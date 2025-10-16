@@ -505,54 +505,30 @@ def discord_join_event():
     db.session.commit()
     return jsonify({'success': True})
 
-@app.route('/discord/auto-link', methods=['POST'])
-def discord_auto_link():
-    """Auto-link Discord account (called by bot)"""
+@app.route('/discord/link-existing', methods=['POST'])
+def discord_link_existing():
+    """Link Discord to existing account"""
     data = request.json
     
-    # Verify bot secret
     if data.get('secret') != os.environ.get('DISCORD_BOT_SECRET', 'change-this-secret'):
         return jsonify({'error': 'Unauthorized'}), 401
     
+    username = data.get('username')
+    password = data.get('password')
     discord_id = data.get('discord_id')
     discord_username = data.get('discord_username')
     
-    if not discord_id or not discord_username:
-        return jsonify({'error': 'Missing discord_id or discord_username'}), 400
+    # Find user and verify password
+    user = User.query.filter_by(username=username).first()
+    if not user or not check_password_hash(user.password_hash, password):
+        return jsonify({'error': 'Invalid username or password'}), 401
     
-    # Check if already linked to someone
-    existing_user = User.query.filter_by(discord_id=discord_id).first()
-    if existing_user:
-        return jsonify({'success': True, 'linked_to': existing_user.username, 'already_linked': True})
-    
-    # Check if this Discord ID is linked to another account
-    existing_link = User.query.filter_by(discord_id=discord_id).first()
-    if existing_link:
-        return jsonify({'error': 'This Discord account is already linked'}), 400
-    
-    # Try to find or create user account
-    # First, try to find a user with similar name
-    username_base = discord_username.lower().replace(' ', '_')
-    username = username_base
-    counter = 1
-    
-    # If username exists, try variations
-    while User.query.filter_by(username=username).first():
-        username = f"{username_base}{counter}"
-        counter += 1
-    
-    # Create new user account with Discord info
-    new_user = User(
-        username=username,
-        discord_id=discord_id,
-        discord_username=discord_username,
-        password_hash=generate_password_hash(os.urandom(24).hex()),  # Random password
-        is_admin=False
-    )
-    db.session.add(new_user)
+    # Link Discord
+    user.discord_id = discord_id
+    user.discord_username = discord_username
     db.session.commit()
     
-    return jsonify({'success': True, 'linked_to': username, 'new_account': True})
+    return jsonify({'success': True, 'username': username})
 
 @app.route('/discord/check-link/<discord_id>')
 def discord_check_link(discord_id):
@@ -581,6 +557,145 @@ def discord_user_events(discord_id):
         if event:
             events.append({'id': event.id, 'title': event.title, 'date': event.event_date.strftime('%B %d, %Y at %I:%M %p'), 'location': event.location or 'TBD', 'role': assignment.role or 'Crew Member'})
     return jsonify({'events': events})
+
+@app.route('/discord/create-account', methods=['POST'])
+def discord_create_account():
+    """Create new account from Discord"""
+    data = request.json
+    if data.get('secret') != os.environ.get('DISCORD_BOT_SECRET'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    username = data.get('username')
+    password = data.get('password')
+    
+    if User.query.filter_by(username=username).first():
+        return jsonify({'error': 'Username already exists'}), 400
+    
+    user = User(
+        username=username,
+        password_hash=generate_password_hash(password),
+        is_admin=False
+    )
+    db.session.add(user)
+    db.session.commit()
+    return jsonify({'success': True, 'username': username})
+'''
+@app.route('/discord/link-existing', methods=['POST'])
+def discord_link_existing():
+    """Link Discord to existing account"""
+    data = request.json
+    if data.get('secret') != os.environ.get('DISCORD_BOT_SECRET'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    username = data.get('username')
+    password = data.get('password')
+    discord_id = data.get('discord_id')
+    discord_username = data.get('discord_username')
+    
+    user = User.query.filter_by(username=username).first()
+    if not user or not check_password_hash(user.password_hash, password):
+        return jsonify({'error': 'Invalid username or password'}), 401
+    
+    user.discord_id = discord_id
+    user.discord_username = discord_username
+    db.session.commit()
+    return jsonify({'success': True, 'username': username})
+'''
+@app.route('/discord/search-equipment/<query>')
+def discord_search_equipment(query):
+    """Search equipment"""
+    equipment = Equipment.query.filter(
+        (Equipment.name.contains(query)) | 
+        (Equipment.barcode.contains(query))
+    ).limit(10).all()
+    
+    return jsonify({
+        'equipment': [{
+            'name': e.name,
+            'barcode': e.barcode,
+            'category': e.category,
+            'location': e.location
+        } for e in equipment]
+    })
+
+@app.route('/discord/list-events')
+def discord_list_events():
+    """List upcoming events"""
+    events = Event.query.filter(
+        Event.event_date >= datetime.now()
+    ).order_by(Event.event_date).limit(10).all()
+    
+    return jsonify({
+        'events': [{
+            'id': e.id,
+            'title': e.title,
+            'date': e.event_date.strftime('%B %d, %Y at %I:%M %p'),
+            'location': e.location,
+            'crew_count': len(e.crew_assignments)
+        } for e in events]
+    })
+
+@app.route('/discord/event-crew/<int:event_id>')
+def discord_event_crew(event_id):
+    """Get crew for event"""
+    event = Event.query.get_or_404(event_id)
+    
+    return jsonify({
+        'event_title': event.title,
+        'crew': [{
+            'name': a.crew_member,
+            'role': a.role or 'Crew Member'
+        } for a in event.crew_assignments]
+    })
+
+@app.route('/discord/add-event', methods=['POST'])
+def discord_add_event():
+    """Create event from Discord"""
+    data = request.json
+    if data.get('secret') != os.environ.get('DISCORD_BOT_SECRET'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    try:
+        event_date = datetime.strptime(data['date'], '%Y-%m-%d %H:%M')
+        event = Event(
+            title=data['title'],
+            event_date=event_date,
+            location=data.get('location', 'TBD'),
+            created_by='Discord Bot'
+        )
+        db.session.add(event)
+        db.session.commit()
+        
+        send_discord_message(event)
+        return jsonify({'success': True, 'event_id': event.id})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/discord/leave-event', methods=['POST'])
+def discord_leave_event():
+    """Leave event"""
+    data = request.json
+    if data.get('secret') != os.environ.get('DISCORD_BOT_SECRET'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    event_id = data.get('event_id')
+    discord_id = data.get('discord_id')
+    
+    user = User.query.filter_by(discord_id=discord_id).first()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    assignment = CrewAssignment.query.filter_by(
+        event_id=event_id,
+        crew_member=user.username
+    ).first()
+    
+    if assignment:
+        db.session.delete(assignment)
+        db.session.commit()
+    
+    return jsonify({'success': True})
+
 
 # ADMIN ROUTES
 
@@ -618,18 +733,26 @@ def delete_user(id):
     db.session.commit()
     return jsonify({'success': True})
 
-@app.route('/admin/backup', methods=['POST'])
+@app.route('/admin/download-backup/<filename>')
 @login_required
-def backup_database():
+def download_backup(filename):
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
-    try:
-        os.makedirs('backups', exist_ok=True)
-        backup_file = f'backups/production_crew_backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.db'
-        shutil.copy('production_crew.db', backup_file)
-        return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    
+    # Verify filename is safe
+    if '..' in filename or '/' in filename:
+        return jsonify({'error': 'Invalid filename'}), 400
+    
+    backup_path = os.path.join('backups', filename)
+    if not os.path.exists(backup_path):
+        return jsonify({'error': 'File not found'}), 404
+    
+    return send_file(
+        backup_path,
+        as_attachment=True,
+        download_name=filename,
+        mimetype='application/octet-stream'
+    )
 
 @app.route('/admin/restore', methods=['POST'])
 @login_required
