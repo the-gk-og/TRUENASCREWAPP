@@ -11,7 +11,6 @@ import shutil
 import csv
 import io
 import requests
-import threading
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-change-this'
@@ -36,6 +35,7 @@ login_manager.login_view = 'login'
 mail = Mail(app)
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+os.makedirs('backups', exist_ok=True)
 
 # DATABASE MODELS
 
@@ -57,6 +57,17 @@ class Equipment(db.Model):
     location = db.Column(db.String(200))
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def to_dict(self):
+        """Convert Equipment to dictionary for JSON serialization"""
+        return {
+            'id': self.id,
+            'barcode': self.barcode,
+            'name': self.name,
+            'category': self.category or '',
+            'location': self.location or '',
+            'notes': self.notes or ''
+        }
 
 class PickListItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -143,7 +154,82 @@ def send_discord_message(event):
         print(f"Failed to send Discord message: {e}")
     return None
 
+# ADD THESE ROUTES TO app.py (before @app.route('/'))
+
+@app.route('/home')
+def home():
+    """Landing page - accessible to everyone"""
+    return render_template('home.html')
+
+@app.route('/learn-more')
+def learn_more():
+    """Learn more page with detailed features"""
+    return render_template('learn_more.html')
+
+@app.route('/contact')
+def contact():
+    """Contact page"""
+    return render_template('contact.html')
+
+@app.route('/contact/send', methods=['POST'])
+def send_contact_message():
+    """Send contact message"""
+    data = request.json
+    name = data.get('name', '').strip()
+    email = data.get('email', '').strip()
+    subject = data.get('subject', '').strip()
+    message = data.get('message', '').strip()
+    
+    # Validation
+    if not all([name, email, subject, message]):
+        return jsonify({'error': 'All fields are required'}), 400
+    
+    if len(message) < 10:
+        return jsonify({'error': 'Message must be at least 10 characters'}), 400
+    
+    # Send email to admin
+    try:
+        admin_email = app.config['MAIL_DEFAULT_SENDER']
+        email_body = f"""
+New Contact Message from {name}
+
+Email: {email}
+Subject: {subject}
+
+Message:
+{message}
+
+---
+This is an automated message from the Production Crew Management System contact form.
+"""
+        send_email(f"Contact Form: {subject}", admin_email, email_body)
+        
+        # Optional: Send confirmation email to user
+        user_email_body = f"""
+Hello {name},
+
+Thank you for reaching out to the Production Crew Management System team!
+
+We received your message about: {subject}
+
+We'll get back to you as soon as possible.
+
+Best regards,
+Production Crew Management System Team
+"""
+        send_email("We received your message", email, user_email_body)
+        
+        return jsonify({'success': True, 'message': 'Message sent successfully! Check your email for confirmation.'})
+    except Exception as e:
+        print(f"Contact form error: {e}")
+        return jsonify({'error': 'Failed to send message. Please try again later.'}), 500
+
+
+
 # AUTH ROUTES
+
+
+
 
 @app.route('/')
 def index():
@@ -181,15 +267,15 @@ def dashboard():
 @login_required
 def equipment_list():
     equipment = Equipment.query.all()
-    equipment_dict = [{'id': e.id, 'barcode': e.barcode, 'name': e.name, 'category': e.category or '', 'location': e.location or '', 'notes': e.notes or ''} for e in equipment]
-    return render_template('equipment.html', equipment=equipment, equipment_json=equipment_dict)
+    equipment_json = [e.to_dict() for e in equipment]
+    return render_template('equipment.html', equipment=equipment, equipment_json=equipment_json)
 
 @app.route('/equipment/barcode/<barcode>')
 @login_required
 def equipment_by_barcode(barcode):
     equipment = Equipment.query.filter_by(barcode=barcode).first()
     if equipment:
-        return jsonify({'id': equipment.id, 'barcode': equipment.barcode, 'name': equipment.name, 'category': equipment.category, 'location': equipment.location, 'notes': equipment.notes})
+        return jsonify(equipment.to_dict())
     return jsonify({'error': 'Equipment not found'}), 404
 
 @app.route('/equipment/add', methods=['POST'])
@@ -300,7 +386,7 @@ def picklist():
         event = None
     events = Event.query.order_by(Event.event_date.desc()).all()
     all_equipment = Equipment.query.all()
-    equipment_dict = [{'id': e.id, 'name': e.name, 'location': e.location or '', 'category': e.category or '', 'barcode': e.barcode or ''} for e in all_equipment]
+    equipment_dict = [e.to_dict() for e in all_equipment]
     return render_template('picklist.html', items=items, events=events, current_event=event, all_equipment=all_equipment, all_equipment_json=equipment_dict)
 
 @app.route('/picklist/add', methods=['POST'])
@@ -442,6 +528,36 @@ def assign_crew():
     assignment = CrewAssignment(event_id=data['event_id'], crew_member=data['crew_member'], role=data.get('role', ''), assigned_via='webapp')
     db.session.add(assignment)
     db.session.commit()
+    
+    # Send email notification if user has email
+    user = User.query.filter_by(username=data['crew_member']).first()
+    event = Event.query.get(data['event_id'])
+    if user and user.email and event:
+        subject = f"🎭 You're assigned to: {event.title}"
+        body = f"""Hello {user.username},
+
+You have been assigned to an upcoming production event!
+
+📋 Event Details:
+  • Event: {event.title}
+  • Date & Time: {event.event_date.strftime('%B %d, %Y at %I:%M %p')}
+  • Location: {event.location or 'TBD'}
+  • Your Role: {data.get('role', 'Crew Member')}
+
+📝 Description: {event.description or 'No description'}
+
+Please log in to the Production Crew Management System to view:
+  • Pick lists for items to gather
+  • Stage plans for setup
+  • Other crew members assigned to this event
+  • Event details and updates
+
+Let me know if you have any questions!
+
+Best regards,
+Production Crew System"""
+        send_email(subject, user.email, body)
+    
     return jsonify({'success': True, 'id': assignment.id})
 
 @app.route('/crew/remove/<int:id>', methods=['DELETE'])
@@ -451,6 +567,36 @@ def remove_crew(id):
     db.session.delete(assignment)
     db.session.commit()
     return jsonify({'success': True})
+
+@app.route('/crew/resend-notification', methods=['POST'])
+@login_required
+def resend_notification():
+    data = request.json
+    assignment = CrewAssignment.query.get(data.get('assignment_id'))
+    event = Event.query.get(data.get('event_id'))
+    
+    if not assignment or not event:
+        return jsonify({'error': 'Not found'}), 404
+    
+    user = User.query.filter_by(username=assignment.crew_member).first()
+    if user and user.email:
+        subject = f"🎭 Reminder: {event.title}"
+        body = f"""Hello {user.username},
+
+This is a reminder that you're assigned to:
+
+📋 Event: {event.title}
+📅 Date & Time: {event.event_date.strftime('%B %d, %Y at %I:%M %p')}
+📍 Location: {event.location or 'TBD'}
+👤 Your Role: {assignment.role or 'Crew Member'}
+
+See you there!
+
+Production Crew System"""
+        send_email(subject, user.email, body)
+        return jsonify({'success': True})
+    
+    return jsonify({'error': 'User has no email'}), 400
 
 # DISCORD ROUTES
 
@@ -509,7 +655,6 @@ def discord_join_event():
 def discord_link_existing():
     """Link Discord to existing account"""
     data = request.json
-    
     if data.get('secret') != os.environ.get('DISCORD_BOT_SECRET', 'change-this-secret'):
         return jsonify({'error': 'Unauthorized'}), 401
     
@@ -518,12 +663,10 @@ def discord_link_existing():
     discord_id = data.get('discord_id')
     discord_username = data.get('discord_username')
     
-    # Find user and verify password
     user = User.query.filter_by(username=username).first()
     if not user or not check_password_hash(user.password_hash, password):
         return jsonify({'error': 'Invalid username or password'}), 401
     
-    # Link Discord
     user.discord_id = discord_id
     user.discord_username = discord_username
     db.session.commit()
@@ -547,6 +690,7 @@ def discord_check_link(discord_id):
 
 @app.route('/discord/user-events/<discord_id>')
 def discord_user_events(discord_id):
+    """Get user's events"""
     user = User.query.filter_by(discord_id=discord_id).first()
     if not user:
         return jsonify({'error': 'User not found'}), 404
@@ -571,82 +715,30 @@ def discord_create_account():
     if User.query.filter_by(username=username).first():
         return jsonify({'error': 'Username already exists'}), 400
     
-    user = User(
-        username=username,
-        password_hash=generate_password_hash(password),
-        is_admin=False
-    )
+    user = User(username=username, password_hash=generate_password_hash(password), is_admin=False)
     db.session.add(user)
     db.session.commit()
     return jsonify({'success': True, 'username': username})
-'''
-@app.route('/discord/link-existing', methods=['POST'])
-def discord_link_existing():
-    """Link Discord to existing account"""
-    data = request.json
-    if data.get('secret') != os.environ.get('DISCORD_BOT_SECRET'):
-        return jsonify({'error': 'Unauthorized'}), 401
-    
-    username = data.get('username')
-    password = data.get('password')
-    discord_id = data.get('discord_id')
-    discord_username = data.get('discord_username')
-    
-    user = User.query.filter_by(username=username).first()
-    if not user or not check_password_hash(user.password_hash, password):
-        return jsonify({'error': 'Invalid username or password'}), 401
-    
-    user.discord_id = discord_id
-    user.discord_username = discord_username
-    db.session.commit()
-    return jsonify({'success': True, 'username': username})
-'''
+
 @app.route('/discord/search-equipment/<query>')
 def discord_search_equipment(query):
     """Search equipment"""
     equipment = Equipment.query.filter(
-        (Equipment.name.contains(query)) | 
-        (Equipment.barcode.contains(query))
+        (Equipment.name.contains(query)) | (Equipment.barcode.contains(query))
     ).limit(10).all()
-    
-    return jsonify({
-        'equipment': [{
-            'name': e.name,
-            'barcode': e.barcode,
-            'category': e.category,
-            'location': e.location
-        } for e in equipment]
-    })
+    return jsonify({'equipment': [e.to_dict() for e in equipment]})
 
 @app.route('/discord/list-events')
 def discord_list_events():
     """List upcoming events"""
-    events = Event.query.filter(
-        Event.event_date >= datetime.now()
-    ).order_by(Event.event_date).limit(10).all()
-    
-    return jsonify({
-        'events': [{
-            'id': e.id,
-            'title': e.title,
-            'date': e.event_date.strftime('%B %d, %Y at %I:%M %p'),
-            'location': e.location,
-            'crew_count': len(e.crew_assignments)
-        } for e in events]
-    })
+    events = Event.query.filter(Event.event_date >= datetime.now()).order_by(Event.event_date).limit(10).all()
+    return jsonify({'events': [{'id': e.id, 'title': e.title, 'date': e.event_date.strftime('%B %d, %Y at %I:%M %p'), 'location': e.location or 'TBD', 'crew_count': len(e.crew_assignments)} for e in events]})
 
 @app.route('/discord/event-crew/<int:event_id>')
 def discord_event_crew(event_id):
     """Get crew for event"""
     event = Event.query.get_or_404(event_id)
-    
-    return jsonify({
-        'event_title': event.title,
-        'crew': [{
-            'name': a.crew_member,
-            'role': a.role or 'Crew Member'
-        } for a in event.crew_assignments]
-    })
+    return jsonify({'event_title': event.title, 'crew': [{'name': a.crew_member, 'role': a.role or 'Crew Member'} for a in event.crew_assignments]})
 
 @app.route('/discord/add-event', methods=['POST'])
 def discord_add_event():
@@ -657,15 +749,9 @@ def discord_add_event():
     
     try:
         event_date = datetime.strptime(data['date'], '%Y-%m-%d %H:%M')
-        event = Event(
-            title=data['title'],
-            event_date=event_date,
-            location=data.get('location', 'TBD'),
-            created_by='Discord Bot'
-        )
+        event = Event(title=data['title'], event_date=event_date, location=data.get('location', 'TBD'), created_by='Discord Bot')
         db.session.add(event)
         db.session.commit()
-        
         send_discord_message(event)
         return jsonify({'success': True, 'event_id': event.id})
     except Exception as e:
@@ -685,17 +771,13 @@ def discord_leave_event():
     if not user:
         return jsonify({'error': 'User not found'}), 404
     
-    assignment = CrewAssignment.query.filter_by(
-        event_id=event_id,
-        crew_member=user.username
-    ).first()
+    assignment = CrewAssignment.query.filter_by(event_id=event_id, crew_member=user.username).first()
     
     if assignment:
         db.session.delete(assignment)
         db.session.commit()
     
     return jsonify({'success': True})
-
 
 # ADMIN ROUTES
 
@@ -733,6 +815,20 @@ def delete_user(id):
     db.session.commit()
     return jsonify({'success': True})
 
+@app.route('/admin/backup', methods=['POST'])
+@login_required
+def backup_database():
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    try:
+        os.makedirs('backups', exist_ok=True)
+        backup_filename = f"production_crew_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+        backup_path = os.path.join('backups', backup_filename)
+        shutil.copy('production_crew.db', backup_path)
+        return jsonify({'success': True, 'filename': backup_filename})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/admin/download-backup/<filename>')
 @login_required
 def download_backup(filename):
@@ -747,12 +843,7 @@ def download_backup(filename):
     if not os.path.exists(backup_path):
         return jsonify({'error': 'File not found'}), 404
     
-    return send_file(
-        backup_path,
-        as_attachment=True,
-        download_name=filename,
-        mimetype='application/octet-stream'
-    )
+    return send_file(backup_path, as_attachment=True, download_name=filename, mimetype='application/octet-stream')
 
 @app.route('/admin/restore', methods=['POST'])
 @login_required
@@ -782,6 +873,67 @@ def list_backups():
             path = os.path.join('backups', file)
             backups.append({'name': file, 'size': os.path.getsize(path), 'date': datetime.fromtimestamp(os.path.getmtime(path)).isoformat()})
     return jsonify(backups)
+
+@app.route('/admin/users/edit/<int:id>', methods=['PUT'])
+@login_required
+def edit_user(id):
+    """Edit user data (admin only)"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    user = User.query.get_or_404(id)
+    data = request.json
+    
+    # Cannot change another admin's username if you're not them
+    if id != current_user.id and user.is_admin:
+        return jsonify({'error': 'Cannot modify other admin accounts'}), 403
+    
+    # Update username if provided and changed
+    if data.get('username') and data['username'] != user.username:
+        if User.query.filter_by(username=data['username']).first():
+            return jsonify({'error': 'Username already exists'}), 400
+        user.username = data['username']
+    
+    # Update email if provided
+    if data.get('email'):
+        if data['email'] != user.email and User.query.filter_by(email=data['email']).first():
+            return jsonify({'error': 'Email already in use'}), 400
+        user.email = data['email'] if data['email'].strip() else None
+    
+    # Update discord if provided
+    if 'discord_id' in data:
+        user.discord_id = data.get('discord_id') or None
+        user.discord_username = data.get('discord_username') or None
+    
+    # Update password if provided
+    if data.get('password'):
+        if len(data['password']) < 6:
+            return jsonify({'error': 'Password must be at least 6 characters'}), 400
+        user.password_hash = generate_password_hash(data['password'])
+    
+    try:
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'User updated successfully'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/users/get/<int:id>', methods=['GET'])
+@login_required
+def get_user(id):
+    """Get user data for editing (admin only)"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    user = User.query.get_or_404(id)
+    return jsonify({
+        'id': user.id,
+        'username': user.username,
+        'email': user.email or '',
+        'discord_id': user.discord_id or '',
+        'discord_username': user.discord_username or '',
+        'is_admin': user.is_admin
+    })
 
 # DATABASE INIT
 

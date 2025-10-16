@@ -67,8 +67,9 @@
                 </td>
                 <td>{{ user.created_at.strftime('%b %d, %Y') }}</td>
                 <td>
+                    <button onclick="editUserModal({{ user.id }})" class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;"><i class="fas fa-edit"></i> Edit</button>
                     {% if user.id != current_user.id %}
-                    <button onclick="deleteUser({{ user.id }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;"><i class="fas fa-trash"></i></button>
+                    <button onclick="deleteUser({{ user.id }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;"><i class="fas fa-trash"></i> Delete</button>
                     {% else %}
                     <span style="color: #999; font-size: 0.85rem;">Current User</span>
                     {% endif %}
@@ -165,6 +166,55 @@
     </div>
 </div>
 
+<!-- Edit User Modal -->
+<div id="editUserModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('editUserModal')">&times;</span>
+        <h2 style="margin-bottom: 1.5rem;">Edit User</h2>
+        <form id="editUserForm">
+            <input type="hidden" id="editUserId">
+            
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="editUsername" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="editEmail" placeholder="user@example.com">
+            </div>
+            
+            <div class="form-group">
+                <label>Password (Leave blank to keep current password)</label>
+                <input type="password" id="editPassword" placeholder="Enter new password (min 6 chars)">
+            </div>
+            
+            <div style="background: #f0f4ff; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; border-left: 4px solid var(--primary);">
+                <h4 style="margin-bottom: 1rem; color: var(--primary);">Discord Integration</h4>
+                
+                <div class="form-group">
+                    <label>Discord ID</label>
+                    <input type="text" id="editDiscordId" placeholder="Leave blank to unlink">
+                </div>
+                
+                <div class="form-group">
+                    <label>Discord Username</label>
+                    <input type="text" id="editDiscordUsername" placeholder="e.g., username#1234">
+                </div>
+                
+                <p style="font-size: 0.85rem; color: #666; margin: 0;">
+                    💡 <strong>Tip:</strong> Leave both Discord fields blank to unlink the account.
+                </p>
+            </div>
+            
+            <div style="display: flex; gap: 1rem;">
+                <button type="submit" class="btn btn-success" style="flex: 1;"><i class="fas fa-save"></i> Save Changes</button>
+                <button type="button" onclick="hideModal('editUserModal')" class="btn btn-primary" style="flex: 1;">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- Restore Modal -->
 <div id="restoreModal" class="modal">
     <div class="modal-content">
@@ -230,6 +280,7 @@ function loadBackups() {
         });
 }
 
+// Create backup
 function createBackup() {
     fetch('/admin/backup', {method: 'POST'})
         .then(r => r.json())
@@ -241,6 +292,7 @@ function createBackup() {
         });
 }
 
+// Add user form
 document.getElementById('addUserForm').addEventListener('submit', function(e) {
     e.preventDefault();
     const data = {
@@ -264,6 +316,51 @@ document.getElementById('addUserForm').addEventListener('submit', function(e) {
     });
 });
 
+// Edit user modal - Load user data
+function editUserModal(userId) {
+    fetch(`/admin/users/get/${userId}`)
+        .then(r => r.json())
+        .then(user => {
+            document.getElementById('editUserId').value = user.id;
+            document.getElementById('editUsername').value = user.username;
+            document.getElementById('editEmail').value = user.email;
+            document.getElementById('editDiscordId').value = user.discord_id;
+            document.getElementById('editDiscordUsername').value = user.discord_username;
+            document.getElementById('editPassword').value = '';
+            showModal('editUserModal');
+        })
+        .catch(err => showAlert('Failed to load user data', 'error'));
+}
+
+// Edit user form
+document.getElementById('editUserForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const userId = document.getElementById('editUserId').value;
+    const data = {
+        username: document.getElementById('editUsername').value,
+        email: document.getElementById('editEmail').value || null,
+        password: document.getElementById('editPassword').value || null,
+        discord_id: document.getElementById('editDiscordId').value || null,
+        discord_username: document.getElementById('editDiscordUsername').value || null
+    };
+    
+    fetch(`/admin/users/edit/${userId}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert('User updated successfully!', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showAlert(result.error || 'Error updating user', 'error');
+        }
+    });
+});
+
+// CSV import
 document.getElementById('csvForm').addEventListener('submit', function(e) {
     e.preventDefault();
     const formData = new FormData(this);
@@ -284,6 +381,7 @@ document.getElementById('csvForm').addEventListener('submit', function(e) {
     });
 });
 
+// SheetDB import
 document.getElementById('sheetdbForm').addEventListener('submit', function(e) {
     e.preventDefault();
     const data = {
@@ -306,6 +404,7 @@ document.getElementById('sheetdbForm').addEventListener('submit', function(e) {
     });
 });
 
+// Delete user
 document.getElementById('restoreForm').addEventListener('submit', function(e) {
     e.preventDefault();
     const formData = new FormData();

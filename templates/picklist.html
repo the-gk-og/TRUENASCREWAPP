@@ -174,7 +174,7 @@
 
 {% block scripts %}
 <script>
-let all_equipment = {{ all_equipment|tojson }};
+let all_equipment = {{ all_equipment_json|tojson }};
 
 function switchMode(mode) {
     const equipBtn = document.getElementById('equipBtn');
