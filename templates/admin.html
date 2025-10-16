@@ -38,6 +38,7 @@
             <tr>
                 <th>Username</th>
                 <th>Email</th>
+                <th>Discord</th>
                 <th>Role</th>
                 <th>Created</th>
                 <th>Actions</th>
@@ -48,6 +49,15 @@
             <tr>
                 <td><strong>{{ user.username }}</strong></td>
                 <td>{{ user.email or '-' }}</td>
+                <td>
+                    {% if user.discord_username %}
+                    <span style="background: #5865f2; color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">
+                        <i class="fab fa-discord"></i> {{ user.discord_username }}
+                    </span>
+                    {% else %}
+                    <span style="color: #999;">Not linked</span>
+                    {% endif %}
+                </td>
                 <td>
                     {% if user.is_admin %}
                     <span style="background: var(--primary); color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">Admin</span>

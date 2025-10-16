@@ -10,3 +10,4 @@ instance/
 
 # Ignore local environment variables
 .env
+.env1

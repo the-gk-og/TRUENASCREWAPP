@@ -11,29 +11,26 @@ import shutil
 import csv
 import io
 import requests
-
-from flask import Flask
-from dotenv import load_dotenv
-import os
-
-# Load environment variables from .env file
-load_dotenv()
+import threading
 
 app = Flask(__name__)
-
-# Core configuration
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'fallback-secret-key')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', 'sqlite:///production_crew.db')
 app.config['UPLOAD_FOLDER'] = os.getenv('UPLOAD_FOLDER', 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_CONTENT_LENGTH', 16 * 1024 * 1024))  # 16 MB
 
 # Email configuration
-app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
-app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT', 587))
+app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
 app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME', '')
-app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD', '')
-app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', 'noreply@prodcrew.local')
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', '')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', '')
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', 'noreply@prodcrew.local')
+
+# Discord configuration
+DISCORD_BOT_TOKEN = os.environ.get('DISCORD_BOT_TOKEN', '')
+DISCORD_WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL', '')
+DISCORD_GUILD_ID = os.environ.get('DISCORD_GUILD_ID', '')
 
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
@@ -47,9 +44,172 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=True)
+    discord_id = db.Column(db.String(50), unique=True, nullable=True)
+    discord_username = db.Column(db.String(100), nullable=True)
     password_hash = db.Column(db.String(200))
     is_admin = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class Equipment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    barcode = db.Column(db.String(100), unique=True, nullable=False)
+    name = db.Column(db.String(200), nullable=False)
+    category = db.Column(db.String(100))
+    location = db.Column(db.String(200))
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class PickListItem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    item_name = db.Column(db.String(200), nullable=False)
+    quantity = db.Column(db.Integer, default=1)
+    is_checked = db.Column(db.Boolean, default=False)
+    added_by = db.Column(db.String(80))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'))
+    equipment_id = db.Column(db.Integer, db.ForeignKey('equipment.id'), nullable=True)
+    
+    # Relationship to equipment
+    equipment = db.relationship('Equipment', backref='pick_list_items')
+
+class StagePlan(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    filename = db.Column(db.String(300), nullable=False)
+    uploaded_by = db.Column(db.String(80))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'))
+
+class Event(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    event_date = db.Column(db.DateTime, nullable=False)
+    location = db.Column(db.String(200))
+    created_by = db.Column(db.String(80))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    discord_message_id = db.Column(db.String(50), nullable=True)
+    crew_assignments = db.relationship('CrewAssignment', backref='event', lazy=True, cascade='all, delete-orphan')
+    pick_list_items = db.relationship('PickListItem', backref='event', lazy=True, cascade='all, delete-orphan')
+    stage_plans = db.relationship('StagePlan', backref='event', lazy=True, cascade='all, delete-orphan')
+
+class CrewAssignment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
+    crew_member = db.Column(db.String(80), nullable=False)
+    role = db.Column(db.String(100))
+    assigned_at = db.Column(db.DateTime, default=datetime.utcnow)
+    assigned_via = db.Column(db.String(20), default='webapp')  # 'webapp' or 'discord'
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+# Template context functions
+@app.context_processor
+def inject_functions():
+    def get_user_by_username(username):
+        return User.query.filter_by(username=username).first()
+    return dict(get_user_by_username=get_user_by_username)
+
+def send_discord_message(event):
+    """Send event details to Discord with reaction buttons"""
+    if not DISCORD_WEBHOOK_URL:
+        return None
+    
+    try:
+        embed = {
+            "title": f"🎭 New Event: {event.title}",
+            "description": event.description or "No description provided",
+            "color": 6366239,  # Indigo color
+            "fields": [
+                {
+                    "name": "📅 Date & Time",
+                    "value": event.event_date.strftime('%B %d, %Y at %I:%M %p'),
+                    "inline": False
+                },
+                {
+                    "name": "📍 Location",
+                    "value": event.location or "TBD",
+                    "inline": False
+                },
+                {
+                    "name": "👥 How to Join",
+                    "value": "React with ✋ to add yourself to this event! Or use `/join-event` command.",
+                    "inline": False
+                }
+            ],
+            "footer": {"text": f"Event ID: {event.id}"}
+        }
+        
+        response = requests.post(DISCORD_WEBHOOK_URL, json={"embeds": [embed]})
+        
+        if response.status_code == 204:
+            # Get message ID from Discord
+            return response.headers.get('X-Message-ID')
+    except Exception as e:
+        print(f"Failed to send Discord message: {e}")
+    
+    return None
+
+def schedule_discord_notifications(event):
+    """Schedule Discord notifications 1 week before and on day of event"""
+    def send_notification(message_text):
+        if not DISCORD_WEBHOOK_URL:
+            return
+        
+        crew_mentions = []
+        for assignment in event.crew_assignments:
+            user = User.query.filter_by(username=assignment.crew_member).first()
+            if user and user.discord_id:
+                crew_mentions.append(f"<@{user.discord_id}>")
+        
+        if crew_mentions:
+            embed = {
+                "title": f"🎭 Reminder: {event.title}",
+                "description": message_text,
+                "color": 16776960,  # Gold/yellow color
+                "fields": [
+                    {
+                        "name": "📅 Date & Time",
+                        "value": event.event_date.strftime('%B %d, %Y at %I:%M %p'),
+                        "inline": False
+                    },
+                    {
+                        "name": "📍 Location",
+                        "value": event.location or "TBD",
+                        "inline": False
+                    }
+                ]
+            }
+            
+            content = " ".join(crew_mentions) if crew_mentions else "@here"
+            try:
+                requests.post(DISCORD_WEBHOOK_URL, json={
+                    "content": content,
+                    "embeds": [embed]
+                })
+            except Exception as e:
+                print(f"Failed to send Discord notification: {e}")
+    
+    # Schedule notifications in background threads
+    now = datetime.now()
+    
+    # 1 week before
+    one_week_before = event.event_date - timedelta(days=7)
+    if one_week_before > now:
+        delay = (one_week_before - now).total_seconds()
+        timer = threading.Timer(delay, send_notification, args=["Event happening in 1 week!"])
+        timer.daemon = True
+        timer.start()
+    
+    # On day of event
+    day_of = event.event_date.replace(hour=8, minute=0, second=0, microsecond=0)
+    if day_of > now:
+        delay = (day_of - now).total_seconds()
+        timer = threading.Timer(delay, send_notification, args=["Event happening TODAY!"])
+        timer.daemon = True
+        timer.start()
 
 class Equipment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -351,22 +511,69 @@ def picklist():
     else:
         items = PickListItem.query.filter_by(event_id=None).all()
         event = None
+    
     events = Event.query.order_by(Event.event_date.desc()).all()
-    return render_template('picklist.html', items=items, events=events, current_event=event)
+    all_equipment = Equipment.query.all()
+    
+    equipment_dict = [{
+        'id': e.id,
+        'name': e.name,
+        'location': e.location or '',
+        'category': e.category or '',
+        'barcode': e.barcode or ''
+    } for e in all_equipment]
+    
+    return render_template('picklist.html', items=items, events=events, current_event=event, all_equipment=all_equipment, all_equipment_json=equipment_dict)
 
 @app.route('/picklist/add', methods=['POST'])
 @login_required
 def add_picklist_item():
     data = request.json
-    item = PickListItem(
-        item_name=data['item_name'],
-        quantity=data.get('quantity', 1),
-        added_by=current_user.username,
-        event_id=data.get('event_id')
-    )
+    equipment_id = data.get('equipment_id')
+    
+    # If equipment selected, use its details
+    if equipment_id:
+        equipment = Equipment.query.get(equipment_id)
+        if not equipment:
+            return jsonify({'error': 'Equipment not found'}), 404
+        
+        item = PickListItem(
+            item_name=equipment.name,
+            quantity=data.get('quantity', 1),
+            added_by=current_user.username,
+            event_id=data.get('event_id'),
+            equipment_id=equipment_id
+        )
+    else:
+        # Manual entry
+        item = PickListItem(
+            item_name=data['item_name'],
+            quantity=data.get('quantity', 1),
+            added_by=current_user.username,
+            event_id=data.get('event_id'),
+            equipment_id=None
+        )
+    
     db.session.add(item)
     db.session.commit()
-    return jsonify({'success': True, 'id': item.id})
+    
+    return jsonify({
+        'success': True,
+        'id': item.id,
+        'item': {
+            'id': item.id,
+            'item_name': item.item_name,
+            'quantity': item.quantity,
+            'is_checked': item.is_checked,
+            'added_by': item.added_by,
+            'equipment_id': item.equipment_id,
+            'equipment': {
+                'location': item.equipment.location if item.equipment else None,
+                'category': item.equipment.category if item.equipment else None,
+                'barcode': item.equipment.barcode if item.equipment else None
+            } if item.equipment else None
+        }
+    })
 
 @app.route('/picklist/toggle/<int:id>', methods=['POST'])
 @login_required
@@ -491,6 +698,16 @@ def add_event():
     )
     db.session.add(event)
     db.session.commit()
+    
+    # Send Discord message with event details
+    message_id = send_discord_message(event)
+    if message_id:
+        event.discord_message_id = message_id
+        db.session.commit()
+    
+    # Schedule notifications
+    schedule_discord_notifications(event)
+    
     return jsonify({'success': True, 'id': event.id})
 
 @app.route('/events/<int:id>')
@@ -668,6 +885,94 @@ def delete_user(id):
     db.session.delete(user)
     db.session.commit()
     return jsonify({'success': True})
+
+# Discord Integration Routes
+@app.route('/settings/link-discord', methods=['POST'])
+@login_required
+def link_discord():
+    data = request.json
+    discord_id = data.get('discord_id')
+    discord_username = data.get('discord_username')
+    
+    # Allow unlinking
+    if discord_id is None and discord_username is None:
+        current_user.discord_id = None
+        current_user.discord_username = None
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Discord account unlinked'})
+    
+    if not discord_id or not discord_username:
+        return jsonify({'error': 'Discord ID and username required'}), 400
+    
+    # Check if this Discord ID is already linked
+    existing = User.query.filter_by(discord_id=discord_id).first()
+    if existing and existing.id != current_user.id:
+        return jsonify({'error': 'This Discord account is already linked'}), 400
+    
+    current_user.discord_id = discord_id
+    current_user.discord_username = discord_username
+    db.session.commit()
+    
+    return jsonify({'success': True, 'message': f'Discord account @{discord_username} linked!'})
+
+@app.route('/discord-settings')
+@login_required
+def discord_settings():
+    return render_template('discord_settings.html')
+
+@app.route('/settings/discord-status')
+@login_required
+def discord_status():
+    if current_user.discord_id:
+        return jsonify({
+            'linked': True,
+            'discord_id': current_user.discord_id,
+            'discord_username': current_user.discord_username
+        })
+    return jsonify({'linked': False})
+
+@app.route('/discord/join-event', methods=['POST'])
+def discord_join_event():
+    """Endpoint for Discord bot to call when user reacts"""
+    data = request.json
+    
+    # Verify Discord bot secret
+    if data.get('secret') != os.environ.get('DISCORD_BOT_SECRET', 'change-this-secret'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    event_id = data.get('event_id')
+    discord_id = data.get('discord_id')
+    role = data.get('role', 'Crew Member')
+    
+    event = Event.query.get(event_id)
+    if not event:
+        return jsonify({'error': 'Event not found'}), 404
+    
+    # Find user by Discord ID
+    user = User.query.filter_by(discord_id=discord_id).first()
+    if not user:
+        return jsonify({'error': 'Discord account not linked to any user'}), 400
+    
+    # Check if already assigned
+    existing = CrewAssignment.query.filter_by(
+        event_id=event_id,
+        crew_member=user.username
+    ).first()
+    
+    if existing:
+        return jsonify({'error': 'Already assigned to this event'}), 400
+    
+    # Add crew member
+    assignment = CrewAssignment(
+        event_id=event_id,
+        crew_member=user.username,
+        role=role,
+        assigned_via='discord'
+    )
+    db.session.add(assignment)
+    db.session.commit()
+    
+    return jsonify({'success': True, 'message': f'{user.username} added to event!'})
 
 @app.route('/admin/backup', methods=['POST'])
 @login_required
