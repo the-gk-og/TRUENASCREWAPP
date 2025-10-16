@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Pick List{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h2>📋 Pick List</h2>
+        <button onclick="showModal('addItemModal')" class="btn btn-success">+ Add Item</button>
+    </div>
+    
+    <div class="form-group">
+        <label>Filter by Event:</label>
+        <select id="eventFilter" onchange="window.location.href='/picklist?event_id='+this.value">
+            <option value="">All Items (General)</option>
+            {% for event in events %}
+            <option value="{{ event.id }}" {% if current_event and current_event.id == event.id %}selected{% endif %}>
+                {{ event.title }} - {{ event.event_date.strftime('%b %d, %Y') }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    
+    {% if current_event %}
+    <div style="background: #e8f4f8; padding: 1rem; border-radius: 6px; margin-bottom: 1rem;">
+        <strong>Event:</strong> {{ current_event.title }}<br>
+        <strong>Date:</strong> {{ current_event.event_date.strftime('%B %d, %Y at %I:%M %p') }}<br>
+        <strong>Location:</strong> {{ current_event.location or 'N/A' }}
+    </div>
+    {% endif %}
+    
+    <div id="pickList">
+        {% if items %}
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 50px;">✓</th>
+                    <th>Item</th>
+                    <th>Quantity</th>
+                    <th>Added By</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr style="{% if item.is_checked %}opacity: 0.5; text-decoration: line-through;{% endif %}">
+                    <td>
+                        <input type="checkbox" {% if item.is_checked %}checked{% endif %} 
+                               onchange="toggleItem({{ item.id }})" 
+                               style="width: 20px; height: 20px; cursor: pointer;">
+                    </td>
+                    <td><strong>{{ item.item_name }}</strong></td>
+                    <td>{{ item.quantity }}</td>
+                    <td>{{ item.added_by }}</td>
+                    <td>
+                        <button onclick="deleteItem({{ item.id }})" class="btn btn-danger" style="padding: 0.5rem 1rem; font-size: 0.9rem;">Delete</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        <div style="margin-top: 1rem; padding: 1rem; background: #f8f9fa; border-radius: 6px;">
+            <strong>Progress:</strong> {{ items|selectattr('is_checked')|list|length }} / {{ items|length }} items checked
+        </div>
+        {% else %}
+        <p style="text-align: center; color: #666; padding: 2rem;">No items in this pick list yet. Add items to get started!</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Add Item Modal -->
+<div id="addItemModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('addItemModal')">&times;</span>
+        <h2>Add Item to Pick List</h2>
+        <form id="addItemForm">
+            <div class="form-group">
+                <label>Item Name *</label>
+                <input type="text" id="itemName" required autofocus>
+            </div>
+            <div class="form-group">
+                <label>Quantity</label>
+                <input type="number" id="quantity" value="1" min="1">
+            </div>
+            <div class="form-group">
+                <label>Assign to Event (Optional)</label>
+                <select id="eventId">
+                    <option value="">General Pick List</option>
+                    {% for event in events %}
+                    <option value="{{ event.id }}" {% if current_event and current_event.id == event.id %}selected{% endif %}>
+                        {{ event.title }} - {{ event.event_date.strftime('%b %d, %Y') }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-success">Add Item</button>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('addItemForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const data = {
+        item_name: document.getElementById('itemName').value,
+        quantity: parseInt(document.getElementById('quantity').value),
+        event_id: document.getElementById('eventId').value || null
+    };
+    
+    fetch('/picklist/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            location.reload();
+        }
+    });
+});
+
+function toggleItem(id) {
+    fetch(`/picklist/toggle/${id}`, {method: 'POST'})
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                location.reload();
+            }
+        });
+}
+
+function deleteItem(id) {
+    if (!confirm('Delete this item from the pick list?')) return;
+    
+    fetch(`/picklist/delete/${id}`, {method: 'DELETE'})
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) location.reload();
+        });
+}
+</script>
+{% endblock %}

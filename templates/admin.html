@@ -1,0 +1,337 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Panel{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2><i class="fas fa-cog"></i> Admin Panel</h2>
+    <p style="color: #666; margin-top: 0.5rem;">Manage users, database backups, and system settings.</p>
+</div>
+
+<div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); margin-bottom: 2rem;">
+    <div class="card" style="text-align: center;">
+        <h3 style="color: var(--primary);">👥</h3>
+        <p id="userCount" style="font-size: 2rem; font-weight: bold;">0</p>
+        <p>Total Users</p>
+    </div>
+    <div class="card" style="text-align: center;">
+        <h3 style="color: var(--success);">📦</h3>
+        <p id="equipCount" style="font-size: 2rem; font-weight: bold;">0</p>
+        <p>Equipment Items</p>
+    </div>
+    <div class="card" style="text-align: center;">
+        <h3 style="color: var(--secondary);">📅</h3>
+        <p id="eventCount" style="font-size: 2rem; font-weight: bold;">0</p>
+        <p>Events</p>
+    </div>
+</div>
+
+<!-- User Management -->
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h3>User Management</h3>
+        <button onclick="showModal('addUserModal')" class="btn btn-success"><i class="fas fa-plus"></i> Add User</button>
+    </div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Created</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td><strong>{{ user.username }}</strong></td>
+                <td>{{ user.email or '-' }}</td>
+                <td>
+                    {% if user.is_admin %}
+                    <span style="background: var(--primary); color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">Admin</span>
+                    {% else %}
+                    <span style="background: #e5e7eb; color: var(--dark); padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">User</span>
+                    {% endif %}
+                </td>
+                <td>{{ user.created_at.strftime('%b %d, %Y') }}</td>
+                <td>
+                    {% if user.id != current_user.id %}
+                    <button onclick="deleteUser({{ user.id }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;"><i class="fas fa-trash"></i></button>
+                    {% else %}
+                    <span style="color: #999; font-size: 0.85rem;">Current User</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Database Management -->
+<div class="card">
+    <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-database"></i> Database Management</h3>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+        <div>
+            <h4 style="margin-bottom: 1rem; color: var(--primary);">Backup</h4>
+            <p style="color: #666; margin-bottom: 1rem; font-size: 0.9rem;">Create a backup of your database</p>
+            <button onclick="createBackup()" class="btn btn-success" style="width: 100%;"><i class="fas fa-download"></i> Create Backup</button>
+        </div>
+        <div>
+            <h4 style="margin-bottom: 1rem; color: var(--secondary);">Restore</h4>
+            <p style="color: #666; margin-bottom: 1rem; font-size: 0.9rem;">Restore from a backup file</p>
+            <button onclick="showModal('restoreModal')" class="btn btn-primary" style="width: 100%;"><i class="fas fa-upload"></i> Restore Backup</button>
+        </div>
+    </div>
+    
+    <div style="background: #f8fafc; padding: 1.5rem; border-radius: 8px;">
+        <h4 style="margin-bottom: 1rem;"><i class="fas fa-history"></i> Recent Backups</h4>
+        <div id="backupsList" style="max-height: 300px; overflow-y: auto;">
+            <p style="color: #999; text-align: center;">Loading backups...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Import Equipment -->
+<div class="card">
+    <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-file-import"></i> Import Equipment</h3>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 2rem;">
+        <!-- CSV Import -->
+        <div>
+            <h4 style="margin-bottom: 1rem; color: var(--primary);">Import from CSV</h4>
+            <p style="color: #666; margin-bottom: 1rem; font-size: 0.9rem;">Upload a CSV file with columns: barcode, name, category, location, notes</p>
+            <form id="csvForm" enctype="multipart/form-data">
+                <div class="form-group">
+                    <input type="file" id="csvFile" accept=".csv" required>
+                </div>
+                <button type="submit" class="btn btn-success" style="width: 100%;"><i class="fas fa-upload"></i> Import CSV</button>
+            </form>
+        </div>
+        
+        <!-- SheetDB Import -->
+        <div>
+            <h4 style="margin-bottom: 1rem; color: var(--secondary);">Import from SheetDB</h4>
+            <p style="color: #666; margin-bottom: 1rem; font-size: 0.9rem;">Connect to your Google Sheet via SheetDB</p>
+            <form id="sheetdbForm">
+                <div class="form-group">
+                    <label>SheetDB ID *</label>
+                    <input type="text" id="sheetId" placeholder="e.g., abc123def456" required>
+                </div>
+                <button type="submit" class="btn btn-success" style="width: 100%;"><i class="fas fa-database"></i> Import from Sheet</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Add User Modal -->
+<div id="addUserModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('addUserModal')">&times;</span>
+        <h2 style="margin-bottom: 1.5rem;">Add New User</h2>
+        <form id="addUserForm">
+            <div class="form-group">
+                <label>Username *</label>
+                <input type="text" id="username" required>
+            </div>
+            <div class="form-group">
+                <label>Email (Optional - for notifications)</label>
+                <input type="email" id="email" placeholder="user@example.com">
+            </div>
+            <div class="form-group">
+                <label>Password *</label>
+                <input type="password" id="password" required>
+            </div>
+            <div class="form-group">
+                <label style="display: flex; align-items: center; gap: 0.75rem;">
+                    <input type="checkbox" id="isAdmin" style="width: auto;">
+                    <span>Grant Admin Privileges</span>
+                </label>
+            </div>
+            <button type="submit" class="btn btn-success" style="width: 100%;"><i class="fas fa-plus"></i> Create User</button>
+        </form>
+    </div>
+</div>
+
+<!-- Restore Modal -->
+<div id="restoreModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('restoreModal')">&times;</span>
+        <h2 style="margin-bottom: 1.5rem; color: var(--danger);">⚠️ Restore Database</h2>
+        <p style="color: #666; margin-bottom: 1.5rem; background: #fef2f2; padding: 1rem; border-radius: 8px; border-left: 4px solid var(--danger);">
+            <strong>Warning:</strong> This will replace your current database with the backup. Current data will be lost!
+        </p>
+        <form id="restoreForm" enctype="multipart/form-data">
+            <div class="form-group">
+                <label>Select Backup File *</label>
+                <input type="file" id="restoreFile" accept=".db" required>
+            </div>
+            <div class="form-group">
+                <label style="display: flex; align-items: center; gap: 0.75rem;">
+                    <input type="checkbox" id="confirmRestore" required>
+                    <span style="color: var(--danger); font-weight: 600;">I understand this will replace my current database</span>
+                </label>
+            </div>
+            <button type="submit" class="btn btn-danger" style="width: 100%;"><i class="fas fa-exclamation-triangle"></i> Restore Database</button>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Load stats
+function loadStats() {
+    const userCount = {{ users|length }};
+    document.getElementById('userCount').textContent = userCount;
+}
+
+// Load backups list
+function loadBackups() {
+    fetch('/admin/backups')
+        .then(r => r.json())
+        .then(backups => {
+            let html = '';
+            if (backups.length === 0) {
+                html = '<p style="color: #999; text-align: center;">No backups yet</p>';
+            } else {
+                html = '<table style="font-size: 0.9rem;"><tbody>';
+                backups.forEach(backup => {
+                    const date = new Date(backup.date);
+                    const size = (backup.size / 1024 / 1024).toFixed(2);
+                    html += `
+                        <tr>
+                            <td>
+                                <strong>${backup.name}</strong><br>
+                                <small style="color: #999;">${size} MB • ${date.toLocaleString()}</small>
+                            </td>
+                            <td style="text-align: right; white-space: nowrap;">
+                                <a href="/admin/download-backup/${backup.name}" class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;"><i class="fas fa-download"></i></a>
+                            </td>
+                        </tr>
+                    `;
+                });
+                html += '</tbody></table>';
+            }
+            document.getElementById('backupsList').innerHTML = html;
+        });
+}
+
+function createBackup() {
+    fetch('/admin/backup', {method: 'POST'})
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                showAlert('Backup created successfully!', 'success');
+                loadBackups();
+            }
+        });
+}
+
+document.getElementById('addUserForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const data = {
+        username: document.getElementById('username').value,
+        email: document.getElementById('email').value || null,
+        password: document.getElementById('password').value,
+        is_admin: document.getElementById('isAdmin').checked
+    };
+    fetch('/admin/users/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            location.reload();
+        } else {
+            showAlert(result.error, 'error');
+        }
+    });
+});
+
+document.getElementById('csvForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    formData.append('file', document.getElementById('csvFile').files[0]);
+    
+    fetch('/equipment/import-csv', {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert(`Imported ${result.imported} items from CSV!`, 'success');
+            document.getElementById('csvFile').value = '';
+        } else {
+            showAlert(result.error, 'error');
+        }
+    });
+});
+
+document.getElementById('sheetdbForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const data = {
+        sheet_id: document.getElementById('sheetId').value
+    };
+    
+    fetch('/equipment/import-sheetdb', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert(`Imported ${result.imported} items from SheetDB!`, 'success');
+            document.getElementById('sheetId').value = '';
+        } else {
+            showAlert(result.error, 'error');
+        }
+    });
+});
+
+document.getElementById('restoreForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData();
+    formData.append('file', document.getElementById('restoreFile').files[0]);
+    
+    fetch('/admin/restore', {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert(result.message, 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showAlert(result.error, 'error');
+        }
+    });
+});
+
+function deleteUser(id) {
+    if (!confirm('Delete this user? This action cannot be undone.')) return;
+    fetch(`/admin/users/delete/${id}`, {method: 'DELETE'})
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                location.reload();
+            } else {
+                showAlert(result.error, 'error');
+            }
+        });
+}
+
+// Initialize
+loadStats();
+loadBackups();
+setInterval(loadBackups, 30000); // Refresh every 30 seconds
+</script>
+{% endblock %}

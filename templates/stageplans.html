@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}Stage Plans{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h2>🎨 Stage Plans</h2>
+        <button onclick="showModal('uploadModal')" class="btn btn-success">+ Upload Stage Plan</button>
+    </div>
+    
+    <div class="form-group">
+        <label>Filter by Event:</label>
+        <select id="eventFilter" onchange="window.location.href='/stageplans?event_id='+this.value">
+            <option value="">All Plans</option>
+            {% for event in events %}
+            <option value="{{ event.id }}" {% if current_event and current_event.id == event.id %}selected{% endif %}>
+                {{ event.title }} - {{ event.event_date.strftime('%b %d, %Y') }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    
+    {% if current_event %}
+    <div style="background: #e8f4f8; padding: 1rem; border-radius: 6px; margin-bottom: 1rem;">
+        <strong>Event:</strong> {{ current_event.title }}<br>
+        <strong>Date:</strong> {{ current_event.event_date.strftime('%B %d, %Y at %I:%M %p') }}
+    </div>
+    {% endif %}
+    
+    {% if plans %}
+    <div class="grid">
+        {% for plan in plans %}
+        <div class="card" style="padding: 1rem;">
+            <h3 style="margin-bottom: 0.5rem;">{{ plan.title }}</h3>
+            <p style="color: #666; font-size: 0.9rem; margin-bottom: 1rem;">
+                Uploaded by {{ plan.uploaded_by }} on {{ plan.created_at.strftime('%b %d, %Y') }}
+            </p>
+            
+            {% if plan.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')) %}
+            <img src="{{ url_for('uploaded_file', filename=plan.filename) }}" 
+                 alt="{{ plan.title }}" 
+                 style="width: 100%; border-radius: 6px; margin-bottom: 1rem; cursor: pointer;"
+                 onclick="showImageModal('{{ url_for('uploaded_file', filename=plan.filename) }}', '{{ plan.title }}')">
+            {% else %}
+            <div style="background: #f0f0f0; padding: 2rem; text-align: center; border-radius: 6px; margin-bottom: 1rem;">
+                <p style="font-size: 3rem;">📄</p>
+                <p>{{ plan.filename }}</p>
+            </div>
+            {% endif %}
+            
+            <div style="display: flex; gap: 0.5rem;">
+                <a href="{{ url_for('uploaded_file', filename=plan.filename) }}" 
+                   download="{{ plan.filename }}" 
+                   class="btn btn-primary" 
+                   style="flex: 1; text-align: center; padding: 0.5rem;">Download</a>
+                <button onclick="deletePlan({{ plan.id }})" 
+                        class="btn btn-danger" 
+                        style="padding: 0.5rem 1rem;">Delete</button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p style="text-align: center; color: #666; padding: 2rem;">No stage plans uploaded yet.</p>
+    {% endif %}
+</div>
+
+<!-- Upload Modal -->
+<div id="uploadModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('uploadModal')">&times;</span>
+        <h2>Upload Stage Plan</h2>
+        <form id="uploadForm" enctype="multipart/form-data">
+            <div class="form-group">
+                <label>Title *</label>
+                <input type="text" name="title" id="title" required>
+            </div>
+            <div class="form-group">
+                <label>Assign to Event (Optional)</label>
+                <select name="event_id" id="eventId">
+                    <option value="">No specific event</option>
+                    {% for event in events %}
+                    <option value="{{ event.id }}" {% if current_event and current_event.id == event.id %}selected{% endif %}>
+                        {{ event.title }} - {{ event.event_date.strftime('%b %d, %Y') }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>File * (Images, PDFs accepted)</label>
+                <input type="file" name="file" id="file" required accept="image/*,.pdf">
+            </div>
+            <button type="submit" class="btn btn-success">Upload</button>
+        </form>
+    </div>
+</div>
+
+<!-- Image Preview Modal -->
+<div id="imageModal" class="modal">
+    <div class="modal-content" style="max-width: 90%; max-height: 90vh;">
+        <span class="close" onclick="hideModal('imageModal')">&times;</span>
+        <h2 id="imageTitle" style="margin-bottom: 1rem;"></h2>
+        <img id="imagePreview" src="" alt="" style="width: 100%; height: auto; border-radius: 6px;">
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('uploadForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    
+    fetch('/stageplans/upload', {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            location.reload();
+        } else {
+            alert('Upload failed: ' + (result.error || 'Unknown error'));
+        }
+    })
+    .catch(err => {
+        alert('Upload failed: ' + err.message);
+    });
+});
+
+function showImageModal(src, title) {
+    document.getElementById('imagePreview').src = src;
+    document.getElementById('imageTitle').textContent = title;
+    showModal('imageModal');
+}
+
+function deletePlan(id) {
+    if (!confirm('Delete this stage plan?')) return;
+    
+    fetch(`/stageplans/delete/${id}`, {method: 'DELETE'})
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) location.reload();
+        });
+}
+</script>
+{% endblock %}

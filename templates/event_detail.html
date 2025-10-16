@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+
+{% block title %}{{ event.title }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <a href="{{ url_for('calendar') }}" style="color: #667eea; text-decoration: none; margin-bottom: 1rem; display: inline-block;">← Back to Calendar</a>
+    
+    <h1>{{ event.title }}</h1>
+    <p style="color: #666; margin-top: 0.5rem;">
+        📅 {{ event.event_date.strftime('%B %d, %Y at %I:%M %p') }}
+        {% if event.location %}| 📍 {{ event.location }}{% endif %}
+    </p>
+    
+    {% if event.description %}
+    <div style="background: #f8f9fa; padding: 1rem; border-radius: 6px; margin-top: 1rem;">
+        <p>{{ event.description }}</p>
+    </div>
+    {% endif %}
+</div>
+
+<div class="grid">
+    <!-- Crew Assignments -->
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h3>👥 Crew Assignments ({{ event.crew_assignments|length }})</h3>
+            <button onclick="showModal('addCrewModal')" class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem;">+ Add Crew</button>
+        </div>
+        
+        {% if event.crew_assignments %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Crew Member</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for assignment in event.crew_assignments %}
+                <tr>
+                    <td>
+                        <strong>{{ assignment.crew_member }}</strong>
+                        {% set user = get_user_by_username(assignment.crew_member) %}
+                        {% if user and user.email %}
+                        <br><small style="color: #999;"><i class="fas fa-envelope"></i> {{ user.email }}</small>
+                        {% endif %}
+                    </td>
+                    <td>{{ assignment.role or 'Crew Member' }}</td>
+                    <td>
+                        {% if user and user.email %}
+                        <span style="background: #d1fae5; color: #065f46; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;"><i class="fas fa-check-circle"></i> Notified</span>
+                        {% else %}
+                        <span style="background: #fee2e2; color: #991b1b; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;"><i class="fas fa-exclamation-circle"></i> No Email</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <button onclick="removeCrew({{ assignment.id }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;"><i class="fas fa-trash"></i></button>
+                        {% if user and user.email %}
+                        <button onclick="resendNotification({{ assignment.id }}, '{{ assignment.crew_member }}')" class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;"><i class="fas fa-redo"></i></button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color: #666; text-align: center; padding: 1rem;">No crew members assigned yet.</p>
+        {% endif %}
+    </div>
+    
+    <!-- Quick Links -->
+    <div class="card">
+        <h3 style="margin-bottom: 1rem;">Quick Links</h3>
+        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+            <a href="{{ url_for('picklist', event_id=event.id) }}" class="btn btn-primary">📋 View Pick List ({{ event.pick_list_items|length }} items)</a>
+            <a href="{{ url_for('stageplans', event_id=event.id) }}" class="btn btn-primary">🎨 View Stage Plans ({{ event.stage_plans|length }} plans)</a>
+        </div>
+    </div>
+</div>
+
+<!-- Pick List Preview -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">📋 Pick List Preview</h3>
+    {% if event.pick_list_items %}
+    <table>
+        <thead>
+            <tr>
+                <th>✓</th>
+                <th>Item</th>
+                <th>Quantity</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in event.pick_list_items[:5] %}
+            <tr>
+                <td>
+                    {% if item.is_checked %}✅{% else %}⬜{% endif %}
+                </td>
+                <td>{{ item.item_name }}</td>
+                <td>{{ item.quantity }}</td>
+                <td>
+                    {% if item.is_checked %}
+                    <span style="color: #27ae60; font-weight: bold;">Checked</span>
+                    {% else %}
+                    <span style="color: #e67e22; font-weight: bold;">Pending</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% if event.pick_list_items|length > 5 %}
+    <p style="margin-top: 1rem; text-align: center;">
+        <a href="{{ url_for('picklist', event_id=event.id) }}">View all {{ event.pick_list_items|length }} items →</a>
+    </p>
+    {% endif %}
+    {% else %}
+    <p style="color: #666; text-align: center; padding: 1rem;">No pick list items for this event. <a href="{{ url_for('picklist', event_id=event.id) }}">Add items →</a></p>
+    {% endif %}
+</div>
+
+<!-- Stage Plans Preview -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">🎨 Stage Plans</h3>
+    {% if event.stage_plans %}
+    <div class="grid">
+        {% for plan in event.stage_plans %}
+        <div style="background: #f8f9fa; padding: 1rem; border-radius: 6px;">
+            <h4 style="margin-bottom: 0.5rem;">{{ plan.title }}</h4>
+            <p style="color: #666; font-size: 0.9rem;">Uploaded by {{ plan.uploaded_by }}</p>
+            <a href="{{ url_for('uploaded_file', filename=plan.filename) }}" class="btn btn-primary" style="margin-top: 0.5rem; padding: 0.5rem 1rem; font-size: 0.9rem;">View/Download</a>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p style="color: #666; text-align: center; padding: 1rem;">No stage plans uploaded. <a href="{{ url_for('stageplans', event_id=event.id) }}">Upload now →</a></p>
+    {% endif %}
+</div>
+
+<!-- Add Crew Modal -->
+<div id="addCrewModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('addCrewModal')">&times;</span>
+        <h2 style="margin-bottom: 1.5rem;"><i class="fas fa-user-plus"></i> Add Crew Member</h2>
+        
+        <div style="background: #f0f4ff; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; border-left: 4px solid var(--primary);">
+            <strong style="color: var(--primary);">💡 Tip:</strong> Select a crew member from the list to notify them automatically via email (if they have an email address set).
+        </div>
+        
+        <form id="addCrewForm">
+            <div class="form-group">
+                <label>Crew Member *</label>
+                <select id="crewMember" required>
+                    <option value="">-- Select a crew member --</option>
+                    {% for user in all_users %}
+                    <option value="{{ user.username }}">
+                        {{ user.username }}{% if user.email %} ({{ user.email }}){% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Role / Position</label>
+                <input type="text" id="crewRole" placeholder="e.g., Stage Manager, Lighting Operator, Sound Tech">
+            </div>
+            <button type="submit" class="btn btn-success" style="width: 100%;"><i class="fas fa-plus"></i> Add to Crew</button>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('addCrewForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const data = {
+        event_id: {{ event.id }},
+        crew_member: document.getElementById('crewMember').value,
+        role: document.getElementById('crewRole').value
+    };
+    
+    fetch('/crew/assign', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert('Crew member added! Email notification sent if available.', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showAlert(result.error || 'Error adding crew member', 'error');
+        }
+    });
+});
+
+function removeCrew(id) {
+    if (!confirm('Remove this crew member from the event?')) return;
+    
+    fetch(`/crew/remove/${id}`, {method: 'DELETE'})
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                showAlert('Crew member removed', 'success');
+                setTimeout(() => location.reload(), 500);
+            }
+        });
+}
+
+function resendNotification(assignmentId, crewMember) {
+    if (!confirm(`Send notification email to ${crewMember}?`)) return;
+    
+    fetch('/crew/resend-notification', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            assignment_id: assignmentId,
+            event_id: {{ event.id }}
+        })
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert('Notification email sent!', 'success');
+        } else {
+            showAlert(result.error || 'Failed to send notification', 'error');
+        }
+    });
+}
+</script>
+{% endblock %}
