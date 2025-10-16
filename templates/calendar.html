@@ -1,32 +1,4 @@
-function deleteEvent(id) {
-    if (!confirm('Delete this event? This will also delete all associated pick list items, stage plans, and crew assignments.')) return;
-    
-    fetch(`/events/delete/${id}`, {method: 'DELETE'})
-        .then(r => r.json())
-        .then(result => {
-            if (result.success) {
-                location.reload();
-            } else {
-                alert('Error: ' + (result.error || 'Unknown error'));
-            }
-        });
-}
-
-function subscribeCalendar() {
-    const host = window.location.host;
-    const protocol = window.location.protocol;
-    const calendarUrl = `${protocol}//${host}/calendar/ics`;
-    
-    // Copy to clipboard
-    navigator.clipboard.writeText(calendarUrl).then(() => {
-        showAlert('Calendar URL copied! Paste it in Google Calendar settings.', 'success');
-    });
-    
-    // Also open Google Calendar
-    setTimeout(() => {
-        window.open('https://calendar.google.com/calendar/u/0/r/settings/addbyurl', '_blank');
-    }, 500);
-}{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}Calendar{% endblock %}
 
@@ -197,6 +169,35 @@ function deleteEvent(id) {
                 alert('Error: ' + (result.error || 'Unknown error'));
             }
         });
+}
+function deleteEvent(id) {
+    if (!confirm('Delete this event? This will also delete all associated pick list items, stage plans, and crew assignments.')) return;
+    
+    fetch(`/events/delete/${id}`, {method: 'DELETE'})
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                location.reload();
+            } else {
+                alert('Error: ' + (result.error || 'Unknown error'));
+            }
+        });
+}
+
+function subscribeCalendar() {
+    const host = window.location.host;
+    const protocol = window.location.protocol;
+    const calendarUrl = `${protocol}//${host}/calendar/ics`;
+    
+    // Copy to clipboard
+    navigator.clipboard.writeText(calendarUrl).then(() => {
+        showAlert('Calendar URL copied! Paste it in Google Calendar settings.', 'success');
+    });
+    
+    // Also open Google Calendar
+    setTimeout(() => {
+        window.open('https://calendar.google.com/calendar/u/0/r/settings/addbyurl', '_blank');
+    }, 500);
 }
 </script>
 {% endblock %}
