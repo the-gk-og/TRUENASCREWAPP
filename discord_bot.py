@@ -1,3 +1,5 @@
+# Updated discord_bot.py - Replace your existing file with this
+
 import discord
 from discord.ext import commands
 import os
@@ -107,7 +109,7 @@ async def find_equipment(interaction: discord.Interaction, query: str):
         embed = discord.Embed(title="❌ Error", description=str(e), color=discord.Color.red())
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-@bot.tree.command(name="events", description="List all events with IDs")
+@bot.tree.command(name="events", description="List all events")
 async def list_events(interaction: discord.Interaction):
     """List upcoming events"""
     try:
@@ -129,7 +131,7 @@ async def list_events(interaction: discord.Interaction):
         embed = discord.Embed(title="❌ Error", description=str(e), color=discord.Color.red())
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-@bot.tree.command(name="list", description="List crew for an event")
+@bot.tree.command(name="crew", description="List crew for an event")
 async def list_crew(interaction: discord.Interaction, event_id: int):
     """List crew assigned to event"""
     try:
@@ -150,36 +152,44 @@ async def list_crew(interaction: discord.Interaction, event_id: int):
         embed = discord.Embed(title="❌ Error", description=str(e), color=discord.Color.red())
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# EVENT MANAGEMENT
-
-@bot.tree.command(name="add-event", description="Create an event")
-async def add_event(interaction: discord.Interaction, title: str, date: str, location: str = None):
-    """Create new event (format date as: 2024-12-25 18:00)"""
+# PICK LIST COMMAND - FIXED
+@bot.tree.command(name="pick-list", description="View pick list for event")
+async def pick_list(interaction: discord.Interaction, event_id: int):
+    """View pick list items - FIXED VERSION"""
     try:
-        response = requests.post(
-            f"{WEB_APP_URL}/discord/add-event",
-            json={
-                "title": title,
-                "date": date,
-                "location": location or "TBD",
-                "secret": DISCORD_BOT_SECRET
-            },
-            timeout=5
-        )
+        response = requests.get(f"{WEB_APP_URL}/discord/pick-list/{event_id}", timeout=5)
         if response.status_code == 200:
             data = response.json()
-            embed = discord.Embed(
-                title="✅ Event Created!",
-                description=f"**{title}**\n📅 {date}\n📍 {location}\n\nEvent ID: {data['event_id']}",
-                color=discord.Color.green()
-            )
+            event_title = data.get('event_title', 'Event')
+            items = data.get('items', [])
+            
+            if not items:
+                embed = discord.Embed(title=f"📋 {event_title}", description="No items in pick list", color=discord.Color.blue())
+            else:
+                checked = sum(1 for item in items if item['is_checked'])
+                embed = discord.Embed(
+                    title=f"📋 {event_title}",
+                    description=f"Progress: {checked}/{len(items)} items gathered",
+                    color=discord.Color.blue()
+                )
+                for item in items[:20]:  # Show max 20 items
+                    status = "✅" if item['is_checked'] else "⬜"
+                    location = item.get('location', 'N/A')
+                    category = item.get('category', 'N/A')
+                    embed.add_field(
+                        name=f"{status} {item['name']}",
+                        value=f"Qty: {item['quantity']} | 📍 {location} | 📦 {category}",
+                        inline=False
+                    )
             await interaction.response.send_message(embed=embed, ephemeral=True)
         else:
-            embed = discord.Embed(title="❌ Error", description=response.json().get('error', 'Failed'), color=discord.Color.red())
+            embed = discord.Embed(title="❌ Error", description="Event not found or has no pick list", color=discord.Color.red())
             await interaction.response.send_message(embed=embed, ephemeral=True)
     except Exception as e:
         embed = discord.Embed(title="❌ Error", description=str(e), color=discord.Color.red())
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+# EVENT MANAGEMENT
 
 @bot.tree.command(name="join-event", description="Join event by ID")
 async def join_event(interaction: discord.Interaction, event_id: int):
@@ -221,39 +231,6 @@ async def leave_event(interaction: discord.Interaction, event_id: int):
         embed = discord.Embed(title="❌ Error", description=str(e), color=discord.Color.red())
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# PICK LISTS
-
-@bot.tree.command(name="pick-list", description="View pick list for event")
-async def pick_list(interaction: discord.Interaction, event_id: int):
-    """View pick list items"""
-    try:
-        response = requests.get(f"{WEB_APP_URL}/discord/pick-list/{event_id}", timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            event_title = data.get('event_title', 'Event')
-            items = data.get('items', [])
-            
-            if not items:
-                embed = discord.Embed(title=f"📋 {event_title}", description="No items in pick list", color=discord.Color.blue())
-            else:
-                checked = sum(1 for item in items if item['is_checked'])
-                embed = discord.Embed(
-                    title=f"📋 {event_title}",
-                    description=f"Progress: {checked}/{len(items)} items gathered",
-                    color=discord.Color.blue()
-                )
-                for item in items[:15]:
-                    status = "✅" if item['is_checked'] else "⬜"
-                    embed.add_field(
-                        name=f"{status} {item['name']}",
-                        value=f"Qty: {item['quantity']} | {item['location']}",
-                        inline=False
-                    )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-    except Exception as e:
-        embed = discord.Embed(title="❌ Error", description=str(e), color=discord.Color.red())
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
 @bot.tree.command(name="my-events", description="Your assigned events")
 async def my_events(interaction: discord.Interaction):
     """Show your events"""
@@ -282,10 +259,10 @@ async def help_command(interaction: discord.Interaction):
     """Show help"""
     embed = discord.Embed(title="🎭 Production Crew Commands", color=discord.Color.blue())
     
-    embed.add_field(name="📝 Account", value="/create-account, /link-account", inline=False)
-    embed.add_field(name="🔍 Search", value="/find, /events, /list", inline=False)
-    embed.add_field(name="📅 Events", value="/add-event, /join-event, /leave-event, /my-events", inline=False)
-    embed.add_field(name="📋 Lists", value="/pick-list", inline=False)
+    embed.add_field(name="📝 Account", value="`/create-account` • `/link-account`", inline=False)
+    embed.add_field(name="🔍 Search", value="`/find` • `/events` • `/crew`", inline=False)
+    embed.add_field(name="📅 Events", value="`/join-event` • `/leave-event` • `/my-events`", inline=False)
+    embed.add_field(name="📋 Lists", value="`/pick-list` - View items for event", inline=False)
     embed.add_field(name="ℹ️ Info", value="React with ✋ to join events from messages", inline=False)
     
     await interaction.response.send_message(embed=embed, ephemeral=True)

@@ -11,6 +11,9 @@ import shutil
 import csv
 import io
 import requests
+from datetime import datetime, timedelta
+import pytz
+
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-change-this'
@@ -108,6 +111,17 @@ class CrewAssignment(db.Model):
     role = db.Column(db.String(100))
     assigned_at = db.Column(db.DateTime, default=datetime.utcnow)
     assigned_via = db.Column(db.String(20), default='webapp')
+
+class EventSchedule(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
+    schedule_type = db.Column(db.String(100), nullable=False)  # 'arrival', 'bump_in', 'sound_check', 'rehearsal', 'performance', etc.
+    scheduled_time = db.Column(db.DateTime, nullable=False)
+    description = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    event = db.relationship('Event', backref=db.backref('schedules', cascade='all, delete-orphan'))
+
 
 # LOGIN & UTILITIES
 
@@ -223,6 +237,7 @@ Production Crew Management System Team
     except Exception as e:
         print(f"Contact form error: {e}")
         return jsonify({'error': 'Failed to send message. Please try again later.'}), 500
+
 
 @app.route('/quote', methods=['GET', 'POST'])
 def quote():
@@ -515,20 +530,43 @@ def calendar_ics():
 @login_required
 def add_event():
     data = request.json
-    event = Event(title=data['title'], description=data.get('description', ''), event_date=datetime.fromisoformat(data['event_date']), location=data.get('location', ''), created_by=current_user.username)
+    event = Event(
+        title=data['title'],
+        description=data.get('description', ''),
+        event_date=datetime.fromisoformat(data['event_date']),
+        location=data.get('location', ''),
+        created_by=current_user.username
+    )
     db.session.add(event)
     db.session.commit()
     send_discord_message(event)
     return jsonify({'success': True, 'id': event.id})
 
-@app.route('/events/<int:id>')
+@app.route('/events/<int:id>', methods=['GET'])
 @login_required
 def event_detail(id):
     event = Event.query.get_or_404(id)
     all_users = User.query.all()
-    return render_template('event_detail.html', event=event, all_users=all_users)
+    schedules = EventSchedule.query.filter_by(event_id=id).order_by(EventSchedule.scheduled_time).all()
+    return render_template('event_detail.html', event=event, all_users=all_users, schedules=schedules)
 
-@app.route('/events/delete/<int:id>', methods=['DELETE'])
+@app.route('/events/<int:id>/edit', methods=['PUT'])
+@login_required
+def edit_event(id):
+    event = Event.query.get_or_404(id)
+    data = request.json
+    
+    event.title = data.get('title', event.title)
+    event.description = data.get('description', event.description)
+    event.location = data.get('location', event.location)
+    
+    if data.get('event_date'):
+        event.event_date = datetime.fromisoformat(data['event_date'])
+    
+    db.session.commit()
+    return jsonify({'success': True})
+
+@app.route('/events/<int:id>', methods=['DELETE'])
 @login_required
 def delete_event(id):
     if not current_user.is_admin:
@@ -538,6 +576,50 @@ def delete_event(id):
     db.session.commit()
     return jsonify({'success': True})
 
+# EVENT SCHEDULING ROUTES - Add these new routes
+
+@app.route('/events/<int:event_id>/schedule/add', methods=['POST'])
+@login_required
+def add_event_schedule(event_id):
+    event = Event.query.get_or_404(event_id)
+    data = request.json
+    
+    schedule = EventSchedule(
+        event_id=event_id,
+        schedule_type=data['schedule_type'],
+        scheduled_time=datetime.fromisoformat(data['scheduled_time']),
+        description=data.get('description', '')
+    )
+    
+    db.session.add(schedule)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'id': schedule.id,
+        'scheduled_time': schedule.scheduled_time.isoformat()
+    })
+
+@app.route('/events/schedule/<int:schedule_id>/edit', methods=['PUT'])
+@login_required
+def edit_event_schedule(schedule_id):
+    schedule = EventSchedule.query.get_or_404(schedule_id)
+    data = request.json
+    
+    schedule.schedule_type = data.get('schedule_type', schedule.schedule_type)
+    schedule.scheduled_time = datetime.fromisoformat(data['scheduled_time'])
+    schedule.description = data.get('description', schedule.description)
+    
+    db.session.commit()
+    return jsonify({'success': True})
+
+@app.route('/events/schedule/<int:schedule_id>/delete', methods=['DELETE'])
+@login_required
+def delete_event_schedule(schedule_id):
+    schedule = EventSchedule.query.get_or_404(schedule_id)
+    db.session.delete(schedule)
+    db.session.commit()
+    return jsonify({'success': True})
 # CREW ROUTES
 
 @app.route('/crew/assign', methods=['POST'])
@@ -797,6 +879,29 @@ def discord_leave_event():
         db.session.commit()
     
     return jsonify({'success': True})
+
+@app.route('/discord/pick-list/<int:event_id>')
+def discord_pick_list(event_id):
+    """Get pick list for event (Discord API)"""
+    event = Event.query.get_or_404(event_id)
+    items = PickListItem.query.filter_by(event_id=event_id).all()
+    
+    items_data = []
+    for item in items:
+        items_data.append({
+            'id': item.id,
+            'name': item.item_name,
+            'quantity': item.quantity,
+            'is_checked': item.is_checked,
+            'location': item.equipment.location if item.equipment else 'N/A',
+            'category': item.equipment.category if item.equipment else 'N/A'
+        })
+    
+    return jsonify({
+        'event_title': event.title,
+        'items': items_data
+    })
+
 
 # ADMIN ROUTES
 
