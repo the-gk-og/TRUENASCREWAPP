@@ -158,7 +158,7 @@ def send_discord_message(event):
             "fields": [
                 {"name": "📅 Date & Time", "value": event.event_date.strftime('%B %d, %Y at %I:%M %p'), "inline": False},
                 {"name": "📍 Location", "value": event.location or "TBD", "inline": False},
-                {"name": "👥 How to Join", "value": "React with ✋ to add yourself!", "inline": False}
+                #{"name": "👥 How to Join", "value": "React with ✋ to add yourself!", "inline": False}
             ],
             "footer": {"text": f"Event ID: {event.id}"}
         }
