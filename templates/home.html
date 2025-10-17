@@ -1,88 +1,12 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Production Crew Management System</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+{% extends "base_alt.html" %}
+
+{% block title %}Login - Production Crew{% endblock %}
+
+{% block content %}
+
+
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        :root {
-            --primary: #6366f1;
-            --primary-dark: #4f46e5;
-            --secondary: #ec4899;
-            --success: #10b981;
-            --danger: #ef4444;
-            --warning: #f59e0b;
-            --dark: #1f2937;
-            --light: #f9fafb;
-            --border: #e5e7eb;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, var(--light) 0%, #f3f4f6 100%);
-            color: var(--dark);
-        }
-        
-        header {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-            color: white;
-            padding: 1rem 2rem;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.2);
-        }
-        
-        nav {
-            max-width: 1400px;
-            margin: 0 auto;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .logo {
-            font-size: 1.5rem;
-            font-weight: bold;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        .nav-links {
-            display: flex;
-            gap: 2rem;
-            align-items: center;
-        }
-        
-        .nav-links a {
-            color: white;
-            text-decoration: none;
-            font-weight: 500;
-            transition: opacity 0.3s;
-        }
-        
-        .nav-links a:hover {
-            opacity: 0.8;
-        }
-        
-        .btn-login {
-            background: white;
-            color: var(--primary);
-            padding: 0.6rem 1.5rem;
-            border-radius: 6px;
-            text-decoration: none;
-            font-weight: 600;
-            transition: all 0.3s;
-        }
-        
-        .btn-login:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(255, 255, 255, 0.3);
-        }
+
         
         .hero {
             max-width: 1400px;
@@ -201,12 +125,13 @@
         }
         
         .cta-section {
+            width: 100%;
             background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
             color: white;
             padding: 4rem 2rem;
             text-align: center;
-            margin: 4rem 0;
-        }
+            margin: 0;
+  }
         
         .cta-section h2 {
             font-size: 2.5rem;
@@ -280,26 +205,13 @@
     </style>
 </head>
 <body>
-    <header>
-        <nav>
-            <div class="logo">
-                <span style="font-size: 2rem;">🎭</span>
-                <span>Production Crew</span>
-            </div>
-            <div class="nav-links">
-                <a href="/home">Home</a>
-                <a href="/learn-more">Learn More</a>
-                <a href="/contact">Contact</a>
-                <a href="/login" class="btn-login">Login</a>
-            </div>
-        </nav>
-    </header>
+
 
     <section class="hero">
         <h1>Production Crew Management System</h1>
         <p>Streamline your production workflow with intelligent equipment tracking, crew scheduling, and event management all in one place.</p>
         <div class="hero-buttons">
-            <a href="/login" class="btn btn-primary"><i class="fas fa-sign-in-alt"></i> Get Started</a>
+            <a href="/quote" class="btn btn-primary"><i class="fas fa-sign-in-alt"></i> Enquire Now</a>
             <a href="/learn-more" class="btn btn-secondary"><i class="fas fa-book"></i> Learn More</a>
         </div>
     </section>
@@ -366,16 +278,11 @@
     <section class="cta-section">
         <h2>Ready to Get Started?</h2>
         <p>Join other production teams managing their workflow more efficiently</p>
-        <a href="/login" class="btn btn-primary"><i class="fas fa-arrow-right"></i> Login to Dashboard</a>
+        <a href="/quote" class="btn btn-primary"><i class="fas fa-arrow-right"></i>Contact Us</a>
     </section>
 
-    <footer>
-        <div class="footer-links">
-            <a href="/home">Home</a>
-            <a href="/learn-more">Learn More</a>
-            <a href="/contact">Contact</a>
-        </div>
-        <p>&copy; 2024 Production Crew Management System. All rights reserved.</p>
-    </footer>
+
 </body>
 </html>
+  
+{% endblock %}

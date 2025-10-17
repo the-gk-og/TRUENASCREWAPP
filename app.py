@@ -224,6 +224,25 @@ Production Crew Management System Team
         print(f"Contact form error: {e}")
         return jsonify({'error': 'Failed to send message. Please try again later.'}), 500
 
+@app.route('/quote', methods=['GET', 'POST'])
+def quote():
+    if request.method == 'POST':
+        name = request.form.get('name')
+        email = request.form.get('email')
+        organization = request.form.get('organization')
+        message = request.form.get('message')
+
+        # You can add email sending or database storage here
+        print("Quote enquiry received:")
+        print(f"Name: {name}")
+        print(f"Email: {email}")
+        print(f"Organization: {organization}")
+        print(f"Message: {message}")
+
+        flash('Your enquiry has been submitted successfully. We’ll be in touch soon!', 'success')
+        return redirect('/quote')
+
+    return render_template('quote.html')
 
 
 # AUTH ROUTES
@@ -235,7 +254,7 @@ Production Crew Management System Team
 def index():
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
-    return redirect(url_for('login'))
+    return redirect(url_for('home'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():

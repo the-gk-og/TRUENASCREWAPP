@@ -1,0 +1,138 @@
+{% extends "base_alt.html" %}
+
+{% block title %}Enquire for Quote - Production Crew{% endblock %}
+
+{% block head %}
+<style>
+  .quote-section {
+    max-width: 800px;
+    margin: 6rem auto;
+    background: white;
+    padding: 3rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    border: 1px solid var(--border);
+    text-align: center;
+  }
+
+  .quote-section h2 {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    color: var(--primary);
+  }
+
+  .quote-section p {
+    font-size: 1.1rem;
+    color: #555;
+    margin-bottom: 2rem;
+  }
+
+  .form-group {
+    margin-bottom: 1.5rem;
+    text-align: left;
+  }
+
+  label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: var(--dark);
+  }
+
+  input, textarea {
+    width: 100%;
+    padding: 0.875rem 1rem;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    resize: vertical;
+  }
+
+  input:focus, textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  }
+
+  .btn {
+    width: 100%;
+    padding: 1rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    color: white;
+    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+  }
+
+  .alert {
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    border-left: 4px solid var(--danger);
+    background: #fef2f2;
+    color: #7f1d1d;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  @media (max-width: 768px) {
+    .quote-section {
+      margin: 4rem 1rem;
+      padding: 2rem;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="quote-section">
+  <h2><i class="fas fa-file-invoice-dollar"></i> Enquire for Deployment Quote</h2>
+  <p>We offer custom deployments tailored to your production team’s needs. Fill out the form below and we’ll get back to you with a personalized quote.</p>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      {% for message in messages %}
+        <div class="alert"><i class="fas fa-exclamation-circle"></i> {{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <form method="POST" action="/quote">
+    <div class="form-group">
+      <label for="name"><i class="fas fa-user"></i> Your Name</label>
+      <input type="text" id="name" name="name" required placeholder="Enter your full name" />
+    </div>
+    <div class="form-group">
+      <label for="email"><i class="fas fa-envelope"></i> Email Address</label>
+      <input type="email" id="email" name="email" required placeholder="Enter your email" />
+    </div>
+    <div class="form-group">
+      <label for="organization"><i class="fas fa-building"></i> Organization</label>
+      <input type="text" id="organization" name="organization" placeholder="Your team or company name" />
+    </div>
+    <div class="form-group">
+      <label for="message"><i class="fas fa-comment-dots"></i> Requirements</label>
+      <textarea id="message" name="message" rows="5" required placeholder="Describe your deployment needs, team size, and any special features you’re interested in..."></textarea>
+    </div>
+    <button type="submit" class="btn btn-primary">
+      <i class="fas fa-paper-plane"></i> Submit Enquiry
+    </button>
+  </form>
+</section>
+{% endblock %}

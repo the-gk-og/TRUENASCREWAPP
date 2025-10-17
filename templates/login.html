@@ -1,318 +1,166 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Production Crew Manager</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-        }
-        
-        .background-animation {
-            position: absolute;
-            width: 400px;
-            height: 400px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 50%;
-            animation: float 20s infinite;
-        }
-        
-        .bg-circle-1 {
-            top: -50px;
-            left: -50px;
-            animation-delay: 0s;
-        }
-        
-        .bg-circle-2 {
-            bottom: -100px;
-            right: -50px;
-            animation-delay: 2s;
-        }
-        
-        @keyframes float {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(20px); }
-        }
-        
-        .login-container {
-            background: white;
-            padding: 3.5rem;
-            border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            width: 100%;
-            max-width: 420px;
-            position: relative;
-            z-index: 10;
-            animation: slideUp 0.5s ease;
-        }
-        
-        @keyframes slideUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        
-        .logo {
-            text-align: center;
-            margin-bottom: 2rem;
-        }
-        
-        .logo h1 {
-            font-size: 2.5rem;
-            color: #667eea;
-            margin-bottom: 0.5rem;
-        }
-        
-        .logo p {
-            color: #999;
-            font-size: 0.95rem;
-        }
-        
-        .form-group {
-            margin-bottom: 1.5rem;
-        }
-        
-        label {
-            display: block;
-            margin-bottom: 0.75rem;
-            font-weight: 600;
-            color: #333;
-            font-size: 0.95rem;
-        }
-        
-        input {
-            width: 100%;
-            padding: 0.875rem 1rem;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 1rem;
-            transition: all 0.3s ease;
-            font-family: inherit;
-        }
-        
-        input:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-        
-        /* Mobile optimization */
-        input {
-            font-size: 16px; /* Prevents iOS zoom on focus */
-        }
-        
-        @media (max-width: 768px) {
-            body {
-                padding: 1rem;
-            }
-            
-            .login-container {
-                max-width: 100%;
-                padding: 2rem 1.5rem;
-                margin: 0 auto;
-            }
-            
-            .logo h1 {
-                font-size: 2rem;
-            }
-            
-            .logo p {
-                font-size: 0.9rem;
-            }
-            
-            .form-group {
-                margin-bottom: 1.25rem;
-            }
-            
-            label {
-                font-size: 0.95rem;
-            }
-            
-            button {
-                padding: 0.875rem;
-                font-size: 0.95rem;
-            }
-            
-            .info-box {
-                font-size: 0.8rem;
-                padding: 0.75rem;
-            }
-        }
-        
-        @media (max-width: 480px) {
-            .login-container {
-                padding: 1.5rem 1rem;
-            }
-            
-            .logo h1 {
-                font-size: 1.75rem;
-            }
-            
-            .logo p {
-                font-size: 0.85rem;
-            }
-            
-            h2 {
-                font-size: 1.25rem;
-            }
-            
-            label {
-                font-size: 0.9rem;
-            }
-            
-            input {
-                padding: 0.75rem;
-                font-size: 16px;
-            }
-            
-            button {
-                padding: 0.75rem;
-                font-size: 0.9rem;
-            }
-            
-            .info-box {
-                font-size: 0.75rem;
-                padding: 0.75rem;
-                border-radius: 6px;
-            }
-            
-            .info-box code {
-                font-size: 0.7rem;
-            }
-        }
-        
-        button {
-            width: 100%;
-            padding: 1rem;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-        }
-        
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
-        }
-        
-        button:active {
-            transform: translateY(0);
-        }
-        
-        .alert {
-            padding: 1rem;
-            border-radius: 8px;
-            margin-bottom: 1.5rem;
-            border-left: 4px solid #ef4444;
-            background: #fef2f2;
-            color: #7f1d1d;
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            animation: slideDown 0.3s ease;
-        }
-        
-        @keyframes slideDown {
-            from {
-                opacity: 0;
-                transform: translateY(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        
-        .info-box {
-            background: #f0f4ff;
-            border-left: 4px solid #667eea;
-            padding: 1rem;
-            border-radius: 8px;
-            margin-top: 2rem;
-            font-size: 0.85rem;
-            color: #333;
-        }
-        
-        .info-box strong {
-            color: #667eea;
-        }
-        
-        @media (max-width: 480px) {
-            .login-container {
-                padding: 2rem;
-                margin: 1rem;
-            }
-            
-            .logo h1 {
-                font-size: 2rem;
-            }
-            
-            .background-animation {
-                width: 250px;
-                height: 250px;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="background-animation bg-circle-1"></div>
-    <div class="background-animation bg-circle-2"></div>
-    
-    <div class="login-container">
-        <div class="logo">
-            <h1>🎭</h1>
-            <h2 style="color: #333; font-size: 1.5rem; margin-bottom: 0.5rem;">Production Crew</h2>
-            <p>Management System</p>
-        </div>
-        
-        {% with messages = get_flashed_messages() %}
-            {% if messages %}
-                {% for message in messages %}
-                <div class="alert"><i class="fas fa-exclamation-circle"></i> {{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-        
-        <form method="POST">
-            <div class="form-group">
-                <label for="username"><i class="fas fa-user"></i> Username</label>
-                <input type="text" id="username" name="username" required autofocus placeholder="Enter your username">
-            </div>
-            <div class="form-group">
-                <label for="password"><i class="fas fa-lock"></i> Password</label>
-                <input type="password" id="password" name="password" required placeholder="Enter your password">
-            </div>
-            <button type="submit" style="margin-top: 1rem;">
-                <i class="fas fa-sign-in-alt"></i> Login
-            </button>
-        </form>
-        
-        <div class="info-box">
-            <strong>Demo Account:</strong><br>
-            Username: <code>admin</code><br>
-            Password: <code>admin123</code><br>
-            <em style="color: #999;">Change these after first login!</em>
-        </div>
+{% extends "base_alt.html" %}
+
+{% block title %}Login - Production Crew{% endblock %}
+
+{% block head %}
+<style>
+  body {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    overflow: hidden;
+  }
+
+  .background-animation {
+    position: absolute;
+    width: 400px;
+    height: 400px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    animation: float 20s infinite;
+    z-index: 0;
+  }
+
+  .bg-circle-1 {
+    top: -50px;
+    left: -50px;
+    animation-delay: 0s;
+  }
+
+  .bg-circle-2 {
+    bottom: -100px;
+    right: -50px;
+    animation-delay: 2s;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(20px); }
+  }
+
+  .login-container {
+    background: white;
+    padding: 3rem;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    width: 100%;
+    max-width: 420px;
+    margin: 8rem auto;
+    position: relative;
+    z-index: 10;
+    animation: slideUp 0.5s ease;
+  }
+
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .login-container h2 {
+    text-align: center;
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    color: #667eea;
+  }
+
+  .login-container p {
+    text-align: center;
+    color: #666;
+    margin-bottom: 2rem;
+  }
+
+  .form-group {
+    margin-bottom: 1.5rem;
+  }
+
+  label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: #333;
+  }
+
+  input {
+    width: 100%;
+    padding: 0.875rem 1rem;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+  }
+
+  input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  }
+
+  .btn {
+    width: 100%;
+    padding: 1rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+  }
+
+  .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+  }
+
+  .alert {
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    border-left: 4px solid #ef4444;
+    background: #fef2f2;
+    color: #7f1d1d;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  @media (max-width: 768px) {
+    .login-container {
+      margin: 6rem 1rem;
+      padding: 2rem;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="background-animation bg-circle-1"></div>
+<div class="background-animation bg-circle-2"></div>
+
+<div class="login-container">
+  <h2><i class="fas fa-sign-in-alt"></i> Login</h2>
+  <p>Access your dashboard and manage your crew</p>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      {% for message in messages %}
+        <div class="alert"><i class="fas fa-exclamation-circle"></i> {{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <form method="POST">
+    <div class="form-group">
+      <label for="username"><i class="fas fa-user"></i> Username</label>
+      <input type="text" id="username" name="username" required autofocus placeholder="Enter your username" />
     </div>
-</body>
-</html>
+    <div class="form-group">
+      <label for="password"><i class="fas fa-lock"></i> Password</label>
+      <input type="password" id="password" name="password" required placeholder="Enter your password" />
+    </div>
+    <button type="submit" class="btn">
+      <i class="fas fa-sign-in-alt"></i> Login
+    </button>
+  </form>
+</div>
+{% endblock %}
