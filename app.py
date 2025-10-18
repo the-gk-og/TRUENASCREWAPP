@@ -13,6 +13,15 @@ import io
 import requests
 from datetime import datetime, timedelta
 import pytz
+import secrets
+import string
+import threading
+import discord
+from discord.ext import commands
+import os
+import requests
+from dotenv import load_dotenv
+
 
 
 app = Flask(__name__)
@@ -39,6 +48,8 @@ mail = Mail(app)
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs('backups', exist_ok=True)
+
+notification_tracker = {}
 
 # DATABASE MODELS
 
@@ -146,27 +157,232 @@ def send_email(subject, recipient, body):
     except Exception as e:
         print(f"Failed to send email: {e}")
         return False
+    return None
 
-def send_discord_message(event):
+def send_discord_event_announcement(event):
+    """Send event announcement to Discord immediately when created"""
     if not DISCORD_WEBHOOK_URL:
-        return None
+        return
+    
     try:
         embed = {
             "title": f"🎭 New Event: {event.title}",
             "description": event.description or "No description provided",
-            "color": 6366239,
+            "color": 6366239,  # Indigo
             "fields": [
-                {"name": "📅 Date & Time", "value": event.event_date.strftime('%B %d, %Y at %I:%M %p'), "inline": False},
-                {"name": "📍 Location", "value": event.location or "TBD", "inline": False},
-                #{"name": "👥 How to Join", "value": "React with ✋ to add yourself!", "inline": False}
+                {
+                    "name": "📅 Date & Time",
+                    "value": event.event_date.strftime('%B %d, %Y at %I:%M %p'),
+                    "inline": False
+                },
+                {
+                    "name": "📍 Location",
+                    "value": event.location or "TBD",
+                    "inline": False
+                },
+                {
+                    "name": "🎟️ Event ID",
+                    "value": str(event.id),
+                    "inline": True
+                }
             ],
             "footer": {"text": f"Event ID: {event.id}"}
         }
+        
         response = requests.post(DISCORD_WEBHOOK_URL, json={"embeds": [embed]})
-        return response.status_code == 204
+        
+        if response.status_code == 204:
+            # Track that we sent the "created" notification
+            if event.id not in notification_tracker:
+                notification_tracker[event.id] = {}
+            notification_tracker[event.id]['created'] = True
+            print(f"✓ Posted new event to Discord: {event.title}")
+            return True
     except Exception as e:
-        print(f"Failed to send Discord message: {e}")
+        print(f"❌ Error posting event to Discord: {e}")
+    
     return None
+
+def schedule_event_notifications(event):
+    """Schedule notifications for 1 week before, 1 day before, and on the day"""
+    
+    def send_timed_notification(event_id, notification_type):
+        """Send a timed notification"""
+        try:
+            # Fetch fresh event data
+            event = Event.query.get(event_id)
+            if not event:
+                return
+            
+            if not DISCORD_WEBHOOK_URL:
+                return
+            
+            # Get all crew members for this event
+            crew_members = [a.crew_member for a in event.crew_assignments]
+            
+            # Fetch Discord IDs for crew members
+            discord_mentions = []
+            for crew_name in crew_members:
+                user = User.query.filter_by(username=crew_name).first()
+                if user and user.discord_id:
+                    discord_mentions.append(f"<@{user.discord_id}>")
+            
+            # Check if we've already sent this notification type for this event
+            if event_id not in notification_tracker:
+                notification_tracker[event_id] = {}
+            
+            if notification_type in notification_tracker[event_id]:
+                print(f"⏭️  Notification '{notification_type}' already sent for event {event_id} - skipping")
+                return
+            
+            # Create the appropriate embed based on notification type
+            if notification_type == '1_week_before':
+                embed = {
+                    "title": f"📅 Event in 1 Week: {event.title}",
+                    "description": "Your event is coming up next week! Be prepared!",
+                    "color": 16776960,  # Gold/Yellow
+                    "fields": [
+                        {
+                            "name": "📅 Date & Time",
+                            "value": event.event_date.strftime('%B %d, %Y at %I:%M %p'),
+                            "inline": False
+                        },
+                        {
+                            "name": "📍 Location",
+                            "value": event.location or "TBD",
+                            "inline": False
+                        },
+                        {
+                            "name": "🎟️ Event ID",
+                            "value": str(event.id),
+                            "inline": True
+                        }
+                    ],
+                    "footer": {"text": f"Event ID: {event.id}"}
+                }
+                mention_text = "⏰ Reminder to assigned crew:"
+            
+            elif notification_type == '1_day_before':
+                embed = {
+                    "title": f"⏰ Event Tomorrow: {event.title}",
+                    "description": "Your event is happening tomorrow! Get ready!",
+                    "color": 16753920,  # Orange
+                    "fields": [
+                        {
+                            "name": "📅 Date & Time",
+                            "value": event.event_date.strftime('%B %d, %Y at %I:%M %p'),
+                            "inline": False
+                        },
+                        {
+                            "name": "📍 Location",
+                            "value": event.location or "TBD",
+                            "inline": False
+                        },
+                        {
+                            "name": "🎟️ Event ID",
+                            "value": str(event.id),
+                            "inline": True
+                        }
+                    ],
+                    "footer": {"text": f"Event ID: {event.id}"}
+                }
+                mention_text = "🚨 Event tomorrow - assigned crew:"
+            
+            elif notification_type == 'event_today':
+                embed = {
+                    "title": f"🎭 EVENT TODAY: {event.title}",
+                    "description": "Your event is happening RIGHT NOW!",
+                    "color": 16711680,  # Red/Bright
+                    "fields": [
+                        {
+                            "name": "📅 Date & Time",
+                            "value": event.event_date.strftime('%B %d, %Y at %I:%M %p'),
+                            "inline": False
+                        },
+                        {
+                            "name": "📍 Location",
+                            "value": event.location or "TBD",
+                            "inline": False
+                        },
+                        {
+                            "name": "🎟️ Event ID",
+                            "value": str(event.id),
+                            "inline": True
+                        }
+                    ],
+                    "footer": {"text": f"Event ID: {event.id}"}
+                }
+                mention_text = "🎬 EVENT IS HAPPENING NOW - Assigned crew:"
+            
+            # Send the message
+            content = mention_text
+            if discord_mentions:
+                content += " " + " ".join(discord_mentions)
+            else:
+                content = mention_text + " (no crew members linked to Discord)"
+            
+            payload = {
+                "content": content,
+                "embeds": [embed]
+            }
+            
+            response = requests.post(DISCORD_WEBHOOK_URL, json=payload)
+            
+            if response.status_code == 204:
+                notification_tracker[event_id][notification_type] = True
+                print(f"✓ Posted {notification_type} notification for event {event_id}: {event.title}")
+                return True
+            else:
+                print(f"❌ Failed to post {notification_type} notification: {response.status_code}")
+        
+        except Exception as e:
+            print(f"❌ Error sending {notification_type} notification: {e}")
+    
+    # Calculate delays for each notification
+    now = datetime.utcnow()
+    event_time = event.event_date
+    
+    # 1 week before
+    one_week_before = event_time - timedelta(days=7)
+    delay_one_week = (one_week_before - now).total_seconds()
+    
+    # 1 day before
+    one_day_before = event_time - timedelta(days=1)
+    delay_one_day = (one_day_before - now).total_seconds()
+    
+    # On the day (at 8:00 AM of event day)
+    event_day_morning = event_time.replace(hour=8, minute=0, second=0, microsecond=0)
+    delay_event_day = (event_day_morning - now).total_seconds()
+    
+    # Schedule notifications only if they're in the future
+    if delay_one_week > 0:
+        print(f"⏱️  Scheduled '1 week before' notification for event {event.id} in {delay_one_week/3600:.1f} hours")
+        timer = threading.Timer(delay_one_week, send_timed_notification, args=[event.id, '1_week_before'])
+        timer.daemon = True
+        timer.start()
+    
+    if delay_one_day > 0:
+        print(f"⏱️  Scheduled '1 day before' notification for event {event.id} in {delay_one_day/3600:.1f} hours")
+        timer = threading.Timer(delay_one_day, send_timed_notification, args=[event.id, '1_day_before'])
+        timer.daemon = True
+        timer.start()
+    
+    if delay_event_day > 0:
+        print(f"⏱️  Scheduled 'event today' notification for event {event.id} in {delay_event_day/3600:.1f} hours")
+        timer = threading.Timer(delay_event_day, send_timed_notification, args=[event.id, 'event_today'])
+   
+
+
+
+def generate_secure_password(length=32):
+    """Generate a cryptographically secure random password"""
+    # Use a mix of uppercase, lowercase, digits, and special characters
+    characters = string.ascii_letters + string.digits + string.punctuation
+    # Remove ambiguous characters like l, 1, O, 0, etc.
+    safe_chars = ''.join(c for c in characters if c not in 'l1LO0|`~')
+    password = ''.join(secrets.choice(safe_chars) for _ in range(length))
+    return password
+
 
 # ADD THESE ROUTES TO app.py (before @app.route('/'))
 
@@ -1064,13 +1280,45 @@ def get_user(id):
 def init_db():
     with app.app_context():
         db.create_all()
-        if not User.query.filter_by(username='admin').first():
-            admin = User(username='admin', password_hash=generate_password_hash('admin123'), is_admin=True)
-            db.session.add(admin)
+        
+        # Check if admin user already exists
+        existing_admin = User.query.filter_by(username='admin').first()
+        
+        if not existing_admin:
+            # Generate a secure random password
+            admin_password = generate_secure_password(32)
+            admin_user = User(
+                username='admin',
+                password_hash=generate_password_hash(admin_password),
+                is_admin=True
+            )
+            db.session.add(admin_user)
             db.session.commit()
-            print("Admin user created: admin/admin123")
+            
+            # Print to terminal with clear formatting
+            print("\n" + "="*80)
+            print("🎭 PRODUCTION CREW MANAGEMENT SYSTEM - INITIALIZATION")
+            print("="*80)
+            print("\n✓ Database initialized successfully!")
+            print("\n" + "-"*80)
+            print("📋 DEFAULT ADMIN ACCOUNT CREATED")
+            print("-"*80)
+            print(f"\n  Username: admin")
+            print(f"  Password: {admin_password}\n")
+            print("-"*80)
+            print("\n⚠️  IMPORTANT SECURITY NOTES:")
+            print("   • Save this password in a secure location")
+            print("   • Change this password immediately after first login")
+            print("   • Do not share this password")
+            print("   • Each admin should have their own account\n")
+            print("="*80 + "\n")
+        else:
+            print("✓ Admin user already exists - skipping initialization")
+
 
 if __name__ == '__main__':
     init_db()
     port = int(os.environ.get('PORT', 5000))
+    
+    # Start Flask app
     app.run(host='0.0.0.0', port=port, debug=False)
