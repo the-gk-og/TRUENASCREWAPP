@@ -299,7 +299,7 @@ async def on_reaction_add(reaction, user):
                         pass
             except Exception as e:
                 print(f"Reaction error: {e}")
-
+'''
 if __name__ == "__main__":
     if not DISCORD_BOT_TOKEN:
         print("ERROR: DISCORD_BOT_TOKEN not found!")
@@ -307,4 +307,3 @@ if __name__ == "__main__":
     print(f"Starting bot... Web App: {WEB_APP_URL}")
     bot.run(DISCORD_BOT_TOKEN)
 
-'''
