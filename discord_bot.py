@@ -263,12 +263,12 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(name="🔍 Search", value="`/find` • `/events` • `/crew`", inline=False)
     embed.add_field(name="📅 Events", value="`/join-event` • `/leave-event` • `/my-events`", inline=False)
     embed.add_field(name="📋 Lists", value="`/pick-list` - View items for event", inline=False)
-    embed.add_field(name="ℹ️ Info", value="React with ✋ to join events from messages", inline=False)
+    #embed.add_field(name="ℹ️ Info", value="React with ✋ to join events from messages", inline=False)
     
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # REACTION HANDLER
-
+'''
 @bot.event
 async def on_reaction_add(reaction, user):
     """Handle emoji reactions"""
@@ -306,3 +306,5 @@ if __name__ == "__main__":
         exit(1)
     print(f"Starting bot... Web App: {WEB_APP_URL}")
     bot.run(DISCORD_BOT_TOKEN)
+
+'''
