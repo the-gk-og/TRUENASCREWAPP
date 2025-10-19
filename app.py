@@ -384,6 +384,29 @@ def generate_secure_password(length=32):
     return password
 
 
+
+def send_discord_message(event):
+    if not DISCORD_WEBHOOK_URL:
+        return None
+    try:
+        embed = {
+            "title": f"🎭 New Event: {event.title}",
+            "description": event.description or "No description provided",
+            "color": 6366239,
+            "fields": [
+                {"name": "📅 Date & Time", "value": event.event_date.strftime('%B %d, %Y at %I:%M %p'), "inline": False},
+                {"name": "📍 Location", "value": event.location or "TBD", "inline": False},
+                #{"name": "👥 How to Join", "value": "React with ✋ to add yourself!", "inline": False}
+            ],
+            "footer": {"text": f"Event ID: {event.id}"}
+        }
+        response = requests.post(DISCORD_WEBHOOK_URL, json={"embeds": [embed]})
+        return response.status_code == 204
+    except Exception as e:
+        print(f"Failed to send Discord message: {e}")
+    return None
+
+
 # ADD THESE ROUTES TO app.py (before @app.route('/'))
 
 @app.route('/home')
