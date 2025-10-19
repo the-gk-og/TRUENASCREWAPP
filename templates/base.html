@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Production Crew Manager{% endblock %}</title>
+    <title>{% block title %}ShowWise{% endblock %}</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * { 
@@ -310,6 +310,34 @@
             color: var(--dark);
         }
         
+footer {
+      width: 100%;
+      background: var(--dark);
+      color: white;
+      padding: 2rem;
+      text-align: center;
+      margin-top: 4rem;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 2rem;
+      justify-content: center;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .footer-links a {
+      color: #aaa;
+      text-decoration: none;
+      transition: color 0.3s;
+    }
+
+    .footer-links a:hover {
+      color: white;
+    }
+
+
         @media (max-width: 768px) {
             .navbar {
                 flex-direction: column;
@@ -555,5 +583,21 @@
         }
     </script>
     {% block scripts %}{% endblock %}
+      <footer>
+    <div class="footer-links">
+      <a href="/dashboard">dashboard</a>
+      <a href="/equipment">Equipment</a>
+      <a href="/picklist">Pick List</a>
+      <a href="/stageplans">Stage Plans</a>
+      <a href="/calendar">Calendar</a>
+        <a href="/discord_settings">Discord</a>
+    {%if current_user.is_admin %}
+      <a href="/admin">Admin</a>
+    {% endif %}
+     <a href="/logout">Logout</a>
+    </div>
+   <p>&copy; 2024 ShowWise. All rights reserved.</p>
+   <p>to report bugs email bugs@sfx-crew.com</p>
+  </footer>
 </body>
 </html>

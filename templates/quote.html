@@ -1,10 +1,8 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Enquire for Quote - Production Crew</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+{% extends "base_alt.html" %}
+
+{% block title %}quote - ShowWise{% endblock %}
+
+{% block content %}
   <style>
     :root {
       --primary: #6366f1;
@@ -17,109 +15,14 @@
       --danger: #ef4444;
     }
 
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+  
 
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       background: linear-gradient(135deg, var(--light) 0%, #f3f4f6 100%);
     }
 
-    header {
-      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-      color: white;
-      padding: 1rem 2rem;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      box-shadow: 0 4px 15px rgba(99, 102, 241, 0.2);
-    }
-
-    nav {
-      max-width: 1400px;
-      margin: 0 auto;
-      width: 100%;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 1rem;
-      flex-wrap: wrap;
-    }
-
-    .logo {
-      font-size: 1.5rem;
-      font-weight: bold;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      white-space: nowrap;
-    }
-
-    .nav-links {
-      display: flex;
-      gap: 1rem;
-      align-items: center;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-      flex: 1;
-      min-width: 0;
-    }
-
-    .nav-links a {
-      color: white;
-      text-decoration: none;
-      font-weight: 500;
-      transition: opacity 0.3s;
-      white-space: nowrap;
-      padding: 0.5rem 0.75rem;
-      border-radius: 4px;
-      font-size: 0.95rem;
-    }
-
-    .nav-links a:hover {
-      opacity: 0.8;
-      background: rgba(255, 255, 255, 0.1);
-    }
-
-    .btn-login {
-      background: var(--primary-dark);
-      color: var(--primary);
-      padding: 0.6rem 1.25rem;
-      border-radius: 6px;
-      text-decoration: none;
-      font-weight: 600;
-      transition: all 0.3s;
-      white-space: nowrap;
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-size: 0.95rem;
-    }
-
-    .btn-login:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(255, 255, 255, 0.3);
-    }
-
-    main {
-      flex: 1;
-      padding: 4rem 2rem;
-      max-width: 1200px;
-      margin: 0 auto;
-      width: 100%;
-    }
-
-    footer {
-      width: 100%;
-      background: var(--dark);
-      color: white;
-      padding: 2rem;
-      text-align: center;
-      margin-top: 4rem;
-    }
+   
 
     .quote-container {
       max-width: 600px;
@@ -359,21 +262,7 @@
   </style>
 </head>
 <body>
-  <header>
-    <nav>
-      <div class="logo">
-        <span style="font-size: 2rem;">🎭</span>
-        <span>Production Crew</span>
-      </div>
-      <div class="nav-links">
-        <a href="/home">Home</a>
-        <a href="/learn-more">Learn More</a>
-        <a href="/quote">Enquire</a>
-        <a href="/contact">Contact</a>
-        <a href="/login" class="btn-login"><i class="fas fa-sign-in-alt"></i> Login</a>
-      </div>
-    </nav>
-  </header>
+ 
 
   <main>
     <div class="quote-container">
@@ -414,15 +303,7 @@
     </div>
   </main>
 
-  <footer>
-    <div style="display: flex; gap: 2rem; justify-content: center; margin-bottom: 1rem; flex-wrap: wrap;">
-      <a href="/home" style="color: #aaa; text-decoration: none; transition: color 0.3s;">Home</a>
-      <a href="/learn-more" style="color: #aaa; text-decoration: none; transition: color 0.3s;">Learn More</a>
-      <a href="/quote" style="color: #aaa; text-decoration: none; transition: color 0.3s;">Enquire</a>
-      <a href="/contact" style="color: #aaa; text-decoration: none; transition: color 0.3s;">Contact</a>
-    </div>
-    <p>&copy; 2024 Production Crew Management System. All rights reserved.</p>
-  </footer>
+
 
   <script>
     document.getElementById('quoteForm').addEventListener('submit', function(e) {
@@ -488,3 +369,5 @@
   </script>
 </body>
 </html>
+
+{% endblock %}
