@@ -491,7 +491,9 @@
 <body>
     {% if current_user.is_authenticated %}
     <nav class="navbar">
-        <h1>🎭 Production Crew</h1>
+        <h1>
+            <img src="/static/logo.png" alt="ShowWise" style="height: 40px; margin-right: 10px; vertical-align: middle;">
+        </h1>
         <div class="nav-links">
             <a href="{{ url_for('dashboard') }}"><i class="fas fa-home"></i> Dashboard</a>
             <a href="{{ url_for('equipment_list') }}"><i class="fas fa-box"></i> Equipment</a>
