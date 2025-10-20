@@ -765,7 +765,6 @@ def calendar():
     return render_template('calendar.html', events=events, now=now)
 
 @app.route('/calendar/ics')
-@login_required
 def calendar_ics():
     events = Event.query.all()
     ical = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Production Crew//EN\r\n"
