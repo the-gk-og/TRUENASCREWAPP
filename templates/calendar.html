@@ -17,12 +17,11 @@
                 <li style="margin-bottom: 0.75rem;">Go to Google Calendar settings</li>
                 <li style="margin-bottom: 0.75rem;">Click "Add other calendars" → "Subscribe to calendar"</li>
                 <li style="margin-bottom: 0.75rem;">Paste the URL</li>
-                <li>Your events will now appear automatically!</li>
+                <li>Your events will now appear automatically with schedules!</li>
             </ol>
         </div>
         
         <button onclick="subscribeCalendar()" class="btn btn-primary" style="width: 100%; margin-bottom: 1rem;">
-
             <i class="fas fa-copy"></i> Copy Calendar URL
         </button>
         <button onclick="window.open('https://calendar.google.com/calendar/u/0/r/settings/addbyurl', '_blank')" class="btn btn-success" style="width: 100%;">
@@ -32,6 +31,7 @@
         <div id="urlDisplay" style="background: #f3f4f6; padding: 1rem; border-radius: 6px; margin-top: 1.5rem; word-break: break-all; font-family: monospace; font-size: 0.85rem; display: none;"></div>
     </div>
 </div>
+
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
         <h2>📅 Event Calendar</h2>
@@ -52,6 +52,14 @@
                 <p style="color: #666; margin-bottom: 0.5rem;">
                     📅 {{ event.event_date.strftime('%B %d, %Y at %I:%M %p') }}
                 </p>
+                {% if event.event_end_date %}
+                <p style="color: #666; margin-bottom: 0.5rem;">
+                    🏁 {{ event.event_end_date.strftime('%I:%M %p') }}
+                    <span style="background: #e0e7ff; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; margin-left: 0.5rem;">
+                        {{ ((event.event_end_date - event.event_date).total_seconds() / 3600)|round(1) }}h
+                    </span>
+                </p>
+                {% endif %}
                 {% if event.location %}
                 <p style="color: #666; margin-bottom: 0.5rem;">📍 {{ event.location }}</p>
                 {% endif %}
@@ -73,7 +81,8 @@
             <thead>
                 <tr>
                     <th>Event</th>
-                    <th>Date</th>
+                    <th>Start</th>
+                    <th>End</th>
                     <th>Location</th>
                     <th>Crew</th>
                     <th>Actions</th>
@@ -83,7 +92,14 @@
                 {% for event in past|sort(attribute='event_date', reverse=True) %}
                 <tr style="opacity: 0.7;">
                     <td><strong>{{ event.title }}</strong></td>
-                    <td>{{ event.event_date.strftime('%b %d, %Y') }}</td>
+                    <td>{{ event.event_date.strftime('%b %d, %Y %I:%M %p') }}</td>
+                    <td>
+                        {% if event.event_end_date %}
+                        {{ event.event_end_date.strftime('%I:%M %p') }}
+                        {% else %}
+                        N/A
+                        {% endif %}
+                    </td>
                     <td>{{ event.location or 'N/A' }}</td>
                     <td>{{ event.crew_assignments|length }}</td>
                     <td>
@@ -113,8 +129,12 @@
                 <input type="text" id="eventTitle" required>
             </div>
             <div class="form-group">
-                <label>Date & Time *</label>
+                <label>Start Date & Time *</label>
                 <input type="datetime-local" id="eventDate" required>
+            </div>
+            <div class="form-group">
+                <label>End Date & Time (Optional - defaults to 3 hours after start)</label>
+                <input type="datetime-local" id="eventEndDate">
             </div>
             <div class="form-group">
                 <label>Location</label>
@@ -141,6 +161,7 @@ document.getElementById('addEventForm').addEventListener('submit', function(e) {
     const data = {
         title: document.getElementById('eventTitle').value,
         event_date: document.getElementById('eventDate').value,
+        event_end_date: document.getElementById('eventEndDate').value || null,
         location: document.getElementById('eventLocation').value,
         description: document.getElementById('eventDescription').value
     };
@@ -153,7 +174,10 @@ document.getElementById('addEventForm').addEventListener('submit', function(e) {
     .then(r => r.json())
     .then(result => {
         if (result.success) {
-            location.reload();
+            showAlert('Event created successfully!', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showAlert('Error creating event', 'error');
         }
     });
 });
@@ -165,19 +189,7 @@ function deleteEvent(id) {
         .then(r => r.json())
         .then(result => {
             if (result.success) {
-                location.reload();
-            } else {
-                alert('Error: ' + (result.error || 'Unknown error'));
-            }
-        });
-}
-function deleteEvent(id) {
-    if (!confirm('Delete this event? This will also delete all associated pick list items, stage plans, and crew assignments.')) return;
-    
-    fetch(`/events/delete/${id}`, {method: 'DELETE'})
-        .then(r => r.json())
-        .then(result => {
-            if (result.success) {
+                showAlert('Event deleted!', 'success');
                 location.reload();
             } else {
                 alert('Error: ' + (result.error || 'Unknown error'));

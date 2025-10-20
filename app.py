@@ -106,11 +106,13 @@ class StagePlan(db.Model):
     event_id = db.Column(db.Integer, db.ForeignKey('event.id'))
     
 
+
 class Event(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
-    event_date = db.Column(db.DateTime, nullable=False)
+    event_date = db.Column(db.DateTime, nullable=False)  # Start date/time
+    event_end_date = db.Column(db.DateTime, nullable=True)  # End date/time (NEW)
     location = db.Column(db.String(200))
     created_by = db.Column(db.String(80))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -118,6 +120,7 @@ class Event(db.Model):
     crew_assignments = db.relationship('CrewAssignment', backref='event', lazy=True, cascade='all, delete-orphan')
     pick_list_items = db.relationship('PickListItem', backref='event', lazy=True, cascade='all, delete-orphan')
     stage_plans = db.relationship('StagePlan', backref='event', lazy=True, cascade='all, delete-orphan')
+
 
 class CrewAssignment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -764,7 +767,7 @@ def calendar():
 
 @app.route('/calendar/ics')
 def calendar_ics():
-    """Generate iCalendar format for ShowWise sync"""
+    """Generate iCalendar format for ShowWise sync with schedules"""
     events = Event.query.all()
 
     ical = "BEGIN:VCALENDAR\r\n"
@@ -799,13 +802,52 @@ def calendar_ics():
 
     for event in events:
         start_time = event.event_date.strftime('%Y%m%dT%H%M%S')
-        end_time = (event.event_date + timedelta(hours=2)).strftime('%Y%m%dT%H%M%S')
+        
+        # Calculate end time - check if event has end date, otherwise default to 3 hours after start
+        if hasattr(event, 'event_end_date') and event.event_end_date:
+            end_time = event.event_end_date.strftime('%Y%m%dT%H%M%S')
+        else:
+            # Default: 3 hours duration
+            end_time = (event.event_date + timedelta(hours=3)).strftime('%Y%m%dT%H%M%S')
+        
         created_time = datetime.now().strftime('%Y%m%dT%H%M%S')
 
-        title = event.title.replace('\n', ' ').replace(',', '\\,').replace('"', '\\"')
-        description = (event.description or '').replace('\n', ' ').replace(',', '\\,').replace('"', '\\"')
-        location = (event.location or '').replace('\n', ' ').replace(',', '\\,').replace('"', '\\"')
+        # Escape special characters for iCalendar format
+        def ical_escape(text):
+            if not text:
+                return ''
+            return text.replace('\n', '\\n').replace(',', '\\,').replace(';', '\\;').replace('\\', '\\\\')
 
+        title = ical_escape(event.title)
+        location = ical_escape(event.location or '')
+        
+        # Build description with event details and schedules
+        description_parts = []
+        if event.description:
+            description_parts.append(ical_escape(event.description))
+        
+        # Add schedule information if exists
+        if hasattr(event, 'schedules') and event.schedules:
+            description_parts.append("\\n\\n--- SCHEDULE ---")
+            for schedule in sorted(event.schedules, key=lambda x: x.scheduled_time):
+                schedule_time = schedule.scheduled_time.strftime('%I:%M %p')
+                schedule_text = f"\\n• {schedule_time} - {ical_escape(schedule.title)}"
+                if schedule.description:
+                    schedule_text += f": {ical_escape(schedule.description)}"
+                description_parts.append(schedule_text)
+        
+        # Add crew information
+        if event.crew_assignments:
+            description_parts.append("\\n\\n--- CREW ---")
+            for assignment in event.crew_assignments:
+                crew_text = f"\\n• {ical_escape(assignment.crew_member)}"
+                if assignment.role:
+                    crew_text += f" ({ical_escape(assignment.role)})"
+                description_parts.append(crew_text)
+        
+        description = ''.join(description_parts)
+
+        # Main event
         ical += "BEGIN:VEVENT\r\n"
         ical += f"UID:{event.id}-showwise@localhost\r\n"
         ical += f"DTSTAMP;TZID=Australia/Sydney:{created_time}\r\n"
@@ -818,12 +860,31 @@ def calendar_ics():
         if location:
             ical += f"LOCATION:{location}\r\n"
 
-        if event.crew_assignments:
-            crew_list = ", ".join([a.crew_member for a in event.crew_assignments])
-            ical += f"X-CREW:{crew_list}\r\n"
-
         ical += "STATUS:CONFIRMED\r\n"
         ical += "END:VEVENT\r\n"
+        
+        # Add individual schedule items as separate events (optional - you can remove this if you prefer them only in description)
+        if hasattr(event, 'schedules') and event.schedules:
+            for idx, schedule in enumerate(event.schedules):
+                schedule_start = schedule.scheduled_time.strftime('%Y%m%dT%H%M%S')
+                # Schedule events are 30 minutes by default
+                schedule_end = (schedule.scheduled_time + timedelta(minutes=30)).strftime('%Y%m%dT%H%M%S')
+                
+                ical += "BEGIN:VEVENT\r\n"
+                ical += f"UID:{event.id}-schedule-{schedule.id}@localhost\r\n"
+                ical += f"DTSTAMP;TZID=Australia/Sydney:{created_time}\r\n"
+                ical += f"DTSTART;TZID=Australia/Sydney:{schedule_start}\r\n"
+                ical += f"DTEND;TZID=Australia/Sydney:{schedule_end}\r\n"
+                ical += f"SUMMARY:{ical_escape(event.title)} - {ical_escape(schedule.title)}\r\n"
+                
+                if schedule.description:
+                    ical += f"DESCRIPTION:{ical_escape(schedule.description)}\r\n"
+                if location:
+                    ical += f"LOCATION:{location}\r\n"
+                
+                ical += "STATUS:CONFIRMED\r\n"
+                ical += f"RELATED-TO:{event.id}-showwise@localhost\r\n"  # Link to main event
+                ical += "END:VEVENT\r\n"
 
     ical += "END:VCALENDAR\r\n"
 
@@ -831,23 +892,40 @@ def calendar_ics():
         'Content-Disposition': 'inline; filename="showwise_sync.ics"',
         'Cache-Control': 'no-cache, must-revalidate'
     })
+
   
 # EVENT ROUTES
 @app.route('/events/add', methods=['POST'])
 @login_required
 def add_event():
     data = request.json
+    
+    # Parse dates
+    start_date = datetime.fromisoformat(data['event_date'])
+    
+    # Handle end date - if not provided, default to 3 hours after start
+    if data.get('event_end_date'):
+        end_date = datetime.fromisoformat(data['event_end_date'])
+    else:
+        end_date = start_date + timedelta(hours=3)
+    
     event = Event(
         title=data['title'],
         description=data.get('description', ''),
-        event_date=datetime.fromisoformat(data['event_date']),
+        event_date=start_date,
+        event_end_date=end_date,
         location=data.get('location', ''),
         created_by=current_user.username
     )
     db.session.add(event)
     db.session.commit()
-    send_discord_message(event)
+    
+    # Send Discord notification and schedule reminders
+    send_discord_event_announcement(event)
+    schedule_event_notifications(event)
+    
     return jsonify({'success': True, 'id': event.id})
+
 
 @app.route('/events/<int:id>', methods=['GET'])
 @login_required
@@ -856,22 +934,6 @@ def event_detail(id):
     all_users = User.query.all()
     schedules = EventSchedule.query.filter_by(event_id=id).order_by(EventSchedule.scheduled_time).all()
     return render_template('event_detail.html', event=event, all_users=all_users, schedules=schedules)
-
-@app.route('/events/<int:id>/edit', methods=['PUT'])
-@login_required
-def edit_event(id):
-    event = Event.query.get_or_404(id)
-    data = request.json
-    
-    event.title = data.get('title', event.title)
-    event.description = data.get('description', event.description)
-    event.location = data.get('location', event.location)
-    
-    if data.get('event_date'):
-        event.event_date = datetime.fromisoformat(data['event_date'])
-    
-    db.session.commit()
-    return jsonify({'success': True})
 
 @app.route('/events/<int:id>', methods=['DELETE'])
 @login_required
@@ -917,26 +979,28 @@ def add_event_schedule(event_id):
         return jsonify({'error': str(e)}), 400
 
 
-@app.route('/events/schedule/<int:schedule_id>/edit', methods=['PUT'])
+@app.route('/events/<int:id>/edit', methods=['PUT'])
 @login_required
-def edit_event_schedule(schedule_id):
-    """Edit a schedule item"""
-    schedule = EventSchedule.query.get_or_404(schedule_id)
+def edit_event(id):
+    event = Event.query.get_or_404(id)
     data = request.json
     
-    try:
-        schedule.title = data.get('title', schedule.title)
-        schedule.description = data.get('description', schedule.description)
-        
-        if data.get('scheduled_time'):
-            schedule.scheduled_time = datetime.fromisoformat(data['scheduled_time'])
-        
-        db.session.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        db.session.rollback()
-        print(f"Schedule edit error: {e}")
-        return jsonify({'error': str(e)}), 400
+    event.title = data.get('title', event.title)
+    event.description = data.get('description', event.description)
+    event.location = data.get('location', event.location)
+    
+    if data.get('event_date'):
+        event.event_date = datetime.fromisoformat(data['event_date'])
+    
+    if data.get('event_end_date'):
+        event.event_end_date = datetime.fromisoformat(data['event_end_date'])
+    elif data.get('event_date'):
+        # If start date changed but no end date provided, update end date to maintain 3-hour duration
+        event.event_end_date = event.event_date + timedelta(hours=3)
+    
+    db.session.commit()
+    return jsonify({'success': True})
+
 
 
 @app.route('/events/schedule/<int:schedule_id>/delete', methods=['DELETE'])
@@ -1434,217 +1498,410 @@ def init_db():
             print("✓ Admin user already exists - skipping initialization")
 
 # PDF EXPORT ROUTE
-from reportlab.lib.pagesizes import letter
+# Replace the /events/<int:event_id>/export-pdf route in app.py with this FIXED version
+
+from reportlab.lib.pagesizes import letter, A4
 from reportlab.platypus import (
     SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer,
-    PageBreak, Image, KeepTogether
+    PageBreak, Image, KeepTogether, HRFlowable
 )
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch, mm
 from reportlab.lib import colors
 from reportlab.pdfgen import canvas
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 from io import BytesIO
 import os
 import re
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-
-pdfmetrics.registerFont(TTFont('DejaVuSans', 'DejaVuSans.ttf'))
+from datetime import datetime
 
 @app.route('/events/<int:event_id>/export-pdf')
 @login_required
 def export_event_pdf(event_id):
-    """Export event details to PDF, including stage plan images"""
+    """Export modern event brief to PDF with proper text wrapping"""
     try:
         event = Event.query.get_or_404(event_id)
 
+        # Custom header/footer
         def add_header_footer(canvas, doc):
             canvas.saveState()
-            canvas.setFont('Helvetica-Bold', 12)
-            canvas.drawString(20 * mm, 275 * mm, "Event - " + doc.event_title)
-            canvas.setFont('Helvetica', 9)
-            canvas.drawRightString(200 * mm, 10 * mm, f"Page {canvas.getPageNumber()}")
+            
+            # Header - Modern gradient bar
+            canvas.setFillColorRGB(0.39, 0.49, 0.94)  # Primary color
+            canvas.rect(0, letter[1] - 40, letter[0], 40, fill=True, stroke=False)
+            
+            # Header text
+            canvas.setFillColorRGB(1, 1, 1)
+            canvas.setFont('Helvetica-Bold', 16)
+            canvas.drawString(20 * mm, letter[1] - 25, "EVENT BRIEF")
+            
+            canvas.setFont('Helvetica', 10)
+            canvas.drawRightString(letter[0] - 20 * mm, letter[1] - 25, f"Event ID: {event.id}")
+            
+            # Footer
+            canvas.setFillColorRGB(0.5, 0.5, 0.5)
+            canvas.setFont('Helvetica', 8)
+            canvas.drawString(20 * mm, 15 * mm, f"Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}")
+            canvas.drawRightString(letter[0] - 20 * mm, 15 * mm, f"Page {canvas.getPageNumber()}")
+            
+            # Footer line
+            canvas.setStrokeColorRGB(0.8, 0.8, 0.8)
+            canvas.setLineWidth(0.5)
+            canvas.line(20 * mm, 20 * mm, letter[0] - 20 * mm, 20 * mm)
+            
             canvas.restoreState()
 
-        # Create PDF in memory
+        # Create PDF
         pdf_buffer = BytesIO()
-        doc = SimpleDocTemplate(pdf_buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
-        doc.event_title = event.title  # Pass title to header/footer
-        styles = getSampleStyleSheet()
+        doc = SimpleDocTemplate(
+            pdf_buffer, 
+            pagesize=letter,
+            topMargin=50,
+            bottomMargin=30,
+            leftMargin=20*mm,
+            rightMargin=20*mm
+        )
+        
         story = []
+        styles = getSampleStyleSheet()
 
         # Custom styles
         title_style = ParagraphStyle(
             'CustomTitle',
             parent=styles['Heading1'],
-            fontSize=24,
-            textColor=colors.HexColor('#6366f1'),
-            spaceAfter=12,
-            alignment=1
-        )
-
-        section_style = ParagraphStyle(
-            'SectionTitle',
-            parent=styles['Heading2'],
-            fontSize=14,
+            fontSize=28,
             textColor=colors.HexColor('#6366f1'),
             spaceAfter=8,
-            spaceBefore=8
+            spaceBefore=20,
+            alignment=TA_CENTER,
+            fontName='Helvetica-Bold'
         )
 
+        subtitle_style = ParagraphStyle(
+            'Subtitle',
+            parent=styles['Normal'],
+            fontSize=11,
+            textColor=colors.HexColor('#6b7280'),
+            spaceAfter=20,
+            alignment=TA_CENTER,
+            fontName='Helvetica'
+        )
+
+        section_header_style = ParagraphStyle(
+            'SectionHeader',
+            parent=styles['Heading2'],
+            fontSize=14,
+            textColor=colors.HexColor('#1f2937'),
+            spaceAfter=12,
+            spaceBefore=20,
+            fontName='Helvetica-Bold',
+            leftIndent=0
+        )
+
+        body_style = ParagraphStyle(
+            'CustomBody',
+            parent=styles['Normal'],
+            fontSize=10,
+            leading=14,
+            textColor=colors.HexColor('#374151'),
+            fontName='Helvetica'
+        )
+
+        # Style for wrapping text in tables
         wrapped_style = ParagraphStyle(
             'WrappedText',
             parent=styles['Normal'],
-            fontName='DejaVuSans',
-            fontSize=10,
+            fontSize=9,
             leading=12,
-            wordWrap='LTR',
-            splitLongWords=True
+            textColor=colors.HexColor('#374151'),
+            fontName='Helvetica',
+            wordWrap='CJK'
         )
 
+        small_wrapped_style = ParagraphStyle(
+            'SmallWrapped',
+            parent=styles['Normal'],
+            fontSize=8,
+            leading=11,
+            textColor=colors.HexColor('#4b5563'),
+            fontName='Helvetica',
+            wordWrap='CJK'
+        )
+
+        note_header_style = ParagraphStyle(
+            'NoteHeader',
+            parent=styles['Normal'],
+            fontSize=9,
+            textColor=colors.HexColor('#78350f'),
+            fontName='Helvetica-Bold',
+            wordWrap='CJK'
+        )
+
+        note_body_style = ParagraphStyle(
+            'NoteBody',
+            parent=styles['Normal'],
+            fontSize=9,
+            leading=12,
+            textColor=colors.HexColor('#78350f'),
+            fontName='Helvetica',
+            wordWrap='CJK'
+        )
+
+        highlight_style = ParagraphStyle(
+            'Highlight',
+            parent=styles['Normal'],
+            fontSize=10,
+            textColor=colors.HexColor('#1f2937'),
+            fontName='Helvetica-Bold',
+            leftIndent=10
+        )
 
         # Title
-        story.append(Paragraph(f"{event.title}", title_style))
-        story.append(Spacer(1, 0.2*inch))
+        story.append(Spacer(1, 0.3*inch))
+        story.append(Paragraph(event.title, title_style))
+        
+        # Subtitle with date
+        subtitle_text = f"{event.event_date.strftime('%A, %B %d, %Y')}"
+        story.append(Paragraph(subtitle_text, subtitle_style))
+        
+        # Decorative line
+        story.append(HRFlowable(
+            width="100%",
+            thickness=2,
+            color=colors.HexColor('#e5e7eb'),
+            spaceBefore=10,
+            spaceAfter=20
+        ))
 
-        # Event Details
-        story.append(Paragraph("Event Details", section_style))
-        details_data = [
-            ['Date & Time:', event.event_date.strftime('%B %d, %Y at %I:%M %p')],
-            ['Location:', event.location or 'N/A'],
-            ['Created By:', event.created_by or 'N/A'],
-        ]
-        details_table = Table(details_data, colWidths=[1.5*inch, 4.5*inch])
-        details_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f0f4ff')),
-            ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        # ==================== EVENT OVERVIEW ====================
+        story.append(Paragraph("EVENT OVERVIEW", section_header_style))
+        
+        overview_data = []
+        
+        # Time information
+        start_time = event.event_date.strftime('%I:%M %p')
+        if hasattr(event, 'event_end_date') and event.event_end_date:
+            end_time = event.event_end_date.strftime('%I:%M %p')
+            duration = (event.event_end_date - event.event_date).total_seconds() / 3600
+            time_info = f"{start_time} - {end_time} ({duration:.1f} hours)"
+        else:
+            time_info = f"{start_time} (Duration: TBD)"
+        
+        overview_data.append([Paragraph('<b>Time:</b>', body_style), Paragraph(time_info, body_style)])
+        overview_data.append([Paragraph('<b>Location:</b>', body_style), Paragraph(event.location or 'To Be Determined', body_style)])
+        overview_data.append([Paragraph('<b>Created By:</b>', body_style), Paragraph(event.created_by or 'N/A', body_style)])
+        overview_data.append([Paragraph('<b>Created:</b>', body_style), Paragraph(event.created_at.strftime('%B %d, %Y'), body_style)])
+        
+        overview_table = Table(overview_data, colWidths=[1.5*inch, 4.5*inch])
+        overview_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f3f4f6')),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#1f2937')),
+            ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+            ('ALIGN', (1, 0), (1, -1), 'LEFT'),
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, -1), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-            ('GRID', (0, 0), (-1, -1), 1, colors.grey),
+            ('TOPPADDING', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+            ('LEFTPADDING', (0, 0), (-1, -1), 12),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 12),
+            ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#e5e7eb')),
+            ('ROWBACKGROUNDS', (0, 0), (-1, -1), [colors.white, colors.HexColor('#f9fafb')])
         ]))
-        story.append(details_table)
+        story.append(overview_table)
         story.append(Spacer(1, 0.2*inch))
 
         # Description
         if event.description:
-            story.append(Paragraph("Description", section_style))
-            story.append(KeepTogether([
-                Paragraph(event.description, wrapped_style),
-                Spacer(1, 0.2*inch)
-            ]))
-
-        # Event Notes
-        if hasattr(event, 'notes') and event.notes:
-            story.append(Paragraph("Event Notes", section_style))
-            for note in sorted(event.notes, key=lambda x: x.created_at, reverse=True):
-                note_text = f"<b>{note.created_by}</b> ({note.created_at.strftime('%b %d, %Y')}): {note.content}"
-                story.append(KeepTogether([
-                    Paragraph(note_text, wrapped_style),
-                    Spacer(1, 0.1*inch)
-                ]))
+            story.append(Paragraph("DESCRIPTION", section_header_style))
+            # Replace newlines with <br/> tags for proper formatting
+            desc_text = event.description.replace('\n', '<br/>')
+            story.append(Paragraph(desc_text, body_style))
             story.append(Spacer(1, 0.2*inch))
 
-        # Schedule
+        # ==================== EVENT SCHEDULE ====================
         if hasattr(event, 'schedules') and event.schedules:
-            story.append(Paragraph("Schedule", section_style))
-            schedule_data = [['Title', 'Time', 'Description']]
+            story.append(Paragraph("EVENT SCHEDULE", section_header_style))
+            
+            schedule_data = [[
+                Paragraph('<b>Time</b>', wrapped_style),
+                Paragraph('<b>Activity</b>', wrapped_style),
+                Paragraph('<b>Details</b>', wrapped_style)
+            ]]
+            
             for schedule in sorted(event.schedules, key=lambda x: x.scheduled_time):
+                time_str = schedule.scheduled_time.strftime('%I:%M %p')
+                
+                # Wrap long descriptions properly
+                desc_text = schedule.description or ''
+                
                 schedule_data.append([
+                    Paragraph(time_str, wrapped_style),
                     Paragraph(schedule.title, wrapped_style),
-                    Paragraph(schedule.scheduled_time.strftime('%I:%M %p'), wrapped_style),
-                    Paragraph(schedule.description or 'N/A', wrapped_style)
+                    Paragraph(desc_text, small_wrapped_style)
                 ])
-            schedule_table = Table(schedule_data, colWidths=[1.5*inch, 1*inch, 3.5*inch])
+            
+            schedule_table = Table(schedule_data, colWidths=[1*inch, 1.8*inch, 3.2*inch])
             schedule_table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#6366f1')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                 ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
                 ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                ('WORDWRAP', (0, 0), (-1, -1), 'CJK'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('FONTSIZE', (0, 0), (-1, -1), 9),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-                ('GRID', (0, 0), (-1, -1), 1, colors.grey),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('LEFTPADDING', (0, 0), (-1, -1), 10),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+                ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#e5e7eb')),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f3f4f6')])
             ]))
             story.append(schedule_table)
             story.append(Spacer(1, 0.2*inch))
 
-        # Pick List
-        if hasattr(event, 'pick_list_items') and event.pick_list_items:
-            story.append(Paragraph("Pick List", section_style))
-            picklist_data = [['Item', 'Qty', 'Location', 'Status']]
-            for item in event.pick_list_items:
-                checkbox = '✓' if item.is_checked else '☐'
-                picklist_data.append([
-                    Paragraph(item.item_name, wrapped_style),
-                    Paragraph(str(item.quantity), wrapped_style),
-                    Paragraph(item.equipment.location if item.equipment else 'N/A', wrapped_style),
-                    Paragraph(checkbox, wrapped_style)
-                ])
-            picklist_table = Table(picklist_data, colWidths=[2*inch, 0.5*inch, 2*inch, 0.5*inch])
-            picklist_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#10b981')),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                ('WORDWRAP', (0, 0), (-1, -1), 'CJK'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, -1), 9),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-                ('GRID', (0, 0), (-1, -1), 1, colors.grey),
-            ]))
-            story.append(picklist_table)
-            story.append(Spacer(1, 0.2*inch))
+        # ==================== EVENT NOTES ====================
+        if hasattr(event, 'notes') and event.notes:
+            story.append(Paragraph("EVENT NOTES", section_header_style))
+            
+            for note in sorted(event.notes, key=lambda x: x.created_at, reverse=True):
+                # Create note content with proper wrapping
+                note_header = f"<b>{note.created_by}</b> • {note.created_at.strftime('%b %d, %Y at %I:%M %p')}"
+                
+                note_data = [[
+                    Paragraph(note_header, note_header_style)
+                ], [
+                    Paragraph(note.content, note_body_style)
+                ]]
+                
+                note_table = Table(note_data, colWidths=[5.8*inch])
+                note_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#fef3c7')),
+                    ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#78350f')),
+                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('TOPPADDING', (0, 0), (-1, -1), 10),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 12),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 12),
+                    ('BOX', (0, 0), (-1, -1), 2, colors.HexColor('#fbbf24')),
+                ]))
+                story.append(note_table)
+                story.append(Spacer(1, 0.1*inch))
+            
+            story.append(Spacer(1, 0.1*inch))
 
-        # Stage Plans
-        if hasattr(event, 'stage_plans') and event.stage_plans:
-            story.append(Paragraph("Stage Plans", section_style))
-            for plan in event.stage_plans:
-                story.append(Paragraph(f"{plan.title} (uploaded by {plan.uploaded_by})", styles['Normal']))
-                image_file = os.path.join('uploads', plan.filename)
-                if os.path.exists(image_file):
-                    img = Image(image_file, width=5.5*inch, height=3.5*inch)
-                    img.hAlign = 'CENTER'
-                    story.append(img)
-                    story.append(Spacer(1, 0.2*inch))
-                else:
-                    story.append(Paragraph("Image not available", styles['Normal']))
-                    story.append(Spacer(1, 0.1*inch))
-
-        # Crew Assignments
+        # ==================== CREW ASSIGNMENTS ====================
         if hasattr(event, 'crew_assignments') and event.crew_assignments:
-            story.append(Paragraph("Attending Crew", section_style))
-            crew_data = [['Crew Member', 'Role']]
+            story.append(Paragraph("CREW ASSIGNMENTS", section_header_style))
+            
+            crew_data = [[
+                Paragraph('<b>Crew Member</b>', wrapped_style),
+                Paragraph('<b>Role</b>', wrapped_style),
+                Paragraph('<b>Contact</b>', wrapped_style)
+            ]]
+            
             for assignment in event.crew_assignments:
+                user = User.query.filter_by(username=assignment.crew_member).first()
+                email = user.email if user and user.email else 'N/A'
                 crew_data.append([
                     Paragraph(assignment.crew_member, wrapped_style),
-                    Paragraph(assignment.role or 'Crew Member', wrapped_style)
+                    Paragraph(assignment.role or 'Crew Member', wrapped_style),
+                    Paragraph(email, small_wrapped_style)
                 ])
-            crew_table = Table(crew_data, colWidths=[2.5*inch, 3.5*inch])
+            
+            crew_table = Table(crew_data, colWidths=[2*inch, 2*inch, 2*inch])
             crew_table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#ec4899')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                 ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
                 ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                ('WORDWRAP', (0, 0), (-1, -1), 'CJK'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('FONTSIZE', (0, 0), (-1, -1), 9),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-                ('GRID', (0, 0), (-1, -1), 1, colors.grey),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('LEFTPADDING', (0, 0), (-1, -1), 10),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+                ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#e5e7eb')),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#fce7f3')])
             ]))
             story.append(crew_table)
             story.append(Spacer(1, 0.2*inch))
 
-        # Build PDF with header and page numbers
+        # ==================== PICK LIST ====================
+        if hasattr(event, 'pick_list_items') and event.pick_list_items:
+            story.append(Paragraph("EQUIPMENT PICK LIST", section_header_style))
+            
+            checked_count = sum(1 for item in event.pick_list_items if item.is_checked)
+            total_count = len(event.pick_list_items)
+            progress_text = f"Progress: {checked_count}/{total_count} items gathered"
+            story.append(Paragraph(progress_text, highlight_style))
+            story.append(Spacer(1, 0.1*inch))
+            
+            picklist_data = [[
+                Paragraph('<b>✓</b>', wrapped_style),
+                Paragraph('<b>Item</b>', wrapped_style),
+                Paragraph('<b>Qty</b>', wrapped_style),
+                Paragraph('<b>Location</b>', wrapped_style),
+                Paragraph('<b>Category</b>', wrapped_style)
+            ]]
+            
+            for item in event.pick_list_items:
+                checkbox = '✓' if item.is_checked else '☐'
+                location = item.equipment.location if item.equipment else 'N/A'
+                category = item.equipment.category if item.equipment else 'N/A'
+                picklist_data.append([
+                    Paragraph(checkbox, wrapped_style),
+                    Paragraph(item.item_name, wrapped_style),
+                    Paragraph(str(item.quantity), wrapped_style),
+                    Paragraph(location, small_wrapped_style),
+                    Paragraph(category, small_wrapped_style)
+                ])
+            
+            picklist_table = Table(picklist_data, colWidths=[0.4*inch, 2.2*inch, 0.6*inch, 1.6*inch, 1.2*inch])
+            picklist_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#10b981')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+                ('ALIGN', (1, 0), (-1, -1), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#e5e7eb')),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#ecfdf5')])
+            ]))
+            story.append(picklist_table)
+            story.append(Spacer(1, 0.2*inch))
+
+        # ==================== STAGE PLANS ====================
+        if hasattr(event, 'stage_plans') and event.stage_plans:
+            story.append(PageBreak())
+            story.append(Paragraph("STAGE PLANS", section_header_style))
+            
+            for plan in event.stage_plans:
+                story.append(Paragraph(f"<b>{plan.title}</b>", highlight_style))
+                story.append(Paragraph(f"Uploaded by {plan.uploaded_by} on {plan.created_at.strftime('%b %d, %Y')}", body_style))
+                story.append(Spacer(1, 0.1*inch))
+                
+                image_file = os.path.join('uploads', plan.filename)
+                if os.path.exists(image_file) and plan.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
+                    try:
+                        img = Image(image_file, width=5.5*inch, height=3.5*inch)
+                        img.hAlign = 'CENTER'
+                        story.append(img)
+                    except:
+                        story.append(Paragraph("Image could not be loaded", body_style))
+                else:
+                    story.append(Paragraph(f"File: {plan.filename} (not displayed)", body_style))
+                
+                story.append(Spacer(1, 0.3*inch))
+
+        # Build PDF
         doc.build(story, onFirstPage=add_header_footer, onLaterPages=add_header_footer)
         pdf_buffer.seek(0)
 
-        # Sanitize filename
+        # Generate filename
         safe_title = re.sub(r'\W+', '_', event.title)
-        filename = f"{safe_title}_Event_Details.pdf"
+        filename = f"{safe_title}_Event_Brief_{event.event_date.strftime('%Y%m%d')}.pdf"
 
         return send_file(
             pdf_buffer,
@@ -1660,9 +1917,7 @@ def export_event_pdf(event_id):
         print(f"PDF export error: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
-
-               
+        return jsonify({'error': str(e)}), 500            
 #note routs
 
 @app.route('/events/<int:event_id>/notes/add', methods=['POST'])

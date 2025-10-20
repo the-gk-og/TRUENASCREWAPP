@@ -22,14 +22,27 @@
         </div>
     </div>
     
-    <p style="color: #666; margin: 0.5rem 0; word-break: break-word;">
-        📅 {{ event.event_date.strftime('%B %d, %Y at %I:%M %p') }}
-    </p>
-    {% if event.location %}
-    <p style="color: #666; margin: 0.5rem 0; word-break: break-word;">
-        📍 {{ event.location }}
-    </p>
-    {% endif %}
+    <div style="background: linear-gradient(135deg, #e8f4f8 0%, #d1e7f4 100%); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid var(--primary);">
+        <p style="color: #666; margin: 0.5rem 0; word-break: break-word;">
+            📅 <strong>Start:</strong> {{ event.event_date.strftime('%B %d, %Y at %I:%M %p') }}
+        </p>
+        {% if event.event_end_date %}
+        <p style="color: #666; margin: 0.5rem 0; word-break: break-word;">
+            🏁 <strong>End:</strong> {{ event.event_end_date.strftime('%B %d, %Y at %I:%M %p') }}
+        </p>
+        <p style="color: #666; margin: 0.5rem 0;">
+            ⏱️ <strong>Duration:</strong> 
+            <span style="background: #e0e7ff; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.9rem;">
+                {{ ((event.event_end_date - event.event_date).total_seconds() / 3600)|round(1) }} hours
+            </span>
+        </p>
+        {% endif %}
+        {% if event.location %}
+        <p style="color: #666; margin: 0.5rem 0; word-break: break-word;">
+            📍 <strong>Location:</strong> {{ event.location }}
+        </p>
+        {% endif %}
+    </div>
     
     {% if event.description %}
     <div style="background: #f8f9fa; padding: 1rem; border-radius: 6px; margin-top: 1rem; word-break: break-word;">
@@ -37,6 +50,8 @@
     </div>
     {% endif %}
 </div>
+
+
 
 <!-- EVENT NOTES SECTION -->
 <div class="card">
@@ -198,8 +213,14 @@
                 <input type="text" id="editTitle" value="{{ event.title }}" required>
             </div>
             <div class="form-group">
-                <label>Date & Time *</label>
+                <label>Start Date & Time *</label>
                 <input type="datetime-local" id="editDate" value="{{ event.event_date.strftime('%Y-%m-%dT%H:%M') }}" required>
+            </div>
+            <div class="form-group">
+                <label>End Date & Time</label>
+                <input type="datetime-local" id="editEndDate" 
+                       value="{% if event.event_end_date %}{{ event.event_end_date.strftime('%Y-%m-%dT%H:%M') }}{% endif %}">
+                <small style="color: #666; display: block; margin-top: 0.25rem;">Leave blank to use 3-hour default</small>
             </div>
             <div class="form-group">
                 <label>Location</label>
@@ -217,6 +238,7 @@
         </form>
     </div>
 </div>
+
 
 <!-- ADD SCHEDULE MODAL -->
 <div id="addScheduleModal" class="modal">
@@ -485,5 +507,32 @@ function removeCrew(id) {
             }
         });
 }
+
+// Edit event with end date
+document.getElementById('editEventForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const data = {
+        title: document.getElementById('editTitle').value,
+        event_date: document.getElementById('editDate').value,
+        event_end_date: document.getElementById('editEndDate').value || null,
+        location: document.getElementById('editLocation').value,
+        description: document.getElementById('editDescription').value
+    };
+    
+    fetch('/events/{{ event.id }}/edit', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    }).then(r => r.json()).then(result => {
+        if (result.success) {
+            showAlert('Event updated!', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showAlert('Error updating event', 'error');
+        }
+    });
+});
+
 </script>
 {% endblock %}
