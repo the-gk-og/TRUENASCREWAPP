@@ -1352,24 +1352,42 @@ def init_db():
 #export routes
 
 
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import (
+    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer,
+    PageBreak, Image, KeepTogether
+)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch, mm
+from reportlab.lib import colors
+from reportlab.pdfgen import canvas
+from io import BytesIO
+import os
+import re
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+
+pdfmetrics.registerFont(TTFont('DejaVuSans', 'DejaVuSans.ttf'))
+
 @app.route('/events/<int:event_id>/export-pdf')
 @login_required
 def export_event_pdf(event_id):
     """Export event details to PDF, including stage plan images"""
     try:
-        from reportlab.lib.pagesizes import letter
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.units import inch
-        from reportlab.lib import colors
-        from io import BytesIO
-        import os
-
         event = Event.query.get_or_404(event_id)
+
+        def add_header_footer(canvas, doc):
+            canvas.saveState()
+            canvas.setFont('Helvetica-Bold', 12)
+            canvas.drawString(20 * mm, 275 * mm, "Event - " + doc.event_title)
+            canvas.setFont('Helvetica', 9)
+            canvas.drawRightString(200 * mm, 10 * mm, f"Page {canvas.getPageNumber()}")
+            canvas.restoreState()
 
         # Create PDF in memory
         pdf_buffer = BytesIO()
         doc = SimpleDocTemplate(pdf_buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+        doc.event_title = event.title  # Pass title to header/footer
         styles = getSampleStyleSheet()
         story = []
 
@@ -1380,7 +1398,7 @@ def export_event_pdf(event_id):
             fontSize=24,
             textColor=colors.HexColor('#6366f1'),
             spaceAfter=12,
-            alignment=1  # Center
+            alignment=1
         )
 
         section_style = ParagraphStyle(
@@ -1392,8 +1410,19 @@ def export_event_pdf(event_id):
             spaceBefore=8
         )
 
+        wrapped_style = ParagraphStyle(
+            'WrappedText',
+            parent=styles['Normal'],
+            fontName='DejaVuSans',
+            fontSize=10,
+            leading=12,
+            wordWrap='LTR',
+            splitLongWords=True
+        )
+
+
         # Title
-        story.append(Paragraph(f"🎭 {event.title}", title_style))
+        story.append(Paragraph(f"{event.title}", title_style))
         story.append(Spacer(1, 0.2*inch))
 
         # Event Details
@@ -1408,7 +1437,7 @@ def export_event_pdf(event_id):
             ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f0f4ff')),
             ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, -1), 10),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
@@ -1420,16 +1449,20 @@ def export_event_pdf(event_id):
         # Description
         if event.description:
             story.append(Paragraph("Description", section_style))
-            story.append(Paragraph(event.description, styles['Normal']))
-            story.append(Spacer(1, 0.2*inch))
+            story.append(KeepTogether([
+                Paragraph(event.description, wrapped_style),
+                Spacer(1, 0.2*inch)
+            ]))
 
         # Event Notes
         if hasattr(event, 'notes') and event.notes:
             story.append(Paragraph("Event Notes", section_style))
             for note in sorted(event.notes, key=lambda x: x.created_at, reverse=True):
                 note_text = f"<b>{note.created_by}</b> ({note.created_at.strftime('%b %d, %Y')}): {note.content}"
-                story.append(Paragraph(note_text, styles['Normal']))
-                story.append(Spacer(1, 0.1*inch))
+                story.append(KeepTogether([
+                    Paragraph(note_text, wrapped_style),
+                    Spacer(1, 0.1*inch)
+                ]))
             story.append(Spacer(1, 0.2*inch))
 
         # Schedule
@@ -1438,16 +1471,17 @@ def export_event_pdf(event_id):
             schedule_data = [['Title', 'Time', 'Description']]
             for schedule in sorted(event.schedules, key=lambda x: x.scheduled_time):
                 schedule_data.append([
-                    schedule.title,
-                    schedule.scheduled_time.strftime('%I:%M %p'),
-                    schedule.description or 'N/A'
+                    Paragraph(schedule.title, wrapped_style),
+                    Paragraph(schedule.scheduled_time.strftime('%I:%M %p'), wrapped_style),
+                    Paragraph(schedule.description or 'N/A', wrapped_style)
                 ])
-            schedule_table = Table(schedule_data, colWidths=[1.5*inch, 1*inch, 2.5*inch])
+            schedule_table = Table(schedule_data, colWidths=[1.5*inch, 1*inch, 3.5*inch])
             schedule_table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#6366f1')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                 ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('WORDWRAP', (0, 0), (-1, -1), 'CJK'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('FONTSIZE', (0, 0), (-1, -1), 9),
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
@@ -1461,27 +1495,29 @@ def export_event_pdf(event_id):
             story.append(Paragraph("Pick List", section_style))
             picklist_data = [['Item', 'Qty', 'Location', 'Status']]
             for item in event.pick_list_items:
+                checkbox = '✓' if item.is_checked else '☐'
                 picklist_data.append([
-                    item.item_name,
-                    str(item.quantity),
-                    item.equipment.location if item.equipment else 'N/A',
-                    '✓ Gathered' if item.is_checked else '○ Pending'
+                    Paragraph(item.item_name, wrapped_style),
+                    Paragraph(str(item.quantity), wrapped_style),
+                    Paragraph(item.equipment.location if item.equipment else 'N/A', wrapped_style),
+                    Paragraph(checkbox, wrapped_style)
                 ])
-            picklist_table = Table(picklist_data, colWidths=[2*inch, 0.5*inch, 1.5*inch, 1*inch])
+            picklist_table = Table(picklist_data, colWidths=[2*inch, 0.5*inch, 2*inch, 0.5*inch])
             picklist_table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#10b981')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                 ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('WORDWRAP', (0, 0), (-1, -1), 'CJK'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, -1), 8),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
                 ('GRID', (0, 0), (-1, -1), 1, colors.grey),
             ]))
             story.append(picklist_table)
             story.append(Spacer(1, 0.2*inch))
 
-        # Stage Plans with Images
+        # Stage Plans
         if hasattr(event, 'stage_plans') and event.stage_plans:
             story.append(Paragraph("Stage Plans", section_style))
             for plan in event.stage_plans:
@@ -1495,40 +1531,38 @@ def export_event_pdf(event_id):
                 else:
                     story.append(Paragraph("Image not available", styles['Normal']))
                     story.append(Spacer(1, 0.1*inch))
-                    
+
         # Crew Assignments
         if hasattr(event, 'crew_assignments') and event.crew_assignments:
             story.append(Paragraph("Attending Crew", section_style))
-            crew_data = [['Crew Member', 'Role', 'Notification Status']]
+            crew_data = [['Crew Member', 'Role']]
             for assignment in event.crew_assignments:
-                user = User.query.filter_by(username=assignment.crew_member).first()
-                status = 'Email: Yes' if (user and user.email) else 'Email: No'
                 crew_data.append([
-                    assignment.crew_member,
-                    assignment.role or 'Crew Member',
-                    status
+                    Paragraph(assignment.crew_member, wrapped_style),
+                    Paragraph(assignment.role or 'Crew Member', wrapped_style)
                 ])
-            crew_table = Table(crew_data, colWidths=[2*inch, 1.5*inch, 1.5*inch])
+            crew_table = Table(crew_data, colWidths=[2.5*inch, 3.5*inch])
             crew_table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#ec4899')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                 ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('WORDWRAP', (0, 0), (-1, -1), 'CJK'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('FONTSIZE', (0, 0), (-1, -1), 9),
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
                 ('GRID', (0, 0), (-1, -1), 1, colors.grey),
             ]))
             story.append(crew_table)
+            story.append(Spacer(1, 0.2*inch))
 
-        # Build PDF
-        doc.build(story)
+        # Build PDF with header and page numbers
+        doc.build(story, onFirstPage=add_header_footer, onLaterPages=add_header_footer)
         pdf_buffer.seek(0)
 
         # Sanitize filename
-        import re
         safe_title = re.sub(r'\W+', '_', event.title)
-        filename = f"{safe_title}_Details.pdf"
+        filename = f"{safe_title}_Event_Details.pdf"
 
         return send_file(
             pdf_buffer,
@@ -1546,7 +1580,7 @@ def export_event_pdf(event_id):
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-
+               
 #note routs
 # Add these routes to your app.py (in the routes section)
 
