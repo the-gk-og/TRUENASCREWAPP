@@ -22,6 +22,8 @@ from discord.ext import commands
 import os
 import requests
 from dotenv import load_dotenv
+from flask import Response
+from datetime import datetime, timedelta
 
 
 #setup
@@ -759,61 +761,77 @@ def calendar():
     now = datetime.now()
     return render_template('calendar.html', events=events, now=now)
 
+
 @app.route('/calendar/ics')
 def calendar_ics():
-    """Generate iCalendar format for Google Calendar subscription"""
+    """Generate iCalendar format for ShowWise sync"""
     events = Event.query.all()
-    
-    # iCalendar format (RFC 5545)
+
     ical = "BEGIN:VCALENDAR\r\n"
     ical += "VERSION:2.0\r\n"
-    ical += "PRODID:-//Production Crew//EN\r\n"
+    ical += "PRODID:-//ShowWise//EN\r\n"
     ical += "CALSCALE:GREGORIAN\r\n"
     ical += "METHOD:PUBLISH\r\n"
-    ical += "X-WR-CALNAME:Production Crew Events\r\n"
-    ical += "X-WR-TIMEZONE:UTC\r\n"
+    ical += "X-WR-CALNAME:ShowWise sync\r\n"
+    ical += "X-WR-TIMEZONE:Australia/Sydney\r\n"
     ical += "REFRESH-INTERVAL;VALUE=DURATION:PT1H\r\n"
     ical += "X-WR-CALDESC:Production events and scheduling\r\n"
-    
+
+    # Add timezone block for Australia/Sydney
+    ical += (
+        "BEGIN:VTIMEZONE\r\n"
+        "TZID:Australia/Sydney\r\n"
+        "X-LIC-LOCATION:Australia/Sydney\r\n"
+        "BEGIN:STANDARD\r\n"
+        "DTSTART:20240407T030000\r\n"
+        "TZOFFSETFROM:+1100\r\n"
+        "TZOFFSETTO:+1000\r\n"
+        "TZNAME:AEST\r\n"
+        "END:STANDARD\r\n"
+        "BEGIN:DAYLIGHT\r\n"
+        "DTSTART:20241006T020000\r\n"
+        "TZOFFSETFROM:+1000\r\n"
+        "TZOFFSETTO:+1100\r\n"
+        "TZNAME:AEDT\r\n"
+        "END:DAYLIGHT\r\n"
+        "END:VTIMEZONE\r\n"
+    )
+
     for event in events:
-        # Format dates correctly for iCalendar
-        start_time = event.event_date.strftime('%Y%m%dT%H%M%SZ')
-        end_time = (event.event_date + timedelta(hours=2)).strftime('%Y%m%dT%H%M%SZ')
-        created_time = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
-        
-        # Clean up event title and description
+        start_time = event.event_date.strftime('%Y%m%dT%H%M%S')
+        end_time = (event.event_date + timedelta(hours=2)).strftime('%Y%m%dT%H%M%S')
+        created_time = datetime.now().strftime('%Y%m%dT%H%M%S')
+
         title = event.title.replace('\n', ' ').replace(',', '\\,').replace('"', '\\"')
         description = (event.description or '').replace('\n', ' ').replace(',', '\\,').replace('"', '\\"')
         location = (event.location or '').replace('\n', ' ').replace(',', '\\,').replace('"', '\\"')
-        
+
         ical += "BEGIN:VEVENT\r\n"
-        ical += f"UID:{event.id}-productionCrew@localhost\r\n"
-        ical += f"DTSTAMP:{created_time}\r\n"
-        ical += f"DTSTART:{start_time}\r\n"
-        ical += f"DTEND:{end_time}\r\n"
+        ical += f"UID:{event.id}-showwise@localhost\r\n"
+        ical += f"DTSTAMP;TZID=Australia/Sydney:{created_time}\r\n"
+        ical += f"DTSTART;TZID=Australia/Sydney:{start_time}\r\n"
+        ical += f"DTEND;TZID=Australia/Sydney:{end_time}\r\n"
         ical += f"SUMMARY:{title}\r\n"
-        
+
         if description:
             ical += f"DESCRIPTION:{description}\r\n"
         if location:
             ical += f"LOCATION:{location}\r\n"
-        
-        # Add crew members to description if needed
+
         if event.crew_assignments:
             crew_list = ", ".join([a.crew_member for a in event.crew_assignments])
             ical += f"X-CREW:{crew_list}\r\n"
-        
+
         ical += "STATUS:CONFIRMED\r\n"
         ical += "END:VEVENT\r\n"
-    
-    ical += "END:VCALENDAR\r\n"
-    
-    return ical, 200, {
-        'Content-Type': 'text/calendar; charset=utf-8',
-        'Content-Disposition': 'inline; filename="production_crew_events.ics"',
-        'Cache-Control': 'no-cache, must-revalidate'
-    }
 
+    ical += "END:VCALENDAR\r\n"
+
+    return Response(ical, mimetype='text/calendar', headers={
+        'Content-Disposition': 'inline; filename="showwise_sync.ics"',
+        'Cache-Control': 'no-cache, must-revalidate'
+    })
+  
 # EVENT ROUTES
 @app.route('/events/add', methods=['POST'])
 @login_required
