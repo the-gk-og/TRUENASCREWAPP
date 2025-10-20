@@ -101,6 +101,7 @@ class StagePlan(db.Model):
     uploaded_by = db.Column(db.String(80))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     event_id = db.Column(db.Integer, db.ForeignKey('event.id'))
+    
 
 class Event(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -126,12 +127,23 @@ class CrewAssignment(db.Model):
 class EventSchedule(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
-    schedule_type = db.Column(db.String(100), nullable=False)  # 'arrival', 'bump_in', 'sound_check', 'rehearsal', 'performance', etc.
+    title = db.Column(db.String(100), nullable=False)  # Changed from schedule_type to title
     scheduled_time = db.Column(db.DateTime, nullable=False)
     description = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     event = db.relationship('Event', backref=db.backref('schedules', cascade='all, delete-orphan'))
+
+class EventNote(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_by = db.Column(db.String(80), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    event = db.relationship('Event', backref=db.backref('notes', cascade='all, delete-orphan'))
+
 
 
 # LOGIN & UTILITIES
@@ -825,7 +837,7 @@ def add_event_schedule(event_id):
     
     schedule = EventSchedule(
         event_id=event_id,
-        schedule_type=data['schedule_type'],
+        title=data['title'],  # Changed from schedule_type to title
         scheduled_time=datetime.fromisoformat(data['scheduled_time']),
         description=data.get('description', '')
     )
@@ -1337,6 +1349,255 @@ def init_db():
             print("="*80 + "\n")
         else:
             print("✓ Admin user already exists - skipping initialization")
+#export routes
+
+
+@app.route('/events/<int:event_id>/export-pdf')
+@login_required
+def export_event_pdf(event_id):
+    """Export event details to PDF, including stage plan images"""
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.lib import colors
+        from io import BytesIO
+        import os
+
+        event = Event.query.get_or_404(event_id)
+
+        # Create PDF in memory
+        pdf_buffer = BytesIO()
+        doc = SimpleDocTemplate(pdf_buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+        styles = getSampleStyleSheet()
+        story = []
+
+        # Custom styles
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=24,
+            textColor=colors.HexColor('#6366f1'),
+            spaceAfter=12,
+            alignment=1  # Center
+        )
+
+        section_style = ParagraphStyle(
+            'SectionTitle',
+            parent=styles['Heading2'],
+            fontSize=14,
+            textColor=colors.HexColor('#6366f1'),
+            spaceAfter=8,
+            spaceBefore=8
+        )
+
+        # Title
+        story.append(Paragraph(f"🎭 {event.title}", title_style))
+        story.append(Spacer(1, 0.2*inch))
+
+        # Event Details
+        story.append(Paragraph("Event Details", section_style))
+        details_data = [
+            ['Date & Time:', event.event_date.strftime('%B %d, %Y at %I:%M %p')],
+            ['Location:', event.location or 'N/A'],
+            ['Created By:', event.created_by or 'N/A'],
+        ]
+        details_table = Table(details_data, colWidths=[1.5*inch, 4.5*inch])
+        details_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f0f4ff')),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 1, colors.grey),
+        ]))
+        story.append(details_table)
+        story.append(Spacer(1, 0.2*inch))
+
+        # Description
+        if event.description:
+            story.append(Paragraph("Description", section_style))
+            story.append(Paragraph(event.description, styles['Normal']))
+            story.append(Spacer(1, 0.2*inch))
+
+        # Event Notes
+        if hasattr(event, 'notes') and event.notes:
+            story.append(Paragraph("Event Notes", section_style))
+            for note in sorted(event.notes, key=lambda x: x.created_at, reverse=True):
+                note_text = f"<b>{note.created_by}</b> ({note.created_at.strftime('%b %d, %Y')}): {note.content}"
+                story.append(Paragraph(note_text, styles['Normal']))
+                story.append(Spacer(1, 0.1*inch))
+            story.append(Spacer(1, 0.2*inch))
+
+        # Schedule
+        if hasattr(event, 'schedules') and event.schedules:
+            story.append(Paragraph("Schedule", section_style))
+            schedule_data = [['Title', 'Time', 'Description']]
+            for schedule in sorted(event.schedules, key=lambda x: x.scheduled_time):
+                schedule_data.append([
+                    schedule.title,
+                    schedule.scheduled_time.strftime('%I:%M %p'),
+                    schedule.description or 'N/A'
+                ])
+            schedule_table = Table(schedule_data, colWidths=[1.5*inch, 1*inch, 2.5*inch])
+            schedule_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#6366f1')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('GRID', (0, 0), (-1, -1), 1, colors.grey),
+            ]))
+            story.append(schedule_table)
+            story.append(Spacer(1, 0.2*inch))
+
+        # Pick List
+        if hasattr(event, 'pick_list_items') and event.pick_list_items:
+            story.append(Paragraph("Pick List", section_style))
+            picklist_data = [['Item', 'Qty', 'Location', 'Status']]
+            for item in event.pick_list_items:
+                picklist_data.append([
+                    item.item_name,
+                    str(item.quantity),
+                    item.equipment.location if item.equipment else 'N/A',
+                    '✓ Gathered' if item.is_checked else '○ Pending'
+                ])
+            picklist_table = Table(picklist_data, colWidths=[2*inch, 0.5*inch, 1.5*inch, 1*inch])
+            picklist_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#10b981')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                ('GRID', (0, 0), (-1, -1), 1, colors.grey),
+            ]))
+            story.append(picklist_table)
+            story.append(Spacer(1, 0.2*inch))
+
+        # Stage Plans with Images
+        if hasattr(event, 'stage_plans') and event.stage_plans:
+            story.append(Paragraph("Stage Plans", section_style))
+            for plan in event.stage_plans:
+                story.append(Paragraph(f"{plan.title} (uploaded by {plan.uploaded_by})", styles['Normal']))
+                image_file = os.path.join('uploads', plan.filename)
+                if os.path.exists(image_file):
+                    img = Image(image_file, width=5.5*inch, height=3.5*inch)
+                    img.hAlign = 'CENTER'
+                    story.append(img)
+                    story.append(Spacer(1, 0.2*inch))
+                else:
+                    story.append(Paragraph("Image not available", styles['Normal']))
+                    story.append(Spacer(1, 0.1*inch))
+                    
+        # Crew Assignments
+        if hasattr(event, 'crew_assignments') and event.crew_assignments:
+            story.append(Paragraph("Attending Crew", section_style))
+            crew_data = [['Crew Member', 'Role', 'Notification Status']]
+            for assignment in event.crew_assignments:
+                user = User.query.filter_by(username=assignment.crew_member).first()
+                status = 'Email: Yes' if (user and user.email) else 'Email: No'
+                crew_data.append([
+                    assignment.crew_member,
+                    assignment.role or 'Crew Member',
+                    status
+                ])
+            crew_table = Table(crew_data, colWidths=[2*inch, 1.5*inch, 1.5*inch])
+            crew_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#ec4899')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('GRID', (0, 0), (-1, -1), 1, colors.grey),
+            ]))
+            story.append(crew_table)
+
+        # Build PDF
+        doc.build(story)
+        pdf_buffer.seek(0)
+
+        # Sanitize filename
+        import re
+        safe_title = re.sub(r'\W+', '_', event.title)
+        filename = f"{safe_title}_Details.pdf"
+
+        return send_file(
+            pdf_buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=filename
+        )
+
+    except ImportError as e:
+        print(f"Import error: {e}")
+        return jsonify({'error': 'reportlab not installed. Run: pip install reportlab'}), 500
+    except Exception as e:
+        print(f"PDF export error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+#note routs
+# Add these routes to your app.py (in the routes section)
+
+@app.route('/events/<int:event_id>/notes/add', methods=['POST'])
+@login_required
+def add_event_note(event_id):
+    """Add a note to an event"""
+    event = Event.query.get_or_404(event_id)
+    data = request.json
+    
+    note = EventNote(
+        event_id=event_id,
+        content=data['content'],
+        created_by=current_user.username
+    )
+    db.session.add(note)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'id': note.id,
+        'note': {
+            'id': note.id,
+            'content': note.content,
+            'created_by': note.created_by,
+            'created_at': note.created_at.strftime('%b %d, %Y at %I:%M %p')
+        }
+    })
+
+@app.route('/events/notes/<int:note_id>/edit', methods=['PUT'])
+@login_required
+def edit_event_note(note_id):
+    """Edit an event note"""
+    note = EventNote.query.get_or_404(note_id)
+    data = request.json
+    
+    note.content = data['content']
+    note.updated_at = datetime.utcnow()
+    db.session.commit()
+    
+    return jsonify({'success': True})
+
+@app.route('/events/notes/<int:note_id>/delete', methods=['DELETE'])
+@login_required
+def delete_event_note(note_id):
+    """Delete an event note"""
+    note = EventNote.query.get_or_404(note_id)
+    db.session.delete(note)
+    db.session.commit()
+    
+    return jsonify({'success': True})
 
 
 if __name__ == '__main__':

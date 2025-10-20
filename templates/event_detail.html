@@ -10,11 +10,16 @@
     
     <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem;">
         <h1 style="margin: 0;">{{ event.title }}</h1>
-        {% if current_user.is_admin %}
-        <button onclick="showModal('editEventModal')" class="btn btn-primary" style="padding: 0.5rem 1rem; white-space: nowrap;">
-            <i class="fas fa-edit"></i> Edit
-        </button>
-        {% endif %}
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            {% if current_user.is_admin %}
+            <button onclick="showModal('editEventModal')" class="btn btn-primary" style="padding: 0.5rem 1rem; white-space: nowrap;">
+                <i class="fas fa-edit"></i> Edit
+            </button>
+            {% endif %}
+            <button onclick="exportPDF()" class="btn btn-success" style="padding: 0.5rem 1rem; white-space: nowrap;">
+                <i class="fas fa-file-pdf"></i> Export PDF
+            </button>
+        </div>
     </div>
     
     <p style="color: #666; margin: 0.5rem 0; word-break: break-word;">
@@ -33,6 +38,49 @@
     {% endif %}
 </div>
 
+<!-- EVENT NOTES SECTION -->
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+        <h3>📝 Event Notes</h3>
+        <button onclick="showModal('addNoteModal')" class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
+            + Add Note
+        </button>
+    </div>
+    
+    <div id="notesList">
+        {% if event.notes %}
+            {% for note in event.notes|sort(attribute='created_at', reverse=True) %}
+            <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--warning); margin-bottom: 0.75rem;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 0;">
+                        <p style="margin: 0.25rem 0; color: #555; font-size: 0.85rem;">
+                            <strong>{{ note.created_by }}</strong> • {{ note.created_at.strftime('%b %d, %Y at %I:%M %p') }}
+                        </p>
+                        <p id="note-content-{{ note.id }}" style="margin: 0.5rem 0; color: #333; word-break: break-word;">{{ note.content }}</p>
+                        <div id="note-edit-{{ note.id }}" style="display: none; margin: 0.5rem 0;">
+                            <textarea id="note-textarea-{{ note.id }}" style="width: 100%; padding: 0.5rem; border: 2px solid var(--border); border-radius: 6px; min-height: 80px; font-family: inherit;">{{ note.content }}</textarea>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
+                        <button onclick="editNoteToggle({{ note.id }})" id="edit-btn-{{ note.id }}" class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button onclick="saveNoteEdit({{ note.id }})" id="save-btn-{{ note.id }}" style="display: none; padding: 0.4rem 0.8rem; font-size: 0.8rem;" class="btn btn-success">
+                            <i class="fas fa-save"></i>
+                        </button>
+                        <button onclick="deleteNote({{ note.id }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+        <p style="color: #666; text-align: center; padding: 1rem;">No notes yet. Add one to get started!</p>
+        {% endif %}
+    </div>
+</div>
+
 <!-- EVENT SCHEDULE SECTION -->
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
@@ -44,11 +92,11 @@
     
     {% if schedules %}
     <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-        {% for schedule in schedules %}
+        {% for schedule in schedules|sort(attribute='scheduled_time') %}
         <div style="background: linear-gradient(135deg, #e8f4f8 0%, #d1e7f4 100%); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--primary);">
             <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
                 <div style="flex: 1; min-width: 200px;">
-                    <h4 style="margin: 0 0 0.5rem 0; color: var(--primary);">{{ schedule.schedule_type|title }}</h4>
+                    <h4 style="margin: 0 0 0.5rem 0; color: var(--primary);">{{ schedule.title }}</h4>
                     <p style="margin: 0.25rem 0; color: #555; font-size: 0.9rem;">
                         <i class="fas fa-clock"></i> {{ schedule.scheduled_time.strftime('%I:%M %p') }}
                     </p>
@@ -124,6 +172,21 @@
     </div>
 </div>
 
+<!-- ADD NOTE MODAL -->
+<div id="addNoteModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('addNoteModal')">&times;</span>
+        <h2>Add Event Note</h2>
+        <form id="addNoteForm">
+            <div class="form-group">
+                <label>Note Content *</label>
+                <textarea id="noteContent" required placeholder="Add important notes about this event..." style="min-height: 120px;"></textarea>
+            </div>
+            <button type="submit" class="btn btn-success" style="width: 100%;"><i class="fas fa-plus"></i> Add Note</button>
+        </form>
+    </div>
+</div>
+
 <!-- EDIT EVENT MODAL -->
 <div id="editEventModal" class="modal">
     <div class="modal-content">
@@ -162,20 +225,8 @@
         <h2>Add Schedule Item</h2>
         <form id="addScheduleForm">
             <div class="form-group">
-                <label>Schedule Type *</label>
-                <select id="scheduleType" required>
-                    <option value="">-- Select type --</option>
-                    <option value="arrival">Arrival Time</option>
-                    <option value="bump_in">Bump In</option>
-                    <option value="load_in">Load In</option>
-                    <option value="setup">Setup</option>
-                    <option value="sound_check">Sound Check</option>
-                    <option value="rehearsal">Rehearsal</option>
-                    <option value="tech_run">Tech Run</option>
-                    <option value="performance">Performance</option>
-                    <option value="strike">Strike / Cleanup</option>
-                    <option value="other">Other</option>
-                </select>
+                <label>Schedule Title *</label>
+                <input type="text" id="scheduleTitle" placeholder="e.g., Sound Check, Rehearsal, Performance" required>
             </div>
             <div class="form-group">
                 <label>Time *</label>
@@ -220,9 +271,87 @@
 
 {% block scripts %}
 <script>
+// Export to PDF
+function exportPDF() {
+    window.location.href = '/events/{{ event.id }}/export-pdf';
+}
+
+// Add Note
+document.getElementById('addNoteForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const data = {
+        content: document.getElementById('noteContent').value
+    };
+    fetch('/events/{{ event.id }}/notes/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert('Note added!', 'success');
+            setTimeout(() => location.reload(), 500);
+        }
+    });
+});
+
+// Edit Note Toggle
+function editNoteToggle(noteId) {
+    const content = document.getElementById(`note-content-${noteId}`);
+    const editDiv = document.getElementById(`note-edit-${noteId}`);
+    const editBtn = document.getElementById(`edit-btn-${noteId}`);
+    const saveBtn = document.getElementById(`save-btn-${noteId}`);
+    
+    if (editDiv.style.display === 'none') {
+        content.style.display = 'none';
+        editDiv.style.display = 'block';
+        editBtn.style.display = 'none';
+        saveBtn.style.display = 'inline-block';
+    } else {
+        content.style.display = 'block';
+        editDiv.style.display = 'none';
+        editBtn.style.display = 'inline-block';
+        saveBtn.style.display = 'none';
+    }
+}
+
+// Save Note Edit
+function saveNoteEdit(noteId) {
+    const newContent = document.getElementById(`note-textarea-${noteId}`).value;
+    const data = { content: newContent };
+    
+    fetch(`/events/notes/${noteId}/edit`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert('Note updated!', 'success');
+            setTimeout(() => location.reload(), 500);
+        }
+    });
+}
+
+// Delete Note
+function deleteNote(noteId) {
+    if (!confirm('Delete this note?')) return;
+    fetch(`/events/notes/${noteId}/delete`, {method: 'DELETE'})
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                showAlert('Note deleted!', 'success');
+                location.reload();
+            }
+        });
+}
+
 // Edit event
 document.getElementById('editEventForm').addEventListener('submit', function(e) {
     e.preventDefault();
+    
     const data = {
         title: document.getElementById('editTitle').value,
         event_date: document.getElementById('editDate').value,
@@ -257,7 +386,7 @@ function deleteEventConfirm() {
 document.getElementById('addScheduleForm').addEventListener('submit', function(e) {
     e.preventDefault();
     const data = {
-        schedule_type: document.getElementById('scheduleType').value,
+        title: document.getElementById('scheduleTitle').value,
         scheduled_time: document.getElementById('scheduleTime').value,
         description: document.getElementById('scheduleDescription').value
     };
@@ -278,7 +407,10 @@ function deleteSchedule(id) {
     fetch(`/events/schedule/${id}/delete`, {method: 'DELETE'})
         .then(r => r.json())
         .then(result => {
-            if (result.success) location.reload();
+            if (result.success) {
+                showAlert('Schedule deleted!', 'success');
+                location.reload();
+            }
         });
 }
 
@@ -307,7 +439,10 @@ function removeCrew(id) {
     fetch(`/crew/remove/${id}`, {method: 'DELETE'})
         .then(r => r.json())
         .then(result => {
-            if (result.success) location.reload();
+            if (result.success) {
+                showAlert('Crew member removed!', 'success');
+                location.reload();
+            }
         });
 }
 </script>
