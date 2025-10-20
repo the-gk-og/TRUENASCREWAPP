@@ -1,9 +1,9 @@
 # Ignore all contents inside uploads/ (files and subfolders)
-uploads/**
+#uploads/**
 
 # But keep the uploads/ folder itself
-!uploads/
-!uploads/.gitkeep  # Optional: placeholder file to keep the folder tracked
+#!uploads/
+#!uploads/.gitkeep  # Optional: placeholder file to keep the folder tracked
 
 # Ignore the entire instance/ folder
 instance/
