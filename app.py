@@ -1,3 +1,4 @@
+#import
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_from_directory, send_file
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -23,7 +24,7 @@ import requests
 from dotenv import load_dotenv
 
 
-
+#setup
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.config['SECRET_KEY'] = 'your-secret-key-change-this'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///production_crew.db'
@@ -178,7 +179,7 @@ def send_discord_event_announcement(event):
     
     try:
         embed = {
-            "title": f"🎭 New Event: {event.title}",
+            "title": f"New Event: {event.title}",
             "description": event.description or "No description provided",
             "color": 6366239,  # Indigo
             "fields": [
@@ -384,8 +385,6 @@ def schedule_event_notifications(event):
         timer = threading.Timer(delay_event_day, send_timed_notification, args=[event.id, 'event_today'])
    
 
-
-
 def generate_secure_password(length=32):
     """Generate a cryptographically secure random password"""
     # Use a mix of uppercase, lowercase, digits, and special characters
@@ -394,7 +393,6 @@ def generate_secure_password(length=32):
     safe_chars = ''.join(c for c in characters if c not in 'l1LO0|`~')
     password = ''.join(secrets.choice(safe_chars) for _ in range(length))
     return password
-
 
 
 def send_discord_message(event):
@@ -419,7 +417,7 @@ def send_discord_message(event):
     return None
 
 
-# ADD THESE ROUTES TO app.py (before @app.route('/'))
+#logedout routes
 
 @app.route('/home')
 def home():
@@ -465,7 +463,7 @@ Message:
 {message}
 
 ---
-This is an automated message from the Production Crew Management System contact form.
+This is an automated message from the ShowWise System contact form.
 """
         send_email(f"Contact Form: {subject}", admin_email, email_body)
         
@@ -473,14 +471,14 @@ This is an automated message from the Production Crew Management System contact 
         user_email_body = f"""
 Hello {name},
 
-Thank you for reaching out to the Production Crew Management System team!
+Thank you for reaching out to the ShowWise team!
 
 We received your message about: {subject}
 
 We'll get back to you as soon as possible.
 
 Best regards,
-Production Crew Management System Team
+ShowWise Team
 """
         send_email("We received your message", email, user_email_body)
         
@@ -512,9 +510,6 @@ def quote():
 
 
 # AUTH ROUTES
-
-
-
 
 @app.route('/')
 def index():
@@ -826,7 +821,7 @@ def delete_event(id):
     db.session.commit()
     return jsonify({'success': True})
 
-# EVENT SCHEDULING ROUTES - Add these new routes
+# EVENT SCHEDULING ROUTES 
 
 @app.route('/events/<int:event_id>/schedule/add', methods=['POST'])
 @login_required
@@ -870,6 +865,7 @@ def delete_event_schedule(schedule_id):
     db.session.delete(schedule)
     db.session.commit()
     return jsonify({'success': True})
+
 # CREW ROUTES
 
 @app.route('/crew/assign', methods=['POST'])
@@ -931,7 +927,7 @@ def resend_notification():
     
     user = User.query.filter_by(username=assignment.crew_member).first()
     if user and user.email:
-        subject = f"🎭 Reminder: {event.title}"
+        subject = f"Reminder: {event.title}"
         body = f"""Hello {user.username},
 
 This is a reminder that you're assigned to:
@@ -943,7 +939,7 @@ This is a reminder that you're assigned to:
 
 See you there!
 
-Production Crew System"""
+ShowWise System"""
         send_email(subject, user.email, body)
         return jsonify({'success': True})
     
@@ -1348,9 +1344,8 @@ def init_db():
             print("="*80 + "\n")
         else:
             print("✓ Admin user already exists - skipping initialization")
-#export routes
 
-
+# PDF EXPORT ROUTE
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import (
     SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer,
@@ -1581,7 +1576,6 @@ def export_event_pdf(event_id):
 
                
 #note routs
-# Add these routes to your app.py (in the routes section)
 
 @app.route('/events/<int:event_id>/notes/add', methods=['POST'])
 @login_required
@@ -1632,6 +1626,7 @@ def delete_event_note(note_id):
     
     return jsonify({'success': True})
 
+# RUN APP
 
 if __name__ == '__main__':
     init_db()
