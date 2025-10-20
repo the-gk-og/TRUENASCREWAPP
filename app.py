@@ -761,16 +761,60 @@ def calendar():
 
 @app.route('/calendar/ics')
 def calendar_ics():
+    """Generate iCalendar format for Google Calendar subscription"""
     events = Event.query.all()
-    ical = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Production Crew//EN\r\n"
+    
+    # iCalendar format (RFC 5545)
+    ical = "BEGIN:VCALENDAR\r\n"
+    ical += "VERSION:2.0\r\n"
+    ical += "PRODID:-//Production Crew//EN\r\n"
+    ical += "CALSCALE:GREGORIAN\r\n"
+    ical += "METHOD:PUBLISH\r\n"
+    ical += "X-WR-CALNAME:Production Crew Events\r\n"
+    ical += "X-WR-TIMEZONE:UTC\r\n"
+    ical += "REFRESH-INTERVAL;VALUE=DURATION:PT1H\r\n"
+    ical += "X-WR-CALDESC:Production events and scheduling\r\n"
+    
     for event in events:
-        ical += f"BEGIN:VEVENT\r\nUID:{event.id}@prodcrew\r\nDTSTART:{event.event_date.strftime('%Y%m%dT%H%M%SZ')}\r\nDTEND:{(event.event_date + timedelta(hours=2)).strftime('%Y%m%dT%H%M%SZ')}\r\nSUMMARY:{event.title}\r\n"
-        if event.location:
-            ical += f"LOCATION:{event.location}\r\n"
+        # Format dates correctly for iCalendar
+        start_time = event.event_date.strftime('%Y%m%dT%H%M%SZ')
+        end_time = (event.event_date + timedelta(hours=2)).strftime('%Y%m%dT%H%M%SZ')
+        created_time = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+        
+        # Clean up event title and description
+        title = event.title.replace('\n', ' ').replace(',', '\\,').replace('"', '\\"')
+        description = (event.description or '').replace('\n', ' ').replace(',', '\\,').replace('"', '\\"')
+        location = (event.location or '').replace('\n', ' ').replace(',', '\\,').replace('"', '\\"')
+        
+        ical += "BEGIN:VEVENT\r\n"
+        ical += f"UID:{event.id}-productionCrew@localhost\r\n"
+        ical += f"DTSTAMP:{created_time}\r\n"
+        ical += f"DTSTART:{start_time}\r\n"
+        ical += f"DTEND:{end_time}\r\n"
+        ical += f"SUMMARY:{title}\r\n"
+        
+        if description:
+            ical += f"DESCRIPTION:{description}\r\n"
+        if location:
+            ical += f"LOCATION:{location}\r\n"
+        
+        # Add crew members to description if needed
+        if event.crew_assignments:
+            crew_list = ", ".join([a.crew_member for a in event.crew_assignments])
+            ical += f"X-CREW:{crew_list}\r\n"
+        
+        ical += "STATUS:CONFIRMED\r\n"
         ical += "END:VEVENT\r\n"
+    
     ical += "END:VCALENDAR\r\n"
-    return ical, 200, {'Content-Type': 'text/calendar'}
+    
+    return ical, 200, {
+        'Content-Type': 'text/calendar; charset=utf-8',
+        'Content-Disposition': 'inline; filename="production_crew_events.ics"',
+        'Cache-Control': 'no-cache, must-revalidate'
+    }
 
+# EVENT ROUTES
 @app.route('/events/add', methods=['POST'])
 @login_required
 def add_event():
@@ -826,46 +870,72 @@ def delete_event(id):
 @app.route('/events/<int:event_id>/schedule/add', methods=['POST'])
 @login_required
 def add_event_schedule(event_id):
+    """Add a schedule item to an event"""
     event = Event.query.get_or_404(event_id)
     data = request.json
     
-    schedule = EventSchedule(
-        event_id=event_id,
-        title=data['title'],  # Changed from schedule_type to title
-        scheduled_time=datetime.fromisoformat(data['scheduled_time']),
-        description=data.get('description', '')
-    )
-    
-    db.session.add(schedule)
-    db.session.commit()
-    
-    return jsonify({
-        'success': True,
-        'id': schedule.id,
-        'scheduled_time': schedule.scheduled_time.isoformat()
-    })
+    try:
+        # Parse the datetime correctly
+        scheduled_time = datetime.fromisoformat(data['scheduled_time'])
+        
+        schedule = EventSchedule(
+            event_id=event_id,
+            title=data.get('title', ''),
+            scheduled_time=scheduled_time,
+            description=data.get('description', ''),
+        )
+        
+        db.session.add(schedule)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'id': schedule.id,
+            'scheduled_time': schedule.scheduled_time.isoformat()
+        })
+    except Exception as e:
+        db.session.rollback()
+        print(f"Schedule add error: {e}")
+        return jsonify({'error': str(e)}), 400
+
 
 @app.route('/events/schedule/<int:schedule_id>/edit', methods=['PUT'])
 @login_required
 def edit_event_schedule(schedule_id):
+    """Edit a schedule item"""
     schedule = EventSchedule.query.get_or_404(schedule_id)
     data = request.json
     
-    schedule.schedule_type = data.get('schedule_type', schedule.schedule_type)
-    schedule.scheduled_time = datetime.fromisoformat(data['scheduled_time'])
-    schedule.description = data.get('description', schedule.description)
-    
-    db.session.commit()
-    return jsonify({'success': True})
+    try:
+        schedule.title = data.get('title', schedule.title)
+        schedule.description = data.get('description', schedule.description)
+        
+        if data.get('scheduled_time'):
+            schedule.scheduled_time = datetime.fromisoformat(data['scheduled_time'])
+        
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        print(f"Schedule edit error: {e}")
+        return jsonify({'error': str(e)}), 400
+
 
 @app.route('/events/schedule/<int:schedule_id>/delete', methods=['DELETE'])
 @login_required
 def delete_event_schedule(schedule_id):
+    """Delete a schedule item"""
     schedule = EventSchedule.query.get_or_404(schedule_id)
-    db.session.delete(schedule)
-    db.session.commit()
-    return jsonify({'success': True})
-
+    
+    try:
+        db.session.delete(schedule)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        print(f"Schedule delete error: {e}")
+        return jsonify({'error': str(e)}), 400
+    
 # CREW ROUTES
 
 @app.route('/crew/assign', methods=['POST'])

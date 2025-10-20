@@ -225,18 +225,25 @@
         <h2>Add Schedule Item</h2>
         <form id="addScheduleForm">
             <div class="form-group">
-                <label>Schedule Title *</label>
-                <input type="text" id="scheduleTitle" placeholder="e.g., Sound Check, Rehearsal, Performance" required>
+                <label>Schedule Title * (e.g., Sound Check, Rehearsal, Performance)</label>
+                <input type="text" id="scheduleTitle" placeholder="e.g., Sound Check" required>
             </div>
             <div class="form-group">
-                <label>Time *</label>
+                <label>Time * (Date and Time)</label>
                 <input type="datetime-local" id="scheduleTime" required>
             </div>
             <div class="form-group">
-                <label>Description</label>
-                <textarea id="scheduleDescription" placeholder="Optional notes..."></textarea>
+                <label>Description (Optional)</label>
+                <textarea id="scheduleDescription" placeholder="Optional notes..." style="min-height: 80px;"></textarea>
             </div>
-            <button type="submit" class="btn btn-success" style="width: 100%;">Add Schedule</button>
+            <div style="display: flex; gap: 1rem;">
+                <button type="submit" class="btn btn-success" style="flex: 1;">
+                    <i class="fas fa-plus"></i> Add Schedule
+                </button>
+                <button type="button" onclick="hideModal('addScheduleModal')" class="btn btn-primary" style="flex: 1;">
+                    Cancel
+                </button>
+            </div>
         </form>
     </div>
 </div>
@@ -383,35 +390,68 @@ function deleteEventConfirm() {
 }
 
 // Schedule functions
+
 document.getElementById('addScheduleForm').addEventListener('submit', function(e) {
     e.preventDefault();
+    
+    const title = document.getElementById('scheduleTitle').value.trim();
+    const scheduled_time = document.getElementById('scheduleTime').value;
+    const description = document.getElementById('scheduleDescription').value.trim();
+    
+    // Validation
+    if (!title || !scheduled_time) {
+        showAlert('Title and time are required', 'error');
+        return;
+    }
+    
     const data = {
-        title: document.getElementById('scheduleTitle').value,
-        scheduled_time: document.getElementById('scheduleTime').value,
-        description: document.getElementById('scheduleDescription').value
+        title: title,
+        scheduled_time: scheduled_time,
+        description: description
     };
+    
+    console.log('Sending schedule data:', data);
+    
     fetch('/events/{{ event.id }}/schedule/add', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(data)
-    }).then(r => r.json()).then(result => {
+    })
+    .then(r => {
+        console.log('Response status:', r.status);
+        return r.json();
+    })
+    .then(result => {
+        console.log('Response data:', result);
         if (result.success) {
             showAlert('Schedule added!', 'success');
+            document.getElementById('addScheduleForm').reset();
+            hideModal('addScheduleModal');
             setTimeout(() => location.reload(), 500);
+        } else {
+            showAlert(result.error || 'Error adding schedule', 'error');
         }
+    })
+    .catch(err => {
+        console.error('Fetch error:', err);
+        showAlert('Error: ' + err.message, 'error');
     });
 });
 
 function deleteSchedule(id) {
     if (!confirm('Delete this schedule item?')) return;
+    
     fetch(`/events/schedule/${id}/delete`, {method: 'DELETE'})
         .then(r => r.json())
         .then(result => {
             if (result.success) {
                 showAlert('Schedule deleted!', 'success');
                 location.reload();
+            } else {
+                showAlert(result.error || 'Error deleting schedule', 'error');
             }
-        });
+        })
+        .catch(err => showAlert('Error: ' + err.message, 'error'));
 }
 
 // Crew functions

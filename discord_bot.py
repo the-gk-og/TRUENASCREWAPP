@@ -300,6 +300,8 @@ async def on_reaction_add(reaction, user):
             except Exception as e:
                 print(f"Reaction error: {e}")
 '''
+
+# RUN BOT
 if __name__ == "__main__":
     if not DISCORD_BOT_TOKEN:
         print("ERROR: DISCORD_BOT_TOKEN not found!")
