@@ -135,53 +135,58 @@ document.getElementById('searchInput').addEventListener('input', function(e) {
 // Camera barcode scanning
 function startCamera() {
     if (isScanning) return;
-    
-    document.getElementById('cameraContainer').style.display = 'block';
+
+    const container = document.getElementById('cameraContainer');
+    const interactive = document.querySelector('#interactive');
+
+    if (!interactive) {
+        alert('Camera container not found.');
+        return;
+    }
+
+    container.style.display = 'block';
     document.getElementById('startCameraBtn').style.display = 'none';
     document.getElementById('stopCameraBtn').style.display = 'inline-block';
-    
-    Quagga.init({
-        inputStream: {
-            name: "Live",
-            type: "LiveStream",
-            target: document.querySelector('#interactive'),
-            constraints: {
-                width: 640,
-                height: 480,
-                facingMode: "environment"
+
+    // Delay initialization to ensure DOM is rendered
+    setTimeout(() => {
+        Quagga.init({
+            inputStream: {
+                name: "Live",
+                type: "LiveStream",
+                target: interactive,
+                constraints: {
+                    width: 640,
+                    height: 480,
+                    facingMode: "environment"
+                }
+            },
+            decoder: {
+                readers: [
+                    "code_128_reader",
+                    "ean_reader",
+                    "ean_8_reader",
+                    "code_39_reader",
+                    "code_39_vin_reader",
+                    "codabar_reader",
+                    "upc_reader",
+                    "upc_e_reader",
+                    "i2of5_reader"
+                ]
             }
-        },
-        decoder: {
-            readers: [
-                "code_128_reader",
-                "ean_reader",
-                "ean_8_reader",
-                "code_39_reader",
-                "code_39_vin_reader",
-                "codabar_reader",
-                "upc_reader",
-                "upc_e_reader",
-                "i2of5_reader"
-            ]
-        }
-    }, function(err) {
-        if (err) {
-            console.error(err);
-            alert('Failed to access camera. Please check permissions.');
-            stopCamera();
-            return;
-        }
-        isScanning = true;
-        Quagga.start();
-    });
-    
-    Quagga.onDetected(function(result) {
-        const code = result.codeResult.code;
-        document.getElementById('barcodeInput').value = code;
-        lookupBarcode();
-        stopCamera();
-    });
+        }, function(err) {
+            if (err) {
+                console.error(err);
+                alert('Failed to access camera. Please check permissions.');
+                stopCamera();
+                return;
+            }
+            isScanning = true;
+            Quagga.start();
+        });
+    }, 300); // 300ms delay
 }
+
 
 function stopCamera() {
     if (isScanning) {
