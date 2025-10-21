@@ -13,11 +13,11 @@
             {% endif %}
         </div>
     </div>
-    
+
     <div class="form-group">
         <input type="text" id="searchInput" placeholder="🔍 Search by name, barcode, or location..." style="font-size: 1rem;">
     </div>
-    
+
     <div id="equipmentList">
         <table>
             <thead>
@@ -42,8 +42,8 @@
                     <td>{{ item.notes[:50] }}{% if item.notes|length > 50 %}...{% endif %}</td>
                     {% if current_user.is_admin %}
                     <td>
-                        <button onclick="editEquipment({{ item.id }})" class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.9rem;">Edit</button>
-                        <button onclick="deleteEquipment({{ item.id }})" class="btn btn-danger" style="padding: 0.5rem 1rem; font-size: 0.9rem;">Delete</button>
+                        <button onclick="editEquipment({{ item.id }})" class="btn btn-primary">Edit</button>
+                        <button onclick="deleteEquipment({{ item.id }})" class="btn btn-danger">Delete</button>
                     </td>
                     {% endif %}
                 </tr>
@@ -58,16 +58,16 @@
     <div class="modal-content">
         <span class="close" onclick="hideModal('scanModal')">&times;</span>
         <h2>Scan Barcode</h2>
-        
+
         <div style="margin-bottom: 1rem;">
             <button onclick="startCamera()" class="btn btn-primary" id="startCameraBtn">📷 Start Camera</button>
             <button onclick="stopCamera()" class="btn btn-danger" id="stopCameraBtn" style="display: none;">Stop Camera</button>
         </div>
-        
+
         <div id="cameraContainer" style="display: none; margin-bottom: 1rem;">
-            <div id="interactive" class="viewport" style="width: 100%; max-width: 640px; height: 480px; margin: 0 auto; position: relative; border: 2px solid #ddd; border-radius: 6px;"></div>
+            <div id="interactive" class="viewport" style="width: 100%; max-width: 640px; height: 480px; margin: 0 auto; border: 2px solid #ddd; border-radius: 6px;"></div>
         </div>
-        
+
         <p style="margin-bottom: 1rem; text-align: center;">OR enter manually:</p>
         <div class="form-group">
             <input type="text" id="barcodeInput" placeholder="Enter barcode..." autofocus>
@@ -110,45 +110,33 @@
     </div>
 </div>
 {% endif %}
-
 {% endblock %}
 
 {% block scripts %}
-<!-- QuaggaJS for barcode scanning -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
-
 <script>
 let allEquipment = {{ equipment_json|tojson }};
 let isScanning = false;
 
-// Search functionality
+// Search filter
 document.getElementById('searchInput').addEventListener('input', function(e) {
     const query = e.target.value.toLowerCase();
     const rows = document.querySelectorAll('#equipmentList tbody tr');
-    
     rows.forEach(row => {
         const text = row.textContent.toLowerCase();
         row.style.display = text.includes(query) ? '' : 'none';
     });
 });
 
-// Camera barcode scanning
+// Barcode scanning
 function startCamera() {
     if (isScanning) return;
-
     const container = document.getElementById('cameraContainer');
     const interactive = document.querySelector('#interactive');
-
-    if (!interactive) {
-        alert('Camera container not found.');
-        return;
-    }
-
     container.style.display = 'block';
     document.getElementById('startCameraBtn').style.display = 'none';
     document.getElementById('stopCameraBtn').style.display = 'inline-block';
 
-    // Delay initialization to ensure DOM is rendered
     setTimeout(() => {
         Quagga.init({
             inputStream: {
@@ -162,35 +150,33 @@ function startCamera() {
                 }
             },
             decoder: {
-                readers: [
-                    "code_128_reader",
-                    "ean_reader",
-                    "ean_8_reader",
-                    "code_39_reader",
-                    "code_39_vin_reader",
-                    "codabar_reader",
-                    "upc_reader",
-                    "upc_e_reader",
-                    "i2of5_reader"
-                ]
+                readers: ["code_128_reader"]
             }
         }, function(err) {
             if (err) {
                 console.error(err);
-                alert('Failed to access camera. Please check permissions.');
+                alert('Camera error. Check permissions.');
                 stopCamera();
                 return;
             }
             isScanning = true;
             Quagga.start();
         });
-    }, 300); // 300ms delay
-}
 
+        Quagga.onDetected(function(result) {
+            if (!result || !result.codeResult || !result.codeResult.code) return;
+            const barcode = result.codeResult.code;
+            stopCamera();
+            hideModal('scanModal');
+            lookupBarcode(barcode);
+        });
+    }, 300);
+}
 
 function stopCamera() {
     if (isScanning) {
         Quagga.stop();
+        Quagga.offDetected();
         isScanning = false;
     }
     document.getElementById('cameraContainer').style.display = 'none';
@@ -203,18 +189,18 @@ document.getElementById('barcodeInput')?.addEventListener('keypress', function(e
     if (e.key === 'Enter') lookupBarcode();
 });
 
-function lookupBarcode() {
-    const barcode = document.getElementById('barcodeInput').value.trim();
+function lookupBarcode(barcode = null) {
+    barcode = barcode || document.getElementById('barcodeInput').value.trim();
     if (!barcode) return;
-    
+
     fetch(`/equipment/barcode/${barcode}`)
         .then(r => r.json())
         .then(data => {
+            const resultDiv = document.getElementById('barcodeResult');
             if (data.error) {
-                document.getElementById('barcodeResult').innerHTML = 
-                    '<div class="alert alert-error">Equipment not found!</div>';
+                resultDiv.innerHTML = '<div class="alert alert-error">Equipment not found!</div>';
             } else {
-                document.getElementById('barcodeResult').innerHTML = `
+                resultDiv.innerHTML = `
                     <div class="card" style="background: #f8f9fa; padding: 1.5rem;">
                         <h3>${data.name}</h3>
                         <p><strong>Barcode:</strong> ${data.barcode}</p>
@@ -223,35 +209,38 @@ function lookupBarcode() {
                         ${data.notes ? `<p><strong>Notes:</strong> ${data.notes}</p>` : ''}
                     </div>
                 `;
+                showModal('scanModal'); // Optional: reopen modal to show result
             }
         });
 }
 
+// Admin actions
 {% if current_user.is_admin %}
-// Add/Edit equipment
 document.getElementById('equipmentForm')?.addEventListener('submit', function(e) {
     e.preventDefault();
     const id = document.getElementById('equipmentId').value;
     const data = {
         barcode: document.getElementById('barcode').value,
         name: document.getElementById('name').value,
-        category: document.getElementById('category').value,
+         category: document.getElementById('category').value,
         location: document.getElementById('location').value,
         notes: document.getElementById('notes').value
     };
-    
+
     const url = id ? `/equipment/update/${id}` : '/equipment/add';
     const method = id ? 'PUT' : 'POST';
-    
+
     fetch(url, {
         method: method,
-        headers: {'Content-Type': 'application/json'},
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
     })
     .then(r => r.json())
     .then(result => {
         if (result.success) {
             location.reload();
+        } else {
+            alert('Failed to save equipment. Please try again.');
         }
     });
 });
@@ -259,7 +248,7 @@ document.getElementById('equipmentForm')?.addEventListener('submit', function(e)
 function editEquipment(id) {
     const item = allEquipment.find(e => e.id === id);
     if (!item) return;
-    
+
     document.getElementById('modalTitle').textContent = 'Edit Equipment';
     document.getElementById('equipmentId').value = item.id;
     document.getElementById('barcode').value = item.barcode;
@@ -267,19 +256,32 @@ function editEquipment(id) {
     document.getElementById('category').value = item.category || '';
     document.getElementById('location').value = item.location || '';
     document.getElementById('notes').value = item.notes || '';
-    
+
     showModal('addModal');
 }
 
 function deleteEquipment(id) {
     if (!confirm('Delete this equipment item?')) return;
-    
-    fetch(`/equipment/delete/${id}`, {method: 'DELETE'})
+
+    fetch(`/equipment/delete/${id}`, { method: 'DELETE' })
         .then(r => r.json())
         .then(result => {
-            if (result.success) location.reload();
+            if (result.success) {
+                location.reload();
+            } else {
+                alert('Failed to delete equipment. Please try again.');
+            }
         });
 }
 {% endif %}
+
+// Modal helpers
+function showModal(id) {
+    document.getElementById(id).style.display = 'block';
+}
+
+function hideModal(id) {
+    document.getElementById(id).style.display = 'none';
+}
 </script>
 {% endblock %}
