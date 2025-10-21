@@ -150,7 +150,35 @@ class EventNote(db.Model):
     
     event = db.relationship('Event', backref=db.backref('notes', cascade='all, delete-orphan'))
 
+class TodoItem(db.Model):
+    """Personal to-do list items for users"""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    priority = db.Column(db.String(20), default='medium')
+    is_completed = db.Column(db.Boolean, default=False)
+    due_date = db.Column(db.DateTime, nullable=True)
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    
+    user = db.relationship('User', backref='todos')
+    event = db.relationship('Event', backref='todos')
 
+class CastMember(db.Model):
+    """Cast members for productions"""
+    id = db.Column(db.Integer, primary_key=True)
+    actor_name = db.Column(db.String(200), nullable=False)
+    character_name = db.Column(db.String(200), nullable=False)
+    role_type = db.Column(db.String(50), default='lead')
+    contact_email = db.Column(db.String(120), nullable=True)
+    contact_phone = db.Column(db.String(50), nullable=True)
+    notes = db.Column(db.Text)
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    event = db.relationship('Event', backref='cast_members')
 
 # LOGIN & UTILITIES
 
@@ -1967,6 +1995,236 @@ def delete_event_note(note_id):
     db.session.delete(note)
     db.session.commit()
     
+    return jsonify({'success': True})
+
+# ==================== ADMIN OVERVIEW ====================
+@app.route('/admin/overview')
+@login_required
+def admin_overview():
+    """Enhanced overview dashboard for admins/teachers"""
+    if not current_user.is_admin:
+        flash('Admin access required')
+        return redirect(url_for('dashboard'))
+    
+    # Get statistics
+    total_users = User.query.count()
+    total_equipment = Equipment.query.count()
+    total_events = Event.query.count()
+    
+    # Upcoming events with crew counts
+    upcoming_events = Event.query.filter(
+        Event.event_date >= datetime.now()
+    ).order_by(Event.event_date).limit(10).all()
+    
+    # Recent activity (last 7 days)
+    week_ago = datetime.now() - timedelta(days=7)
+    recent_users = User.query.filter(User.created_at >= week_ago).count()
+    recent_equipment = Equipment.query.filter(Equipment.created_at >= week_ago).count()
+    recent_events = Event.query.filter(Event.created_at >= week_ago).count()
+    
+    # Active crew members (assigned to upcoming events)
+    active_crew = db.session.query(CrewAssignment.crew_member).join(Event).filter(
+        Event.event_date >= datetime.now()
+    ).distinct().count()
+    
+    # Equipment usage statistics
+    equipment_usage = db.session.query(
+        Equipment.category,
+        db.func.count(PickListItem.id).label('usage_count')
+    ).outerjoin(PickListItem).group_by(Equipment.category).all()
+    
+    return render_template('admin_overview.html',
+        total_users=total_users,
+        total_equipment=total_equipment,
+        total_events=total_events,
+        upcoming_events=upcoming_events,
+        recent_users=recent_users,
+        recent_equipment=recent_equipment,
+        recent_events=recent_events,
+        active_crew=active_crew,
+        equipment_usage=equipment_usage
+    )
+
+# ==================== EXPORT EVENTS ====================
+@app.route('/admin/export-events')
+@login_required
+def export_events_csv():
+    """Export all events with crew members to CSV"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    # Create CSV in memory
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Write header
+    writer.writerow(['Event Title', 'Date', 'Time', 'Location', 'Crew Member', 'Role', 'Email', 'Status'])
+    
+    # Get all events with crew
+    events = Event.query.order_by(Event.event_date).all()
+    
+    for event in events:
+        if event.crew_assignments:
+            for assignment in event.crew_assignments:
+                user = User.query.filter_by(username=assignment.crew_member).first()
+                writer.writerow([
+                    event.title,
+                    event.event_date.strftime('%Y-%m-%d'),
+                    event.event_date.strftime('%I:%M %p'),
+                    event.location or 'N/A',
+                    assignment.crew_member,
+                    assignment.role or 'Crew Member',
+                    user.email if user and user.email else 'N/A',
+                    'Upcoming' if event.event_date >= datetime.now() else 'Past'
+                ])
+        else:
+            # Event with no crew
+            writer.writerow([
+                event.title,
+                event.event_date.strftime('%Y-%m-%d'),
+                event.event_date.strftime('%I:%M %p'),
+                event.location or 'N/A',
+                'No crew assigned',
+                '',
+                '',
+                'Upcoming' if event.event_date >= datetime.now() else 'Past'
+            ])
+    
+    # Prepare response
+    output.seek(0)
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename=events_crew_{datetime.now().strftime("%Y%m%d")}.csv'}
+    )
+
+# ==================== TO-DO LIST ROUTES ====================
+@app.route('/todos')
+@login_required
+def todos():
+    """User's personal to-do list"""
+    user_todos = TodoItem.query.filter_by(user_id=current_user.id).order_by(
+        TodoItem.is_completed.asc(),
+        TodoItem.priority.desc(),
+        TodoItem.due_date.asc()
+    ).all()
+    events = Event.query.order_by(Event.event_date.desc()).all()
+    return render_template('todos.html', todos=user_todos, events=events)
+
+@app.route('/todos/add', methods=['POST'])
+@login_required
+def add_todo():
+    """Add a new to-do item"""
+    data = request.json
+    todo = TodoItem(
+        user_id=current_user.id,
+        title=data['title'],
+        description=data.get('description', ''),
+        priority=data.get('priority', 'medium'),
+        due_date=datetime.fromisoformat(data['due_date']) if data.get('due_date') else None,
+        event_id=data.get('event_id')
+    )
+    db.session.add(todo)
+    db.session.commit()
+    return jsonify({'success': True, 'id': todo.id})
+
+@app.route('/todos/<int:id>/toggle', methods=['POST'])
+@login_required
+def toggle_todo(id):
+    """Toggle to-do completion status"""
+    todo = TodoItem.query.get_or_404(id)
+    if todo.user_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+    todo.is_completed = not todo.is_completed
+    todo.completed_at = datetime.utcnow() if todo.is_completed else None
+    db.session.commit()
+    return jsonify({'success': True, 'is_completed': todo.is_completed})
+
+@app.route('/todos/<int:id>', methods=['DELETE'])
+@login_required
+def delete_todo(id):
+    """Delete a to-do item"""
+    todo = TodoItem.query.get_or_404(id)
+    if todo.user_id != current_user.id and not current_user.is_admin:
+        return jsonify({'error': 'Unauthorized'}), 403
+    db.session.delete(todo)
+    db.session.commit()
+    return jsonify({'success': True})
+
+# ==================== CAST MANAGEMENT ROUTES ====================
+@app.route('/cast')
+@login_required
+def cast_list():
+    """View all cast members"""
+    cast_members = CastMember.query.order_by(CastMember.character_name).all()
+    events = Event.query.order_by(Event.event_date.desc()).all()
+    
+    # Convert to JSON for JavaScript
+    cast_json = [{
+        'id': c.id,
+        'actor_name': c.actor_name,
+        'character_name': c.character_name,
+        'role_type': c.role_type,
+        'contact_email': c.contact_email,
+        'contact_phone': c.contact_phone,
+        'notes': c.notes,
+        'event_id': c.event_id
+    } for c in cast_members]
+    
+    return render_template('cast.html', cast_members=cast_members, events=events, cast_json=cast_json)
+
+@app.route('/cast/add', methods=['POST'])
+@login_required
+def add_cast():
+    """Add a cast member"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    data = request.json
+    cast = CastMember(
+        actor_name=data['actor_name'],
+        character_name=data['character_name'],
+        role_type=data.get('role_type', 'lead'),
+        contact_email=data.get('contact_email'),
+        contact_phone=data.get('contact_phone'),
+        notes=data.get('notes', ''),
+        event_id=data.get('event_id')
+    )
+    db.session.add(cast)
+    db.session.commit()
+    return jsonify({'success': True, 'id': cast.id})
+
+@app.route('/cast/<int:id>', methods=['PUT'])
+@login_required
+def update_cast(id):
+    """Update cast member"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    cast = CastMember.query.get_or_404(id)
+    data = request.json
+    
+    cast.actor_name = data.get('actor_name', cast.actor_name)
+    cast.character_name = data.get('character_name', cast.character_name)
+    cast.role_type = data.get('role_type', cast.role_type)
+    cast.contact_email = data.get('contact_email', cast.contact_email)
+    cast.contact_phone = data.get('contact_phone', cast.contact_phone)
+    cast.notes = data.get('notes', cast.notes)
+    cast.event_id = data.get('event_id', cast.event_id)
+    
+    db.session.commit()
+    return jsonify({'success': True})
+
+@app.route('/cast/<int:id>', methods=['DELETE'])
+@login_required
+def delete_cast(id):
+    """Delete cast member"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    cast = CastMember.query.get_or_404(id)
+    db.session.delete(cast)
+    db.session.commit()
     return jsonify({'success': True})
 
 # RUN APP

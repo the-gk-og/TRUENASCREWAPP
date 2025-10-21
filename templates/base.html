@@ -22,138 +22,262 @@
             --dark: #1f2937;
             --light: #f9fafb;
             --border: #e5e7eb;
+            --sidebar-width: 260px;
+            --topbar-height: 60px;
         }
         
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, var(--light) 0%, #f3f4f6 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            background: var(--light);
             color: var(--dark);
             min-height: 100vh;
         }
         
-        .navbar {
+        /* Sidebar */
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: var(--sidebar-width);
+            height: 100vh;
+            background: white;
+            border-right: 1px solid var(--border);
+            overflow-y: auto;
+            transition: transform 0.3s ease;
+            z-index: 1000;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+        }
+        
+        .sidebar-header {
+            padding: 1.5rem 1rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
             background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
             color: white;
-            padding: 1.25rem 2rem;
+        }
+        
+        .sidebar-header h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+        
+        .sidebar-nav {
+            padding: 1rem 0;
+        }
+        
+        .nav-section {
+            margin-bottom: 1.5rem;
+        }
+        
+        .nav-section-title {
+            padding: 0.5rem 1rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #6b7280;
+            letter-spacing: 0.05em;
+        }
+        
+        .nav-item {
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            box-shadow: 0 10px 30px rgba(99, 102, 241, 0.2);
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            flex-wrap: wrap;
-            gap: 1rem;
-        }
-        
-        .navbar h1 { 
-            font-size: 1.75rem; 
-            font-weight: 700; 
-            letter-spacing: -0.5px; 
-        }
-        
-        .nav-links {
-            display: flex;
-            gap: 0.5rem;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-        
-        .nav-links a {
-            color: white;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            color: var(--dark);
             text-decoration: none;
-            padding: 0.625rem 1rem;
-            border-radius: 6px;
-            transition: all 0.3s ease;
-            font-size: 0.95rem;
-            font-weight: 500;
-            display: inline-flex;
+            transition: all 0.2s ease;
+            border-left: 3px solid transparent;
+        }
+        
+        .nav-item:hover {
+            background: #f3f4f6;
+            border-left-color: var(--primary);
+            color: var(--primary);
+        }
+        
+        .nav-item.active {
+            background: #ede9fe;
+            border-left-color: var(--primary);
+            color: var(--primary);
+            font-weight: 600;
+        }
+        
+        .nav-item i {
+            width: 20px;
+            text-align: center;
+            font-size: 1.1rem;
+        }
+        
+        /* Topbar */
+        .topbar {
+            position: fixed;
+            left: var(--sidebar-width);
+            top: 0;
+            right: 0;
+            height: var(--topbar-height);
+            background: white;
+            border-bottom: 1px solid var(--border);
+            display: flex;
             align-items: center;
-            gap: 0.5rem;
+            justify-content: space-between;
+            padding: 0 1.5rem;
+            z-index: 999;
         }
         
-        .nav-links a:hover {
-            background: rgba(255, 255, 255, 0.2);
-            transform: translateY(-2px);
+        .mobile-menu-btn {
+            display: none;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--dark);
         }
         
-        .container {
-            max-width: 1400px;
-            margin: 2.5rem auto;
-            padding: 0 2rem;
+        .topbar-user {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
         }
         
+        .user-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        
+        /* Main Content */
+        .main-content {
+            margin-left: var(--sidebar-width);
+            margin-top: var(--topbar-height);
+            padding: 2rem;
+            min-height: calc(100vh - var(--topbar-height));
+        }
+        
+        .page-header {
+            margin-bottom: 2rem;
+        }
+        
+        .page-title {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--dark);
+        }
+        
+        .page-subtitle {
+            color: #6b7280;
+            font-size: 0.95rem;
+        }
+        
+        /* Cards */
         .card {
             background: white;
             border-radius: 12px;
-            padding: 2rem;
-            margin-bottom: 2rem;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
             border: 1px solid var(--border);
-            transition: all 0.3s ease;
         }
         
-        .card:hover {
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
-            transform: translateY(-2px);
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
         }
         
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--dark);
+        }
+        
+        /* Buttons */
         .btn {
-            padding: 0.75rem 1.5rem;
+            padding: 0.625rem 1.25rem;
             border: none;
             border-radius: 8px;
             cursor: pointer;
-            font-size: 0.95rem;
+            font-size: 0.9rem;
             font-weight: 600;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
             text-decoration: none;
             display: inline-flex;
             align-items: center;
             gap: 0.5rem;
-            text-align: center;
-            justify-content: center;
+            white-space: nowrap;
         }
         
         .btn-primary {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            background: var(--primary);
             color: white;
-            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
         }
         
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+            background: var(--primary-dark);
+            transform: translateY(-1px);
         }
         
         .btn-success {
-            background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
+            background: var(--success);
             color: white;
-            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
         }
         
         .btn-success:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+            background: #059669;
+            transform: translateY(-1px);
         }
         
         .btn-danger {
-            background: linear-gradient(135deg, var(--danger) 0%, #dc2626 100%);
+            background: var(--danger);
             color: white;
-            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
         }
         
         .btn-danger:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+            background: #dc2626;
+            transform: translateY(-1px);
         }
         
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        th {
+            background: #f9fafb;
+            font-weight: 600;
+        }
+        
+        tr:hover {
+            background: #fafbfc;
+        }
+        
+        /* Forms */
         .form-group {
             margin-bottom: 1.5rem;
         }
         
         .form-group label {
             display: block;
-            margin-bottom: 0.75rem;
+            margin-bottom: 0.5rem;
             font-weight: 600;
             color: var(--dark);
         }
@@ -162,11 +286,11 @@
         .form-group textarea,
         .form-group select {
             width: 100%;
-            padding: 0.875rem 1rem;
+            padding: 0.75rem;
             border: 2px solid var(--border);
             border-radius: 8px;
             font-size: 1rem;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
             font-family: inherit;
         }
         
@@ -178,366 +302,227 @@
             box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
         }
         
-        .form-group textarea { 
-            min-height: 100px; 
-            resize: vertical; 
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
         }
         
-        .alert {
-            padding: 1rem 1.5rem;
-            border-radius: 8px;
-            margin-bottom: 1.5rem;
-            border-left: 4px solid;
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-        
-        .alert-success {
-            background: #ecfdf5;
-            color: #065f46;
-            border-color: var(--success);
-        }
-        
-        .alert-error {
-            background: #fef2f2;
-            color: #7f1d1d;
-            border-color: var(--danger);
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 1rem;
-        }
-        
-        th, td {
-            padding: 1rem;
-            text-align: left;
-            border-bottom: 1px solid var(--border);
-        }
-        
-        th {
-            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-            font-weight: 700;
-            color: var(--dark);
-        }
-        
-        tr:hover {
-            background: #fafbfc;
-        }
-        
+        /* Modal */
         .modal {
             display: none;
             position: fixed;
-            z-index: 1000;
+            z-index: 2000;
             left: 0;
             top: 0;
             width: 100%;
             height: 100%;
             background: rgba(0, 0, 0, 0.5);
             backdrop-filter: blur(4px);
-            animation: fadeIn 0.3s ease;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
         }
         
         .modal-content {
             background: white;
-            margin: 10vh auto;
+            margin: 5vh auto;
             padding: 2rem;
             border-radius: 12px;
             width: 90%;
             max-width: 600px;
-            max-height: 80vh;
+            max-height: 90vh;
             overflow-y: auto;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            animation: slideUp 0.3s ease;
-        }
-        
-        @keyframes slideUp {
-            from { transform: translateY(30px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
         }
         
         .close {
             float: right;
-            font-size: 2rem;
+            font-size: 1.5rem;
             font-weight: bold;
             cursor: pointer;
             color: #999;
             transition: color 0.3s;
         }
         
-        .close:hover { 
-            color: var(--primary); 
+        .close:hover {
+            color: var(--danger);
         }
         
-        .grid {
-            display: grid;
-            gap: 2rem;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-        }
-        
-        code {
-            background: #f3f4f6;
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            font-family: 'Courier New', monospace;
-            font-size: 0.9rem;
-        }
-        
-        h2 {
-            font-size: 1.875rem;
-            font-weight: 700;
+        /* Alerts */
+        .alert {
+            padding: 1rem;
+            border-radius: 8px;
             margin-bottom: 1rem;
-            color: var(--dark);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
         }
         
-        h3 {
-            font-size: 1.25rem;
-            font-weight: 700;
-            margin-bottom: 0.75rem;
-            color: var(--dark);
+        .alert-success {
+            background: #ecfdf5;
+            color: #065f46;
+            border-left: 4px solid var(--success);
         }
         
-        h4 {
-            font-size: 1rem;
-            font-weight: 600;
-            color: var(--dark);
+        .alert-error {
+            background: #fef2f2;
+            color: #7f1d1d;
+            border-left: 4px solid var(--danger);
         }
         
-footer {
-      width: 100%;
-      background: var(--dark);
-      color: white;
-      padding: 2rem;
-      text-align: center;
-      margin-top: 4rem;
-    }
-
-    .footer-links {
-      display: flex;
-      gap: 2rem;
-      justify-content: center;
-      margin-bottom: 1rem;
-      flex-wrap: wrap;
-    }
-
-    .footer-links a {
-      color: #aaa;
-      text-decoration: none;
-      transition: color 0.3s;
-    }
-
-    .footer-links a:hover {
-      color: white;
-    }
-
-
+        /* Mobile Responsive */
         @media (max-width: 768px) {
-            .navbar {
-                flex-direction: column;
-                gap: 0.5rem;
+            .sidebar {
+                transform: translateX(-100%);
             }
             
-            .navbar h1 {
-                font-size: 1.25rem;
+            .sidebar.open {
+                transform: translateX(0);
             }
             
-            .nav-links {
-                width: 100%;
-                justify-content: center;
-                flex-wrap: wrap;
+            .topbar {
+                left: 0;
             }
             
-            .nav-links a {
-                padding: 0.5rem 0.75rem;
-                font-size: 0.8rem;
-                flex: 0 1 auto;
-            }
-            
-            .container {
-                margin: 1rem auto;
-                padding: 0 0.75rem;
-            }
-            
-            .card {
+            .main-content {
+                margin-left: 0;
                 padding: 1rem;
-                margin-bottom: 1rem;
-                border-radius: 8px;
             }
             
-            .btn {
-                padding: 0.6rem 0.9rem;
-                font-size: 0.85rem;
-                width: 100%;
-                margin-bottom: 0.5rem;
+            .mobile-menu-btn {
+                display: block;
             }
             
-            .form-group input,
-            .form-group textarea,
-            .form-group select {
-                padding: 0.75rem;
-                font-size: 16px; /* Prevents zoom on iOS */
-            }
-            
-            .form-group textarea {
-                min-height: 80px;
-            }
-            
-            table {
-                font-size: 0.85rem;
-            }
-            
-            th, td {
-                padding: 0.65rem 0.5rem;
-            }
-            
-            h2 {
+            .page-title {
                 font-size: 1.5rem;
             }
             
-            h3 {
-                font-size: 1.1rem;
-            }
-            
-            h4 {
-                font-size: 0.95rem;
-            }
-            
-            .grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .modal-content {
-                margin: 20vh auto;
-                width: 95%;
-                padding: 1.5rem;
-            }
-            
-            /* Mobile-specific fixes */
-            .nav-links {
-                gap: 0.25rem;
-            }
-            
-            .btn-group {
-                display: flex;
-                gap: 0.5rem;
-                flex-wrap: wrap;
-            }
-            
-            .btn-group .btn {
-                flex: 1;
-                min-width: 100px;
-            }
-            
-            /* Horizontal scroll for tables */
-            table {
-                font-size: 0.75rem;
-                overflow-x: auto;
-                display: block;
-                max-width: 100%;
-                white-space: nowrap;
-            }
-            
-            /* Stack layout for cards */
-            .stat-card {
+            .card {
                 padding: 1rem;
-                margin-bottom: 0.75rem;
             }
             
-            /* Touch-friendly buttons */
             .btn {
-                min-height: 44px; /* iOS recommended minimum */
-                padding: 0.75rem;
-            }
-            
-            /* Responsive grid for button groups */
-            [style*="display: flex"] {
-                flex-direction: column;
+                font-size: 0.85rem;
+                padding: 0.5rem 1rem;
             }
         }
         
-        /* Extra small devices */
         @media (max-width: 480px) {
-            .navbar h1 {
-                font-size: 1rem;
+            .topbar {
+                padding: 0 1rem;
             }
             
-            .nav-links a {
-                padding: 0.4rem 0.5rem;
-                font-size: 0.7rem;
-            }
-            
-            .container {
-                padding: 0 0.5rem;
-            }
-            
-            .card {
+            .main-content {
                 padding: 0.75rem;
             }
             
-            h2 {
+            .page-title {
                 font-size: 1.25rem;
-                margin-bottom: 0.75rem;
             }
-            
-            h3 {
-                font-size: 1rem;
-                margin-bottom: 0.5rem;
-            }
-            
-            .btn {
-                padding: 0.6rem 0.75rem;
-                font-size: 0.8rem;
-            }
-            
-            table {
-                font-size: 0.7rem;
-            }
-            
-            th, td {
-                padding: 0.5rem 0.25rem;
-            }
-            
-            .modal-content {
-                margin: 30vh auto;
-                padding: 1rem;
-            }
-            
-            .form-group label {
-                font-size: 0.9rem;
-                margin-bottom: 0.5rem;
+        }
+        
+        /* Overlay for mobile */
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar-overlay.show {
+                display: block;
             }
         }
     </style>
 </head>
 <body>
     {% if current_user.is_authenticated %}
-    <nav class="navbar">
-        <h1>
-            <img src="/static/logo.png" alt="ShowWise" style="height: 40px; margin-right: 10px; vertical-align: middle;">
-        </h1>
-        <div class="nav-links">
-            <a href="{{ url_for('dashboard') }}"><i class="fas fa-home"></i> Dashboard</a>
-            <a href="{{ url_for('equipment_list') }}"><i class="fas fa-box"></i> Equipment</a>
-            <a href="{{ url_for('picklist') }}"><i class="fas fa-list-check"></i> Pick List</a>
-            <a href="{{ url_for('stageplans') }}"><i class="fas fa-image"></i> Stage Plans</a>
-            <a href="{{ url_for('calendar') }}"><i class="fas fa-calendar"></i> Calendar</a>
-            <a href="{{ url_for('discord_settings') }}"><i class="fab fa-discord"></i> Discord</a>
-            {% if current_user.is_admin %}
-            <a href="{{ url_for('admin_panel') }}"><i class="fas fa-cog"></i> Admin</a>
-            {% endif %}
-            <a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> Logout</a>
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <i class="fas fa-theater-masks"></i>
+            <h1>ShowWise</h1>
         </div>
-    </nav>
-    {% endif %}
-
-    <div class="container">
+        
+        <nav class="sidebar-nav">
+            <div class="nav-section">
+                <div class="nav-section-title">Main</div>
+                <a href="{{ url_for('dashboard') }}" class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">
+                    <i class="fas fa-home"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="{{ url_for('todos') }}" class="nav-item {% if request.endpoint == 'todos' %}active{% endif %}">
+                    <i class="fas fa-tasks"></i>
+                    <span>My To-Do List</span>
+                </a>
+                <a href="{{ url_for('calendar') }}" class="nav-item {% if request.endpoint == 'calendar' %}active{% endif %}">
+                    <i class="fas fa-calendar"></i>
+                    <span>Calendar</span>
+                </a>
+            </div>
+            
+            <div class="nav-section">
+                <div class="nav-section-title">Production</div>
+                <a href="{{ url_for('equipment_list') }}" class="nav-item {% if request.endpoint == 'equipment_list' %}active{% endif %}">
+                    <i class="fas fa-box"></i>
+                    <span>Equipment</span>
+                </a>
+                <a href="{{ url_for('picklist') }}" class="nav-item {% if request.endpoint == 'picklist' %}active{% endif %}">
+                    <i class="fas fa-list-check"></i>
+                    <span>Pick Lists</span>
+                </a>
+                <a href="{{ url_for('stageplans') }}" class="nav-item {% if request.endpoint == 'stageplans' %}active{% endif %}">
+                    <i class="fas fa-image"></i>
+                    <span>Stage Plans</span>
+                </a>
+                <a href="{{ url_for('cast_list') }}" class="nav-item {% if request.endpoint == 'cast_list' %}active{% endif %}">
+                    <i class="fas fa-users"></i>
+                    <span>Cast</span>
+                </a>
+            </div>
+            
+            <div class="nav-section">
+                <div class="nav-section-title">Settings</div>
+                <a href="{{ url_for('discord_settings') }}" class="nav-item {% if request.endpoint == 'discord_settings' %}active{% endif %}">
+                    <i class="fab fa-discord"></i>
+                    <span>Discord</span>
+                </a>
+                {% if current_user.is_admin %}
+                <a href="{{ url_for('admin_overview') }}" class="nav-item {% if request.endpoint == 'admin_overview' %}active{% endif %}">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Overview</span>
+                </a>
+                <a href="{{ url_for('admin_panel') }}" class="nav-item {% if request.endpoint == 'admin_panel' %}active{% endif %}">
+                    <i class="fas fa-cog"></i>
+                    <span>Admin Panel</span>
+                </a>
+                {% endif %}
+                <a href="{{ url_for('logout') }}" class="nav-item">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>Logout</span>
+                </a>
+            </div>
+        </nav>
+    </aside>
+    
+    <!-- Sidebar Overlay (Mobile) -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+    
+    <!-- Topbar -->
+    <header class="topbar">
+        <button class="mobile-menu-btn" onclick="toggleSidebar()">
+            <i class="fas fa-bars"></i>
+        </button>
+        
+        <div class="topbar-user">
+            <div class="user-avatar">
+                {{ current_user.username[0].upper() }}
+            </div>
+            <span style="font-weight: 600;">{{ current_user.username }}</span>
+        </div>
+    </header>
+    
+    <!-- Main Content -->
+    <main class="main-content">
         {% with messages = get_flashed_messages() %}
             {% if messages %}
                 {% for message in messages %}
@@ -547,35 +532,44 @@ footer {
         {% endwith %}
         
         {% block content %}{% endblock %}
-    </div>
-
+    </main>
+    {% else %}
+    {% endif %}
+    
     <script>
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            sidebar.classList.toggle('open');
+            overlay.classList.toggle('show');
+        }
+        
+        function closeSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            sidebar.classList.remove('open');
+            overlay.classList.remove('show');
+        }
+        
         function showModal(id) {
-            const modal = document.getElementById(id);
-            if (modal) {
-                modal.style.display = 'block';
-            }
+            document.getElementById(id).style.display = 'block';
         }
         
         function hideModal(id) {
-            const modal = document.getElementById(id);
-            if (modal) {
-                modal.style.display = 'none';
-            }
+            document.getElementById(id).style.display = 'none';
         }
         
         function showAlert(message, type = 'success') {
             const alert = document.createElement('div');
             alert.className = `alert alert-${type}`;
             alert.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i> ${message}`;
-            const container = document.querySelector('.container');
-            if (container) {
-                container.insertBefore(alert, container.firstChild);
+            const main = document.querySelector('.main-content');
+            if (main) {
+                main.insertBefore(alert, main.firstChild);
                 setTimeout(() => alert.remove(), 3000);
             }
         }
         
-        // Close modal when clicking outside
         window.onclick = function(event) {
             if (event.target.classList.contains('modal')) {
                 event.target.style.display = 'none';
@@ -583,21 +577,5 @@ footer {
         }
     </script>
     {% block scripts %}{% endblock %}
-      <footer>
-    <div class="footer-links">
-      <a href="/dashboard">dashboard</a>
-      <a href="/equipment">Equipment</a>
-      <a href="/picklist">Pick List</a>
-      <a href="/stageplans">Stage Plans</a>
-      <a href="/calendar">Calendar</a>
-        <a href="/discord_settings">Discord</a>
-    {%if current_user.is_admin %}
-      <a href="/admin">Admin</a>
-    {% endif %}
-     <a href="/logout">Logout</a>
-    </div>
-   <p>&copy; 2024 ShowWise. All rights reserved.</p>
-   <p>to report bugs email bugs@sfx-crew.com</p>
-  </footer>
 </body>
 </html>

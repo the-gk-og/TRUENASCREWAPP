@@ -1,43 +1,39 @@
-# Save as migrate_event_enddate.py and run: python migrate_event_enddate.py
+# Save as migrate_new_features.py and run: python migrate_new_features.py
 
-from app import app, db, Event
-from sqlalchemy import inspect, text
-from datetime import timedelta
+from app import app, db, TodoItem, CastMember
+from sqlalchemy import inspect
 
-def add_event_end_date():
-    """Add event_end_date column to Event model"""
+def migrate_database():
+    """Add new tables for To-Do and Cast features"""
     
     with app.app_context():
         inspector = inspect(db.engine)
-        columns = [col['name'] for col in inspector.get_columns('event')]
+        existing_tables = inspector.get_table_names()
         
-        if 'event_end_date' in columns:
-            print("✓ event_end_date column already exists")
-            return
+        print("🔄 Checking database for new features...")
         
-        print("⚙️  Adding event_end_date column...")
+        # Check if TodoItem table exists
+        if 'todo_item' not in existing_tables:
+            print("📝 Creating TodoItem table...")
+            db.create_all()
+            print("✅ TodoItem table created!")
+        else:
+            print("✓ TodoItem table already exists")
         
-        try:
-            # Add the column
-            with db.engine.connect() as conn:
-                conn.execute(text('ALTER TABLE event ADD COLUMN event_end_date DATETIME'))
-                conn.commit()
-                print("✓ Added event_end_date column")
-            
-            # Set default end dates for existing events (3 hours after start)
-            with db.engine.connect() as conn:
-                conn.execute(text('''
-                    UPDATE event 
-                    SET event_end_date = datetime(event_date, '+3 hours')
-                    WHERE event_end_date IS NULL
-                '''))
-                conn.commit()
-                print("✓ Set default end dates for existing events")
-            
-            print("✅ Migration complete!")
-            
-        except Exception as e:
-            print(f"❌ Migration error: {e}")
+        # Check if CastMember table exists
+        if 'cast_member' not in existing_tables:
+            print("🎭 Creating CastMember table...")
+            db.create_all()
+            print("✅ CastMember table created!")
+        else:
+            print("✓ CastMember table already exists")
+        
+        print("\n✅ Migration complete! All new features are ready to use.")
+        print("\nNew features added:")
+        print("  • To-Do List system")
+        print("  • Cast Management")
+        print("  • Admin Overview Dashboard")
+        print("  • Event Export functionality")
 
 if __name__ == '__main__':
-    add_event_end_date()
+    migrate_database()
