@@ -19,37 +19,43 @@
     </div>
 
     <div id="equipmentList">
-        <table>
-            <thead>
-                <tr>
-                    <th>Barcode</th>
-                    <th>Name</th>
-                    <th>Category</th>
-                    <th>Location</th>
-                    <th>Notes</th>
-                    {% if current_user.is_admin %}
-                    <th>Actions</th>
-                    {% endif %}
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in equipment %}
-                <tr data-id="{{ item.id }}">
-                    <td><code>{{ item.barcode }}</code></td>
-                    <td><strong>{{ item.name }}</strong></td>
-                    <td>{{ item.category or '-' }}</td>
-                    <td>{{ item.location or '-' }}</td>
-                    <td>{{ item.notes[:50] }}{% if item.notes|length > 50 %}...{% endif %}</td>
-                    {% if current_user.is_admin %}
-                    <td>
-                        <button onclick="editEquipment({{ item.id }})" class="btn btn-primary">Edit</button>
-                        <button onclick="deleteEquipment({{ item.id }})" class="btn btn-danger">Delete</button>
-                    </td>
-                    {% endif %}
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+ <table>
+    <thead>
+        <tr>
+            <th>Barcode</th>
+            <th>Name</th>
+            <th>Quantity</th>
+            <th>Category</th>
+            <th>Location</th>
+            <th>Notes</th>
+            {% if current_user.is_admin %}
+            <th>Actions</th>
+            {% endif %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in equipment %}
+        <tr data-id="{{ item.id }}">
+            <td><code>{{ item.barcode }}</code></td>
+            <td><strong>{{ item.name }}</strong></td>
+            <td>
+                <span style="background: #e0e7ff; color: var(--primary); padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600;">
+                    {{ item.quantity_owned if item.quantity_owned else 1 }}
+                </span>
+            </td>
+            <td>{{ item.category or '-' }}</td>
+            <td>{{ item.location or '-' }}</td>
+            <td>{{ item.notes[:50] }}{% if item.notes|length > 50 %}...{% endif %}</td>
+            {% if current_user.is_admin %}
+            <td>
+                <button onclick="editEquipment({{ item.id }})" class="btn btn-primary">Edit</button>
+                <button onclick="deleteEquipment({{ item.id }})" class="btn btn-danger">Delete</button>
+            </td>
+            {% endif %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
     </div>
 </div>
 
@@ -92,6 +98,13 @@
             <div class="form-group">
                 <label>Name *</label>
                 <input type="text" id="name" required>
+            </div>
+            <div class="form-group">
+                <label>Quantity Owned *</label>
+                <input type="number" id="quantityOwned" value="1" min="1" required>
+                <small style="color: #666; display: block; margin-top: 0.25rem;">
+                    How many of this item do you own? Used for allocation tracking.
+                </small>
             </div>
             <div class="form-group">
                 <label>Category</label>
@@ -283,5 +296,53 @@ function showModal(id) {
 function hideModal(id) {
     document.getElementById(id).style.display = 'none';
 }
+
+document.getElementById('equipmentForm')?.addEventListener('submit', function(e) {
+    e.preventDefault();
+    const id = document.getElementById('equipmentId').value;
+    const data = {
+        barcode: document.getElementById('barcode').value,
+        name: document.getElementById('name').value,
+        quantity_owned: parseInt(document.getElementById('quantityOwned').value) || 1,
+        category: document.getElementById('category').value,
+        location: document.getElementById('location').value,
+        notes: document.getElementById('notes').value
+    };
+
+    const url = id ? `/equipment/update/${id}` : '/equipment/add';
+    const method = id ? 'PUT' : 'POST';
+
+    fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert(id ? 'Equipment updated!' : 'Equipment added!', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showAlert('Failed to save equipment. Please try again.', 'error');
+        }
+    });
+});
+
+function editEquipment(id) {
+    const item = allEquipment.find(e => e.id === id);
+    if (!item) return;
+
+    document.getElementById('modalTitle').textContent = 'Edit Equipment';
+    document.getElementById('equipmentId').value = item.id;
+    document.getElementById('barcode').value = item.barcode;
+    document.getElementById('name').value = item.name;
+    document.getElementById('quantityOwned').value = item.quantity_owned || 1;
+    document.getElementById('category').value = item.category || '';
+    document.getElementById('location').value = item.location || '';
+    document.getElementById('notes').value = item.notes || '';
+
+    showModal('addModal');
+}
+
 </script>
 {% endblock %}

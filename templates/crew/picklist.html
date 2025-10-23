@@ -1,4 +1,348 @@
-{% extends "base.html" %}
+{% block scripts %}
+<script>
+let all_equipment = {{ all_equipment_json|tojson }};
+let pendingEquipmentData = null;
+let bulkMode = false;
+let selectedIds = new Set();
+
+function switchMode(mode) {
+    const equipBtn = document.getElementById('equipBtn');
+    const hiredBtn = document.getElementById('hiredBtn');
+    const manualBtn = document.getElementById('manualBtn');
+    const equipForm = document.getElementById('equipmentForm');
+    const hiredForm = document.getElementById('hiredForm');
+    const manualForm = document.getElementById('manualForm');
+    
+    // Reset all buttons
+    equipBtn.style.background = '#95a5a6';
+    hiredBtn.style.background = '#95a5a6';
+    manualBtn.style.background = '#95a5a6';
+    equipForm.style.display = 'none';
+    hiredForm.style.display = 'none';
+    manualForm.style.display = 'none';
+    
+    if (mode === 'equipment') {
+        equipBtn.style.background = 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)';
+        equipForm.style.display = 'block';
+    } else if (mode === 'hired') {
+        hiredBtn.style.background = 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)';
+        hiredForm.style.display = 'block';
+    } else {
+        manualBtn.style.background = 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100())';
+        manualForm.style.display = 'block';
+    }
+}
+
+// Bulk delete functions for picklist
+function toggleBulkMode() {
+    bulkMode = !bulkMode;
+    const bulkCheckboxes = document.querySelectorAll('.bulk-checkbox');
+    const checkItemCheckboxes = document.querySelectorAll('.check-item-checkbox');
+    const btn = document.getElementById('bulkModeBtn');
+    const selectAllBtn = document.getElementById('selectAllBtn');
+    const selectedCount = document.getElementById('selectedCount');
+    
+    if (bulkMode) {
+        bulkCheckboxes.forEach(cb => cb.style.display = 'block');
+        checkItemCheckboxes.forEach(cb => cb.style.display = 'none');
+        btn.innerHTML = '<i class="fas fa-trash"></i> Delete Selected';
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-danger');
+        selectAllBtn.style.display = 'inline-block';
+        selectedCount.style.display = 'inline-block';
+        updateSelectedCount();
+    } else {
+        bulkCheckboxes.forEach(cb => {
+            cb.style.display = 'none';
+            cb.checked = false;
+        });
+        checkItemCheckboxes.forEach(cb => cb.style.display = 'block');
+        selectedIds.clear();
+        btn.innerHTML = '<i class="fas fa-check-square"></i> Bulk Delete';
+        btn.classList.remove('btn-danger');
+        btn.classList.add('btn-primary');
+        selectAllBtn.style.display = 'none';
+        selectedCount.style.display = 'none';
+        
+        // Reset card backgrounds
+        document.querySelectorAll('.picklist-item').forEach(card => {
+            card.style.background = 'white';
+        });
+    }
+}
+
+function selectAll() {
+    const checkboxes = document.querySelectorAll('.bulk-checkbox');
+    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+    
+    checkboxes.forEach(cb => {
+        cb.checked = !allChecked;
+        const card = cb.closest('.picklist-item');
+        const id = parseInt(card.dataset.id);
+        
+        if (!allChecked) {
+            selectedIds.add(id);
+            card.style.background = '#fef3c7';
+        } else {
+            selectedIds.delete(id);
+            card.style.background = 'white';
+        }
+    });
+    
+    updateSelectedCount();
+    
+    const btn = document.getElementById('selectAllBtn');
+    btn.innerHTML = allChecked ? '<i class="fas fa-check-double"></i> Select All' : '<i class="fas fa-times"></i> Deselect All';
+}
+
+function updateSelectedCount() {
+    const countText = document.getElementById('countText');
+    const count = selectedIds.size;
+    countText.textContent = `${count} selected`;
+    
+    const btn = document.getElementById('bulkModeBtn');
+    if (count > 0) {
+        btn.innerHTML = `<i class="fas fa-trash"></i> Delete ${count} Item${count > 1 ? 's' : ''}`;
+    } else {
+        btn.innerHTML = '<i class="fas fa-trash"></i> Delete Selected';
+    }
+}
+
+// Handle bulk checkbox changes
+document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('bulk-checkbox')) {
+        const card = e.target.closest('.picklist-item');
+        const id = parseInt(card.dataset.id);
+        
+        if (e.target.checked) {
+            selectedIds.add(id);
+            card.style.background = '#fef3c7';
+        } else {
+            selectedIds.delete(id);
+            card.style.background = 'white';
+        }
+        
+        updateSelectedCount();
+    }
+});
+
+// Bulk delete execution
+document.getElementById('bulkModeBtn').addEventListener('click', function(e) {
+    e.preventDefault();
+    
+    if (bulkMode && selectedIds.size > 0) {
+        const count = selectedIds.size;
+        if (!confirm(`Delete ${count} pick list item${count > 1 ? 's' : ''}?\n\nThis action cannot be undone.`)) return;
+        
+        this.disabled = true;
+        this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
+        
+        // Delete items one by one
+        const deletePromises = Array.from(selectedIds).map(id => 
+            fetch(`/picklist/delete/${id}`, {method: 'DELETE'}).then(r => r.json())
+        );
+        
+        Promise.all(deletePromises)
+            .then(results => {
+                const successCount = results.filter(r => r.success).length;
+                showAlert(`Successfully deleted ${successCount} item(s)!`, 'success');
+                setTimeout(() => location.reload(), 1000);
+            })
+            .catch(err => {
+                showAlert('Error deleting items: ' + err.message, 'error');
+                this.disabled = false;
+                updateSelectedCount();
+            });
+    } else if (bulkMode && selectedIds.size === 0) {
+        showAlert('Please select at least one item to delete', 'error');
+    } else {
+        toggleBulkMode();
+    }
+});
+
+// Rest of existing code...
+// Check quantity availability
+function checkQuantity() {
+    const equipmentId = document.getElementById('equipmentSelect').value;
+    const quantity = parseInt(document.getElementById('equipQuantity').value) || 1;
+    
+    if (!equipmentId) {
+        document.getElementById('quantityWarning').style.display = 'none';
+        return;
+    }
+    
+    fetch(`/equipment/${equipmentId}/quantity-check`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({quantity: quantity})
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.warning) {
+            const warningDiv = document.getElementById('quantityWarning');
+            const warningText = document.getElementById('warningText');
+            
+            warningText.innerHTML = `
+                <strong>Owned:</strong> ${result.owned} | 
+                <strong>Already Allocated:</strong> ${result.allocated} | 
+                <strong>Available:</strong> ${result.available}<br>
+                <strong>Requesting:</strong> ${result.requested} 
+                (${result.requested - result.available} more than available)
+            `;
+            
+            warningDiv.style.display = 'block';
+        } else {
+            document.getElementById('quantityWarning').style.display = 'none';
+        }
+    });
+}
+
+// Default to equipment mode
+switchMode('equipment');
+
+// Equipment form submission
+document.getElementById('equipmentForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const equipmentId = document.getElementById('equipmentSelect').value;
+    const quantity = parseInt(document.getElementById('equipQuantity').value);
+    
+    const data = {
+        equipment_id: equipmentId,
+        quantity: quantity,
+        event_id: document.getElementById('eventId1').value || null
+    };
+    
+    // Check quantity first
+    fetch(`/equipment/${equipmentId}/quantity-check`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({quantity: quantity})
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.warning) {
+            // Show confirmation modal
+            pendingEquipmentData = data;
+            const confirmText = document.getElementById('confirmWarningText');
+            confirmText.innerHTML = `
+                You're requesting <strong>${result.requested}</strong> items, 
+                but only <strong>${result.available}</strong> are available.<br>
+                (${result.owned} owned, ${result.allocated} already allocated)
+            `;
+            hideModal('addItemModal');
+            showModal('confirmQuantityModal');
+        } else {
+            // Add without confirmation
+            addEquipmentToPicklist(data);
+        }
+    });
+});
+
+// Hired equipment form submission
+document.getElementById('hiredForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const hiredId = document.getElementById('hiredSelect').value;
+    const hiredName = document.getElementById('hiredSelect').options[document.getElementById('hiredSelect').selectedIndex].text;
+    
+    const data = {
+        item_name: hiredName,
+        quantity: parseInt(document.getElementById('hiredQuantity').value),
+        event_id: document.getElementById('eventId3').value || null,
+        hired_equipment_id: hiredId
+    };
+    
+    fetch('/picklist/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert('Hired equipment added to pick list!', 'success');
+            setTimeout(() => location.reload(), 500);
+        } else {
+            showAlert(result.error || 'Error adding item', 'error');
+        }
+    });
+});
+
+function confirmAddEquipment() {
+    if (pendingEquipmentData) {
+        addEquipmentToPicklist(pendingEquipmentData);
+        hideModal('confirmQuantityModal');
+        pendingEquipmentData = null;
+    }
+}
+
+function addEquipmentToPicklist(data) {
+    fetch('/picklist/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert('Equipment added to pick list!', 'success');
+            setTimeout(() => location.reload(), 500);
+        } else {
+            showAlert(result.error || 'Error adding item', 'error');
+        }
+    });
+}
+
+document.getElementById('manualForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const data = {
+        item_name: document.getElementById('itemName').value,
+        quantity: parseInt(document.getElementById('manualQuantity').value),
+        event_id: document.getElementById('eventId2').value || null
+    };
+    
+    fetch('/picklist/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert('Item added to pick list!', 'success');
+            setTimeout(() => location.reload(), 500);
+        } else {
+            showAlert(result.error || 'Error adding item', 'error');
+        }
+    });
+});
+
+function toggleItem(id) {
+    fetch(`/picklist/toggle/${id}`, {method: 'POST'})
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                location.reload();
+            }
+        });
+}
+
+function deleteItem(id) {
+    if (!confirm('Remove this item?')) return;
+    
+    fetch(`/picklist/delete/${id}`, {method: 'DELETE'})
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                showAlert('Item removed!', 'success');
+                location.reload();
+            }
+        });
+}
+</script>
+{% endblock %}{% extends "base.html" %}
 
 {% block title %}Pick List - ShowWise{% endblock %}
 
@@ -6,8 +350,20 @@
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
         <h2>📋 Pick List</h2>
-        <button onclick="showModal('addItemModal')" class="btn btn-success"><i class="fas fa-plus"></i> Add Item</button>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button onclick="showModal('addItemModal')" class="btn btn-success"><i class="fas fa-plus"></i> Add Item</button>
+            <button onclick="toggleBulkMode()" class="btn btn-primary" id="bulkModeBtn">
+                <i class="fas fa-check-square"></i> Bulk Delete
+            </button>
+            <button onclick="selectAll()" class="btn btn-primary" id="selectAllBtn" style="display: none;">
+                <i class="fas fa-check-double"></i> Select All
+            </button>
+        </div>
     </div>
+    
+    <span id="selectedCount" style="display: none; color: var(--primary); font-weight: 600; padding: 0.5rem 1rem; background: #f0f4ff; border-radius: 6px; margin-bottom: 1rem; display: inline-block;">
+        <i class="fas fa-info-circle"></i> <span id="countText">0 selected</span>
+    </span>
     
     <div class="form-group">
         <label>Filter by Event:</label>
@@ -43,10 +399,12 @@
         
         <div style="display: flex; flex-direction: column; gap: 0.75rem;">
             {% for item in items %}
-            <div style="background: {% if item.is_checked %}#ecfdf5{% else %}white{% endif %}; border: 2px solid {% if item.is_checked %}var(--success){% else %}#e5e7eb{% endif %}; padding: 1rem; border-radius: 8px; transition: all 0.3s ease;">
+            <div class="picklist-item" data-id="{{ item.id }}" style="background: {% if item.is_checked %}#ecfdf5{% else %}white{% endif %}; border: 2px solid {% if item.is_checked %}var(--success){% else %}#e5e7eb{% endif %}; padding: 1rem; border-radius: 8px; transition: all 0.3s ease;">
                 <div style="display: flex; align-items: flex-start; gap: 0.75rem;">
+                    <input type="checkbox" class="bulk-checkbox" style="width: 20px; height: 20px; display: none; cursor: pointer; flex-shrink: 0; margin-top: 0.25rem;">
                     <input 
                         type="checkbox" 
+                        class="check-item-checkbox"
                         {% if item.is_checked %}checked{% endif %} 
                         onchange="toggleItem({{ item.id }})" 
                         style="width: 24px; height: 24px; cursor: pointer; flex-shrink: 0; margin-top: 0.25rem;"
@@ -105,30 +463,42 @@
         <h2 style="margin-bottom: 1.5rem;"><i class="fas fa-plus"></i> Add Item to Pick List</h2>
         
         <div style="margin-bottom: 1.5rem;">
-            <button type="button" onclick="switchMode('equipment')" id="equipBtn" class="btn btn-primary" style="width: 48%; margin-right: 2%;">
-                <i class="fas fa-box"></i> From Equipment
+            <button type="button" onclick="switchMode('equipment')" id="equipBtn" class="btn btn-primary" style="width: 32%; margin-right: 1%;">
+                <i class="fas fa-box"></i> Equipment
             </button>
-            <button type="button" onclick="switchMode('manual')" id="manualBtn" class="btn btn-primary" style="width: 48%;">
-                <i class="fas fa-plus"></i> Manual Entry
+            <button type="button" onclick="switchMode('hired')" id="hiredBtn" class="btn btn-primary" style="width: 32%; margin-right: 1%;">
+                <i class="fas fa-handshake"></i> Hired
             </button>
+            <button type="button" onclick="switchMode('manual')" id="manualBtn" class="btn btn-primary" style="width: 32%;">
+                <i class="fas fa-plus"></i> Manual
+            </button>
+        </div>
+        
+        <!-- Quantity Warning Alert -->
+        <div id="quantityWarning" style="display: none; background: #fef3c7; border-left: 4px solid var(--warning); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+            <h4 style="color: var(--warning); margin-bottom: 0.5rem;"><i class="fas fa-exclamation-triangle"></i> Quantity Warning</h4>
+            <p id="warningText" style="color: #78350f; margin: 0; font-size: 0.9rem;"></p>
+            <p style="color: #78350f; margin: 0.5rem 0 0 0; font-size: 0.85rem;">
+                <strong>Note:</strong> You can still add this item if needed.
+            </p>
         </div>
         
         <!-- Equipment Mode -->
         <form id="equipmentForm" style="display: none;">
             <div class="form-group">
                 <label>Select Equipment *</label>
-                <select id="equipmentSelect" required style="width: 100%; padding: 0.875rem; border: 2px solid var(--border); border-radius: 8px; font-size: 1rem;">
+                <select id="equipmentSelect" required onchange="checkQuantity()" style="width: 100%; padding: 0.875rem; border: 2px solid var(--border); border-radius: 8px; font-size: 1rem;">
                     <option value="">-- Choose equipment --</option>
                     {% for eq in all_equipment %}
                     <option value="{{ eq.id }}" data-location="{{ eq.location }}" data-category="{{ eq.category }}" data-barcode="{{ eq.barcode }}">
-                        {{ eq.name }} - {{ eq.location }}
+                        {{ eq.name }} - {{ eq.location }} (Qty: {{ eq.quantity_owned or 1 }})
                     </option>
                     {% endfor %}
                 </select>
             </div>
             <div class="form-group">
                 <label>Quantity</label>
-                <input type="number" id="equipQuantity" value="1" min="1" required>
+                <input type="number" id="equipQuantity" value="1" min="1" required onchange="checkQuantity()">
             </div>
             <div class="form-group">
                 <label>Assign to Event (Optional)</label>
@@ -142,6 +512,37 @@
                 </select>
             </div>
             <button type="submit" class="btn btn-success" style="width: 100%;"><i class="fas fa-check"></i> Add Equipment</button>
+        </form>
+        
+        <!-- Hired Equipment Mode -->
+        <form id="hiredForm" style="display: none;">
+            <div class="form-group">
+                <label>Select Hired Equipment *</label>
+                <select id="hiredSelect" required style="width: 100%; padding: 0.875rem; border: 2px solid var(--border); border-radius: 8px; font-size: 1rem;">
+                    <option value="">-- Choose hired equipment --</option>
+                    {% for hired in hired_equipment %}
+                    <option value="{{ hired.id }}" data-supplier="{{ hired.supplier }}" data-return="{{ hired.return_date.strftime('%Y-%m-%d') }}">
+                        {{ hired.name }} - {{ hired.supplier }} (Return: {{ hired.return_date.strftime('%b %d') }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Quantity</label>
+                <input type="number" id="hiredQuantity" value="1" min="1" required>
+            </div>
+            <div class="form-group">
+                <label>Assign to Event (Optional)</label>
+                <select id="eventId3" style="width: 100%; padding: 0.875rem; border: 2px solid var(--border); border-radius: 8px; font-size: 1rem;">
+                    <option value="">General Pick List</option>
+                    {% for event in events %}
+                    <option value="{{ event.id }}" {% if current_event and current_event.id == event.id %}selected{% endif %}>
+                        {{ event.title }} - {{ event.event_date.strftime('%b %d, %Y') }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-success" style="width: 100%;"><i class="fas fa-check"></i> Add Hired Equipment</button>
         </form>
         
         <!-- Manual Mode -->
@@ -170,11 +571,37 @@
     </div>
 </div>
 
+<!-- Quantity Confirmation Modal -->
+<div id="confirmQuantityModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('confirmQuantityModal')">&times;</span>
+        <h2 style="color: var(--warning); margin-bottom: 1.5rem;"><i class="fas fa-exclamation-triangle"></i> Confirm Quantity</h2>
+        
+        <div style="background: #fef3c7; padding: 1.5rem; border-radius: 8px; border-left: 4px solid var(--warning); margin-bottom: 1.5rem;">
+            <p id="confirmWarningText" style="color: #78350f; margin: 0; font-size: 1rem;"></p>
+        </div>
+        
+        <p style="color: #666; margin-bottom: 1.5rem;">
+            Do you want to add this anyway? This will over-allocate the equipment.
+        </p>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <button onclick="confirmAddEquipment()" class="btn btn-warning">
+                <i class="fas fa-check"></i> Add Anyway
+            </button>
+            <button onclick="hideModal('confirmQuantityModal')" class="btn btn-primary">
+                <i class="fas fa-times"></i> Cancel
+            </button>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
 let all_equipment = {{ all_equipment_json|tojson }};
+let pendingEquipmentData = null;
 
 function switchMode(mode) {
     const equipBtn = document.getElementById('equipBtn');
@@ -195,18 +622,92 @@ function switchMode(mode) {
     }
 }
 
+// Check quantity availability
+function checkQuantity() {
+    const equipmentId = document.getElementById('equipmentSelect').value;
+    const quantity = parseInt(document.getElementById('equipQuantity').value) || 1;
+    
+    if (!equipmentId) {
+        document.getElementById('quantityWarning').style.display = 'none';
+        return;
+    }
+    
+    fetch(`/equipment/${equipmentId}/quantity-check`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({quantity: quantity})
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.warning) {
+            const warningDiv = document.getElementById('quantityWarning');
+            const warningText = document.getElementById('warningText');
+            
+            warningText.innerHTML = `
+                <strong>Owned:</strong> ${result.owned} | 
+                <strong>Already Allocated:</strong> ${result.allocated} | 
+                <strong>Available:</strong> ${result.available}<br>
+                <strong>Requesting:</strong> ${result.requested} 
+                (${result.requested - result.available} more than available)
+            `;
+            
+            warningDiv.style.display = 'block';
+        } else {
+            document.getElementById('quantityWarning').style.display = 'none';
+        }
+    });
+}
+
 // Default to equipment mode
 switchMode('equipment');
 
 document.getElementById('equipmentForm').addEventListener('submit', function(e) {
     e.preventDefault();
     
+    const equipmentId = document.getElementById('equipmentSelect').value;
+    const quantity = parseInt(document.getElementById('equipQuantity').value);
+    
     const data = {
-        equipment_id: document.getElementById('equipmentSelect').value,
-        quantity: parseInt(document.getElementById('equipQuantity').value),
+        equipment_id: equipmentId,
+        quantity: quantity,
         event_id: document.getElementById('eventId1').value || null
     };
     
+    // Check quantity first
+    fetch(`/equipment/${equipmentId}/quantity-check`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({quantity: quantity})
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.warning) {
+            // Show confirmation modal
+            pendingEquipmentData = data;
+            const confirmText = document.getElementById('confirmWarningText');
+            confirmText.innerHTML = `
+                You're requesting <strong>${result.requested}</strong> items, 
+                but only <strong>${result.available}</strong> are available.<br>
+                (${result.owned} owned, ${result.allocated} already allocated)
+            `;
+            hideModal('addItemModal');
+            showModal('confirmQuantityModal');
+        } else {
+            // Add without confirmation
+            addEquipmentToPicklist(data);
+        }
+    });
+});
+
+function confirmAddEquipment() {
+    if (pendingEquipmentData) {
+        addEquipmentToPicklist(pendingEquipmentData);
+        hideModal('confirmQuantityModal');
+        pendingEquipmentData = null;
+    }
+}
+
+function addEquipmentToPicklist(data) {
     fetch('/picklist/add', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -221,7 +722,7 @@ document.getElementById('equipmentForm').addEventListener('submit', function(e) 
             showAlert(result.error || 'Error adding item', 'error');
         }
     });
-});
+}
 
 document.getElementById('manualForm').addEventListener('submit', function(e) {
     e.preventDefault();

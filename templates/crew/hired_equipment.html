@@ -1,0 +1,664 @@
+{% extends "base.html" %}
+
+{% block title %}Hired Equipment - ShowWise{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title"><i class="fas fa-handshake"></i> Hired Equipment</h1>
+    <p class="page-subtitle">Track rented equipment, return dates, and pre-return checklists</p>
+</div>
+
+<div style="display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap; align-items: center;">
+    {% if current_user.is_admin %}
+    <button onclick="showModal('addHiredModal')" class="btn btn-success">
+        <i class="fas fa-plus"></i> Add Hired Equipment
+    </button>
+    <button onclick="showModal('importCsvModal')" class="btn btn-primary">
+        <i class="fas fa-file-csv"></i> Import CSV
+    </button>
+    <button onclick="toggleBulkMode()" class="btn btn-primary" id="bulkModeBtn">
+        <i class="fas fa-check-square"></i> <!--Bulk Delete Mode-->broken do not click
+    </button>
+    <button onclick="selectAll()" class="btn btn-primary" id="selectAllBtn" style="display: none;">
+        <i class="fas fa-check-double"></i> Select All
+    </button>
+    <span id="selectedCount" style="display: none; color: var(--primary); font-weight: 600; padding: 0.5rem 1rem; background: #f0f4ff; border-radius: 6px;">
+        <i class="fas fa-info-circle"></i> <span id="countText">0 selected</span>
+    </span>
+    {% endif %}
+</div>
+
+<!-- Statistics -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+    <div class="card" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; border: none;">
+        <p style="opacity: 0.9; font-size: 0.9rem; margin-bottom: 0.5rem;">Active Hires</p>
+        <h2 style="font-size: 2rem; margin: 0; color: white;">{{ active_hired|length }}</h2>
+    </div>
+    
+    <div class="card" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none;">
+        <p style="opacity: 0.9; font-size: 0.9rem; margin-bottom: 0.5rem;">Returned</p>
+        <h2 style="font-size: 2rem; margin: 0; color: white;">{{ returned_hired|length }}</h2>
+    </div>
+    
+    <div class="card" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; border: none;">
+        <p style="opacity: 0.9; font-size: 0.9rem; margin-bottom: 0.5rem;">Due Soon (7 days)</p>
+        <h2 style="font-size: 2rem; margin: 0; color: white;">
+            {{ active_hired|selectattr('return_date', 'lt', upcoming_threshold)|list|length }}
+        </h2>
+    </div>
+</div>
+
+<!-- Active Hired Equipment -->
+<div class="card">
+    <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-clock"></i> Active Hires ({{ active_hired|length }})</h3>
+    
+    {% if active_hired %}
+    <div id="hiredList" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem;">
+        {% for hired in active_hired|sort(attribute='return_date') %}
+        {% set days_until_return = (hired.return_date - now).days %}
+        <div class="hired-card" data-id="{{ hired.id }}" style="background: white; border: 2px solid {% if days_until_return < 0 %}var(--danger){% elif days_until_return <= 7 %}var(--warning){% else %}var(--border){% endif %}; border-left: 4px solid {% if days_until_return < 0 %}var(--danger){% elif days_until_return <= 7 %}var(--warning){% else %}var(--primary){% endif %}; padding: 1.25rem; border-radius: 8px;">
+            <div style="display: flex; align-items: start; gap: 0.75rem; margin-bottom: 1rem;">
+                <input type="checkbox" class="bulk-checkbox" style="width: 20px; height: 20px; display: none; cursor: pointer; flex-shrink: 0; margin-top: 0.25rem;">
+                <div style="flex: 1; min-width: 0;">
+                    <h4 style="margin: 0 0 0.5rem 0; color: var(--dark); word-break: break-word;">{{ hired.name }}</h4>
+                    
+                    {% if hired.supplier %}
+                    <p style="margin: 0.25rem 0; color: #6b7280; font-size: 0.85rem;">
+                        <i class="fas fa-building"></i> {{ hired.supplier }}
+                    </p>
+                    {% endif %}
+                    
+                    <p style="margin: 0.25rem 0; color: #6b7280; font-size: 0.85rem;">
+                        <i class="fas fa-calendar-plus"></i> Hired: {{ hired.hire_date.strftime('%b %d, %Y') }}
+                    </p>
+                    
+                    <p style="margin: 0.25rem 0; {% if days_until_return < 0 %}color: var(--danger); font-weight: 600;{% elif days_until_return <= 7 %}color: var(--warning); font-weight: 600;{% else %}color: #6b7280;{% endif %} font-size: 0.85rem;">
+                        <i class="fas fa-calendar-times"></i> Return: {{ hired.return_date.strftime('%b %d, %Y') }}
+                        {% if days_until_return < 0 %}
+                        <span style="background: var(--danger); color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; margin-left: 0.5rem;">OVERDUE</span>
+                        {% elif days_until_return <= 7 %}
+                        <span style="background: var(--warning); color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; margin-left: 0.5rem;">DUE SOON</span>
+                        {% endif %}
+                    </p>
+                    
+                    {% if hired.cost %}
+                    <p style="margin: 0.25rem 0; color: #6b7280; font-size: 0.85rem;">
+                        <i class="fas fa-dollar-sign"></i> {{ hired.cost }}
+                    </p>
+                    {% endif %}
+                    
+                    <p style="margin: 0.25rem 0; color: #6b7280; font-size: 0.85rem;">
+                        <i class="fas fa-boxes"></i> Quantity: {{ hired.quantity }}
+                    </p>
+                    
+                    {% if hired.event %}
+                    <p style="margin: 0.25rem 0; color: var(--primary); font-size: 0.85rem;">
+                        <i class="fas fa-theater-masks"></i> {{ hired.event.title }}
+                    </p>
+                    {% endif %}
+                    
+                    {% if hired.notes %}
+                    <p style="margin: 0.5rem 0 0 0; color: #6b7280; font-size: 0.85rem; font-style: italic; word-break: break-word;">
+                        "{{ hired.notes }}"
+                    </p>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap;">
+                <button onclick="showChecklistModal({{ hired.id }})" class="btn btn-primary" style="flex: 1; font-size: 0.85rem; padding: 0.5rem;">
+                    <i class="fas fa-clipboard-check"></i> Checklist
+                </button>
+                {% if current_user.is_admin %}
+                <button onclick="editHired({{ hired.id }})" class="btn btn-primary" style="font-size: 0.85rem; padding: 0.5rem;">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button onclick="markReturned({{ hired.id }})" class="btn btn-success" style="font-size: 0.85rem; padding: 0.5rem;">
+                    <i class="fas fa-check"></i>
+                </button>
+                <button onclick="deleteHired({{ hired.id }})" class="btn btn-danger" style="font-size: 0.85rem; padding: 0.5rem;">
+                    <i class="fas fa-trash"></i>
+                </button>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p style="text-align: center; color: #6b7280; padding: 2rem;">No active hires</p>
+    {% endif %}
+</div>
+
+<!-- Returned Equipment -->
+{% if returned_hired %}
+<div class="card">
+    <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-check-circle"></i> Returned Equipment ({{ returned_hired|length }})</h3>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Supplier</th>
+                <th>Hired</th>
+                <th>Returned</th>
+                <th>Cost</th>
+                {% if current_user.is_admin %}
+                <th>Actions</th>
+                {% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for hired in returned_hired|sort(attribute='returned_at', reverse=True) %}
+            <tr style="opacity: 0.7;">
+                <td><strong>{{ hired.name }}</strong></td>
+                <td>{{ hired.supplier or '-' }}</td>
+                <td>{{ hired.hire_date.strftime('%b %d, %Y') }}</td>
+                <td>{{ hired.returned_at.strftime('%b %d, %Y') if hired.returned_at else '-' }}</td>
+                <td>{{ hired.cost or '-' }}</td>
+                {% if current_user.is_admin %}
+                <td>
+                    <button onclick="deleteHired({{ hired.id }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<!-- Add/Edit Hired Equipment Modal -->
+<div id="addHiredModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('addHiredModal')">&times;</span>
+        <h2 id="hiredModalTitle"><i class="fas fa-plus"></i> Add Hired Equipment</h2>
+        <form id="addHiredForm">
+            <input type="hidden" id="hiredId">
+            
+            <div class="form-group">
+                <label>Equipment Name *</label>
+                <input type="text" id="hiredName" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Supplier/Company</label>
+                <input type="text" id="hiredSupplier" placeholder="e.g., ABC Rentals">
+            </div>
+            
+            <div class="form-group">
+                <label>Hire Date *</label>
+                <input type="date" id="hiredDate" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Return Date *</label>
+                <input type="date" id="returnDate" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Cost</label>
+                <input type="text" id="hiredCost" placeholder="e.g., $500/week">
+            </div>
+            
+            <div class="form-group">
+                <label>Quantity</label>
+                <input type="number" id="hiredQuantity" value="1" min="1">
+            </div>
+            
+            <div class="form-group">
+                <label>Link to Event</label>
+                <select id="hiredEventId">
+                    <option value="">No specific event</option>
+                    {% for event in events %}
+                    <option value="{{ event.id }}">{{ event.title }} - {{ event.event_date.strftime('%b %d, %Y') }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Notes</label>
+                <textarea id="hiredNotes" rows="3" placeholder="Additional information..."></textarea>
+            </div>
+            
+            <button type="submit" class="btn btn-success" style="width: 100%;">
+                <i class="fas fa-check"></i> Save Hired Equipment
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Checklist Modal -->
+<div id="checklistModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('checklistModal')">&times;</span>
+        <h2><i class="fas fa-clipboard-check"></i> Pre-Return Checklist</h2>
+        <p id="checklistEquipmentName" style="color: #6b7280; margin-bottom: 1.5rem;"></p>
+        
+        <div id="checklistItems" style="margin-bottom: 1.5rem;"></div>
+        
+        <button onclick="hideModal('checklistModal')" class="btn btn-primary" style="width: 100%;">
+            Close
+        </button>
+    </div>
+</div>
+
+<!-- Import CSV Modal -->
+<div id="importCsvModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('importCsvModal')">&times;</span>
+        <h2><i class="fas fa-file-csv"></i> Import Hired Equipment from CSV</h2>
+        
+        <div style="background: #f0f4ff; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; border-left: 4px solid var(--primary);">
+            <h4 style="margin-bottom: 0.5rem;">CSV Format:</h4>
+            <p style="font-size: 0.85rem; margin-bottom: 0.5rem;">Your CSV should have these columns:</p>
+            <code style="display: block; background: white; padding: 0.5rem; border-radius: 4px; font-size: 0.85rem;">
+                name, supplier, hire_date, return_date, cost, quantity, notes
+            </code>
+            <p style="font-size: 0.85rem; margin-top: 0.5rem; color: #6b7280;">
+                Dates must be in YYYY-MM-DD format (e.g., 2025-01-15)
+            </p>
+        </div>
+        
+        <form id="importCsvForm" enctype="multipart/form-data">
+            <div class="form-group">
+                <label>Select CSV File *</label>
+                <input type="file" id="csvFile" accept=".csv" required>
+            </div>
+            <button type="submit" class="btn btn-success" style="width: 100%;">
+                <i class="fas fa-upload"></i> Import CSV
+            </button>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<!-- Replace the ENTIRE JavaScript section at the bottom of templates/hired_equipment.html with this -->
+
+<script>
+let hiredData = {{ hired_json|tojson }};
+let bulkMode = false;
+let selectedIds = new Set();
+
+console.log('Script loaded. Hired data count:', hiredData.length);
+
+// Add/Update hired equipment
+document.getElementById('addHiredForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const id = document.getElementById('hiredId').value;
+    const data = {
+        name: document.getElementById('hiredName').value,
+        supplier: document.getElementById('hiredSupplier').value,
+        hire_date: document.getElementById('hiredDate').value,
+        return_date: document.getElementById('returnDate').value,
+        cost: document.getElementById('hiredCost').value,
+        quantity: parseInt(document.getElementById('hiredQuantity').value),
+        notes: document.getElementById('hiredNotes').value,
+        event_id: document.getElementById('hiredEventId').value || null
+    };
+    
+    const url = id ? `/hired-equipment/${id}` : '/hired-equipment/add';
+    const method = id ? 'PUT' : 'POST';
+    
+    fetch(url, {
+        method: method,
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert(id ? 'Hired equipment updated!' : 'Hired equipment added!', 'success');
+            setTimeout(() => location.reload(), 500);
+        }
+    });
+});
+
+// Edit hired
+function editHired(id) {
+    const hired = hiredData.find(h => h.id === id);
+    if (!hired) return;
+    
+    document.getElementById('hiredModalTitle').innerHTML = '<i class="fas fa-edit"></i> Edit Hired Equipment';
+    document.getElementById('hiredId').value = hired.id;
+    document.getElementById('hiredName').value = hired.name;
+    document.getElementById('hiredSupplier').value = hired.supplier || '';
+    document.getElementById('hiredDate').value = hired.hire_date.split('T')[0];
+    document.getElementById('returnDate').value = hired.return_date.split('T')[0];
+    document.getElementById('hiredCost').value = hired.cost || '';
+    document.getElementById('hiredQuantity').value = hired.quantity;
+    document.getElementById('hiredEventId').value = hired.event_id || '';
+    document.getElementById('hiredNotes').value = hired.notes || '';
+    
+    showModal('addHiredModal');
+}
+
+// Delete hired
+function deleteHired(id) {
+    if (!confirm('Delete this hired equipment record?')) return;
+    
+    fetch(`/hired-equipment/${id}`, {method: 'DELETE'})
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                showAlert('Hired equipment deleted!', 'success');
+                location.reload();
+            }
+        });
+}
+
+// Mark as returned
+function markReturned(id) {
+    if (!confirm('Mark this equipment as returned?')) return;
+    
+    fetch(`/hired-equipment/${id}/return`, {method: 'POST'})
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                showAlert('Marked as returned!', 'success');
+                location.reload();
+            }
+        });
+}
+
+// Show checklist modal
+function showChecklistModal(id) {
+    const hired = hiredData.find(h => h.id === id);
+    if (!hired) return;
+    
+    document.getElementById('checklistEquipmentName').textContent = hired.name;
+    
+    // Fetch checklist items
+    fetch(`/hired-equipment/${id}/checklist`)
+        .then(r => r.json())
+        .then(items => {
+            const container = document.getElementById('checklistItems');
+            container.innerHTML = '';
+            
+            items.forEach(item => {
+                const div = document.createElement('div');
+                div.style.cssText = 'background: #f9fafb; padding: 0.75rem; border-radius: 6px; margin-bottom: 0.5rem; display: flex; align-items: start; gap: 0.75rem;';
+                div.innerHTML = `
+                    <input type="checkbox" ${item.is_checked ? 'checked' : ''} 
+                           onchange="toggleChecklistItem(${id}, ${item.id})"
+                           style="width: 20px; height: 20px; cursor: pointer; flex-shrink: 0; margin-top: 0.25rem;">
+                    <div style="flex: 1;">
+                        <strong style="${item.is_checked ? 'text-decoration: line-through; color: #9ca3af;' : ''}">${item.item_name}</strong>
+                        ${item.notes ? `<p style="font-size: 0.85rem; color: #6b7280; margin: 0.25rem 0 0 0;">${item.notes}</p>` : ''}
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        });
+    
+    showModal('checklistModal');
+}
+
+function toggleChecklistItem(hiredId, itemId) {
+    fetch(`/hired-equipment/${hiredId}/checklist/toggle/${itemId}`, {method: 'POST'})
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                showChecklistModal(hiredId);
+            }
+        });
+}
+
+// Import CSV
+document.getElementById('importCsvForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData();
+    formData.append('file', document.getElementById('csvFile').files[0]);
+    
+    fetch('/hired-equipment/import-csv', {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert(`Imported ${result.imported} hired equipment items!`, 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showAlert(result.error, 'error');
+        }
+    });
+});
+
+// BULK DELETE FUNCTIONS - COMPLETELY REWRITTEN
+
+function toggleBulkMode() {
+    console.log('toggleBulkMode called, current bulkMode:', bulkMode);
+    bulkMode = !bulkMode;
+    
+    const bulkCheckboxes = document.querySelectorAll('.bulk-checkbox');
+    const btn = document.getElementById('bulkModeBtn');
+    const selectAllBtn = document.getElementById('selectAllBtn');
+    const selectedCount = document.getElementById('selectedCount');
+    
+    console.log('Found bulk checkboxes:', bulkCheckboxes.length);
+    console.log('New bulkMode:', bulkMode);
+    
+    if (bulkMode) {
+        // Entering bulk mode
+        bulkCheckboxes.forEach(cb => cb.style.display = 'block');
+        btn.innerHTML = '<i class="fas fa-trash"></i> Delete Selected';
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-danger');
+        selectAllBtn.style.display = 'inline-block';
+        selectedCount.style.display = 'inline-block';
+        updateSelectedCount();
+        console.log('✅ Bulk mode enabled');
+    } else {
+        // Exiting bulk mode
+        bulkCheckboxes.forEach(cb => {
+            cb.style.display = 'none';
+            cb.checked = false;
+        });
+        selectedIds.clear();
+        btn.innerHTML = '<i class="fas fa-check-square"></i> Bulk Delete Mode';
+        btn.classList.remove('btn-danger');
+        btn.classList.add('btn-primary');
+        selectAllBtn.style.display = 'none';
+        selectedCount.style.display = 'none';
+        
+        // Reset card backgrounds
+        document.querySelectorAll('.hired-card').forEach(card => {
+            card.style.background = 'white';
+        });
+        console.log('✅ Bulk mode disabled');
+    }
+}
+
+function selectAll() {
+    const checkboxes = document.querySelectorAll('.bulk-checkbox');
+    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+    
+    console.log('selectAll called, allChecked:', allChecked);
+    
+    checkboxes.forEach(cb => {
+        cb.checked = !allChecked;
+        const card = cb.closest('.hired-card');
+        const id = parseInt(card.dataset.id);
+        
+        if (!allChecked) {
+            selectedIds.add(id);
+            card.style.background = '#fef3c7';
+        } else {
+            selectedIds.delete(id);
+            card.style.background = 'white';
+        }
+    });
+    
+    updateSelectedCount();
+    console.log('Selected IDs after selectAll:', Array.from(selectedIds));
+    
+    const btn = document.getElementById('selectAllBtn');
+    btn.innerHTML = allChecked ? '<i class="fas fa-check-double"></i> Select All' : '<i class="fas fa-times"></i> Deselect All';
+}
+
+function updateSelectedCount() {
+    const countText = document.getElementById('countText');
+    const count = selectedIds.size;
+    countText.textContent = `${count} selected`;
+    
+    const btn = document.getElementById('bulkModeBtn');
+    if (count > 0 && bulkMode) {
+        btn.innerHTML = `<i class="fas fa-trash"></i> Delete ${count} Item${count > 1 ? 's' : ''}`;
+    } else if (bulkMode) {
+        btn.innerHTML = '<i class="fas fa-trash"></i> Delete Selected';
+    }
+}
+
+// Handle checkbox changes
+document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('bulk-checkbox')) {
+        const card = e.target.closest('.hired-card');
+        const id = parseInt(card.dataset.id);
+        
+        console.log('Checkbox changed for ID:', id, 'Checked:', e.target.checked);
+        
+        if (e.target.checked) {
+            selectedIds.add(id);
+            card.style.background = '#fef3c7';
+        } else {
+            selectedIds.delete(id);
+            card.style.background = 'white';
+        }
+        
+        updateSelectedCount();
+        console.log('Selected IDs:', Array.from(selectedIds));
+    }
+});
+
+// THE FIX - Use direct event listener on button instead of relying on click attribute
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded, attaching bulk delete handler');
+    
+    const bulkBtn = document.getElementById('bulkModeBtn');
+    if (!bulkBtn) {
+        console.error('❌ Bulk mode button not found!');
+        return;
+    }
+    
+    console.log('✅ Bulk mode button found, attaching click handler');
+    
+    // Remove any existing listeners by cloning the button
+    const newBtn = bulkBtn.cloneNode(true);
+    bulkBtn.parentNode.replaceChild(newBtn, bulkBtn);
+    
+    // Add fresh click listener
+    newBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        console.log('\n' + '='.repeat(50));
+        console.log('BULK DELETE BUTTON CLICKED');
+        console.log('='.repeat(50));
+        console.log('bulkMode:', bulkMode);
+        console.log('selectedIds:', Array.from(selectedIds));
+        console.log('selectedIds.size:', selectedIds.size);
+        
+        if (!bulkMode) {
+            // Not in bulk mode - turn it on
+            console.log('Toggling bulk mode ON');
+            toggleBulkMode();
+            return;
+        }
+        
+        if (selectedIds.size === 0) {
+            // In bulk mode but nothing selected
+            console.log('No items selected');
+            showAlert('⚠️ Please select at least one item to delete', 'error');
+            return;
+        }
+        
+        // In bulk mode with selections - DELETE!
+        const count = selectedIds.size;
+        const idsArray = Array.from(selectedIds);
+        
+        console.log('Proceeding with deletion of:', idsArray);
+        
+        if (!confirm(`⚠️ Delete ${count} hired equipment item${count > 1 ? 's' : ''}?\n\nIDs: ${idsArray.join(', ')}\n\nThis action CANNOT be undone!`)) {
+            console.log('User cancelled');
+            return;
+        }
+        
+        console.log('User confirmed, sending DELETE request...');
+        
+        // Disable button
+        this.disabled = true;
+        this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
+        
+        const requestData = {ids: idsArray};
+        console.log('Request payload:', JSON.stringify(requestData));
+        
+        fetch('/hired-equipment/bulk-delete', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(requestData)
+        })
+        .then(response => {
+            console.log('Response received:', response.status, response.statusText);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            return response.json();
+        })
+        .then(result => {
+            console.log('Response data:', result);
+            
+            if (result.success) {
+                console.log(`✅ Successfully deleted ${result.deleted} items`);
+                showAlert(`✅ Successfully deleted ${result.deleted} item(s)!`, 'success');
+                console.log('Reloading page in 1 second...');
+                setTimeout(() => {
+                    location.reload();
+                }, 1000);
+            } else {
+                throw new Error(result.error || 'Unknown error from server');
+            }
+        })
+        .catch(error => {
+            console.error('❌ ERROR:', error);
+            console.error('Error type:', error.constructor.name);
+            console.error('Error message:', error.message);
+            
+            showAlert('❌ Error deleting items: ' + error.message, 'error');
+            
+            // Re-enable button
+            this.disabled = false;
+            updateSelectedCount();
+        });
+    });
+    
+    console.log('✅ Bulk delete handler attached successfully');
+});
+
+// Reset modal when opening to add new
+function showModal(id) {
+    if (id === 'addHiredModal' && !document.getElementById('hiredId').value) {
+        document.getElementById('hiredModalTitle').innerHTML = '<i class="fas fa-plus"></i> Add Hired Equipment';
+        document.getElementById('addHiredForm').reset();
+        document.getElementById('hiredId').value = '';
+    }
+    document.getElementById(id).style.display = 'block';
+}
+
+function hideModal(id) {
+    document.getElementById(id).style.display = 'none';
+}
+
+console.log('✅ All functions loaded');
+</script>
+{% endblock %}

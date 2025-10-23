@@ -493,6 +493,11 @@
             <i class="fas fa-box"></i>
             <span>Equipment</span>
         </a>
+        <a href="{{ url_for('hired_equipment_list') }}" class="nav-item {% if request.endpoint == 'hired_equipment_list' %}active{% endif %}">
+            <i class="fas fa-handshake"></i>
+            <span>Hired Equipment</span>
+        </a>
+
         <a href="{{ url_for('picklist') }}" class="nav-item {% if request.endpoint == 'picklist' %}active{% endif %}">
             <i class="fas fa-list-check"></i>
             <span>Pick Lists</span>

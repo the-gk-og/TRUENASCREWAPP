@@ -80,7 +80,8 @@ class Equipment(db.Model):
     location = db.Column(db.String(200))
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
+    quantity_owned = db.Column(db.Integer, default=1)
+
     def to_dict(self):
         """Convert Equipment to dictionary for JSON serialization"""
         return {
@@ -89,7 +90,8 @@ class Equipment(db.Model):
             'name': self.name,
             'category': self.category or '',
             'location': self.location or '',
-            'notes': self.notes or ''
+            'notes': self.notes or '',
+            'quantity_owned': self.quantity_owned or 1
         }
 
 class PickListItem(db.Model):
@@ -211,6 +213,32 @@ class CastNote(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     event = db.relationship('Event', backref=db.backref('cast_notes', cascade='all, delete-orphan'))
+
+class HiredEquipment(db.Model):
+    """Hired/rented equipment tracking"""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    supplier = db.Column(db.String(200))
+    hire_date = db.Column(db.DateTime, nullable=False)
+    return_date = db.Column(db.DateTime, nullable=False)
+    cost = db.Column(db.String(50))
+    quantity = db.Column(db.Integer, default=1)
+    notes = db.Column(db.Text)
+    is_returned = db.Column(db.Boolean, default=False)
+    returned_at = db.Column(db.DateTime, nullable=True)
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    checklist_items = db.relationship('HiredEquipmentCheckItem', backref='hired_equipment', cascade='all, delete-orphan')
+    
+    event = db.relationship('Event', backref='hired_equipment')
+
+class HiredEquipmentCheckItem(db.Model):
+    """Checklist items for hired equipment returns"""
+    id = db.Column(db.Integer, primary_key=True)
+    hired_equipment_id = db.Column(db.Integer, db.ForeignKey('hired_equipment.id'), nullable=False)
+    item_name = db.Column(db.String(200), nullable=False)
+    is_checked = db.Column(db.Boolean, default=False)
+    notes = db.Column(db.Text)
 
 # LOGIN & UTILITIES
 
@@ -648,6 +676,7 @@ def add_equipment():
         return jsonify({'error': 'Admin access required'}), 403
     data = request.json
     equipment = Equipment(barcode=data['barcode'], name=data['name'], category=data.get('category', ''), location=data.get('location', ''), notes=data.get('notes', ''))
+    quantity_owned = data.get('quantity_owned', 1)
     db.session.add(equipment)
     db.session.commit()
     return jsonify({'success': True, 'id': equipment.id})
@@ -664,6 +693,7 @@ def update_equipment(id):
     equipment.category = data.get('category', equipment.category)
     equipment.location = data.get('location', equipment.location)
     equipment.notes = data.get('notes', equipment.notes)
+    equipment.quantity_owned = data.get('quantity_owned', equipment.quantity_owned)
     db.session.commit()
     return jsonify({'success': True})
 
@@ -755,7 +785,17 @@ def picklist():
     events = Event.query.order_by(Event.event_date.desc()).all()
     all_equipment = Equipment.query.all()
     equipment_dict = [e.to_dict() for e in all_equipment]
-    return render_template('/crew/picklist.html', items=items, events=events, current_event=event, all_equipment=all_equipment, all_equipment_json=equipment_dict)
+    
+    # Get active hired equipment (not returned)
+    hired_equipment = HiredEquipment.query.filter_by(is_returned=False).order_by(HiredEquipment.return_date).all()
+    
+    return render_template('/crew/picklist.html', 
+                         items=items, 
+                         events=events, 
+                         current_event=event, 
+                         all_equipment=all_equipment, 
+                         all_equipment_json=equipment_dict,
+                         hired_equipment=hired_equipment)
 
 @app.route('/picklist/add', methods=['POST'])
 @login_required
@@ -2693,6 +2733,273 @@ ShowWise Team"""
         send_email(subject, current_user.email, body)
     
     return jsonify({'success': True, 'message': 'Password changed successfully'})
+
+# ==================== HIRED EQUIPMENT ROUTES ====================
+
+from datetime import datetime, timedelta
+
+
+@app.route('/hired-equipment')
+@login_required
+def hired_equipment_list():
+    """View all hired equipment"""
+    hired = HiredEquipment.query.order_by(HiredEquipment.return_date).all()
+    events = Event.query.order_by(Event.event_date.desc()).all()
+    
+    active_hired = [h for h in hired if not h.is_returned]
+    returned_hired = [h for h in hired if h.is_returned]
+
+    hired_json = [{
+        'id': h.id,
+        'name': h.name,
+        'supplier': h.supplier,
+        'hire_date': h.hire_date.isoformat(),
+        'return_date': h.return_date.isoformat(),
+        'cost': h.cost,
+        'quantity': h.quantity,
+        'notes': h.notes,
+        'is_returned': h.is_returned,
+        'event_id': h.event_id
+    } for h in hired]
+
+    upcoming_threshold = datetime.now() + timedelta(days=7)
+
+    return render_template(
+        'crew/hired_equipment.html',
+        active_hired=active_hired,
+        returned_hired=returned_hired,
+        events=events,
+        hired_json=hired_json,
+        upcoming_threshold=upcoming_threshold,
+        now=datetime.now()  # 👈 Add this line
+    )
+
+
+@app.route('/hired-equipment/add', methods=['POST'])
+@login_required
+def add_hired_equipment():
+    """Add hired equipment"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    data = request.json
+    hired = HiredEquipment(
+        name=data['name'],
+        supplier=data.get('supplier', ''),
+        hire_date=datetime.fromisoformat(data['hire_date']),
+        return_date=datetime.fromisoformat(data['return_date']),
+        cost=data.get('cost', ''),
+        quantity=data.get('quantity', 1),
+        notes=data.get('notes', ''),
+        event_id=data.get('event_id')
+    )
+    db.session.add(hired)
+    db.session.commit()
+    
+    # Add default checklist items
+    default_items = [
+        'All items present',
+        'No damage',
+        'Clean condition',
+        'All accessories included',
+        'Documentation returned'
+    ]
+    
+    for item_name in default_items:
+        check_item = HiredEquipmentCheckItem(
+            hired_equipment_id=hired.id,
+            item_name=item_name
+        )
+        db.session.add(check_item)
+    
+    db.session.commit()
+    return jsonify({'success': True, 'id': hired.id})
+
+@app.route('/hired-equipment/<int:id>', methods=['PUT'])
+@login_required
+def update_hired_equipment(id):
+    """Update hired equipment"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    hired = HiredEquipment.query.get_or_404(id)
+    data = request.json
+    
+    hired.name = data.get('name', hired.name)
+    hired.supplier = data.get('supplier', hired.supplier)
+    hired.hire_date = datetime.fromisoformat(data['hire_date']) if data.get('hire_date') else hired.hire_date
+    hired.return_date = datetime.fromisoformat(data['return_date']) if data.get('return_date') else hired.return_date
+    hired.cost = data.get('cost', hired.cost)
+    hired.quantity = data.get('quantity', hired.quantity)
+    hired.notes = data.get('notes', hired.notes)
+    hired.event_id = data.get('event_id', hired.event_id)
+    
+    db.session.commit()
+    return jsonify({'success': True})
+
+@app.route('/hired-equipment/<int:id>', methods=['DELETE'])
+@login_required
+def delete_hired_equipment(id):
+    """Delete hired equipment"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    hired = HiredEquipment.query.get_or_404(id)
+    db.session.delete(hired)
+    db.session.commit()
+    return jsonify({'success': True})
+
+@app.route('/hired-equipment/bulk-delete', methods=['POST'])
+@login_required
+def bulk_delete_hired():
+    """Delete multiple hired equipment items"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    try:
+        data = request.json
+        ids = data.get('ids', [])
+        
+        print(f"Received bulk delete request for IDs: {ids}")  # Debug log
+        
+        if not ids:
+            return jsonify({'error': 'No items selected'}), 400
+        
+        # Delete items one by one to ensure cascade works
+        deleted_count = 0
+        for item_id in ids:
+            item = HiredEquipment.query.get(item_id)
+            if item:
+                db.session.delete(item)
+                deleted_count += 1
+        
+        db.session.commit()
+        print(f"Successfully deleted {deleted_count} items")  # Debug log
+        
+        return jsonify({'success': True, 'deleted': deleted_count})
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error in bulk delete: {str(e)}")  # Debug log
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/hired-equipment/<int:id>/return', methods=['POST'])
+@login_required
+def mark_hired_returned(id):
+    """Mark hired equipment as returned"""
+    hired = HiredEquipment.query.get_or_404(id)
+    hired.is_returned = True
+    hired.returned_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({'success': True})
+
+@app.route('/hired-equipment/<int:id>/checklist/toggle/<int:item_id>', methods=['POST'])
+@login_required
+def toggle_hired_checklist(id, item_id):
+    """Toggle checklist item"""
+    item = HiredEquipmentCheckItem.query.get_or_404(item_id)
+    item.is_checked = not item.is_checked
+    db.session.commit()
+    return jsonify({'success': True, 'is_checked': item.is_checked})
+
+@app.route('/hired-equipment/<int:id>/checklist/add', methods=['POST'])
+@login_required
+def add_hired_checklist_item(id):
+    """Add custom checklist item"""
+    data = request.json
+    item = HiredEquipmentCheckItem(
+        hired_equipment_id=id,
+        item_name=data['item_name'],
+        notes=data.get('notes', '')
+    )
+    db.session.add(item)
+    db.session.commit()
+    return jsonify({'success': True, 'id': item.id})
+
+@app.route('/hired-equipment/import-csv', methods=['POST'])
+@login_required
+def import_hired_csv():
+    """Import hired equipment from CSV"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+    
+    try:
+        stream = io.StringIO(file.stream.read().decode('utf8'), newline=None)
+        csv_reader = csv.DictReader(stream)
+        count = 0
+        
+        for row in csv_reader:
+            name = row.get('name') or row.get('Name')
+            hire_date = row.get('hire_date') or row.get('Hire Date')
+            return_date = row.get('return_date') or row.get('Return Date')
+            
+            if not name or not hire_date or not return_date:
+                continue
+            
+            hired = HiredEquipment(
+                name=name,
+                supplier=row.get('supplier') or row.get('Supplier') or '',
+                hire_date=datetime.strptime(hire_date, '%Y-%m-%d'),
+                return_date=datetime.strptime(return_date, '%Y-%m-%d'),
+                cost=row.get('cost') or row.get('Cost') or '',
+                quantity=int(row.get('quantity') or row.get('Quantity') or 1),
+                notes=row.get('notes') or row.get('Notes') or ''
+            )
+            db.session.add(hired)
+            count += 1
+        
+        db.session.commit()
+        return jsonify({'success': True, 'imported': count})
+    except Exception as e:
+        return jsonify({'error': f'Import failed: {str(e)}'}), 400
+
+
+# ==================== EQUIPMENT QUANTITY TRACKING ====================
+
+@app.route('/hired-equipment/<int:id>/checklist', methods=['GET'])
+@login_required
+def get_hired_checklist(id):
+    """Get checklist items for hired equipment"""
+    items = HiredEquipmentCheckItem.query.filter_by(hired_equipment_id=id).all()
+    return jsonify([{
+        'id': item.id,
+        'item_name': item.item_name,
+        'is_checked': item.is_checked,
+        'notes': item.notes or ''
+    } for item in items])
+
+@app.route('/equipment/<int:id>/quantity-check', methods=['POST'])
+@login_required
+def check_equipment_quantity(id):
+    """Check if equipment quantity is available"""
+    equipment = Equipment.query.get_or_404(id)
+    data = request.json
+    requested_qty = data.get('quantity', 1)
+    
+    # Count how many are already allocated in active pick lists
+    allocated = db.session.query(db.func.sum(PickListItem.quantity)).filter(
+        PickListItem.equipment_id == id,
+        PickListItem.is_checked == False
+    ).scalar() or 0
+    
+    owned = equipment.quantity_owned if hasattr(equipment, 'quantity_owned') else 999
+    available = owned - allocated
+    
+    return jsonify({
+        'owned': owned,
+        'allocated': allocated,
+        'available': available,
+        'requested': requested_qty,
+        'warning': requested_qty > available
+    })
+
 
 # RUN APP
 
