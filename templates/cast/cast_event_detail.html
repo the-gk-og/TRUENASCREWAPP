@@ -1,0 +1,395 @@
+{% extends "base.html" %}
+
+{% block title %}{{ event.title }} - Cast Portal{% endblock %}
+
+{% block content %}
+<div class="card">
+    <a href="{{ url_for('cast_events') }}" style="color: var(--primary); text-decoration: none; margin-bottom: 1rem; display: inline-block;">
+        ← Back to Cast Events
+    </a>
+    
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem;">
+        <h1 style="margin: 0;">{{ event.title }}</h1>
+        
+        {% if current_user.is_admin %}
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <a href="{{ url_for('event_detail', id=event.id) }}" class="btn btn-primary" style="padding: 0.5rem 1rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+                <i class="fas fa-hard-hat"></i> Switch to Crew View
+            </a>
+            <button onclick="showModal('editCastDescriptionModal')" class="btn btn-primary" style="padding: 0.5rem 1rem;">
+                <i class="fas fa-edit"></i> Edit Cast Info
+            </button>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- Event Overview -->
+    <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid var(--warning);">
+        <p style="color: #78350f; margin: 0.5rem 0; font-size: 1.05rem;">
+            📅 <strong>Performance:</strong> {{ event.event_date.strftime('%B %d, %Y at %I:%M %p') }}
+        </p>
+        {% if event.event_end_date %}
+        <p style="color: #78350f; margin: 0.5rem 0;">
+            🏁 <strong>Ends:</strong> {{ event.event_end_date.strftime('%I:%M %p') }}
+        </p>
+        {% endif %}
+        {% if event.location %}
+        <p style="color: #78350f; margin: 0.5rem 0;">
+            📍 <strong>Venue:</strong> {{ event.location }}
+        </p>
+        {% endif %}
+    </div>
+    
+    <!-- My Character Info (only for non-admin cast) -->
+    {% if not current_user.is_admin and cast_member %}
+    <div style="background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%); padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem; border-left: 4px solid var(--primary);">
+        <h3 style="margin: 0 0 1rem 0; color: var(--primary);"><i class="fas fa-user-tag"></i> Your Role</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+            <div>
+                <p style="margin: 0.5rem 0; color: #4338ca;">
+                    <strong>Character:</strong> {{ cast_member.character_name }}
+                </p>
+                <p style="margin: 0.5rem 0; color: #4338ca;">
+                    <strong>Role Type:</strong> {{ cast_member.role_type|capitalize }}
+                </p>
+            </div>
+            {% if cast_member.notes %}
+            <div style="background: white; padding: 1rem; border-radius: 6px;">
+                <p style="margin: 0; color: #4338ca; font-size: 0.9rem;">
+                    <strong>Director's Notes:</strong><br>
+                    {{ cast_member.notes }}
+                </p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Cast Description -->
+    {% if event.cast_description %}
+    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 6px; margin-bottom: 1.5rem; border-left: 4px solid var(--secondary);">
+        <h3 style="margin: 0 0 1rem 0; color: var(--secondary);"><i class="fas fa-info-circle"></i> Cast Information</h3>
+        <p style="margin: 0; white-space: pre-wrap; word-break: break-word;">{{ event.cast_description }}</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- CAST SCHEDULE -->
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+        <h3><i class="fas fa-calendar-alt"></i> Cast Schedule & Call Times</h3>
+        {% if current_user.is_admin %}
+        <button onclick="showModal('addCastScheduleModal')" class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
+            + Add Schedule
+        </button>
+        {% endif %}
+    </div>
+    
+    {% if cast_schedules %}
+    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+        {% for schedule in cast_schedules %}
+        <div style="background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); padding: 1rem; border-radius: 8px; border-left: 4px solid #0284c7;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 200px;">
+                    <h4 style="margin: 0 0 0.5rem 0; color: #075985;">{{ schedule.title }}</h4>
+                    <p style="margin: 0.25rem 0; color: #0c4a6e; font-size: 1.05rem; font-weight: 600;">
+                        <i class="fas fa-clock"></i> {{ schedule.scheduled_time.strftime('%I:%M %p on %B %d, %Y') }}
+                    </p>
+                    {% if schedule.description %}
+                    <p style="margin: 0.5rem 0 0 0; color: #0c4a6e; font-size: 0.9rem;">
+                        {{ schedule.description }}
+                    </p>
+                    {% endif %}
+                </div>
+                {% if current_user.is_admin %}
+                <button onclick="deleteCastSchedule({{ schedule.id }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
+                    <i class="fas fa-trash"></i>
+                </button>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p style="color: #666; text-align: center; padding: 1rem;">No schedule items yet.</p>
+    {% endif %}
+</div>
+
+<!-- CAST NOTES -->
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+        <h3>📝 Cast Notes</h3>
+        {% if current_user.is_admin %}
+        <button onclick="showModal('addCastNoteModal')" class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
+            + Add Note
+        </button>
+        {% endif %}
+    </div>
+    
+    <div id="castNotesList">
+        {% if cast_notes %}
+            {% for note in cast_notes %}
+            <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--warning); margin-bottom: 0.75rem;">
+                <div style="display: flex; justify-content: between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 0;">
+                        <p style="margin: 0.25rem 0; color: #555; font-size: 0.85rem;">
+                            <strong>{{ note.created_by }}</strong> • {{ note.created_at.strftime('%b %d, %Y at %I:%M %p') }}
+                        </p>
+                        <p id="cast-note-content-{{ note.id }}" style="margin: 0.5rem 0; color: #333; word-break: break-word;">{{ note.content }}</p>
+                        {% if current_user.is_admin %}
+                        <div id="cast-note-edit-{{ note.id }}" style="display: none; margin: 0.5rem 0;">
+                            <textarea id="cast-note-textarea-{{ note.id }}" style="width: 100%; padding: 0.5rem; border: 2px solid var(--border); border-radius: 6px; min-height: 80px; font-family: inherit;">{{ note.content }}</textarea>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% if current_user.is_admin %}
+                    <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
+                        <button onclick="editCastNoteToggle({{ note.id }})" id="cast-edit-btn-{{ note.id }}" class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button onclick="saveCastNoteEdit({{ note.id }})" id="cast-save-btn-{{ note.id }}" style="display: none; padding: 0.4rem 0.8rem; font-size: 0.8rem;" class="btn btn-success">
+                            <i class="fas fa-save"></i>
+                        </button>
+                        <button onclick="deleteCastNote({{ note.id }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+        <p style="color: #666; text-align: center; padding: 1rem;">No cast notes yet.</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- CAST LIST -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;"><i class="fas fa-users"></i> Cast List ({{ cast_members|length }})</h3>
+    
+    {% if cast_members %}
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
+        {% for member in cast_members %}
+        <div style="background: #f9fafb; border: 2px solid #e5e7eb; padding: 1rem; border-radius: 8px; border-left: 4px solid {% if member.role_type == 'lead' %}var(--danger){% elif member.role_type == 'supporting' %}var(--warning){% else %}var(--success){% endif %};">
+            <h4 style="margin: 0 0 0.5rem 0; color: var(--dark);">{{ member.actor_name }}</h4>
+            <p style="margin: 0.25rem 0; color: var(--primary); font-weight: 600;">as {{ member.character_name }}</p>
+            <span style="background: {% if member.role_type == 'lead' %}#fee2e2{% elif member.role_type == 'supporting' %}#fef3c7{% else %}#dcfce7{% endif %}; 
+                         color: {% if member.role_type == 'lead' %}#991b1b{% elif member.role_type == 'supporting' %}#78350f{% else %}#065f46{% endif %}; 
+                         padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; display: inline-block; margin-top: 0.5rem;">
+                {{ member.role_type|upper }}
+            </span>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p style="color: #666; text-align: center; padding: 1rem;">No cast assigned yet.</p>
+    {% endif %}
+</div>
+
+<!-- ADMIN MODALS -->
+{% if current_user.is_admin %}
+
+<!-- Edit Cast Description Modal -->
+<div id="editCastDescriptionModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('editCastDescriptionModal')">&times;</span>
+        <h2>Edit Cast Information</h2>
+        <form id="editCastDescriptionForm">
+            <div class="form-group">
+                <label>Cast Description</label>
+                <textarea id="castDescription" rows="8" placeholder="Information specifically for cast members...">{{ event.cast_description or '' }}</textarea>
+                <small style="color: #666; display: block; margin-top: 0.5rem;">This description is only visible to cast members and admins.</small>
+            </div>
+            <button type="submit" class="btn btn-success" style="width: 100%;">Save Cast Information</button>
+        </form>
+    </div>
+</div>
+
+<!-- Add Cast Schedule Modal -->
+<div id="addCastScheduleModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('addCastScheduleModal')">&times;</span>
+        <h2>Add Cast Schedule</h2>
+        <form id="addCastScheduleForm">
+            <div class="form-group">
+                <label>Schedule Title * (e.g., Call Time, Rehearsal, Costume Fitting)</label>
+                <input type="text" id="castScheduleTitle" placeholder="e.g., Call Time" required>
+            </div>
+            <div class="form-group">
+                <label>Time *</label>
+                <input type="datetime-local" id="castScheduleTime" required>
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="castScheduleDescription" rows="3" placeholder="Additional details..."></textarea>
+            </div>
+            <button type="submit" class="btn btn-success" style="width: 100%;">
+                <i class="fas fa-plus"></i> Add Schedule
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Add Cast Note Modal -->
+<div id="addCastNoteModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('addCastNoteModal')">&times;</span>
+        <h2>Add Cast Note</h2>
+        <form id="addCastNoteForm">
+            <div class="form-group">
+                <label>Note Content *</label>
+                <textarea id="castNoteContent" required placeholder="Add important notes for cast members..." style="min-height: 120px;"></textarea>
+                <small style="color: #666; display: block; margin-top: 0.5rem;">Only visible to cast members and admins.</small>
+            </div>
+            <button type="submit" class="btn btn-success" style="width: 100%;"><i class="fas fa-plus"></i> Add Note</button>
+        </form>
+    </div>
+</div>
+
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+{% if current_user.is_admin %}
+
+// Edit Cast Description
+document.getElementById('editCastDescriptionForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const data = {
+        cast_description: document.getElementById('castDescription').value
+    };
+    
+    fetch('/events/{{ event.id }}/edit-cast', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert('Cast information updated!', 'success');
+            setTimeout(() => location.reload(), 500);
+        }
+    });
+});
+
+// Add Cast Schedule
+document.getElementById('addCastScheduleForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const data = {
+        title: document.getElementById('castScheduleTitle').value,
+        scheduled_time: document.getElementById('castScheduleTime').value,
+        description: document.getElementById('castScheduleDescription').value
+    };
+    
+    fetch('/events/{{ event.id }}/cast-schedule/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert('Schedule added!', 'success');
+            setTimeout(() => location.reload(), 500);
+        }
+    });
+});
+
+// Delete Cast Schedule
+function deleteCastSchedule(id) {
+    if (!confirm('Delete this schedule item?')) return;
+    
+    fetch(`/events/cast-schedule/${id}/delete`, {method: 'DELETE'})
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                showAlert('Schedule deleted!', 'success');
+                location.reload();
+            }
+        });
+}
+
+// Add Cast Note
+document.getElementById('addCastNoteForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const data = {
+        content: document.getElementById('castNoteContent').value
+    };
+    
+    fetch('/events/{{ event.id }}/cast-notes/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert('Note added!', 'success');
+            setTimeout(() => location.reload(), 500);
+        }
+    });
+});
+
+// Edit Cast Note Toggle
+function editCastNoteToggle(noteId) {
+    const content = document.getElementById(`cast-note-content-${noteId}`);
+    const editDiv = document.getElementById(`cast-note-edit-${noteId}`);
+    const editBtn = document.getElementById(`cast-edit-btn-${noteId}`);
+    const saveBtn = document.getElementById(`cast-save-btn-${noteId}`);
+    
+    if (editDiv.style.display === 'none') {
+        content.style.display = 'none';
+        editDiv.style.display = 'block';
+        editBtn.style.display = 'none';
+        saveBtn.style.display = 'inline-block';
+    } else {
+        content.style.display = 'block';
+        editDiv.style.display = 'none';
+        editBtn.style.display = 'inline-block';
+        saveBtn.style.display = 'none';
+    }
+}
+
+// Save Cast Note Edit
+function saveCastNoteEdit(noteId) {
+    const newContent = document.getElementById(`cast-note-textarea-${noteId}`).value;
+    const data = { content: newContent };
+    
+    fetch(`/events/cast-notes/${noteId}/edit`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert('Note updated!', 'success');
+            setTimeout(() => location.reload(), 500);
+        }
+    });
+}
+
+// Delete Cast Note
+function deleteCastNote(noteId) {
+    if (!confirm('Delete this note?')) return;
+    
+    fetch(`/events/cast-notes/${noteId}/delete`, {method: 'DELETE'})
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                showAlert('Note deleted!', 'success');
+                location.reload();
+            }
+        });
+}
+
+{% endif %}
+</script>
+{% endblock %}

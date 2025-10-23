@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Overview - ShowWise{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title"><i class="fas fa-chart-line"></i> Admin Overview</h1>
+    <p class="page-subtitle">Comprehensive dashboard for teachers and administrators</p>
+</div>
+
+<!-- Quick Actions -->
+<div style="display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap;">
+    <a href="{{ url_for('export_events_csv') }}" class="btn btn-success">
+        <i class="fas fa-download"></i> Export Events & Crew
+    </a>
+    <a href="{{ url_for('calendar') }}" class="btn btn-primary">
+        <i class="fas fa-calendar-plus"></i> Add Event
+    </a>
+    <a href="{{ url_for('admin_panel') }}" class="btn btn-primary">
+        <i class="fas fa-cog"></i> Manage System
+    </a>
+</div>
+
+<!-- Stats Grid -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+    <div class="card" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; border: none;">
+        <div style="display: flex; justify-content: space-between; align-items: start;">
+            <div>
+                <p style="opacity: 0.9; font-size: 0.9rem; margin-bottom: 0.5rem;">Total Users</p>
+                <h2 style="font-size: 2.5rem; margin: 0; color: white;">{{ total_users }}</h2>
+                <p style="opacity: 0.8; font-size: 0.85rem; margin-top: 0.5rem;">
+                    <i class="fas fa-plus"></i> {{ recent_users }} this week
+                </p>
+            </div>
+            <i class="fas fa-users" style="font-size: 3rem; opacity: 0.3;"></i>
+        </div>
+    </div>
+    
+    <div class="card" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none;">
+        <div style="display: flex; justify-content: space-between; align-items: start;">
+            <div>
+                <p style="opacity: 0.9; font-size: 0.9rem; margin-bottom: 0.5rem;">Equipment Items</p>
+                <h2 style="font-size: 2.5rem; margin: 0; color: white;">{{ total_equipment }}</h2>
+                <p style="opacity: 0.8; font-size: 0.85rem; margin-top: 0.5rem;">
+                    <i class="fas fa-plus"></i> {{ recent_equipment }} this week
+                </p>
+            </div>
+            <i class="fas fa-box" style="font-size: 3rem; opacity: 0.3;"></i>
+        </div>
+    </div>
+    
+    <div class="card" style="background: linear-gradient(135deg, #ec4899 0%, #db2777 100%); color: white; border: none;">
+        <div style="display: flex; justify-content: space-between; align-items: start;">
+            <div>
+                <p style="opacity: 0.9; font-size: 0.9rem; margin-bottom: 0.5rem;">Total Events</p>
+                <h2 style="font-size: 2.5rem; margin: 0; color: white;">{{ total_events }}</h2>
+                <p style="opacity: 0.8; font-size: 0.85rem; margin-top: 0.5rem;">
+                    <i class="fas fa-plus"></i> {{ recent_events }} this week
+                </p>
+            </div>
+            <i class="fas fa-calendar" style="font-size: 3rem; opacity: 0.3;"></i>
+        </div>
+    </div>
+    
+    <div class="card" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; border: none;">
+        <div style="display: flex; justify-content: space-between; align-items: start;">
+            <div>
+                <p style="opacity: 0.9; font-size: 0.9rem; margin-bottom: 0.5rem;">Active Crew</p>
+                <h2 style="font-size: 2.5rem; margin: 0; color: white;">{{ active_crew }}</h2>
+                <p style="opacity: 0.8; font-size: 0.85rem; margin-top: 0.5rem;">
+                    <i class="fas fa-arrow-up"></i> In upcoming events
+                </p>
+            </div>
+            <i class="fas fa-user-friends" style="font-size: 3rem; opacity: 0.3;"></i>
+        </div>
+    </div>
+</div>
+
+<!-- Upcoming Events -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title"><i class="fas fa-calendar-alt"></i> Upcoming Events (Next 10)</h3>
+        <a href="{{ url_for('calendar') }}" class="btn btn-primary" style="font-size: 0.85rem; padding: 0.5rem 1rem;">View All</a>
+    </div>
+    
+    {% if upcoming_events %}
+    <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="background: #f9fafb; border-bottom: 2px solid var(--border);">
+                    <th style="padding: 0.75rem; text-align: left; font-weight: 600;">Event</th>
+                    <th style="padding: 0.75rem; text-align: left; font-weight: 600;">Date & Time</th>
+                    <th style="padding: 0.75rem; text-align: left; font-weight: 600;">Location</th>
+                    <th style="padding: 0.75rem; text-align: center; font-weight: 600;">Crew</th>
+                    <th style="padding: 0.75rem; text-align: center; font-weight: 600;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for event in upcoming_events %}
+                <tr style="border-bottom: 1px solid var(--border);">
+                    <td style="padding: 0.75rem;">
+                        <strong style="color: var(--primary);">{{ event.title }}</strong>
+                    </td>
+                    <td style="padding: 0.75rem; white-space: nowrap;">
+                        {{ event.event_date.strftime('%b %d, %Y at %I:%M %p') }}
+                    </td>
+                    <td style="padding: 0.75rem;">{{ event.location or 'TBD' }}</td>
+                    <td style="padding: 0.75rem; text-align: center;">
+                        <span style="background: #e0e7ff; color: var(--primary); padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600;">
+                            {{ event.crew_assignments|length }} crew
+                        </span>
+                    </td>
+                    <td style="padding: 0.75rem; text-align: center;">
+                        <a href="{{ url_for('event_detail', id=event.id) }}" class="btn btn-primary" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">
+                            <i class="fas fa-eye"></i> View
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p style="text-align: center; padding: 2rem; color: #6b7280;">No upcoming events scheduled</p>
+    {% endif %}
+</div>
+
+<!-- Equipment Usage -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title"><i class="fas fa-chart-bar"></i> Equipment Usage by Category</h3>
+    </div>
+    
+    {% if equipment_usage %}
+    <div style="display: grid; gap: 1rem;">
+        {% for category, usage in equipment_usage %}
+        <div style="background: #f9fafb; padding: 1rem; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <strong style="color: var(--dark);">{{ category or 'Uncategorized' }}</strong>
+                <p style="color: #6b7280; font-size: 0.85rem; margin-top: 0.25rem;">Used {{ usage }} times</p>
+            </div>
+            <div style="width: 50px; height: 50px; border-radius: 50%; background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 1.1rem;">
+                {{ usage }}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p style="text-align: center; padding: 2rem; color: #6b7280;">No equipment usage data yet</p>
+    {% endif %}
+</div>
+
+<!-- Quick Stats -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; margin-top: 2rem;">
+    <div class="card">
+        <h4 style="margin-bottom: 1rem; color: var(--dark);"><i class="fas fa-clock"></i> Recent Activity</h4>
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: #f9fafb; border-radius: 6px;">
+                <span><i class="fas fa-user-plus" style="color: var(--success);"></i> New Users</span>
+                <strong style="color: var(--success);">{{ recent_users }}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: #f9fafb; border-radius: 6px;">
+                <span><i class="fas fa-box" style="color: var(--primary);"></i> New Equipment</span>
+                <strong style="color: var(--primary);">{{ recent_equipment }}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: #f9fafb; border-radius: 6px;">
+                <span><i class="fas fa-calendar-plus" style="color: var(--secondary);"></i> New Events</span>
+                <strong style="color: var(--secondary);">{{ recent_events }}</strong>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <h4 style="margin-bottom: 1rem; color: var(--dark);"><i class="fas fa-info-circle"></i> System Status</h4>
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <div style="padding: 0.75rem; background: #ecfdf5; border-radius: 6px; border-left: 3px solid var(--success);">
+                <strong style="color: var(--success);">✓ System Online</strong>
+                <p style="font-size: 0.85rem; color: #065f46; margin-top: 0.25rem;">All features operational</p>
+            </div>
+            <div style="padding: 0.75rem; background: #eff6ff; border-radius: 6px; border-left: 3px solid var(--primary);">
+                <strong style="color: var(--primary);">Database Healthy</strong>
+                <p style="font-size: 0.85rem; color: #1e40af; margin-top: 0.25rem;">Last backup: Today</p>
+            </div>
+            <div style="padding: 0.75rem; background: #fef3c7; border-radius: 6px; border-left: 3px solid var(--warning);">
+                <strong style="color: var(--warning);">{{ upcoming_events|length }} Upcoming</strong>
+                <p style="font-size: 0.85rem; color: #78350f; margin-top: 0.25rem;">Events need attention</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Auto-refresh stats every 30 seconds
+setInterval(() => {
+    location.reload();
+}, 30000);
+</script>
+{% endblock %}

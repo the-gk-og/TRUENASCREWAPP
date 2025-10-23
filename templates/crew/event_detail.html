@@ -1,0 +1,538 @@
+{% extends "base.html" %}
+
+{% block title %}{{ event.title }} - ShowWise{% endblock %}
+
+{% block content %}
+<div class="card">
+    <a href="{{ url_for('calendar') }}" style="color: #667eea; text-decoration: none; margin-bottom: 1rem; display: inline-block;">
+        ← Back to Calendar
+    </a>
+    
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem;">
+        <h1 style="margin: 0;">{{ event.title }}</h1>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            {% if current_user.is_admin %}
+            <button onclick="showModal('editEventModal')" class="btn btn-primary" style="padding: 0.5rem 1rem; white-space: nowrap;">
+                <i class="fas fa-edit"></i> Edit
+            </button>
+            {% endif %}
+            <button onclick="exportPDF()" class="btn btn-success" style="padding: 0.5rem 1rem; white-space: nowrap;">
+                <i class="fas fa-file-pdf"></i> Export PDF
+            </button>
+        </div>
+    </div>
+    
+    <div style="background: linear-gradient(135deg, #e8f4f8 0%, #d1e7f4 100%); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid var(--primary);">
+        <p style="color: #666; margin: 0.5rem 0; word-break: break-word;">
+            📅 <strong>Start:</strong> {{ event.event_date.strftime('%B %d, %Y at %I:%M %p') }}
+        </p>
+        {% if event.event_end_date %}
+        <p style="color: #666; margin: 0.5rem 0; word-break: break-word;">
+            🏁 <strong>End:</strong> {{ event.event_end_date.strftime('%B %d, %Y at %I:%M %p') }}
+        </p>
+        <p style="color: #666; margin: 0.5rem 0;">
+            ⏱️ <strong>Duration:</strong> 
+            <span style="background: #e0e7ff; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.9rem;">
+                {{ ((event.event_end_date - event.event_date).total_seconds() / 3600)|round(1) }} hours
+            </span>
+        </p>
+        {% endif %}
+        {% if event.location %}
+        <p style="color: #666; margin: 0.5rem 0; word-break: break-word;">
+            📍 <strong>Location:</strong> {{ event.location }}
+        </p>
+        {% endif %}
+    </div>
+    
+    {% if event.description %}
+    <div style="background: #f8f9fa; padding: 1rem; border-radius: 6px; margin-top: 1rem; word-break: break-word;">
+        <p style="margin: 0;">{{ event.description }}</p>
+    </div>
+    {% endif %}
+</div>
+
+
+
+<!-- EVENT NOTES SECTION -->
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+        <h3>📝 Event Notes</h3>
+        <button onclick="showModal('addNoteModal')" class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
+            + Add Note
+        </button>
+    </div>
+    
+    <div id="notesList">
+        {% if event.notes %}
+            {% for note in event.notes|sort(attribute='created_at', reverse=True) %}
+            <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--warning); margin-bottom: 0.75rem;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 0;">
+                        <p style="margin: 0.25rem 0; color: #555; font-size: 0.85rem;">
+                            <strong>{{ note.created_by }}</strong> • {{ note.created_at.strftime('%b %d, %Y at %I:%M %p') }}
+                        </p>
+                        <p id="note-content-{{ note.id }}" style="margin: 0.5rem 0; color: #333; word-break: break-word;">{{ note.content }}</p>
+                        <div id="note-edit-{{ note.id }}" style="display: none; margin: 0.5rem 0;">
+                            <textarea id="note-textarea-{{ note.id }}" style="width: 100%; padding: 0.5rem; border: 2px solid var(--border); border-radius: 6px; min-height: 80px; font-family: inherit;">{{ note.content }}</textarea>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
+                        <button onclick="editNoteToggle({{ note.id }})" id="edit-btn-{{ note.id }}" class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button onclick="saveNoteEdit({{ note.id }})" id="save-btn-{{ note.id }}" style="display: none; padding: 0.4rem 0.8rem; font-size: 0.8rem;" class="btn btn-success">
+                            <i class="fas fa-save"></i>
+                        </button>
+                        <button onclick="deleteNote({{ note.id }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+        <p style="color: #666; text-align: center; padding: 1rem;">No notes yet. Add one to get started!</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- EVENT SCHEDULE SECTION -->
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+        <h3>📋 Event Schedule</h3>
+        <button onclick="showModal('addScheduleModal')" class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
+            + Add Schedule
+        </button>
+    </div>
+    
+    {% if schedules %}
+    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+        {% for schedule in schedules|sort(attribute='scheduled_time') %}
+        <div style="background: linear-gradient(135deg, #e8f4f8 0%, #d1e7f4 100%); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--primary);">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 200px;">
+                    <h4 style="margin: 0 0 0.5rem 0; color: var(--primary);">{{ schedule.title }}</h4>
+                    <p style="margin: 0.25rem 0; color: #555; font-size: 0.9rem;">
+                        <i class="fas fa-clock"></i> {{ schedule.scheduled_time.strftime('%I:%M %p') }}
+                    </p>
+                    {% if schedule.description %}
+                    <p style="margin: 0.25rem 0; color: #555; font-size: 0.9rem;">
+                        {{ schedule.description }}
+                    </p>
+                    {% endif %}
+                </div>
+                <button onclick="deleteSchedule({{ schedule.id }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; white-space: nowrap;">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p style="color: #666; text-align: center; padding: 1rem;">No schedule items yet.</p>
+    {% endif %}
+</div>
+
+<!-- CREW ASSIGNMENTS -->
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+        <h3>👥 Crew ({{ event.crew_assignments|length }})</h3>
+        <button onclick="showModal('addCrewModal')" class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
+            + Add Crew
+        </button>
+    </div>
+    
+    {% if event.crew_assignments %}
+    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+        {% for assignment in event.crew_assignments %}
+        <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; border-left: 4px solid var(--primary);">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 200px;">
+                    <h4 style="margin: 0 0 0.25rem 0;">{{ assignment.crew_member }}</h4>
+                    <p style="margin: 0.25rem 0; color: #666; font-size: 0.9rem;">{{ assignment.role or 'Crew Member' }}</p>
+                    {% set user = get_user_by_username(assignment.crew_member) %}
+                    {% if user and user.email %}
+                    <p style="margin: 0.25rem 0; color: #999; font-size: 0.8rem;"><i class="fas fa-envelope"></i> {{ user.email }}</p>
+                    <span style="background: #d1fae5; color: #065f46; padding: 0.25rem 0.5rem; border-radius: 20px; font-size: 0.75rem; display: inline-block; margin-top: 0.25rem;">
+                        <i class="fas fa-check-circle"></i> Notified
+                    </span>
+                    {% else %}
+                    <span style="background: #fee2e2; color: #991b1b; padding: 0.25rem 0.5rem; border-radius: 20px; font-size: 0.75rem; display: inline-block; margin-top: 0.25rem;">
+                        <i class="fas fa-exclamation-circle"></i> No Email
+                    </span>
+                    {% endif %}
+                </div>
+                <button onclick="removeCrew({{ assignment.id }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; white-space: nowrap;">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p style="color: #666; text-align: center; padding: 1rem;">No crew assigned yet.</p>
+    {% endif %}
+</div>
+
+<!-- QUICK LINKS -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Quick Links</h3>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem;">
+        <a href="{{ url_for('picklist', event_id=event.id) }}" class="btn btn-primary">
+            📋 Pick List ({{ event.pick_list_items|length }})
+        </a>
+        <a href="{{ url_for('stageplans', event_id=event.id) }}" class="btn btn-primary">
+            🎨 Stage Plans ({{ event.stage_plans|length }})
+        </a>
+    </div>
+</div>
+
+<!-- ADD NOTE MODAL -->
+<div id="addNoteModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('addNoteModal')">&times;</span>
+        <h2>Add Event Note</h2>
+        <form id="addNoteForm">
+            <div class="form-group">
+                <label>Note Content *</label>
+                <textarea id="noteContent" required placeholder="Add important notes about this event..." style="min-height: 120px;"></textarea>
+            </div>
+            <button type="submit" class="btn btn-success" style="width: 100%;"><i class="fas fa-plus"></i> Add Note</button>
+        </form>
+    </div>
+</div>
+
+<!-- EDIT EVENT MODAL -->
+<div id="editEventModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('editEventModal')">&times;</span>
+        <h2>Edit Event</h2>
+        <form id="editEventForm">
+            <div class="form-group">
+                <label>Event Title *</label>
+                <input type="text" id="editTitle" value="{{ event.title }}" required>
+            </div>
+            <div class="form-group">
+                <label>Start Date & Time *</label>
+                <input type="datetime-local" id="editDate" value="{{ event.event_date.strftime('%Y-%m-%dT%H:%M') }}" required>
+            </div>
+            <div class="form-group">
+                <label>End Date & Time</label>
+                <input type="datetime-local" id="editEndDate" 
+                       value="{% if event.event_end_date %}{{ event.event_end_date.strftime('%Y-%m-%dT%H:%M') }}{% endif %}">
+                <small style="color: #666; display: block; margin-top: 0.25rem;">Leave blank to use 3-hour default</small>
+            </div>
+            <div class="form-group">
+                <label>Location</label>
+                <input type="text" id="editLocation" value="{{ event.location or '' }}" placeholder="e.g., Main Auditorium">
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="editDescription" placeholder="Event details...">{{ event.description or '' }}</textarea>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <button type="submit" class="btn btn-success">Save Changes</button>
+                <button type="button" onclick="deleteEventConfirm()" class="btn btn-danger">Delete Event</button>
+            </div>
+            <button type="button" onclick="hideModal('editEventModal')" class="btn btn-primary" style="width: 100%;">Cancel</button>
+        </form>
+    </div>
+</div>
+
+
+<!-- ADD SCHEDULE MODAL -->
+<div id="addScheduleModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('addScheduleModal')">&times;</span>
+        <h2>Add Schedule Item</h2>
+        <form id="addScheduleForm">
+            <div class="form-group">
+                <label>Schedule Title * (e.g., Sound Check, Rehearsal, Performance)</label>
+                <input type="text" id="scheduleTitle" placeholder="e.g., Sound Check" required>
+            </div>
+            <div class="form-group">
+                <label>Time * (Date and Time)</label>
+                <input type="datetime-local" id="scheduleTime" required>
+            </div>
+            <div class="form-group">
+                <label>Description (Optional)</label>
+                <textarea id="scheduleDescription" placeholder="Optional notes..." style="min-height: 80px;"></textarea>
+            </div>
+            <div style="display: flex; gap: 1rem;">
+                <button type="submit" class="btn btn-success" style="flex: 1;">
+                    <i class="fas fa-plus"></i> Add Schedule
+                </button>
+                <button type="button" onclick="hideModal('addScheduleModal')" class="btn btn-primary" style="flex: 1;">
+                    Cancel
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ADD CREW MODAL -->
+<div id="addCrewModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('addCrewModal')">&times;</span>
+        <h2>Add Crew Member</h2>
+        <form id="addCrewForm">
+            <div class="form-group">
+                <label>Crew Member *</label>
+                <select id="crewMember" required>
+                    <option value="">-- Select member --</option>
+                    {% for user in all_users %}
+                    <option value="{{ user.username }}">
+                        {{ user.username }}{% if user.email %} ({{ user.email }}){% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Role / Position</label>
+                <input type="text" id="crewRole" placeholder="e.g., Stage Manager">
+            </div>
+            <button type="submit" class="btn btn-success" style="width: 100%;">Add to Crew</button>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Export to PDF
+function exportPDF() {
+    window.location.href = '/events/{{ event.id }}/export-pdf';
+}
+
+// Add Note
+document.getElementById('addNoteForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const data = {
+        content: document.getElementById('noteContent').value
+    };
+    fetch('/events/{{ event.id }}/notes/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert('Note added!', 'success');
+            setTimeout(() => location.reload(), 500);
+        }
+    });
+});
+
+// Edit Note Toggle
+function editNoteToggle(noteId) {
+    const content = document.getElementById(`note-content-${noteId}`);
+    const editDiv = document.getElementById(`note-edit-${noteId}`);
+    const editBtn = document.getElementById(`edit-btn-${noteId}`);
+    const saveBtn = document.getElementById(`save-btn-${noteId}`);
+    
+    if (editDiv.style.display === 'none') {
+        content.style.display = 'none';
+        editDiv.style.display = 'block';
+        editBtn.style.display = 'none';
+        saveBtn.style.display = 'inline-block';
+    } else {
+        content.style.display = 'block';
+        editDiv.style.display = 'none';
+        editBtn.style.display = 'inline-block';
+        saveBtn.style.display = 'none';
+    }
+}
+
+// Save Note Edit
+function saveNoteEdit(noteId) {
+    const newContent = document.getElementById(`note-textarea-${noteId}`).value;
+    const data = { content: newContent };
+    
+    fetch(`/events/notes/${noteId}/edit`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert('Note updated!', 'success');
+            setTimeout(() => location.reload(), 500);
+        }
+    });
+}
+
+// Delete Note
+function deleteNote(noteId) {
+    if (!confirm('Delete this note?')) return;
+    fetch(`/events/notes/${noteId}/delete`, {method: 'DELETE'})
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                showAlert('Note deleted!', 'success');
+                location.reload();
+            }
+        });
+}
+
+// Edit event
+document.getElementById('editEventForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const data = {
+        title: document.getElementById('editTitle').value,
+        event_date: document.getElementById('editDate').value,
+        location: document.getElementById('editLocation').value,
+        description: document.getElementById('editDescription').value
+    };
+    fetch('/events/{{ event.id }}/edit', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    }).then(r => r.json()).then(result => {
+        if (result.success) {
+            showAlert('Event updated!', 'success');
+            setTimeout(() => location.reload(), 1000);
+        }
+    });
+});
+
+function deleteEventConfirm() {
+    if (!confirm('Delete this event? This will also delete all related items.')) return;
+    fetch('/events/{{ event.id }}', {method: 'DELETE'})
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                showAlert('Event deleted!', 'success');
+                setTimeout(() => window.location.href = '/calendar', 1000);
+            }
+        });
+}
+
+// Schedule functions
+
+document.getElementById('addScheduleForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const title = document.getElementById('scheduleTitle').value.trim();
+    const scheduled_time = document.getElementById('scheduleTime').value;
+    const description = document.getElementById('scheduleDescription').value.trim();
+    
+    // Validation
+    if (!title || !scheduled_time) {
+        showAlert('Title and time are required', 'error');
+        return;
+    }
+    
+    const data = {
+        title: title,
+        scheduled_time: scheduled_time,
+        description: description
+    };
+    
+    console.log('Sending schedule data:', data);
+    
+    fetch('/events/{{ event.id }}/schedule/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => {
+        console.log('Response status:', r.status);
+        return r.json();
+    })
+    .then(result => {
+        console.log('Response data:', result);
+        if (result.success) {
+            showAlert('Schedule added!', 'success');
+            document.getElementById('addScheduleForm').reset();
+            hideModal('addScheduleModal');
+            setTimeout(() => location.reload(), 500);
+        } else {
+            showAlert(result.error || 'Error adding schedule', 'error');
+        }
+    })
+    .catch(err => {
+        console.error('Fetch error:', err);
+        showAlert('Error: ' + err.message, 'error');
+    });
+});
+
+function deleteSchedule(id) {
+    if (!confirm('Delete this schedule item?')) return;
+    
+    fetch(`/events/schedule/${id}/delete`, {method: 'DELETE'})
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                showAlert('Schedule deleted!', 'success');
+                location.reload();
+            } else {
+                showAlert(result.error || 'Error deleting schedule', 'error');
+            }
+        })
+        .catch(err => showAlert('Error: ' + err.message, 'error'));
+}
+
+// Crew functions
+document.getElementById('addCrewForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const data = {
+        event_id: {{ event.id }},
+        crew_member: document.getElementById('crewMember').value,
+        role: document.getElementById('crewRole').value
+    };
+    fetch('/crew/assign', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    }).then(r => r.json()).then(result => {
+        if (result.success) {
+            showAlert('Crew member added!', 'success');
+            setTimeout(() => location.reload(), 500);
+        }
+    });
+});
+
+function removeCrew(id) {
+    if (!confirm('Remove this crew member?')) return;
+    fetch(`/crew/remove/${id}`, {method: 'DELETE'})
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                showAlert('Crew member removed!', 'success');
+                location.reload();
+            }
+        });
+}
+
+// Edit event with end date
+document.getElementById('editEventForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const data = {
+        title: document.getElementById('editTitle').value,
+        event_date: document.getElementById('editDate').value,
+        event_end_date: document.getElementById('editEndDate').value || null,
+        location: document.getElementById('editLocation').value,
+        description: document.getElementById('editDescription').value
+    };
+    
+    fetch('/events/{{ event.id }}/edit', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    }).then(r => r.json()).then(result => {
+        if (result.success) {
+            showAlert('Event updated!', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showAlert('Error updating event', 'error');
+        }
+    });
+});
+
+</script>
+{% endblock %}
