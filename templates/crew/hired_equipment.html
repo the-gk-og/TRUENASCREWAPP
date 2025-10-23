@@ -10,16 +10,16 @@
 
 <div style="display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap; align-items: center;">
     {% if current_user.is_admin %}
-    <button onclick="showModal('addHiredModal')" class="btn btn-success">
+    <button id="addHiredBtn" class="btn btn-success">
         <i class="fas fa-plus"></i> Add Hired Equipment
     </button>
-    <button onclick="showModal('importCsvModal')" class="btn btn-primary">
+    <button id="importCsvBtn" class="btn btn-primary">
         <i class="fas fa-file-csv"></i> Import CSV
     </button>
-    <button onclick="toggleBulkMode()" class="btn btn-primary" id="bulkModeBtn">
-        <i class="fas fa-check-square"></i> <!--Bulk Delete Mode-->broken do not click
+    <button id="bulkModeBtn" class="btn btn-primary">
+        <i class="fas fa-check-square"></i> Bulk Delete Mode
     </button>
-    <button onclick="selectAll()" class="btn btn-primary" id="selectAllBtn" style="display: none;">
+    <button id="selectAllBtn" class="btn btn-primary" style="display: none;">
         <i class="fas fa-check-double"></i> Select All
     </button>
     <span id="selectedCount" style="display: none; color: var(--primary); font-weight: 600; padding: 0.5rem 1rem; background: #f0f4ff; border-radius: 6px;">
@@ -44,6 +44,7 @@
         <p style="opacity: 0.9; font-size: 0.9rem; margin-bottom: 0.5rem;">Due Soon (7 days)</p>
         <h2 style="font-size: 2rem; margin: 0; color: white;">
             {{ active_hired|selectattr('return_date', 'lt', upcoming_threshold)|list|length }}
+
         </h2>
     </div>
 </div>
@@ -169,6 +170,7 @@
 </div>
 {% endif %}
 
+<!-- Modals remain the same -->
 <!-- Add/Edit Hired Equipment Modal -->
 <div id="addHiredModal" class="modal">
     <div class="modal-content">
@@ -276,16 +278,76 @@
 {% endblock %}
 
 {% block scripts %}
-<!-- Replace the ENTIRE JavaScript section at the bottom of templates/hired_equipment.html with this -->
-
 <script>
 let hiredData = {{ hired_json|tojson }};
 let bulkMode = false;
 let selectedIds = new Set();
 
-console.log('Script loaded. Hired data count:', hiredData.length);
+// Button click handlers - attach via JavaScript only
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('✅ DOM loaded, attaching handlers');
+    
+    // Add Hired button
+    document.getElementById('addHiredBtn')?.addEventListener('click', () => showModal('addHiredModal'));
+    
+    // Import CSV button  
+    document.getElementById('importCsvBtn')?.addEventListener('click', () => showModal('importCsvModal'));
+    
+    // Select All button
+    document.getElementById('selectAllBtn')?.addEventListener('click', selectAll);
+    
+    // Bulk Mode button - THE KEY FIX
+    const bulkBtn = document.getElementById('bulkModeBtn');
+    if (bulkBtn) {
+        bulkBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            console.log('Bulk button clicked, bulkMode:', bulkMode, 'selectedIds:', Array.from(selectedIds));
+            
+            if (!bulkMode) {
+                toggleBulkMode();
+                return;
+            }
+            
+            if (selectedIds.size === 0) {
+                showAlert('Please select at least one item', 'error');
+                return;
+            }
+            
+            // Execute delete
+            const idsArray = Array.from(selectedIds);
+            if (!confirm(`Delete ${idsArray.length} item(s)?`)) return;
+            
+            this.disabled = true;
+            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
+            
+            fetch('/hired-equipment/bulk-delete', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ids: idsArray})
+            })
+            .then(r => r.json())
+            .then(result => {
+                if (result.success) {
+                    showAlert(`Deleted ${result.deleted} items!`, 'success');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    throw new Error(result.error);
+                }
+            })
+            .catch(err => {
+                showAlert('Error: ' + err.message, 'error');
+                this.disabled = false;
+                updateSelectedCount();
+            });
+        });
+    }
+    
+    console.log('✅ All handlers attached');
+});
 
-// Add/Update hired equipment
+// Form submissions
 document.getElementById('addHiredForm').addEventListener('submit', function(e) {
     e.preventDefault();
     
@@ -312,103 +374,12 @@ document.getElementById('addHiredForm').addEventListener('submit', function(e) {
     .then(r => r.json())
     .then(result => {
         if (result.success) {
-            showAlert(id ? 'Hired equipment updated!' : 'Hired equipment added!', 'success');
+            showAlert(id ? 'Updated!' : 'Added!', 'success');
             setTimeout(() => location.reload(), 500);
         }
     });
 });
 
-// Edit hired
-function editHired(id) {
-    const hired = hiredData.find(h => h.id === id);
-    if (!hired) return;
-    
-    document.getElementById('hiredModalTitle').innerHTML = '<i class="fas fa-edit"></i> Edit Hired Equipment';
-    document.getElementById('hiredId').value = hired.id;
-    document.getElementById('hiredName').value = hired.name;
-    document.getElementById('hiredSupplier').value = hired.supplier || '';
-    document.getElementById('hiredDate').value = hired.hire_date.split('T')[0];
-    document.getElementById('returnDate').value = hired.return_date.split('T')[0];
-    document.getElementById('hiredCost').value = hired.cost || '';
-    document.getElementById('hiredQuantity').value = hired.quantity;
-    document.getElementById('hiredEventId').value = hired.event_id || '';
-    document.getElementById('hiredNotes').value = hired.notes || '';
-    
-    showModal('addHiredModal');
-}
-
-// Delete hired
-function deleteHired(id) {
-    if (!confirm('Delete this hired equipment record?')) return;
-    
-    fetch(`/hired-equipment/${id}`, {method: 'DELETE'})
-        .then(r => r.json())
-        .then(result => {
-            if (result.success) {
-                showAlert('Hired equipment deleted!', 'success');
-                location.reload();
-            }
-        });
-}
-
-// Mark as returned
-function markReturned(id) {
-    if (!confirm('Mark this equipment as returned?')) return;
-    
-    fetch(`/hired-equipment/${id}/return`, {method: 'POST'})
-        .then(r => r.json())
-        .then(result => {
-            if (result.success) {
-                showAlert('Marked as returned!', 'success');
-                location.reload();
-            }
-        });
-}
-
-// Show checklist modal
-function showChecklistModal(id) {
-    const hired = hiredData.find(h => h.id === id);
-    if (!hired) return;
-    
-    document.getElementById('checklistEquipmentName').textContent = hired.name;
-    
-    // Fetch checklist items
-    fetch(`/hired-equipment/${id}/checklist`)
-        .then(r => r.json())
-        .then(items => {
-            const container = document.getElementById('checklistItems');
-            container.innerHTML = '';
-            
-            items.forEach(item => {
-                const div = document.createElement('div');
-                div.style.cssText = 'background: #f9fafb; padding: 0.75rem; border-radius: 6px; margin-bottom: 0.5rem; display: flex; align-items: start; gap: 0.75rem;';
-                div.innerHTML = `
-                    <input type="checkbox" ${item.is_checked ? 'checked' : ''} 
-                           onchange="toggleChecklistItem(${id}, ${item.id})"
-                           style="width: 20px; height: 20px; cursor: pointer; flex-shrink: 0; margin-top: 0.25rem;">
-                    <div style="flex: 1;">
-                        <strong style="${item.is_checked ? 'text-decoration: line-through; color: #9ca3af;' : ''}">${item.item_name}</strong>
-                        ${item.notes ? `<p style="font-size: 0.85rem; color: #6b7280; margin: 0.25rem 0 0 0;">${item.notes}</p>` : ''}
-                    </div>
-                `;
-                container.appendChild(div);
-            });
-        });
-    
-    showModal('checklistModal');
-}
-
-function toggleChecklistItem(hiredId, itemId) {
-    fetch(`/hired-equipment/${hiredId}/checklist/toggle/${itemId}`, {method: 'POST'})
-        .then(r => r.json())
-        .then(result => {
-            if (result.success) {
-                showChecklistModal(hiredId);
-            }
-        });
-}
-
-// Import CSV
 document.getElementById('importCsvForm').addEventListener('submit', function(e) {
     e.preventDefault();
     
@@ -422,7 +393,7 @@ document.getElementById('importCsvForm').addEventListener('submit', function(e) 
     .then(r => r.json())
     .then(result => {
         if (result.success) {
-            showAlert(`Imported ${result.imported} hired equipment items!`, 'success');
+            showAlert(`Imported ${result.imported} items!`, 'success');
             setTimeout(() => location.reload(), 1000);
         } else {
             showAlert(result.error, 'error');
@@ -430,33 +401,23 @@ document.getElementById('importCsvForm').addEventListener('submit', function(e) 
     });
 });
 
-// BULK DELETE FUNCTIONS - COMPLETELY REWRITTEN
-
+// Bulk mode functions
 function toggleBulkMode() {
-    console.log('toggleBulkMode called, current bulkMode:', bulkMode);
     bulkMode = !bulkMode;
-    
-    const bulkCheckboxes = document.querySelectorAll('.bulk-checkbox');
+    const checkboxes = document.querySelectorAll('.bulk-checkbox');
     const btn = document.getElementById('bulkModeBtn');
     const selectAllBtn = document.getElementById('selectAllBtn');
     const selectedCount = document.getElementById('selectedCount');
     
-    console.log('Found bulk checkboxes:', bulkCheckboxes.length);
-    console.log('New bulkMode:', bulkMode);
-    
     if (bulkMode) {
-        // Entering bulk mode
-        bulkCheckboxes.forEach(cb => cb.style.display = 'block');
+        checkboxes.forEach(cb => cb.style.display = 'block');
         btn.innerHTML = '<i class="fas fa-trash"></i> Delete Selected';
         btn.classList.remove('btn-primary');
         btn.classList.add('btn-danger');
         selectAllBtn.style.display = 'inline-block';
         selectedCount.style.display = 'inline-block';
-        updateSelectedCount();
-        console.log('✅ Bulk mode enabled');
     } else {
-        // Exiting bulk mode
-        bulkCheckboxes.forEach(cb => {
+        checkboxes.forEach(cb => {
             cb.style.display = 'none';
             cb.checked = false;
         });
@@ -466,20 +427,14 @@ function toggleBulkMode() {
         btn.classList.add('btn-primary');
         selectAllBtn.style.display = 'none';
         selectedCount.style.display = 'none';
-        
-        // Reset card backgrounds
-        document.querySelectorAll('.hired-card').forEach(card => {
-            card.style.background = 'white';
-        });
-        console.log('✅ Bulk mode disabled');
+        document.querySelectorAll('.hired-card').forEach(card => card.style.background = 'white');
     }
+    updateSelectedCount();
 }
 
 function selectAll() {
     const checkboxes = document.querySelectorAll('.bulk-checkbox');
     const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-    
-    console.log('selectAll called, allChecked:', allChecked);
     
     checkboxes.forEach(cb => {
         cb.checked = !allChecked;
@@ -496,32 +451,20 @@ function selectAll() {
     });
     
     updateSelectedCount();
-    console.log('Selected IDs after selectAll:', Array.from(selectedIds));
-    
-    const btn = document.getElementById('selectAllBtn');
-    btn.innerHTML = allChecked ? '<i class="fas fa-check-double"></i> Select All' : '<i class="fas fa-times"></i> Deselect All';
 }
 
 function updateSelectedCount() {
-    const countText = document.getElementById('countText');
-    const count = selectedIds.size;
-    countText.textContent = `${count} selected`;
-    
+    document.getElementById('countText').textContent = `${selectedIds.size} selected`;
     const btn = document.getElementById('bulkModeBtn');
-    if (count > 0 && bulkMode) {
-        btn.innerHTML = `<i class="fas fa-trash"></i> Delete ${count} Item${count > 1 ? 's' : ''}`;
-    } else if (bulkMode) {
-        btn.innerHTML = '<i class="fas fa-trash"></i> Delete Selected';
+    if (selectedIds.size > 0 && bulkMode) {
+        btn.innerHTML = `<i class="fas fa-trash"></i> Delete ${selectedIds.size} Item${selectedIds.size > 1 ? 's' : ''}`;
     }
 }
 
-// Handle checkbox changes
 document.addEventListener('change', function(e) {
     if (e.target.classList.contains('bulk-checkbox')) {
         const card = e.target.closest('.hired-card');
         const id = parseInt(card.dataset.id);
-        
-        console.log('Checkbox changed for ID:', id, 'Checked:', e.target.checked);
         
         if (e.target.checked) {
             selectedIds.add(id);
@@ -530,127 +473,93 @@ document.addEventListener('change', function(e) {
             selectedIds.delete(id);
             card.style.background = 'white';
         }
-        
         updateSelectedCount();
-        console.log('Selected IDs:', Array.from(selectedIds));
     }
 });
 
-// THE FIX - Use direct event listener on button instead of relying on click attribute
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOM loaded, attaching bulk delete handler');
+// Other functions
+function editHired(id) {
+    const hired = hiredData.find(h => h.id === id);
+    if (!hired) return;
     
-    const bulkBtn = document.getElementById('bulkModeBtn');
-    if (!bulkBtn) {
-        console.error('❌ Bulk mode button not found!');
-        return;
-    }
-    
-    console.log('✅ Bulk mode button found, attaching click handler');
-    
-    // Remove any existing listeners by cloning the button
-    const newBtn = bulkBtn.cloneNode(true);
-    bulkBtn.parentNode.replaceChild(newBtn, bulkBtn);
-    
-    // Add fresh click listener
-    newBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        console.log('\n' + '='.repeat(50));
-        console.log('BULK DELETE BUTTON CLICKED');
-        console.log('='.repeat(50));
-        console.log('bulkMode:', bulkMode);
-        console.log('selectedIds:', Array.from(selectedIds));
-        console.log('selectedIds.size:', selectedIds.size);
-        
-        if (!bulkMode) {
-            // Not in bulk mode - turn it on
-            console.log('Toggling bulk mode ON');
-            toggleBulkMode();
-            return;
-        }
-        
-        if (selectedIds.size === 0) {
-            // In bulk mode but nothing selected
-            console.log('No items selected');
-            showAlert('⚠️ Please select at least one item to delete', 'error');
-            return;
-        }
-        
-        // In bulk mode with selections - DELETE!
-        const count = selectedIds.size;
-        const idsArray = Array.from(selectedIds);
-        
-        console.log('Proceeding with deletion of:', idsArray);
-        
-        if (!confirm(`⚠️ Delete ${count} hired equipment item${count > 1 ? 's' : ''}?\n\nIDs: ${idsArray.join(', ')}\n\nThis action CANNOT be undone!`)) {
-            console.log('User cancelled');
-            return;
-        }
-        
-        console.log('User confirmed, sending DELETE request...');
-        
-        // Disable button
-        this.disabled = true;
-        this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
-        
-        const requestData = {ids: idsArray};
-        console.log('Request payload:', JSON.stringify(requestData));
-        
-        fetch('/hired-equipment/bulk-delete', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify(requestData)
-        })
-        .then(response => {
-            console.log('Response received:', response.status, response.statusText);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            
-            return response.json();
-        })
+    document.getElementById('hiredModalTitle').innerHTML = '<i class="fas fa-edit"></i> Edit';
+    document.getElementById('hiredId').value = hired.id;
+    document.getElementById('hiredName').value = hired.name;
+    document.getElementById('hiredSupplier').value = hired.supplier || '';
+    document.getElementById('hiredDate').value = hired.hire_date.split('T')[0];
+    document.getElementById('returnDate').value = hired.return_date.split('T')[0];
+    document.getElementById('hiredCost').value = hired.cost || '';
+    document.getElementById('hiredQuantity').value = hired.quantity;
+    document.getElementById('hiredEventId').value = hired.event_id || '';
+    document.getElementById('hiredNotes').value = hired.notes || '';
+    showModal('addHiredModal');
+}
+
+function deleteHired(id) {
+    if (!confirm('Delete this item?')) return;
+    fetch(`/hired-equipment/${id}`, {method: 'DELETE'})
+        .then(r => r.json())
         .then(result => {
-            console.log('Response data:', result);
-            
             if (result.success) {
-                console.log(`✅ Successfully deleted ${result.deleted} items`);
-                showAlert(`✅ Successfully deleted ${result.deleted} item(s)!`, 'success');
-                console.log('Reloading page in 1 second...');
-                setTimeout(() => {
-                    location.reload();
-                }, 1000);
-            } else {
-                throw new Error(result.error || 'Unknown error from server');
+                showAlert('Deleted!', 'success');
+                location.reload();
             }
-        })
-        .catch(error => {
-            console.error('❌ ERROR:', error);
-            console.error('Error type:', error.constructor.name);
-            console.error('Error message:', error.message);
-            
-            showAlert('❌ Error deleting items: ' + error.message, 'error');
-            
-            // Re-enable button
-            this.disabled = false;
-            updateSelectedCount();
         });
-    });
-    
-    console.log('✅ Bulk delete handler attached successfully');
-});
+}
 
-// Reset modal when opening to add new
+function markReturned(id) {
+    if (!confirm('Mark as returned?')) return;
+    fetch(`/hired-equipment/${id}/return`, {method: 'POST'})
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                showAlert('Marked as returned!', 'success');
+                location.reload();
+            }
+        });
+}
+
+function showChecklistModal(id) {
+    const hired = hiredData.find(h => h.id === id);
+    if (!hired) return;
+    
+    document.getElementById('checklistEquipmentName').textContent = hired.name;
+    
+    fetch(`/hired-equipment/${id}/checklist`)
+        .then(r => r.json())
+        .then(items => {
+            const container = document.getElementById('checklistItems');
+            container.innerHTML = '';
+            
+            items.forEach(item => {
+                const div = document.createElement('div');
+                div.style.cssText = 'background: #f9fafb; padding: 0.75rem; border-radius: 6px; margin-bottom: 0.5rem; display: flex; align-items: start; gap: 0.75rem;';
+                div.innerHTML = `
+                    <input type="checkbox" ${item.is_checked ? 'checked' : ''} 
+                           onchange="toggleChecklistItem(${id}, ${item.id})"
+                           style="width: 20px; height: 20px; cursor: pointer;">
+                    <strong>${item.item_name}</strong>
+                `;
+                container.appendChild(div);
+            });
+        });
+    
+    showModal('checklistModal');
+}
+
+function toggleChecklistItem(hiredId, itemId) {
+    fetch(`/hired-equipment/${hiredId}/checklist/toggle/${itemId}`, {method: 'POST'})
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) showChecklistModal(hiredId);
+        });
+}
+
 function showModal(id) {
     if (id === 'addHiredModal' && !document.getElementById('hiredId').value) {
-        document.getElementById('hiredModalTitle').innerHTML = '<i class="fas fa-plus"></i> Add Hired Equipment';
         document.getElementById('addHiredForm').reset();
         document.getElementById('hiredId').value = '';
+        document.getElementById('hiredModalTitle').innerHTML = '<i class="fas fa-plus"></i> Add Hired Equipment';
     }
     document.getElementById(id).style.display = 'block';
 }
@@ -658,7 +567,5 @@ function showModal(id) {
 function hideModal(id) {
     document.getElementById(id).style.display = 'none';
 }
-
-console.log('✅ All functions loaded');
 </script>
 {% endblock %}
