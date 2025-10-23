@@ -24,6 +24,10 @@ import requests
 from dotenv import load_dotenv
 from flask import Response
 from datetime import datetime, timedelta
+from functools import wraps
+from flask import redirect, url_for, flash
+from flask_login import current_user
+
 
 
 #setup
@@ -477,6 +481,16 @@ def send_discord_message(event):
         print(f"Failed to send Discord message: {e}")
     return None
 
+def crew_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if current_user.is_cast:
+            flash("Access restricted to crew members.")
+            return redirect(url_for('cast_events'))  # or another cast-only page
+        return f(*args, **kwargs)
+    return decorated_function
+
+
 
 #logedout routes
 
@@ -586,7 +600,11 @@ def login():
         user = User.query.filter_by(username=username).first()
         if user and check_password_hash(user.password_hash, password):
             login_user(user)
-            return redirect(url_for('dashboard'))
+            # Redirect based on role
+            if user.is_cast:
+                return redirect(url_for('cast_events'))
+            else:
+                return redirect(url_for('dashboard'))
         flash('Invalid username or password')
     return render_template('/logedout/login.html')
 
@@ -598,6 +616,7 @@ def logout():
 
 @app.route('/dashboard')
 @login_required
+@crew_required
 def dashboard():
     upcoming_events = Event.query.filter(Event.event_date >= datetime.now()).order_by(Event.event_date).limit(5).all()
     return render_template('/crew/dashboard.html', upcoming_events=upcoming_events)
@@ -606,6 +625,7 @@ def dashboard():
 
 @app.route('/equipment')
 @login_required
+@crew_required
 def equipment_list():
     equipment = Equipment.query.all()
     equipment_json = [e.to_dict() for e in equipment]
@@ -613,6 +633,7 @@ def equipment_list():
 
 @app.route('/equipment/barcode/<barcode>')
 @login_required
+@crew_required
 def equipment_by_barcode(barcode):
     equipment = Equipment.query.filter_by(barcode=barcode).first()
     if equipment:
@@ -621,6 +642,7 @@ def equipment_by_barcode(barcode):
 
 @app.route('/equipment/add', methods=['POST'])
 @login_required
+@crew_required
 def add_equipment():
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
@@ -632,6 +654,7 @@ def add_equipment():
 
 @app.route('/equipment/update/<int:id>', methods=['PUT'])
 @login_required
+@crew_required
 def update_equipment(id):
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
@@ -646,6 +669,7 @@ def update_equipment(id):
 
 @app.route('/equipment/delete/<int:id>', methods=['DELETE'])
 @login_required
+@crew_required
 def delete_equipment(id):
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
@@ -656,6 +680,7 @@ def delete_equipment(id):
 
 @app.route('/equipment/import-csv', methods=['POST'])
 @login_required
+@crew_required
 def import_csv():
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
@@ -685,6 +710,7 @@ def import_csv():
 
 @app.route('/equipment/import-sheetdb', methods=['POST'])
 @login_required
+@crew_required
 def import_sheetdb():
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
@@ -717,6 +743,7 @@ def import_sheetdb():
 
 @app.route('/picklist')
 @login_required
+@crew_required
 def picklist():
     event_id = request.args.get('event_id')
     if event_id:
@@ -732,6 +759,7 @@ def picklist():
 
 @app.route('/picklist/add', methods=['POST'])
 @login_required
+@crew_required
 def add_picklist_item():
     data = request.json
     equipment_id = data.get('equipment_id')
@@ -748,6 +776,7 @@ def add_picklist_item():
 
 @app.route('/picklist/toggle/<int:id>', methods=['POST'])
 @login_required
+@crew_required
 def toggle_picklist_item(id):
     item = PickListItem.query.get_or_404(id)
     item.is_checked = not item.is_checked
@@ -756,6 +785,7 @@ def toggle_picklist_item(id):
 
 @app.route('/picklist/delete/<int:id>', methods=['DELETE'])
 @login_required
+@crew_required
 def delete_picklist_item(id):
     item = PickListItem.query.get_or_404(id)
     db.session.delete(item)
@@ -766,6 +796,7 @@ def delete_picklist_item(id):
 
 @app.route('/stageplans')
 @login_required
+@crew_required
 def stageplans():
     event_id = request.args.get('event_id')
     if event_id:
@@ -779,6 +810,7 @@ def stageplans():
 
 @app.route('/stageplans/upload', methods=['POST'])
 @login_required
+@crew_required
 def upload_stageplan():
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
@@ -797,11 +829,13 @@ def upload_stageplan():
 
 @app.route('/uploads/<filename>')
 @login_required
+@crew_required
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 @app.route('/stageplans/delete/<int:id>', methods=['DELETE'])
 @login_required
+@crew_required
 def delete_stageplan(id):
     plan = StagePlan.query.get_or_404(id)
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], plan.filename)
@@ -815,6 +849,7 @@ def delete_stageplan(id):
 
 @app.route('/calendar')
 @login_required
+@crew_required
 def calendar():
     events = Event.query.order_by(Event.event_date).all()
     now = datetime.now()
@@ -953,6 +988,7 @@ def calendar_ics():
 # EVENT ROUTES
 @app.route('/events/add', methods=['POST'])
 @login_required
+@crew_required
 def add_event():
     data = request.json
     
@@ -985,6 +1021,7 @@ def add_event():
 
 @app.route('/events/<int:id>', methods=['GET'])
 @login_required
+@crew_required
 def event_detail(id):
     event = Event.query.get_or_404(id)
     all_users = User.query.all()
@@ -993,6 +1030,7 @@ def event_detail(id):
 
 @app.route('/events/<int:id>', methods=['DELETE'])
 @login_required
+@crew_required
 def delete_event(id):
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
@@ -1005,6 +1043,7 @@ def delete_event(id):
 
 @app.route('/events/<int:event_id>/schedule/add', methods=['POST'])
 @login_required
+@crew_required
 def add_event_schedule(event_id):
     """Add a schedule item to an event"""
     event = Event.query.get_or_404(event_id)
@@ -1037,6 +1076,7 @@ def add_event_schedule(event_id):
 
 @app.route('/events/<int:id>/edit', methods=['PUT'])
 @login_required
+@crew_required
 def edit_event(id):
     event = Event.query.get_or_404(id)
     data = request.json
@@ -1061,6 +1101,7 @@ def edit_event(id):
 
 @app.route('/events/schedule/<int:schedule_id>/delete', methods=['DELETE'])
 @login_required
+@crew_required
 def delete_event_schedule(schedule_id):
     """Delete a schedule item"""
     schedule = EventSchedule.query.get_or_404(schedule_id)
@@ -1078,6 +1119,7 @@ def delete_event_schedule(schedule_id):
 
 @app.route('/crew/assign', methods=['POST'])
 @login_required
+@crew_required
 def assign_crew():
     data = request.json
     assignment = CrewAssignment(event_id=data['event_id'], crew_member=data['crew_member'], role=data.get('role', ''), assigned_via='webapp')
@@ -1117,6 +1159,7 @@ Production Crew System"""
 
 @app.route('/crew/remove/<int:id>', methods=['DELETE'])
 @login_required
+@crew_required
 def remove_crew(id):
     assignment = CrewAssignment.query.get_or_404(id)
     db.session.delete(assignment)
@@ -1125,6 +1168,7 @@ def remove_crew(id):
 
 @app.route('/crew/resend-notification', methods=['POST'])
 @login_required
+@crew_required
 def resend_notification():
     data = request.json
     assignment = CrewAssignment.query.get(data.get('assignment_id'))
@@ -1157,11 +1201,13 @@ ShowWise System"""
 
 @app.route('/discord-settings')
 @login_required
+@crew_required
 def discord_settings():
     return render_template('/crew/discord_settings.html')
 
 @app.route('/settings/link-discord', methods=['POST'])
 @login_required
+@crew_required
 def link_discord():
     data = request.json
     discord_id = data.get('discord_id')
@@ -1180,6 +1226,7 @@ def link_discord():
 
 @app.route('/settings/discord-status')
 @login_required
+@crew_required
 def discord_status():
     if current_user.discord_id:
         return jsonify({'linked': True, 'discord_id': current_user.discord_id, 'discord_username': current_user.discord_username})
@@ -1588,6 +1635,7 @@ from datetime import datetime
 
 @app.route('/events/<int:event_id>/export-pdf')
 @login_required
+@crew_required
 def export_event_pdf(event_id):
     """Export modern event brief to PDF with proper text wrapping"""
     try:
@@ -1993,6 +2041,7 @@ def export_event_pdf(event_id):
 
 @app.route('/events/<int:event_id>/notes/add', methods=['POST'])
 @login_required
+@crew_required
 def add_event_note(event_id):
     """Add a note to an event"""
     event = Event.query.get_or_404(event_id)
@@ -2019,6 +2068,7 @@ def add_event_note(event_id):
 
 @app.route('/events/notes/<int:note_id>/edit', methods=['PUT'])
 @login_required
+@crew_required
 def edit_event_note(note_id):
     """Edit an event note"""
     note = EventNote.query.get_or_404(note_id)
@@ -2032,6 +2082,7 @@ def edit_event_note(note_id):
 
 @app.route('/events/notes/<int:note_id>/delete', methods=['DELETE'])
 @login_required
+@crew_required
 def delete_event_note(note_id):
     """Delete an event note"""
     note = EventNote.query.get_or_404(note_id)
@@ -2043,6 +2094,7 @@ def delete_event_note(note_id):
 # ==================== ADMIN OVERVIEW ====================
 @app.route('/admin/overview')
 @login_required
+@crew_required
 def admin_overview():
     """Enhanced overview dashboard for admins/teachers"""
     if not current_user.is_admin:
@@ -2091,6 +2143,7 @@ def admin_overview():
 # ==================== EXPORT EVENTS ====================
 @app.route('/admin/export-events')
 @login_required
+@crew_required
 def export_events_csv():
     """Export all events with crew members to CSV"""
     if not current_user.is_admin:
@@ -2144,6 +2197,7 @@ def export_events_csv():
 # ==================== TO-DO LIST ROUTES ====================
 @app.route('/todos')
 @login_required
+@crew_required
 def todos():
     """User's personal to-do list"""
     user_todos = TodoItem.query.filter_by(user_id=current_user.id).order_by(
@@ -2156,6 +2210,7 @@ def todos():
 
 @app.route('/todos/add', methods=['POST'])
 @login_required
+@crew_required
 def add_todo():
     """Add a new to-do item"""
     data = request.json
@@ -2173,6 +2228,7 @@ def add_todo():
 
 @app.route('/todos/<int:id>/toggle', methods=['POST'])
 @login_required
+@crew_required
 def toggle_todo(id):
     """Toggle to-do completion status"""
     todo = TodoItem.query.get_or_404(id)
@@ -2185,6 +2241,7 @@ def toggle_todo(id):
 
 @app.route('/todos/<int:id>', methods=['DELETE'])
 @login_required
+@crew_required
 def delete_todo(id):
     """Delete a to-do item"""
     todo = TodoItem.query.get_or_404(id)
@@ -2197,6 +2254,7 @@ def delete_todo(id):
 # ==================== CAST MANAGEMENT ROUTES ====================
 @app.route('/cast')
 @login_required
+@crew_required
 def cast_list():
     """View all cast members"""
     cast_members = CastMember.query.order_by(CastMember.character_name).all()
@@ -2220,6 +2278,7 @@ def cast_list():
 
 @app.route('/cast/<int:id>', methods=['PUT'])
 @login_required
+@crew_required
 def update_cast(id):
     """Update cast member"""
     if not current_user.is_admin:
@@ -2241,6 +2300,7 @@ def update_cast(id):
 
 @app.route('/cast/<int:id>', methods=['DELETE'])
 @login_required
+@crew_required
 def delete_cast(id):
     """Delete cast member"""
     if not current_user.is_admin:
@@ -2321,6 +2381,7 @@ def cast_event_detail(id):
 # ==================== ADMIN: CREATE CAST ACCOUNT ====================
 @app.route('/cast/create-account', methods=['POST'])
 @login_required
+@crew_required
 def create_cast_account():
     """Create a new cast member account (admin only)"""
     if not current_user.is_admin:
