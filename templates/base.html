@@ -515,6 +515,10 @@
             <i class="fas fa-users"></i>
             <span>Cast</span>
         </a>
+        <a href="{{ url_for('cast_events') }}" class="nav-item {% if request.endpoint == 'cast_events' %}active{% endif %}">
+            <i class="fas fa-users"></i>
+            <span>Cast Event</span>
+        </a>
         <a href="{{ url_for('admin_overview') }}" class="nav-item {% if request.endpoint == 'admin_overview' %}active{% endif %}">
             <i class="fas fa-chart-line"></i>
             <span>Overview</span>

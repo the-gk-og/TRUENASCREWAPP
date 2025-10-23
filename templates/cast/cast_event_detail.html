@@ -1,3 +1,4 @@
+
 {% extends "base.html" %}
 
 {% block title %}{{ event.title }} - Cast Portal{% endblock %}
@@ -16,9 +17,6 @@
             <a href="{{ url_for('event_detail', id=event.id) }}" class="btn btn-primary" style="padding: 0.5rem 1rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
                 <i class="fas fa-hard-hat"></i> Switch to Crew View
             </a>
-            <button onclick="showModal('editCastDescriptionModal')" class="btn btn-primary" style="padding: 0.5rem 1rem;">
-                <i class="fas fa-edit"></i> Edit Cast Info
-            </button>
         </div>
         {% endif %}
     </div>
@@ -66,10 +64,40 @@
     {% endif %}
     
     <!-- Cast Description -->
-    {% if event.cast_description %}
+    {% if event.cast_description or current_user.is_admin %}
     <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 6px; margin-bottom: 1.5rem; border-left: 4px solid var(--secondary);">
-        <h3 style="margin: 0 0 1rem 0; color: var(--secondary);"><i class="fas fa-info-circle"></i> Cast Information</h3>
-        <p style="margin: 0; white-space: pre-wrap; word-break: break-word;">{{ event.cast_description }}</p>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h3 style="margin: 0; color: var(--secondary);"><i class="fas fa-info-circle"></i> Cast Information</h3>
+            {% if current_user.is_admin %}
+            <button onclick="editCastDescription()" class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">
+                <i class="fas fa-edit"></i> Edit
+            </button>
+            {% endif %}
+        </div>
+        
+        {% if event.cast_description %}
+        <div id="castDescriptionView">
+            <p style="margin: 0; white-space: pre-wrap; word-break: break-word;">{{ event.cast_description }}</p>
+        </div>
+        {% else %}
+        <div id="castDescriptionView">
+            <p style="margin: 0; color: #999; font-style: italic;">No cast information yet.</p>
+        </div>
+        {% endif %}
+        
+        {% if current_user.is_admin %}
+        <div id="castDescriptionEdit" style="display: none;">
+            <textarea id="castDescriptionTextarea" style="width: 100%; min-height: 150px; padding: 0.75rem; border: 2px solid var(--border); border-radius: 6px; font-family: inherit;">{{ event.cast_description or '' }}</textarea>
+            <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
+                <button onclick="saveCastDescription()" class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
+                    <i class="fas fa-save"></i> Save
+                </button>
+                <button onclick="cancelCastDescriptionEdit()" class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+            </div>
+        </div>
+        {% endif %}
     </div>
     {% endif %}
 </div>
@@ -190,22 +218,6 @@
 <!-- ADMIN MODALS -->
 {% if current_user.is_admin %}
 
-<!-- Edit Cast Description Modal -->
-<div id="editCastDescriptionModal" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="hideModal('editCastDescriptionModal')">&times;</span>
-        <h2>Edit Cast Information</h2>
-        <form id="editCastDescriptionForm">
-            <div class="form-group">
-                <label>Cast Description</label>
-                <textarea id="castDescription" rows="8" placeholder="Information specifically for cast members...">{{ event.cast_description or '' }}</textarea>
-                <small style="color: #666; display: block; margin-top: 0.5rem;">This description is only visible to cast members and admins.</small>
-            </div>
-            <button type="submit" class="btn btn-success" style="width: 100%;">Save Cast Information</button>
-        </form>
-    </div>
-</div>
-
 <!-- Add Cast Schedule Modal -->
 <div id="addCastScheduleModal" class="modal">
     <div class="modal-content">
@@ -255,38 +267,45 @@
 <script>
 {% if current_user.is_admin %}
 
-// Edit Cast Description
-document.getElementById('editCastDescriptionForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    const data = {
-        cast_description: document.getElementById('castDescription').value
-    };
-    
+// Inline Cast Description Editing
+function editCastDescription() {
+    document.getElementById('castDescriptionView').style.display = 'none';
+    document.getElementById('castDescriptionEdit').style.display = 'block';
+    document.getElementById('castDescriptionTextarea').focus();
+}
+
+function cancelCastDescriptionEdit() {
+    document.getElementById('castDescriptionView').style.display = 'block';
+    document.getElementById('castDescriptionEdit').style.display = 'none';
+}
+
+function saveCastDescription() {
+    const content = document.getElementById('castDescriptionTextarea').value;
+
     fetch('/events/{{ event.id }}/edit-cast', {
         method: 'PUT',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
+        body: JSON.stringify({ cast_description: content })
     })
     .then(r => r.json())
     .then(result => {
         if (result.success) {
-            showAlert('Cast information updated!', 'success');
+            showAlert('Cast information saved!', 'success');
             setTimeout(() => location.reload(), 500);
         }
     });
-});
+}
 
 // Add Cast Schedule
 document.getElementById('addCastScheduleForm').addEventListener('submit', function(e) {
     e.preventDefault();
-    
+
     const data = {
         title: document.getElementById('castScheduleTitle').value,
         scheduled_time: document.getElementById('castScheduleTime').value,
         description: document.getElementById('castScheduleDescription').value
     };
-    
+
     fetch('/events/{{ event.id }}/cast-schedule/add', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -296,7 +315,11 @@ document.getElementById('addCastScheduleForm').addEventListener('submit', functi
     .then(result => {
         if (result.success) {
             showAlert('Schedule added!', 'success');
+            hideModal('addCastScheduleModal');
+            document.getElementById('addCastScheduleForm').reset();
             setTimeout(() => location.reload(), 500);
+        } else {
+            showAlert(result.error || 'Error adding schedule', 'error');
         }
     });
 });
@@ -304,7 +327,7 @@ document.getElementById('addCastScheduleForm').addEventListener('submit', functi
 // Delete Cast Schedule
 function deleteCastSchedule(id) {
     if (!confirm('Delete this schedule item?')) return;
-    
+
     fetch(`/events/cast-schedule/${id}/delete`, {method: 'DELETE'})
         .then(r => r.json())
         .then(result => {
@@ -318,11 +341,11 @@ function deleteCastSchedule(id) {
 // Add Cast Note
 document.getElementById('addCastNoteForm').addEventListener('submit', function(e) {
     e.preventDefault();
-    
+
     const data = {
         content: document.getElementById('castNoteContent').value
     };
-    
+
     fetch('/events/{{ event.id }}/cast-notes/add', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -332,10 +355,14 @@ document.getElementById('addCastNoteForm').addEventListener('submit', function(e
     .then(result => {
         if (result.success) {
             showAlert('Note added!', 'success');
+            hideModal('addCastNoteModal');
+            document.getElementById('addCastNoteForm').reset();
             setTimeout(() => location.reload(), 500);
+        } else {
+            showAlert(result.error || 'Error adding note', 'error');
         }
     });
-});
+}
 
 // Edit Cast Note Toggle
 function editCastNoteToggle(noteId) {
@@ -343,7 +370,7 @@ function editCastNoteToggle(noteId) {
     const editDiv = document.getElementById(`cast-note-edit-${noteId}`);
     const editBtn = document.getElementById(`cast-edit-btn-${noteId}`);
     const saveBtn = document.getElementById(`cast-save-btn-${noteId}`);
-    
+
     if (editDiv.style.display === 'none') {
         content.style.display = 'none';
         editDiv.style.display = 'block';
@@ -361,7 +388,7 @@ function editCastNoteToggle(noteId) {
 function saveCastNoteEdit(noteId) {
     const newContent = document.getElementById(`cast-note-textarea-${noteId}`).value;
     const data = { content: newContent };
-    
+
     fetch(`/events/cast-notes/${noteId}/edit`, {
         method: 'PUT',
         headers: {'Content-Type': 'application/json'},
@@ -379,7 +406,7 @@ function saveCastNoteEdit(noteId) {
 // Delete Cast Note
 function deleteCastNote(noteId) {
     if (!confirm('Delete this note?')) return;
-    
+
     fetch(`/events/cast-notes/${noteId}/delete`, {method: 'DELETE'})
         .then(r => r.json())
         .then(result => {

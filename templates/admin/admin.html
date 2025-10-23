@@ -11,8 +11,13 @@
 <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); margin-bottom: 2rem;">
     <div class="card" style="text-align: center;">
         <h3 style="color: var(--primary);">👥</h3>
-        <p id="userCount" style="font-size: 2rem; font-weight: bold;">0</p>
-        <p>Total Users</p>
+        <p id="crewCount" style="font-size: 2rem; font-weight: bold;">0</p>
+        <p>Crew Members</p>
+    </div>
+    <div class="card" style="text-align: center;">
+        <h3 style="color: var(--secondary);">🎭</h3>
+        <p id="castCount" style="font-size: 2rem; font-weight: bold;">0</p>
+        <p>Cast Members</p>
     </div>
     <div class="card" style="text-align: center;">
         <h3 style="color: var(--success);">📦</h3>
@@ -20,17 +25,17 @@
         <p>Equipment Items</p>
     </div>
     <div class="card" style="text-align: center;">
-        <h3 style="color: var(--secondary);">📅</h3>
+        <h3 style="color: var(--warning);">📅</h3>
         <p id="eventCount" style="font-size: 2rem; font-weight: bold;">0</p>
         <p>Events</p>
     </div>
 </div>
 
-<!-- User Management -->
+<!-- CREW MEMBERS MANAGEMENT -->
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-        <h3>User Management</h3>
-        <button onclick="showModal('addUserModal')" class="btn btn-success"><i class="fas fa-plus"></i> Add User</button>
+        <h3><i class="fas fa-hard-hat"></i> Crew Members Management</h3>
+        <button onclick="showModal('addCrewModal')" class="btn btn-success"><i class="fas fa-plus"></i> Add Crew Member</button>
     </div>
     
     <table>
@@ -44,8 +49,9 @@
                 <th>Actions</th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="crewTableBody">
             {% for user in users %}
+            {% if not user.is_cast %}
             <tr>
                 <td><strong>{{ user.username }}</strong></td>
                 <td>{{ user.email or '-' }}</td>
@@ -62,10 +68,10 @@
                     {% if user.is_admin %}
                     <span style="background: var(--primary); color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">Admin</span>
                     {% else %}
-                    <span style="background: #e5e7eb; color: var(--dark); padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">User</span>
+                    <span style="background: #e5e7eb; color: var(--dark); padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">Crew</span>
                     {% endif %}
                 </td>
-                <td>{{ user.created_at.strftime('%b %d, %Y') }}</td>
+                <td>{{ user.created_at }}</td>
                 <td>
                     <button onclick="editUserModal({{ user.id }})" class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;"><i class="fas fa-edit"></i> Edit</button>
                     {% if user.id != current_user.id %}
@@ -75,6 +81,51 @@
                     {% endif %}
                 </td>
             </tr>
+            {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- CAST MEMBERS MANAGEMENT -->
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h3><i class="fas fa-theater-masks"></i> Cast Members Management</h3>
+        <button onclick="showModal('addCastModal')" class="btn btn-success"><i class="fas fa-plus"></i> Add Cast Member</button>
+    </div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Productions</th>
+                <th>Created</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="castTableBody">
+            {% for user in users %}
+            {% if user.is_cast %}
+            <tr>
+                <td><strong>{{ user.username }}</strong></td>
+                <td>{{ user.email or '-' }}</td>
+                <td>
+                    <span style="background: #fce7f3; color: #9f1239; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">
+                        {{ user.cast_roles|length }} productions
+                    </span>
+                </td>
+                <td>{{ user.created_at }}</td>
+                <td>
+                    <button onclick="editUserModal({{ user.id }})" class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;"><i class="fas fa-edit"></i> Edit</button>
+                    {% if user.id != current_user.id %}
+                    <button onclick="deleteUser({{ user.id }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;"><i class="fas fa-trash"></i> Delete</button>
+                    {% else %}
+                    <span style="color: #999; font-size: 0.85rem;">Current User</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endif %}
             {% endfor %}
         </tbody>
     </table>
@@ -137,23 +188,23 @@
     </div>
 </div>
 
-<!-- Add User Modal -->
-<div id="addUserModal" class="modal">
+<!-- Add Crew Member Modal -->
+<div id="addCrewModal" class="modal">
     <div class="modal-content">
-        <span class="close" onclick="hideModal('addUserModal')">&times;</span>
-        <h2 style="margin-bottom: 1.5rem;">Add New User</h2>
-        <form id="addUserForm">
+        <span class="close" onclick="hideModal('addCrewModal')">&times;</span>
+        <h2 style="margin-bottom: 1.5rem;">Add Crew Member</h2>
+        <form id="addCrewForm">
             <div class="form-group">
                 <label>Username *</label>
-                <input type="text" id="username" required>
+                <input type="text" id="crewUsername" required>
             </div>
             <div class="form-group">
                 <label>Email (Optional - for notifications)</label>
-                <input type="email" id="email" placeholder="user@example.com">
+                <input type="email" id="crewEmail" placeholder="user@example.com">
             </div>
             <div class="form-group">
                 <label>Password *</label>
-                <input type="password" id="password" required>
+                <input type="password" id="crewPassword" required>
             </div>
             <div class="form-group">
                 <label style="display: flex; align-items: center; gap: 0.75rem;">
@@ -161,7 +212,30 @@
                     <span>Grant Admin Privileges</span>
                 </label>
             </div>
-            <button type="submit" class="btn btn-success" style="width: 100%;"><i class="fas fa-plus"></i> Create User</button>
+            <button type="submit" class="btn btn-success" style="width: 100%;"><i class="fas fa-plus"></i> Create Crew Member</button>
+        </form>
+    </div>
+</div>
+
+<!-- Add Cast Member Modal -->
+<div id="addCastModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('addCastModal')">&times;</span>
+        <h2 style="margin-bottom: 1.5rem;">Add Cast Member</h2>
+        <form id="addCastForm">
+            <div class="form-group">
+                <label>Username *</label>
+                <input type="text" id="castUsername" required>
+            </div>
+            <div class="form-group">
+                <label>Email (Optional)</label>
+                <input type="email" id="castEmail" placeholder="user@example.com">
+            </div>
+            <div class="form-group">
+                <label>Password *</label>
+                <input type="password" id="castPassword" required>
+            </div>
+            <button type="submit" class="btn btn-success" style="width: 100%;"><i class="fas fa-plus"></i> Create Cast Member</button>
         </form>
     </div>
 </div>
@@ -245,9 +319,64 @@
 <script>
 // Load stats
 function loadStats() {
-    const userCount = {{ users|length }};
-    document.getElementById('userCount').textContent = userCount;
+    const allUsers = {{ users|tojson }};
+    const crewCount = allUsers.filter(u => !u.is_cast).length;
+    const castCount = allUsers.filter(u => u.is_cast).length;
+    
+    document.getElementById('crewCount').textContent = crewCount;
+    document.getElementById('castCount').textContent = castCount;
 }
+
+// Add Crew Member
+document.getElementById('addCrewForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const data = {
+        username: document.getElementById('crewUsername').value,
+        email: document.getElementById('crewEmail').value || null,
+        password: document.getElementById('crewPassword').value,
+        is_admin: document.getElementById('isAdmin').checked,
+        is_cast: false
+    };
+    fetch('/admin/users/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            location.reload();
+        } else {
+            showAlert(result.error, 'error');
+        }
+    });
+});
+
+// Add Cast Member
+document.getElementById('addCastForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const data = {
+        username: document.getElementById('castUsername').value,
+        email: document.getElementById('castEmail').value || null,
+        password: document.getElementById('castPassword').value,
+        is_cast: true
+    };
+    
+    fetch('/cast/create-account', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert('Cast member account created!', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showAlert(result.error, 'error');
+        }
+    });
+});
 
 // Load backups list
 function loadBackups() {
@@ -291,30 +420,6 @@ function createBackup() {
             }
         });
 }
-
-// Add user form
-document.getElementById('addUserForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const data = {
-        username: document.getElementById('username').value,
-        email: document.getElementById('email').value || null,
-        password: document.getElementById('password').value,
-        is_admin: document.getElementById('isAdmin').checked
-    };
-    fetch('/admin/users/add', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(r => r.json())
-    .then(result => {
-        if (result.success) {
-            location.reload();
-        } else {
-            showAlert(result.error, 'error');
-        }
-    });
-});
 
 // Edit user modal - Load user data
 function editUserModal(userId) {
@@ -404,7 +509,7 @@ document.getElementById('sheetdbForm').addEventListener('submit', function(e) {
     });
 });
 
-// Delete user
+// Restore database
 document.getElementById('restoreForm').addEventListener('submit', function(e) {
     e.preventDefault();
     const formData = new FormData();

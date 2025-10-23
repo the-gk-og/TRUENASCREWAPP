@@ -1365,8 +1365,23 @@ def admin_panel():
     if not current_user.is_admin:
         flash('Admin access required')
         return redirect(url_for('dashboard'))
-    users = User.query.all()
-    return render_template('/admin/admin.html', users=users)
+
+    raw_users = User.query.all()
+
+    # Serialize users for JSON and template rendering
+    users = [
+        {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "is_cast": user.is_cast,
+            "created_at": user.created_at.strftime('%b %d, %Y') if user.created_at else "N/A"
+        }
+        for user in raw_users
+    ]
+
+    return render_template('admin/admin.html', users=users)
+
 
 @app.route('/admin/users/add', methods=['POST'])
 @login_required
