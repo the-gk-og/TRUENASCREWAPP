@@ -2560,7 +2560,63 @@ def get_cast_users():
         } for u in cast_users]
     })
 
+# Add these routes to app.py
 
+# ==================== CHANGE PASSWORD ====================
+@app.route('/change-password')
+@login_required
+def change_password_page():
+    """Password change page for all users"""
+    return render_template('/crew/change_password.html')
+
+@app.route('/change-password', methods=['POST'])
+@login_required
+def change_password():
+    """Handle password change request"""
+    data = request.json
+    current_password = data.get('current_password')
+    new_password = data.get('new_password')
+    confirm_password = data.get('confirm_password')
+    
+    # Validation
+    if not current_password or not new_password or not confirm_password:
+        return jsonify({'error': 'All fields are required'}), 400
+    
+    # Check current password
+    if not check_password_hash(current_user.password_hash, current_password):
+        return jsonify({'error': 'Current password is incorrect'}), 400
+    
+    # Check new password length
+    if len(new_password) < 6:
+        return jsonify({'error': 'New password must be at least 6 characters'}), 400
+    
+    # Check passwords match
+    if new_password != confirm_password:
+        return jsonify({'error': 'New passwords do not match'}), 400
+    
+    # Check new password is different
+    if current_password == new_password:
+        return jsonify({'error': 'New password must be different from current password'}), 400
+    
+    # Update password
+    current_user.password_hash = generate_password_hash(new_password)
+    db.session.commit()
+    
+    # Send confirmation email if email exists
+    if current_user.email:
+        subject = "Password Changed - ShowWise"
+        body = f"""Hello {current_user.username},
+
+Your ShowWise password has been successfully changed.
+
+If you did not make this change, please contact your administrator immediately.
+
+Changed at: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}
+
+ShowWise Team"""
+        send_email(subject, current_user.email, body)
+    
+    return jsonify({'success': True, 'message': 'Password changed successfully'})
 
 # RUN APP
 
