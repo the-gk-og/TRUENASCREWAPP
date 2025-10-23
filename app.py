@@ -65,6 +65,8 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(200))
     is_admin = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_cast = db.Column(db.Boolean, default=False)
+
 
 class Equipment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -120,6 +122,8 @@ class Event(db.Model):
     crew_assignments = db.relationship('CrewAssignment', backref='event', lazy=True, cascade='all, delete-orphan')
     pick_list_items = db.relationship('PickListItem', backref='event', lazy=True, cascade='all, delete-orphan')
     stage_plans = db.relationship('StagePlan', backref='event', lazy=True, cascade='all, delete-orphan')
+    cast_description = db.Column(db.Text)
+
 
 
 class CrewAssignment(db.Model):
@@ -179,6 +183,30 @@ class CastMember(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     event = db.relationship('Event', backref='cast_members')
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    user = db.relationship('User', backref='cast_roles')
+
+class CastSchedule(db.Model):
+    """Schedule items specifically for cast members"""
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
+    title = db.Column(db.String(100), nullable=False)
+    scheduled_time = db.Column(db.DateTime, nullable=False)
+    description = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    event = db.relationship('Event', backref=db.backref('cast_schedules', cascade='all, delete-orphan'))
+
+class CastNote(db.Model):
+    """Notes specifically for cast members"""
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_by = db.Column(db.String(80), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    event = db.relationship('Event', backref=db.backref('cast_notes', cascade='all, delete-orphan'))
 
 # LOGIN & UTILITIES
 
@@ -455,17 +483,17 @@ def send_discord_message(event):
 @app.route('/home')
 def home():
     """Landing page - accessible to everyone"""
-    return render_template('home.html')
+    ('/logedout/home.html')
 
 @app.route('/learn-more')
 def learn_more():
     """Learn more page with detailed features"""
-    return render_template('learn_more.html')
+    return render_template('/logedout/learn_more.html')
 
 @app.route('/contact')
 def contact():
     """Contact page"""
-    return render_template('contact.html')
+    return render_template('/logedout/contact.html')
 
 @app.route('/contact/send', methods=['POST'])
 def send_contact_message():
@@ -539,7 +567,7 @@ def quote():
         flash('Your enquiry has been submitted successfully. We’ll be in touch soon!', 'success')
         return redirect('/quote')
 
-    return render_template('quote.html')
+    return render_template('/logedout/quote.html')
 
 
 # AUTH ROUTES
@@ -560,7 +588,7 @@ def login():
             login_user(user)
             return redirect(url_for('dashboard'))
         flash('Invalid username or password')
-    return render_template('login.html')
+    return render_template('/logedout/login.html')
 
 @app.route('/logout')
 @login_required
@@ -572,7 +600,7 @@ def logout():
 @login_required
 def dashboard():
     upcoming_events = Event.query.filter(Event.event_date >= datetime.now()).order_by(Event.event_date).limit(5).all()
-    return render_template('dashboard.html', upcoming_events=upcoming_events)
+    return render_template('/crew/dashboard.html', upcoming_events=upcoming_events)
 
 # EQUIPMENT ROUTES
 
@@ -581,7 +609,7 @@ def dashboard():
 def equipment_list():
     equipment = Equipment.query.all()
     equipment_json = [e.to_dict() for e in equipment]
-    return render_template('equipment.html', equipment=equipment, equipment_json=equipment_json)
+    return render_template('/crew/equipment.html', equipment=equipment, equipment_json=equipment_json)
 
 @app.route('/equipment/barcode/<barcode>')
 @login_required
@@ -700,7 +728,7 @@ def picklist():
     events = Event.query.order_by(Event.event_date.desc()).all()
     all_equipment = Equipment.query.all()
     equipment_dict = [e.to_dict() for e in all_equipment]
-    return render_template('picklist.html', items=items, events=events, current_event=event, all_equipment=all_equipment, all_equipment_json=equipment_dict)
+    return render_template('/crew/picklist.html', items=items, events=events, current_event=event, all_equipment=all_equipment, all_equipment_json=equipment_dict)
 
 @app.route('/picklist/add', methods=['POST'])
 @login_required
@@ -747,7 +775,7 @@ def stageplans():
         plans = StagePlan.query.all()
         event = None
     events = Event.query.order_by(Event.event_date.desc()).all()
-    return render_template('stageplans.html', plans=plans, events=events, current_event=event)
+    return render_template('/crew/stageplans.html', plans=plans, events=events, current_event=event)
 
 @app.route('/stageplans/upload', methods=['POST'])
 @login_required
@@ -790,7 +818,7 @@ def delete_stageplan(id):
 def calendar():
     events = Event.query.order_by(Event.event_date).all()
     now = datetime.now()
-    return render_template('calendar.html', events=events, now=now)
+    return render_template('/crew/calendar.html', events=events, now=now)
 
 
 @app.route('/calendar/ics')
@@ -961,7 +989,7 @@ def event_detail(id):
     event = Event.query.get_or_404(id)
     all_users = User.query.all()
     schedules = EventSchedule.query.filter_by(event_id=id).order_by(EventSchedule.scheduled_time).all()
-    return render_template('event_detail.html', event=event, all_users=all_users, schedules=schedules)
+    return render_template('/crew/event_detail.html', event=event, all_users=all_users, schedules=schedules)
 
 @app.route('/events/<int:id>', methods=['DELETE'])
 @login_required
@@ -1130,7 +1158,7 @@ ShowWise System"""
 @app.route('/discord-settings')
 @login_required
 def discord_settings():
-    return render_template('discord_settings.html')
+    return render_template('/crew/discord_settings.html')
 
 @app.route('/settings/link-discord', methods=['POST'])
 @login_required
@@ -1338,7 +1366,7 @@ def admin_panel():
         flash('Admin access required')
         return redirect(url_for('dashboard'))
     users = User.query.all()
-    return render_template('admin.html', users=users)
+    return render_template('/admin/admin.html', users=users)
 
 @app.route('/admin/users/add', methods=['POST'])
 @login_required
@@ -2033,7 +2061,7 @@ def admin_overview():
         db.func.count(PickListItem.id).label('usage_count')
     ).outerjoin(PickListItem).group_by(Equipment.category).all()
     
-    return render_template('admin_overview.html',
+    return render_template('/admin/admin_overview.html',
         total_users=total_users,
         total_equipment=total_equipment,
         total_events=total_events,
@@ -2109,7 +2137,7 @@ def todos():
         TodoItem.due_date.asc()
     ).all()
     events = Event.query.order_by(Event.event_date.desc()).all()
-    return render_template('todos.html', todos=user_todos, events=events)
+    return render_template('/crew/todos.html', todos=user_todos, events=events)
 
 @app.route('/todos/add', methods=['POST'])
 @login_required
@@ -2171,28 +2199,9 @@ def cast_list():
         'event_id': c.event_id
     } for c in cast_members]
     
-    return render_template('cast.html', cast_members=cast_members, events=events, cast_json=cast_json)
+    return render_template('/cast/cast.html', cast_members=cast_members, events=events, cast_json=cast_json)
 
-@app.route('/cast/add', methods=['POST'])
-@login_required
-def add_cast():
-    """Add a cast member"""
-    if not current_user.is_admin:
-        return jsonify({'error': 'Admin access required'}), 403
-    
-    data = request.json
-    cast = CastMember(
-        actor_name=data['actor_name'],
-        character_name=data['character_name'],
-        role_type=data.get('role_type', 'lead'),
-        contact_email=data.get('contact_email'),
-        contact_phone=data.get('contact_phone'),
-        notes=data.get('notes', ''),
-        event_id=data.get('event_id')
-    )
-    db.session.add(cast)
-    db.session.commit()
-    return jsonify({'success': True, 'id': cast.id})
+
 
 @app.route('/cast/<int:id>', methods=['PUT'])
 @login_required
@@ -2226,6 +2235,332 @@ def delete_cast(id):
     db.session.delete(cast)
     db.session.commit()
     return jsonify({'success': True})
+
+
+
+
+
+        
+    
+
+# Add these routes to your app.py
+
+# ==================== CAST DASHBOARD ====================
+@app.route('/cast-events')
+@login_required
+def cast_events():
+    """Events page for cast members - shows only their events"""
+    if not current_user.is_cast and not current_user.is_admin:
+        flash('Cast access required')
+        return redirect(url_for('dashboard'))
+    
+    # Get events where user is cast member
+    if current_user.is_admin:
+        # Admins see all events
+        events = Event.query.order_by(Event.event_date).all()
+    else:
+        # Cast members see only their events
+        events = Event.query.join(CastMember).filter(
+            CastMember.user_id == current_user.id
+        ).order_by(Event.event_date).all()
+    
+    now = datetime.now()
+    return render_template('/cast/cast_events.html', events=events, now=now)
+
+# ==================== CAST EVENT DETAIL ====================
+@app.route('/cast-events/<int:id>')
+@login_required
+def cast_event_detail(id):
+    """Event detail page for cast members"""
+    if not current_user.is_cast and not current_user.is_admin:
+        flash('Cast access required')
+        return redirect(url_for('dashboard'))
+    
+    event = Event.query.get_or_404(id)
+    
+    # Check if user is cast in this event (unless admin)
+    if not current_user.is_admin:
+        cast_member = CastMember.query.filter_by(
+            event_id=id,
+            user_id=current_user.id
+        ).first()
+        
+        if not cast_member:
+            flash('You are not cast in this event')
+            return redirect(url_for('/cast/cast_events'))
+    else:
+        cast_member = None
+    
+    # Get cast-specific data
+    cast_schedules = CastSchedule.query.filter_by(event_id=id).order_by(CastSchedule.scheduled_time).all()
+    cast_notes = CastNote.query.filter_by(event_id=id).order_by(CastNote.created_at.desc()).all()
+    cast_members = CastMember.query.filter_by(event_id=id).all()
+    
+    return render_template('/cast/cast_event_detail.html', 
+                         event=event, 
+                         cast_member=cast_member,
+                         cast_schedules=cast_schedules,
+                         cast_notes=cast_notes,
+                         cast_members=cast_members)
+
+# ==================== ADMIN: CREATE CAST ACCOUNT ====================
+@app.route('/cast/create-account', methods=['POST'])
+@login_required
+def create_cast_account():
+    """Create a new cast member account (admin only)"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    data = request.json
+    username = data.get('username')
+    password = data.get('password')
+    email = data.get('email')
+    
+    # Check if username already exists
+    if User.query.filter_by(username=username).first():
+        return jsonify({'error': 'Username already exists'}), 400
+    
+    # Create user with cast access
+    user = User(
+        username=username,
+        password_hash=generate_password_hash(password),
+        email=email,
+        is_cast=True,
+        is_admin=False
+    )
+    db.session.add(user)
+    db.session.commit()
+    
+    # Send welcome email if email provided
+    if email:
+        subject = "🎭 Welcome to ShowWise Cast Portal"
+        body = f"""Hello {username},
+
+Welcome to the ShowWise Cast Portal!
+
+Your account has been created by your production team.
+
+Login Credentials:
+  • Username: {username}
+  • Password: {password}
+
+IMPORTANT: Please change your password after your first login.
+
+You can now access:
+  • Your production schedules
+  • Cast-specific notes and information
+  • Call times and rehearsal information
+  • Communication with the production team
+
+Login at: {request.url_root}login
+
+Break a leg!
+ShowWise Production Team"""
+        send_email(subject, email, body)
+    
+    return jsonify({'success': True, 'user_id': user.id, 'username': username})
+
+# ==================== ADMIN: UPDATE CAST/EVENT LINKING ====================
+@app.route('/cast/add', methods=['POST'])
+@login_required
+def add_cast():
+    """Add a cast member to an event (admin only)"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    data = request.json
+    
+    # Get the user by username or user_id
+    user = None
+    if data.get('user_id'):
+        user = User.query.get(data['user_id'])
+    elif data.get('actor_name'):
+        user = User.query.filter_by(username=data['actor_name']).first()
+    
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    # Ensure user has cast access
+    if not user.is_cast:
+        user.is_cast = True
+    
+    # Create cast member record
+    cast = CastMember(
+        actor_name=user.username,
+        character_name=data['character_name'],
+        role_type=data.get('role_type', 'lead'),
+        contact_email=data.get('contact_email') or user.email,
+        contact_phone=data.get('contact_phone'),
+        notes=data.get('notes', ''),
+        event_id=data.get('event_id'),
+        user_id=user.id
+    )
+    db.session.add(cast)
+    db.session.commit()
+    
+    # Send notification if event specified
+    if cast.event_id and user.email:
+        event = Event.query.get(cast.event_id)
+        subject = f"🎭 You've been cast in: {event.title}"
+        body = f"""Hello {user.username},
+
+You have been cast in an upcoming production!
+
+📋 Production Details:
+  • Event: {event.title}
+  • Character: {cast.character_name}
+  • Role: {cast.role_type}
+  • Date: {event.event_date.strftime('%B %d, %Y at %I:%M %p')}
+  • Location: {event.location or 'TBD'}
+
+Login to ShowWise Cast Portal to view:
+  • Cast-specific schedules and call times
+  • Production notes
+  • Your character information
+
+Break a leg!
+ShowWise Production Team"""
+        send_email(subject, user.email, body)
+    
+    return jsonify({'success': True, 'id': cast.id})
+
+# ==================== ADMIN: CAST SCHEDULE MANAGEMENT ====================
+@app.route('/events/<int:event_id>/cast-schedule/add', methods=['POST'])
+@login_required
+def add_cast_schedule(event_id):
+    """Add cast schedule item (admin only)"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    data = request.json
+    
+    try:
+        scheduled_time = datetime.fromisoformat(data['scheduled_time'])
+        
+        schedule = CastSchedule(
+            event_id=event_id,
+            title=data.get('title', ''),
+            scheduled_time=scheduled_time,
+            description=data.get('description', ''),
+        )
+        
+        db.session.add(schedule)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'id': schedule.id,
+            'scheduled_time': schedule.scheduled_time.isoformat()
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/events/cast-schedule/<int:schedule_id>/delete', methods=['DELETE'])
+@login_required
+def delete_cast_schedule(schedule_id):
+    """Delete cast schedule item (admin only)"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    schedule = CastSchedule.query.get_or_404(schedule_id)
+    db.session.delete(schedule)
+    db.session.commit()
+    
+    return jsonify({'success': True})
+
+# ==================== ADMIN: CAST NOTE MANAGEMENT ====================
+@app.route('/events/<int:event_id>/cast-notes/add', methods=['POST'])
+@login_required
+def add_cast_note(event_id):
+    """Add cast note (admin only)"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    data = request.json
+    
+    note = CastNote(
+        event_id=event_id,
+        content=data['content'],
+        created_by=current_user.username
+    )
+    db.session.add(note)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'id': note.id,
+        'note': {
+            'id': note.id,
+            'content': note.content,
+            'created_by': note.created_by,
+            'created_at': note.created_at.strftime('%b %d, %Y at %I:%M %p')
+        }
+    })
+
+@app.route('/events/cast-notes/<int:note_id>/edit', methods=['PUT'])
+@login_required
+def edit_cast_note(note_id):
+    """Edit cast note (admin only)"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    note = CastNote.query.get_or_404(note_id)
+    data = request.json
+    
+    note.content = data['content']
+    note.updated_at = datetime.utcnow()
+    db.session.commit()
+    
+    return jsonify({'success': True})
+
+@app.route('/events/cast-notes/<int:note_id>/delete', methods=['DELETE'])
+@login_required
+def delete_cast_note(note_id):
+    """Delete cast note (admin only)"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    note = CastNote.query.get_or_404(note_id)
+    db.session.delete(note)
+    db.session.commit()
+    
+    return jsonify({'success': True})
+
+# ==================== ADMIN: UPDATE EVENT CAST DESCRIPTION ====================
+@app.route('/events/<int:id>/edit-cast', methods=['PUT'])
+@login_required
+def edit_event_cast(id):
+    """Update cast-specific event details (admin only)"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    event = Event.query.get_or_404(id)
+    data = request.json
+    
+    event.cast_description = data.get('cast_description', event.cast_description)
+    
+    db.session.commit()
+    return jsonify({'success': True})
+
+# ==================== GET ALL CAST USERS (for admin dropdown) ====================
+@app.route('/cast/users')
+@login_required
+def get_cast_users():
+    """Get all users with cast access (admin only)"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    cast_users = User.query.filter_by(is_cast=True).all()
+    return jsonify({
+        'users': [{
+            'id': u.id,
+            'username': u.username,
+            'email': u.email
+        } for u in cast_users]
+    })
+
+
 
 # RUN APP
 
