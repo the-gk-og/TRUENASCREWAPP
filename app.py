@@ -483,7 +483,7 @@ def send_discord_message(event):
 @app.route('/home')
 def home():
     """Landing page - accessible to everyone"""
-    ('/logedout/home.html')
+    return render_template('/logedout/home.html')
 
 @app.route('/learn-more')
 def learn_more():
