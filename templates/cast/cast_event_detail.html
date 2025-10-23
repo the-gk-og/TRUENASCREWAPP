@@ -4,6 +4,18 @@
 {% block title %}{{ event.title }} - Cast Portal{% endblock %}
 
 {% block content %}
+
+<style>
+.sortable-ghost {
+    opacity: 0.4;
+}
+
+.run-item:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    transition: box-shadow 0.2s ease;
+}
+</style>
+
 <div class="card">
     <a href="{{ url_for('cast_events') }}" style="color: var(--primary); text-decoration: none; margin-bottom: 1rem; display: inline-block;">
         ← Back to Cast Events
@@ -142,6 +154,119 @@
     <p style="color: #666; text-align: center; padding: 1rem;">No schedule items yet.</p>
     {% endif %}
 </div>
+
+<!-- CREW RUN LIST -->
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+        <h3><i class="fas fa-list-ol"></i>Run List</h3>
+        <button onclick="showModal('addCrewRunModal')" class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
+            + Add Item
+        </button>
+    </div>
+    
+    <p style="color: #666; font-size: 0.9rem; margin-bottom: 1rem;">show running order</p>
+    
+    {% if event.crew_run_items %}
+    <div id="crewRunList" style="display: flex; flex-direction: column; gap: 0.75rem;">
+        {% for item in event.crew_run_items %}
+        <div class="run-item" data-id="{{ item.id }}" style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); padding: 1rem; border-radius: 8px; border-left: 4px solid {% if item.cue_type == 'Lighting' %}#f59e0b{% elif item.cue_type == 'Sound' %}#6366f1{% elif item.cue_type == 'Props' %}#10b981{% else %}#6b7280{% endif %}; cursor: move;">
+            <div style="display: flex; align-items: start; gap: 1rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0;">
+                    <i class="fas fa-grip-vertical" style="color: #9ca3af; cursor: grab;"></i>
+                    <span style="background: #e5e7eb; color: var(--dark); padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem; font-weight: 700; min-width: 40px; text-align: center;">
+                        {{ item.order_number }}
+                    </span>
+                </div>
+                
+                <div style="flex: 1; min-width: 0;">
+                    <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.5rem;">
+                        <h4 style="margin: 0; color: var(--dark);">{{ item.title }}</h4>
+                        {% if item.cue_type %}
+                        <span style="background: {% if item.cue_type == 'Lighting' %}#fef3c7{% elif item.cue_type == 'Sound' %}#e0e7ff{% elif item.cue_type == 'Props' %}#dcfce7{% else %}#f3f4f6{% endif %}; 
+                                     color: {% if item.cue_type == 'Lighting' %}#78350f{% elif item.cue_type == 'Sound' %}#3730a3{% elif item.cue_type == 'Props' %}#065f46{% else %}#374151{% endif %}; 
+                                     padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600;">
+                            {{ item.cue_type }}
+                        </span>
+                        {% endif %}
+                        {% if item.duration %}
+                        <span style="background: #f3f4f6; color: #6b7280; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem;">
+                            <i class="fas fa-clock"></i> {{ item.duration }}
+                        </span>
+                        {% endif %}
+                    </div>
+                    
+                    {% if item.description %}
+                    <p style="margin: 0.5rem 0; color: #6b7280; font-size: 0.9rem;">{{ item.description }}</p>
+                    {% endif %}
+                    
+                    {% if item.notes %}
+                    <p style="margin: 0.5rem 0; color: #9ca3af; font-size: 0.85rem; font-style: italic;">
+                        <i class="fas fa-sticky-note"></i> {{ item.notes }}
+                    </p>
+                    {% endif %}
+                </div>
+                
+                <div style="display: flex; gap: 0.25rem; flex-shrink: 0;">
+                    <button onclick="editCrewRunItem({{ item.id }})" class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button onclick="deleteCrewRunItem({{ item.id }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <div style="background: #f0f9ff; padding: 1rem; border-radius: 6px; margin-top: 1rem; border-left: 3px solid var(--primary);">
+        <p style="margin: 0; color: #1e40af; font-size: 0.85rem;">
+            <i class="fas fa-info-circle"></i> <strong>Tip:</strong> Drag and drop items to reorder the run list
+        </p>
+    </div>
+    {% else %}
+    <p style="color: #666; text-align: center; padding: 2rem;">No run list items yet.</p>
+    {% endif %}
+</div>
+
+<!-- Add Crew Run Item Modal -->
+<div id="addCrewRunModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('addCrewRunModal')">&times;</span>
+        <h2 id="crewRunModalTitle"><i class="fas fa-plus"></i> Add Run Item</h2>
+        <form id="addCrewRunForm">
+            <input type="hidden" id="crewRunItemId">
+            
+            <div class="form-group">
+                <label>Title (act name)</label>
+                <input type="text" id="crewRunTitle" required placeholder="Enter cue or step title">
+            </div>
+            
+
+            
+            <div class="form-group">
+                <label>Duration</label>
+                <input type="text" id="crewRunDuration" placeholder="e.g., 5 min, 30 sec">
+            </div>
+            
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="crewRunDescription" rows="3" placeholder="Detailed instructions..."></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label>Notes</label>
+                <textarea id="crewRunNotes" rows="2" placeholder="Additional notes or warnings..."></textarea>
+            </div>
+            
+            <button type="submit" class="btn btn-success" style="width: 100%;">
+                <i class="fas fa-check"></i> <span id="crewRunSubmitText">Add Item</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+
 
 <!-- CAST NOTES -->
 <div class="card">
@@ -418,5 +543,110 @@ function deleteCastNote(noteId) {
 }
 
 {% endif %}
+
+// Crew Run List Management
+let crewRunData = {{ event.crew_run_items|tojson }};
+
+// Add/Edit Crew Run Item
+document.getElementById('addCrewRunForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const itemId = document.getElementById('crewRunItemId').value;
+    const data = {
+        title: document.getElementById('crewRunTitle').value,
+        cue_type: document.getElementById('crewRunCueType').value,
+        duration: document.getElementById('crewRunDuration').value,
+        description: document.getElementById('crewRunDescription').value,
+        notes: document.getElementById('crewRunNotes').value
+    };
+    
+    const url = itemId ? `/events/crew-run/${itemId}/edit` : `/events/{{ event.id }}/crew-run/add`;
+    const method = itemId ? 'PUT' : 'POST';
+    
+    fetch(url, {
+        method: method,
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert(itemId ? 'Run item updated!' : 'Run item added!', 'success');
+            hideModal('addCrewRunModal');
+            setTimeout(() => location.reload(), 500);
+        }
+    });
+});
+
+// Edit Crew Run Item
+function editCrewRunItem(id) {
+    const item = crewRunData.find(i => i.id === id);
+    if (!item) return;
+    
+    document.getElementById('crewRunModalTitle').innerHTML = '<i class="fas fa-edit"></i> Edit Crew Run Item';
+    document.getElementById('crewRunSubmitText').textContent = 'Update Item';
+    document.getElementById('crewRunItemId').value = item.id;
+    document.getElementById('crewRunTitle').value = item.title;
+    document.getElementById('crewRunCueType').value = item.cue_type || '';
+    document.getElementById('crewRunDuration').value = item.duration || '';
+    document.getElementById('crewRunDescription').value = item.description || '';
+    document.getElementById('crewRunNotes').value = item.notes || '';
+    
+    showModal('addCrewRunModal');
+}
+
+// Delete Crew Run Item
+function deleteCrewRunItem(id) {
+    if (!confirm('Delete this run item?')) return;
+    
+    fetch(`/events/crew-run/${id}/delete`, {method: 'DELETE'})
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                showAlert('Run item deleted!', 'success');
+                location.reload();
+            }
+        });
+}
+
+// Reset form when opening for add
+function showModal(id) {
+    if (id === 'addCrewRunModal') {
+        document.getElementById('crewRunModalTitle').innerHTML = '<i class="fas fa-plus"></i> Add Crew Run Item';
+        document.getElementById('crewRunSubmitText').textContent = 'Add Item';
+        document.getElementById('addCrewRunForm').reset();
+        document.getElementById('crewRunItemId').value = '';
+    }
+    document.getElementById(id).style.display = 'block';
+}
+
+// Drag and Drop for Crew Run List
+if (document.getElementById('crewRunList')) {
+    new Sortable(document.getElementById('crewRunList'), {
+        animation: 150,
+        handle: '.fa-grip-vertical',
+        ghostClass: 'sortable-ghost',
+        onEnd: function(evt) {
+            const itemIds = Array.from(document.querySelectorAll('.run-item')).map(el => el.dataset.id);
+            
+            fetch(`/events/{{ event.id }}/crew-run/reorder`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ item_ids: itemIds })
+            })
+            .then(r => r.json())
+            .then(result => {
+                if (result.success) {
+                    location.reload();
+                }
+            });
+        }
+    });
+}
+
+
+
+
+
 </script>
 {% endblock %}

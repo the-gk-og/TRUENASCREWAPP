@@ -240,6 +240,36 @@ class HiredEquipmentCheckItem(db.Model):
     is_checked = db.Column(db.Boolean, default=False)
     notes = db.Column(db.Text)
 
+class CrewRunItem(db.Model):
+    """Run list items for crew (technical cues, setup steps, etc.)"""
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
+    order_number = db.Column(db.Integer, nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    duration = db.Column(db.String(50))  # e.g., "5 min", "30 sec"
+    cue_type = db.Column(db.String(50))  # e.g., "Lighting", "Sound", "Props", "Stage"
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    event = db.relationship('Event', backref=db.backref('crew_run_items', cascade='all, delete-orphan', order_by='CrewRunItem.order_number'))
+
+class CastRunItem(db.Model):
+    """Run list items for cast (scenes, songs, entrances, etc.)"""
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
+    order_number = db.Column(db.Integer, nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    duration = db.Column(db.String(50))  # e.g., "10 min"
+    item_type = db.Column(db.String(50))  # e.g., "Scene", "Song", "Dance", "Intermission"
+    cast_involved = db.Column(db.Text)  # Comma-separated list of characters
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    event = db.relationship('Event', backref=db.backref('cast_run_items', cascade='all, delete-orphan', order_by='CastRunItem.order_number'))
+
+
 # LOGIN & UTILITIES
 
 @login_manager.user_loader
@@ -2999,6 +3029,196 @@ def check_equipment_quantity(id):
         'requested': requested_qty,
         'warning': requested_qty > available
     })
+
+# Add these routes to app.py
+
+# ==================== CREW RUN LIST ROUTES ====================
+
+@app.route('/events/<int:event_id>/crew-run/add', methods=['POST'])
+@login_required
+
+def add_crew_run_item(event_id):
+    """Add crew run list item (admin/crew)"""
+    event = Event.query.get_or_404(event_id)
+    data = request.json
+    
+    # Get the highest order number
+    max_order = db.session.query(db.func.max(CrewRunItem.order_number)).filter_by(event_id=event_id).scalar() or 0
+    
+    run_item = CrewRunItem(
+        event_id=event_id,
+        order_number=max_order + 1,
+        title=data['title'],
+        description=data.get('description', ''),
+        duration=data.get('duration', ''),
+        cue_type=data.get('cue_type', ''),
+        notes=data.get('notes', '')
+    )
+    
+    db.session.add(run_item)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'id': run_item.id,
+        'order_number': run_item.order_number
+    })
+
+@app.route('/events/crew-run/<int:item_id>/edit', methods=['PUT'])
+@login_required
+
+def edit_crew_run_item(item_id):
+    """Edit crew run list item"""
+    item = CrewRunItem.query.get_or_404(item_id)
+    data = request.json
+    
+    item.title = data.get('title', item.title)
+    item.description = data.get('description', item.description)
+    item.duration = data.get('duration', item.duration)
+    item.cue_type = data.get('cue_type', item.cue_type)
+    item.notes = data.get('notes', item.notes)
+    
+    db.session.commit()
+    return jsonify({'success': True})
+
+@app.route('/events/crew-run/<int:item_id>/delete', methods=['DELETE'])
+@login_required
+
+def delete_crew_run_item(item_id):
+    """Delete crew run list item"""
+    item = CrewRunItem.query.get_or_404(item_id)
+    event_id = item.event_id
+    order = item.order_number
+    
+    db.session.delete(item)
+    
+    # Reorder remaining items
+    items_to_reorder = CrewRunItem.query.filter(
+        CrewRunItem.event_id == event_id,
+        CrewRunItem.order_number > order
+    ).all()
+    
+    for item in items_to_reorder:
+        item.order_number -= 1
+    
+    db.session.commit()
+    return jsonify({'success': True})
+
+@app.route('/events/<int:event_id>/crew-run/reorder', methods=['POST'])
+@login_required
+
+def reorder_crew_run_items(event_id):
+    """Reorder crew run list items"""
+    data = request.json
+    item_ids = data.get('item_ids', [])
+    
+    for index, item_id in enumerate(item_ids, start=1):
+        item = CrewRunItem.query.get(item_id)
+        if item and item.event_id == event_id:
+            item.order_number = index
+    
+    db.session.commit()
+    return jsonify({'success': True})
+
+# ==================== CAST RUN LIST ROUTES ====================
+
+@app.route('/events/<int:event_id>/cast-run/add', methods=['POST'])
+@login_required
+def add_cast_run_item(event_id):
+    """Add cast run list item (admin only)"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    event = Event.query.get_or_404(event_id)
+    data = request.json
+    
+    # Get the highest order number
+    max_order = db.session.query(db.func.max(CastRunItem.order_number)).filter_by(event_id=event_id).scalar() or 0
+    
+    run_item = CastRunItem(
+        event_id=event_id,
+        order_number=max_order + 1,
+        title=data['title'],
+        description=data.get('description', ''),
+        duration=data.get('duration', ''),
+        item_type=data.get('item_type', ''),
+        cast_involved=data.get('cast_involved', ''),
+        notes=data.get('notes', '')
+    )
+    
+    db.session.add(run_item)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'id': run_item.id,
+        'order_number': run_item.order_number
+    })
+
+@app.route('/events/cast-run/<int:item_id>/edit', methods=['PUT'])
+@login_required
+def edit_cast_run_item(item_id):
+    """Edit cast run list item (admin only)"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    item = CastRunItem.query.get_or_404(item_id)
+    data = request.json
+    
+    item.title = data.get('title', item.title)
+    item.description = data.get('description', item.description)
+    item.duration = data.get('duration', item.duration)
+    item.item_type = data.get('item_type', item.item_type)
+    item.cast_involved = data.get('cast_involved', item.cast_involved)
+    item.notes = data.get('notes', item.notes)
+    
+    db.session.commit()
+    return jsonify({'success': True})
+
+@app.route('/events/cast-run/<int:item_id>/delete', methods=['DELETE'])
+@login_required
+def delete_cast_run_item(item_id):
+    """Delete cast run list item (admin only)"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    item = CastRunItem.query.get_or_404(item_id)
+    event_id = item.event_id
+    order = item.order_number
+    
+    db.session.delete(item)
+    
+    # Reorder remaining items
+    items_to_reorder = CastRunItem.query.filter(
+        CastRunItem.event_id == event_id,
+        CastRunItem.order_number > order
+    ).all()
+    
+    for item in items_to_reorder:
+        item.order_number -= 1
+    
+    db.session.commit()
+    return jsonify({'success': True})
+
+@app.route('/events/<int:event_id>/cast-run/reorder', methods=['POST'])
+@login_required
+def reorder_cast_run_items(event_id):
+    """Reorder cast run list items (admin only)"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    data = request.json
+    item_ids = data.get('item_ids', [])
+    
+    for index, item_id in enumerate(item_ids, start=1):
+        item = CastRunItem.query.get(item_id)
+        if item and item.event_id == event_id:
+            item.order_number = index
+    
+    db.session.commit()
+    return jsonify({'success': True})
+
+
 
 
 # RUN APP
