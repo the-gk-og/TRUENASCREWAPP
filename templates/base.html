@@ -444,63 +444,89 @@
         </div>
         
         <nav class="sidebar-nav">
-            <div class="nav-section">
-                <div class="nav-section-title">Main</div>
-                <a href="{{ url_for('dashboard') }}" class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">
-                    <i class="fas fa-home"></i>
-                    <span>Dashboard</span>
-                </a>
-                <a href="{{ url_for('todos') }}" class="nav-item {% if request.endpoint == 'todos' %}active{% endif %}">
-                    <i class="fas fa-tasks"></i>
-                    <span>My To-Do List</span>
-                </a>
-                <a href="{{ url_for('calendar') }}" class="nav-item {% if request.endpoint == 'calendar' %}active{% endif %}">
-                    <i class="fas fa-calendar"></i>
-                    <span>Calendar</span>
-                </a>
-            </div>
-            
-            <div class="nav-section">
-                <div class="nav-section-title">Production</div>
-                <a href="{{ url_for('equipment_list') }}" class="nav-item {% if request.endpoint == 'equipment_list' %}active{% endif %}">
-                    <i class="fas fa-box"></i>
-                    <span>Equipment</span>
-                </a>
-                <a href="{{ url_for('picklist') }}" class="nav-item {% if request.endpoint == 'picklist' %}active{% endif %}">
-                    <i class="fas fa-list-check"></i>
-                    <span>Pick Lists</span>
-                </a>
-                <a href="{{ url_for('stageplans') }}" class="nav-item {% if request.endpoint == 'stageplans' %}active{% endif %}">
-                    <i class="fas fa-image"></i>
-                    <span>Stage Plans</span>
-                </a>
-                <a href="{{ url_for('cast_list') }}" class="nav-item {% if request.endpoint == 'cast_list' %}active{% endif %}">
-                    <i class="fas fa-users"></i>
-                    <span>Cast</span>
-                </a>
-            </div>
-            
-            <div class="nav-section">
-                <div class="nav-section-title">Settings</div>
-                <a href="{{ url_for('discord_settings') }}" class="nav-item {% if request.endpoint == 'discord_settings' %}active{% endif %}">
-                    <i class="fab fa-discord"></i>
-                    <span>Discord</span>
-                </a>
-                {% if current_user.is_admin %}
-                <a href="{{ url_for('admin_overview') }}" class="nav-item {% if request.endpoint == 'admin_overview' %}active{% endif %}">
-                    <i class="fas fa-chart-line"></i>
-                    <span>Overview</span>
-                </a>
-                <a href="{{ url_for('admin_panel') }}" class="nav-item {% if request.endpoint == 'admin_panel' %}active{% endif %}">
-                    <i class="fas fa-cog"></i>
-                    <span>Admin Panel</span>
-                </a>
-                {% endif %}
-                <a href="{{ url_for('logout') }}" class="nav-item">
-                    <i class="fas fa-sign-out-alt"></i>
-                    <span>Logout</span>
-                </a>
-            </div>
+<!-- Replace your base.html navigation section with this -->
+
+<nav class="sidebar-nav">
+    {% if current_user.is_cast and not current_user.is_admin %}
+    <!-- CAST-ONLY NAVIGATION -->
+    <div class="nav-section">
+        <div class="nav-section-title">Cast Portal</div>
+        <a href="{{ url_for('cast_events') }}" class="nav-item {% if request.endpoint in ['cast_events', 'cast_event_detail'] %}active{% endif %}">
+            <i class="fas fa-theater-masks"></i>
+            <span>My Productions</span>
+        </a>
+    </div>
+    
+    <div class="nav-section">
+        <div class="nav-section-title">Account</div>
+        <a href="{{ url_for('logout') }}" class="nav-item">
+            <i class="fas fa-sign-out-alt"></i>
+            <span>Logout</span>
+        </a>
+    </div>
+    
+    {% else %}
+    <!-- CREW/ADMIN NAVIGATION (unchanged) -->
+    <div class="nav-section">
+        <div class="nav-section-title">Main</div>
+        <a href="{{ url_for('dashboard') }}" class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">
+            <i class="fas fa-home"></i>
+            <span>Dashboard</span>
+        </a>
+        <a href="{{ url_for('todos') }}" class="nav-item {% if request.endpoint == 'todos' %}active{% endif %}">
+            <i class="fas fa-tasks"></i>
+            <span>My To-Do List</span>
+        </a>
+        <a href="{{ url_for('calendar') }}" class="nav-item {% if request.endpoint == 'calendar' %}active{% endif %}">
+            <i class="fas fa-calendar"></i>
+            <span>Calendar</span>
+        </a>
+    </div>
+    
+    <div class="nav-section">
+        <div class="nav-section-title">Production</div>
+        <a href="{{ url_for('equipment_list') }}" class="nav-item {% if request.endpoint == 'equipment_list' %}active{% endif %}">
+            <i class="fas fa-box"></i>
+            <span>Equipment</span>
+        </a>
+        <a href="{{ url_for('picklist') }}" class="nav-item {% if request.endpoint == 'picklist' %}active{% endif %}">
+            <i class="fas fa-list-check"></i>
+            <span>Pick Lists</span>
+        </a>
+        <a href="{{ url_for('stageplans') }}" class="nav-item {% if request.endpoint == 'stageplans' %}active{% endif %}">
+            <i class="fas fa-image"></i>
+            <span>Stage Plans</span>
+        </a>
+
+    </div>
+    
+    <div class="nav-section">
+        <div class="nav-section-title">Settings</div>
+        <a href="{{ url_for('discord_settings') }}" class="nav-item {% if request.endpoint == 'discord_settings' %}active{% endif %}">
+            <i class="fab fa-discord"></i>
+            <span>Discord</span>
+        </a>
+        {% if current_user.is_admin %}
+        <a href="{{ url_for('cast_list') }}" class="nav-item {% if request.endpoint == 'cast_list' %}active{% endif %}">
+            <i class="fas fa-users"></i>
+            <span>Cast</span>
+        </a>
+        <a href="{{ url_for('admin_overview') }}" class="nav-item {% if request.endpoint == 'admin_overview' %}active{% endif %}">
+            <i class="fas fa-chart-line"></i>
+            <span>Overview</span>
+        </a>
+        <a href="{{ url_for('admin_panel') }}" class="nav-item {% if request.endpoint == 'admin_panel' %}active{% endif %}">
+            <i class="fas fa-cog"></i>
+            <span>Admin Panel</span>
+        </a>
+        {% endif %}
+        <a href="{{ url_for('logout') }}" class="nav-item">
+            <i class="fas fa-sign-out-alt"></i>
+            <span>Logout</span>
+        </a>
+    </div>
+    {% endif %}
+</nav>            </div>
         </nav>
     </aside>
     

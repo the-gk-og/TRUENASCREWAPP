@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Cast Events - ShowWise{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title"><i class="fas fa-theater-masks"></i> Cast Portal - My Events</h1>
+    <p class="page-subtitle">View your productions, schedules, and cast information</p>
+</div>
+
+<!-- Upcoming Events -->
+<div class="card">
+    <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-calendar-alt"></i> Upcoming Productions</h3>
+    
+    {% set upcoming = events|selectattr('event_date', 'ge', now)|list %}
+    {% if upcoming %}
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 1.5rem;">
+        {% for event in upcoming|sort(attribute='event_date') %}
+        <div class="card" style="background: linear-gradient(135deg, #667eea22 0%, #764ba222 100%); border: 2px solid #667eea;">
+            <h3 style="margin-bottom: 0.5rem;">{{ event.title }}</h3>
+            <p style="color: #666; margin-bottom: 0.5rem;">
+                📅 {{ event.event_date.strftime('%B %d, %Y at %I:%M %p') }}
+            </p>
+            {% if event.event_end_date %}
+            <p style="color: #666; margin-bottom: 0.5rem;">
+                🏁 {{ event.event_end_date.strftime('%I:%M %p') }}
+            </p>
+            {% endif %}
+            {% if event.location %}
+            <p style="color: #666; margin-bottom: 0.5rem;">📍 {{ event.location }}</p>
+            {% endif %}
+            
+            {% if not current_user.is_admin %}
+            {% set my_role = event.cast_members|selectattr('user_id', 'equalto', current_user.id)|first %}
+            {% if my_role %}
+            <div style="background: #fef3c7; padding: 0.75rem; border-radius: 6px; margin: 0.75rem 0; border-left: 3px solid var(--warning);">
+                <p style="margin: 0; color: #78350f; font-weight: 600;">
+                    Playing: {{ my_role.character_name }}
+                </p>
+                <p style="margin: 0.25rem 0 0 0; color: #92400e; font-size: 0.85rem;">
+                    {{ my_role.role_type|capitalize }} Role
+                </p>
+            </div>
+            {% endif %}
+            {% endif %}
+            
+            <p style="color: #666; margin-bottom: 1rem;">👥 {{ event.cast_members|length }} cast members</p>
+            <a href="{{ url_for('cast_event_detail', id=event.id) }}" class="btn btn-primary">View Details</a>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p style="color: #666; padding: 2rem; text-align: center;">No upcoming productions.</p>
+    {% endif %}
+</div>
+
+<!-- Past Events -->
+<div class="card" style="margin-top: 2rem;">
+    <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-history"></i> Past Productions</h3>
+    
+    {% set past = events|rejectattr('event_date', 'ge', now)|list %}
+    {% if past %}
+    <table>
+        <thead>
+            <tr>
+                <th>Production</th>
+                <th>Date</th>
+                <th>Location</th>
+                {% if not current_user.is_admin %}
+                <th>My Role</th>
+                {% endif %}
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for event in past|sort(attribute='event_date', reverse=True) %}
+            <tr style="opacity: 0.7;">
+                <td><strong>{{ event.title }}</strong></td>
+                <td>{{ event.event_date.strftime('%b %d, %Y') }}</td>
+                <td>{{ event.location or 'N/A' }}</td>
+                {% if not current_user.is_admin %}
+                <td>
+                    {% set my_role = event.cast_members|selectattr('user_id', 'equalto', current_user.id)|first %}
+                    {% if my_role %}
+                    {{ my_role.character_name }}
+                    {% else %}
+                    -
+                    {% endif %}
+                </td>
+                {% endif %}
+                <td>
+                    <a href="{{ url_for('cast_event_detail', id=event.id) }}" class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.9rem;">View</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #666; padding: 2rem; text-align: center;">No past productions.</p>
+    {% endif %}
+</div>
+
+{% if not events %}
+<div class="card" style="text-align: center; padding: 3rem;">
+    <p style="font-size: 3rem; margin-bottom: 1rem;">🎭</p>
+    <h3 style="color: var(--dark); margin-bottom: 0.5rem;">No Productions Yet</h3>
+    <p style="color: #6b7280;">You haven't been assigned to any productions yet.</p>
+</div>
+{% endif %}
+
+{% endblock %}
