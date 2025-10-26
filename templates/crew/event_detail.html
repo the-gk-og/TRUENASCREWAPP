@@ -259,12 +259,20 @@
 
 
 <!-- CREW ASSIGNMENTS -->
+
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
         <h3>👥 Crew ({{ event.crew_assignments|length }})</h3>
-        <button onclick="showModal('addCrewModal')" class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
-            + Add Crew
-        </button>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            {% if current_user.is_admin %}
+            <button onclick="addAllCrew()" class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+                <i class="fas fa-users"></i> Add All Crew
+            </button>
+            {% endif %}
+            <button onclick="showModal('addCrewModal')" class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
+                <i class="fas fa-plus"></i> Add Crew
+            </button>
+        </div>
     </div>
     
     {% if event.crew_assignments %}
@@ -298,6 +306,8 @@
     <p style="color: #666; text-align: center; padding: 1rem;">No crew assigned yet.</p>
     {% endif %}
 </div>
+
+
 
 <!-- QUICK LINKS -->
 <div class="card">
@@ -758,6 +768,39 @@ if (document.getElementById('crewRunList')) {
                 }
             });
         }
+    });
+}
+
+
+// Add All Crew function
+function addAllCrew() {
+    if (!confirm('Add all crew members to this event?\n\nThis will assign all users with the "Crew" role and send notifications to those with email addresses.')) return;
+    
+    const btn = event.target;
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding...';
+    
+    fetch('/crew/assign-all', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({event_id: {{ event.id }}})
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert(`Added ${result.added} crew member${result.added !== 1 ? 's' : ''} to the event!`, 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showAlert(result.error || 'Error adding crew', 'error');
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    })
+    .catch(err => {
+        showAlert('Error: ' + err.message, 'error');
+        btn.disabled = false;
+        btn.innerHTML = originalText;
     });
 }
 

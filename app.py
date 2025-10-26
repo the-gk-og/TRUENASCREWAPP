@@ -70,6 +70,7 @@ class User(UserMixin, db.Model):
     is_admin = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_cast = db.Column(db.Boolean, default=False)
+    user_role = db.Column(db.String(20), default='crew')  # NEW: 'crew', 'staff', 'cast'
 
 
 class Equipment(db.Model):
@@ -1492,7 +1493,10 @@ def admin_panel():
             "username": user.username,
             "email": user.email,
             "is_cast": user.is_cast,
-            "created_at": user.created_at.strftime('%b %d, %Y') if user.created_at else "N/A"
+            "created_at": user.created_at.strftime('%b %d, %Y') if user.created_at else "N/A",
+            "discord_username": user.discord_username,
+            "is_admin": user.is_admin,
+            "user_role": user.user_role
         }
         for user in raw_users
     ]
@@ -1508,7 +1512,18 @@ def add_user():
     data = request.json
     if User.query.filter_by(username=data['username']).first():
         return jsonify({'error': 'Username exists'}), 400
-    user = User(username=data['username'], email=data.get('email'), password_hash=generate_password_hash(data['password']), is_admin=data.get('is_admin', False))
+    
+    user_role = data.get('user_role', 'crew')
+    is_cast = user_role == 'cast'
+    
+    user = User(
+        username=data['username'], 
+        email=data.get('email'), 
+        password_hash=generate_password_hash(data['password']), 
+        is_admin=data.get('is_admin', False),
+        is_cast=is_cast,
+        user_role=user_role
+    )
     db.session.add(user)
     db.session.commit()
     return jsonify({'success': True})
@@ -1594,39 +1609,71 @@ def edit_user(id):
     user = User.query.get_or_404(id)
     data = request.json
     
-    # Cannot change another admin's username if you're not them
-    if id != current_user.id and user.is_admin:
-        return jsonify({'error': 'Cannot modify other admin accounts'}), 403
+    print(f"\n=== EDITING USER {id} ===")
+    print(f"Current user_role: {getattr(user, 'user_role', 'NOT SET')}")
+    print(f"Data received: {data}")
     
     # Update username if provided and changed
     if data.get('username') and data['username'] != user.username:
         if User.query.filter_by(username=data['username']).first():
             return jsonify({'error': 'Username already exists'}), 400
         user.username = data['username']
+        print(f"Updated username to: {user.username}")
     
     # Update email if provided
-    if data.get('email'):
-        if data['email'] != user.email and User.query.filter_by(email=data['email']).first():
-            return jsonify({'error': 'Email already in use'}), 400
-        user.email = data['email'] if data['email'].strip() else None
+    if data.get('email') is not None:
+        if data['email'] and data['email'] != user.email:
+            if User.query.filter_by(email=data['email']).first():
+                return jsonify({'error': 'Email already in use'}), 400
+            user.email = data['email'].strip() if data['email'].strip() else None
+        elif not data['email']:
+            user.email = None
+        print(f"Updated email to: {user.email}")
     
     # Update discord if provided
     if 'discord_id' in data:
-        user.discord_id = data.get('discord_id') or None
-        user.discord_username = data.get('discord_username') or None
+        user.discord_id = data.get('discord_id').strip() if data.get('discord_id') else None
+        user.discord_username = data.get('discord_username').strip() if data.get('discord_username') else None
+        print(f"Updated discord to: {user.discord_username}")
     
     # Update password if provided
-    if data.get('password'):
+    if data.get('password') and len(data['password']) > 0:
         if len(data['password']) < 6:
             return jsonify({'error': 'Password must be at least 6 characters'}), 400
         user.password_hash = generate_password_hash(data['password'])
+        print("Updated password")
+    
+    # Update role
+    if 'user_role' in data:
+        print(f"Attempting to update user_role from '{getattr(user, 'user_role', 'NOT SET')}' to '{data['user_role']}'")
+        
+        # Check if the column exists
+        try:
+            user.user_role = data['user_role']
+            user.is_cast = (data['user_role'] == 'cast')
+            print(f"Successfully set user_role to: {user.user_role}")
+        except Exception as e:
+            print(f"ERROR setting user_role: {e}")
+            return jsonify({'error': f'Database error: {str(e)}. Did you run the migration script?'}), 500
+    
+    # Update admin status if provided
+    if 'is_admin' in data:
+        if id == current_user.id and not data['is_admin']:
+            return jsonify({'error': 'Cannot remove your own admin privileges'}), 403
+        user.is_admin = data['is_admin']
+        print(f"Updated is_admin to: {user.is_admin}")
     
     try:
         db.session.commit()
+        print(f"✓ Committed changes. Final user_role: {getattr(user, 'user_role', 'NOT SET')}")
+        print("=== END EDIT ===\n")
         return jsonify({'success': True, 'message': 'User updated successfully'})
     except Exception as e:
         db.session.rollback()
+        print(f"✗ Commit failed: {e}")
+        print("=== END EDIT ===\n")
         return jsonify({'error': str(e)}), 500
+    
 
 @app.route('/admin/users/get/<int:id>', methods=['GET'])
 @login_required
@@ -1642,8 +1689,69 @@ def get_user(id):
         'email': user.email or '',
         'discord_id': user.discord_id or '',
         'discord_username': user.discord_username or '',
-        'is_admin': user.is_admin
+        'is_admin': user.is_admin,
+        'user_role': user.user_role
     })
+
+
+
+@app.route('/crew/assign-all', methods=['POST'])
+@login_required
+@crew_required
+def assign_all_crew():
+    """Assign all crew members to an event"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    data = request.json
+    event_id = data.get('event_id')
+    
+    event = Event.query.get_or_404(event_id)
+    
+    # Get all users who are crew (not cast, not staff-only)
+    crew_users = User.query.filter(
+        User.user_role.in_(['crew', 'crew_admin'])
+    ).all()
+    
+    added_count = 0
+    for user in crew_users:
+        # Check if already assigned
+        existing = CrewAssignment.query.filter_by(
+            event_id=event_id, 
+            crew_member=user.username
+        ).first()
+        
+        if not existing:
+            assignment = CrewAssignment(
+                event_id=event_id,
+                crew_member=user.username,
+                role='Crew Member',
+                assigned_via='webapp'
+            )
+            db.session.add(assignment)
+            added_count += 1
+            
+            # Send email notification
+            if user.email:
+                subject = f"🎭 You're assigned to: {event.title}"
+                body = f"""Hello {user.username},
+
+You have been assigned to an upcoming production event!
+
+📋 Event Details:
+  • Event: {event.title}
+  • Date & Time: {event.event_date.strftime('%B %d, %Y at %I:%M %p')}
+  • Location: {event.location or 'TBD'}
+  • Your Role: Crew Member
+
+Please log in to ShowWise to view full event details.
+
+Best regards,
+ShowWise System"""
+                send_email(subject, user.email, body)
+    
+    db.session.commit()
+    return jsonify({'success': True, 'added': added_count})
 
 # DATABASE INIT
 
@@ -2366,7 +2474,7 @@ def update_cast(id):
     cast.event_id = data.get('event_id', cast.event_id)
     
     db.session.commit()
-    return jsonify({'success': True})
+    return jsonify({'success0': True})
 
 @app.route('/cast/<int:id>', methods=['DELETE'])
 @login_required

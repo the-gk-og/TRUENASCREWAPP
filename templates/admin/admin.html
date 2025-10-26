@@ -32,10 +32,11 @@
 </div>
 
 <!-- CREW MEMBERS MANAGEMENT -->
+
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-        <h3><i class="fas fa-hard-hat"></i> Crew Members Management</h3>
-        <button onclick="showModal('addCrewModal')" class="btn btn-success"><i class="fas fa-plus"></i> Add Crew Member</button>
+        <h3><i class="fas fa-users"></i> User Management</h3>
+        <button onclick="showModal('addCrewModal')" class="btn btn-success"><i class="fas fa-plus"></i> Add User</button>
     </div>
     
     <table>
@@ -43,18 +44,32 @@
             <tr>
                 <th>Username</th>
                 <th>Email</th>
-                <th>Discord</th>
                 <th>Role</th>
+                <th>Discord</th>
                 <th>Created</th>
                 <th>Actions</th>
             </tr>
         </thead>
-        <tbody id="crewTableBody">
+        <tbody id="usersTableBody">
             {% for user in users %}
-            {% if not user.is_cast %}
             <tr>
                 <td><strong>{{ user.username }}</strong></td>
                 <td>{{ user.email or '-' }}</td>
+                <td>
+                    {% if user.is_admin and user.user_role == 'crew' %}
+                    <span style="background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%); color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">Crew/Admin</span>
+                    {% elif user.is_admin and user.user_role == 'staff' %}
+                    <span style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">Staff/Admin</span>
+                    {% elif user.is_admin %}
+                    <span style="background: var(--primary); color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">Admin</span>
+                    {% elif user.user_role == 'cast' %}
+                    <span style="background: #fce7f3; color: #9f1239; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">Cast</span>
+                    {% elif user.user_role == "staff" %}
+                    <span style="background: #fef3c7; color: #78350f; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">Staff</span>
+                    {% else %}
+                    <span style="background: #e5e7eb; color: var(--dark); padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">crew</span>
+                    {% endif %}
+                </td>
                 <td>
                     {% if user.discord_username %}
                     <span style="background: #5865f2; color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">
@@ -62,13 +77,6 @@
                     </span>
                     {% else %}
                     <span style="color: #999;">Not linked</span>
-                    {% endif %}
-                </td>
-                <td>
-                    {% if user.is_admin %}
-                    <span style="background: var(--primary); color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">Admin</span>
-                    {% else %}
-                    <span style="background: #e5e7eb; color: var(--dark); padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">Crew</span>
                     {% endif %}
                 </td>
                 <td>{{ user.created_at }}</td>
@@ -81,10 +89,112 @@
                     {% endif %}
                 </td>
             </tr>
-            {% endif %}
             {% endfor %}
         </tbody>
     </table>
+</div>
+
+<!-- Updated Add User Modal -->
+<div id="addCrewModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('addCrewModal')">&times;</span>
+        <h2 style="margin-bottom: 1.5rem;">Add User</h2>
+        <form id="addCrewForm">
+            <div class="form-group">
+                <label>Username *</label>
+                <input type="text" id="crewUsername" required>
+            </div>
+            <div class="form-group">
+                <label>Email (Optional - for notifications)</label>
+                <input type="email" id="crewEmail" placeholder="user@example.com">
+            </div>
+            <div class="form-group">
+                <label>Password *</label>
+                <input type="password" id="crewPassword" required>
+            </div>
+            <div class="form-group">
+                <label>User Role *</label>
+                <select id="userRole" required>
+                    <option value="crew">Crew</option>
+                    <option value="staff">Staff</option>
+                    <option value="cast">Cast</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label style="display: flex; align-items: center; gap: 0.75rem;">
+                    <input type="checkbox" id="isAdmin" style="width: auto;">
+                    <span>Grant Admin Privileges</span>
+                </label>
+            </div>
+            <button type="submit" class="btn btn-success" style="width: 100%;"><i class="fas fa-plus"></i> Create User</button>
+        </form>
+    </div>
+</div>
+
+<!-- Updated Edit User Modal -->
+<!-- Edit User Modal -->
+<div id="editUserModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('editUserModal')">&times;</span>
+        <h2 style="margin-bottom: 1.5rem;">Edit User</h2>
+        <form id="editUserForm">
+            <input type="hidden" id="editUserId">
+            
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="editUsername" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="editEmail" placeholder="user@example.com">
+            </div>
+            
+            <div class="form-group">
+                <label>User Role *</label>
+                <select id="editUserRole" required>
+                    <option value="crew">Crew</option>
+                    <option value="staff">Staff</option>
+                    <option value="cast">Cast</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label style="display: flex; align-items: center; gap: 0.75rem;">
+                    <input type="checkbox" id="editIsAdmin" style="width: auto;">
+                    <span>Grant Admin Privileges</span>
+                </label>
+            </div>
+            
+            <div class="form-group">
+                <label>Password (Leave blank to keep current password)</label>
+                <input type="password" id="editPassword" placeholder="Enter new password (min 6 chars)">
+            </div>
+            
+            <div style="background: #f0f4ff; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; border-left: 4px solid var(--primary);">
+                <h4 style="margin-bottom: 1rem; color: var(--primary);">Discord Integration</h4>
+                
+                <div class="form-group">
+                    <label>Discord ID</label>
+                    <input type="text" id="editDiscordId" placeholder="Leave blank to unlink">
+                </div>
+                
+                <div class="form-group">
+                    <label>Discord Username</label>
+                    <input type="text" id="editDiscordUsername" placeholder="e.g., username#1234">
+                </div>
+                
+                <p style="font-size: 0.85rem; color: #666; margin: 0;">
+                    💡 <strong>Tip:</strong> Leave both Discord fields blank to unlink the account.
+                </p>
+            </div>
+            
+            <div style="display: flex; gap: 1rem;">
+                <button type="submit" class="btn btn-success" style="flex: 1;"><i class="fas fa-save"></i> Save Changes</button>
+                <button type="button" onclick="hideModal('editUserModal')" class="btn btn-primary" style="flex: 1;">Cancel</button>
+            </div>
+        </form>
+    </div>
 </div>
 
 <!-- CAST MEMBERS MANAGEMENT -->
@@ -188,34 +298,7 @@
     </div>
 </div>
 
-<!-- Add Crew Member Modal -->
-<div id="addCrewModal" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="hideModal('addCrewModal')">&times;</span>
-        <h2 style="margin-bottom: 1.5rem;">Add Crew Member</h2>
-        <form id="addCrewForm">
-            <div class="form-group">
-                <label>Username *</label>
-                <input type="text" id="crewUsername" required>
-            </div>
-            <div class="form-group">
-                <label>Email (Optional - for notifications)</label>
-                <input type="email" id="crewEmail" placeholder="user@example.com">
-            </div>
-            <div class="form-group">
-                <label>Password *</label>
-                <input type="password" id="crewPassword" required>
-            </div>
-            <div class="form-group">
-                <label style="display: flex; align-items: center; gap: 0.75rem;">
-                    <input type="checkbox" id="isAdmin" style="width: auto;">
-                    <span>Grant Admin Privileges</span>
-                </label>
-            </div>
-            <button type="submit" class="btn btn-success" style="width: 100%;"><i class="fas fa-plus"></i> Create Crew Member</button>
-        </form>
-    </div>
-</div>
+
 
 <!-- Add Cast Member Modal -->
 <div id="addCastModal" class="modal">
@@ -240,54 +323,7 @@
     </div>
 </div>
 
-<!-- Edit User Modal -->
-<div id="editUserModal" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="hideModal('editUserModal')">&times;</span>
-        <h2 style="margin-bottom: 1.5rem;">Edit User</h2>
-        <form id="editUserForm">
-            <input type="hidden" id="editUserId">
-            
-            <div class="form-group">
-                <label>Username</label>
-                <input type="text" id="editUsername" required>
-            </div>
-            
-            <div class="form-group">
-                <label>Email</label>
-                <input type="email" id="editEmail" placeholder="user@example.com">
-            </div>
-            
-            <div class="form-group">
-                <label>Password (Leave blank to keep current password)</label>
-                <input type="password" id="editPassword" placeholder="Enter new password (min 6 chars)">
-            </div>
-            
-            <div style="background: #f0f4ff; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; border-left: 4px solid var(--primary);">
-                <h4 style="margin-bottom: 1rem; color: var(--primary);">Discord Integration</h4>
-                
-                <div class="form-group">
-                    <label>Discord ID</label>
-                    <input type="text" id="editDiscordId" placeholder="Leave blank to unlink">
-                </div>
-                
-                <div class="form-group">
-                    <label>Discord Username</label>
-                    <input type="text" id="editDiscordUsername" placeholder="e.g., username#1234">
-                </div>
-                
-                <p style="font-size: 0.85rem; color: #666; margin: 0;">
-                    💡 <strong>Tip:</strong> Leave both Discord fields blank to unlink the account.
-                </p>
-            </div>
-            
-            <div style="display: flex; gap: 1rem;">
-                <button type="submit" class="btn btn-success" style="flex: 1;"><i class="fas fa-save"></i> Save Changes</button>
-                <button type="button" onclick="hideModal('editUserModal')" class="btn btn-primary" style="flex: 1;">Cancel</button>
-            </div>
-        </form>
-    </div>
-</div>
+
 
 <!-- Restore Modal -->
 <div id="restoreModal" class="modal">
@@ -317,6 +353,8 @@
 
 {% block scripts %}
 <script>
+
+
 // Load stats
 function loadStats() {
     const allUsers = {{ users|tojson }};
@@ -327,16 +365,20 @@ function loadStats() {
     document.getElementById('castCount').textContent = castCount;
 }
 
-// Add Crew Member
+// Add User Form Handler
 document.getElementById('addCrewForm').addEventListener('submit', function(e) {
     e.preventDefault();
+    
     const data = {
         username: document.getElementById('crewUsername').value,
         email: document.getElementById('crewEmail').value || null,
         password: document.getElementById('crewPassword').value,
         is_admin: document.getElementById('isAdmin').checked,
-        is_cast: false
+        user_role: document.getElementById('userRole').value
     };
+    
+    console.log('Adding user with data:', data); // Debug log
+    
     fetch('/admin/users/add', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -345,22 +387,30 @@ document.getElementById('addCrewForm').addEventListener('submit', function(e) {
     .then(r => r.json())
     .then(result => {
         if (result.success) {
-            location.reload();
+            showAlert('User created successfully!', 'success');
+            setTimeout(() => location.reload(), 1000);
         } else {
             showAlert(result.error, 'error');
         }
+    })
+    .catch(err => {
+        console.error('Add user error:', err);
+        showAlert('Error creating user: ' + err.message, 'error');
     });
 });
 
-// Add Cast Member
+// Add Cast Member Form Handler
 document.getElementById('addCastForm').addEventListener('submit', function(e) {
     e.preventDefault();
     const data = {
         username: document.getElementById('castUsername').value,
         email: document.getElementById('castEmail').value || null,
         password: document.getElementById('castPassword').value,
+        user_role: 'cast',
         is_cast: true
     };
+    
+    console.log('Creating cast member with data:', data);
     
     fetch('/cast/create-account', {
         method: 'POST',
@@ -375,6 +425,10 @@ document.getElementById('addCastForm').addEventListener('submit', function(e) {
         } else {
             showAlert(result.error, 'error');
         }
+    })
+    .catch(err => {
+        console.error('Create cast error:', err);
+        showAlert('Error: ' + err.message, 'error');
     });
 });
 
@@ -406,62 +460,135 @@ function loadBackups() {
                 html += '</tbody></table>';
             }
             document.getElementById('backupsList').innerHTML = html;
+        })
+        .catch(err => {
+            console.error('Load backups error:', err);
+            document.getElementById('backupsList').innerHTML = '<p style="color: #ef4444;">Error loading backups</p>';
         });
 }
 
 // Create backup
 function createBackup() {
+    const btn = event.target;
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+    
     fetch('/admin/backup', {method: 'POST'})
         .then(r => r.json())
         .then(result => {
             if (result.success) {
                 showAlert('Backup created successfully!', 'success');
                 loadBackups();
+            } else {
+                showAlert('Error creating backup', 'error');
             }
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        })
+        .catch(err => {
+            console.error('Create backup error:', err);
+            showAlert('Error: ' + err.message, 'error');
+            btn.disabled = false;
+            btn.innerHTML = originalText;
         });
 }
 
 // Edit user modal - Load user data
 function editUserModal(userId) {
+    console.log('=== LOADING USER FOR EDIT ===');
+    console.log('User ID:', userId);
+    
     fetch(`/admin/users/get/${userId}`)
         .then(r => r.json())
         .then(user => {
+            console.log('Received user data from server:', user);
+            
+            // Set all form fields
             document.getElementById('editUserId').value = user.id;
             document.getElementById('editUsername').value = user.username;
-            document.getElementById('editEmail').value = user.email;
-            document.getElementById('editDiscordId').value = user.discord_id;
-            document.getElementById('editDiscordUsername').value = user.discord_username;
+            document.getElementById('editEmail').value = user.email || '';
+            
+            // Set user role dropdown
+            const roleDropdown = document.getElementById('editUserRole');
+            const roleToSet = user.user_role || 'crew';
+            roleDropdown.value = roleToSet;
+            console.log('Set role dropdown to:', roleToSet);
+            console.log('Role dropdown current value:', roleDropdown.value);
+            
+            // Set admin checkbox
+            document.getElementById('editIsAdmin').checked = user.is_admin || false;
+            console.log('Set is_admin to:', user.is_admin || false);
+            
+            // Set Discord fields
+            document.getElementById('editDiscordId').value = user.discord_id || '';
+            document.getElementById('editDiscordUsername').value = user.discord_username || '';
+            
+            // Clear password field
             document.getElementById('editPassword').value = '';
+            
+            console.log('=== FINISHED LOADING USER ===');
+            
             showModal('editUserModal');
         })
-        .catch(err => showAlert('Failed to load user data', 'error'));
+        .catch(err => {
+            console.error('Error loading user:', err);
+            showAlert('Failed to load user data: ' + err.message, 'error');
+        });
 }
 
-// Edit user form
+// Edit user form submission
 document.getElementById('editUserForm').addEventListener('submit', function(e) {
     e.preventDefault();
+    
+    console.log('=== SUBMITTING USER EDIT ===');
+    
     const userId = document.getElementById('editUserId').value;
+    const roleDropdown = document.getElementById('editUserRole');
+    const selectedRole = roleDropdown.value;
+    
+    console.log('User ID:', userId);
+    console.log('Role dropdown element:', roleDropdown);
+    console.log('Selected role:', selectedRole);
+    console.log('All dropdown options:', Array.from(roleDropdown.options).map(o => ({value: o.value, text: o.text, selected: o.selected})));
+    
     const data = {
         username: document.getElementById('editUsername').value,
         email: document.getElementById('editEmail').value || null,
         password: document.getElementById('editPassword').value || null,
+        user_role: selectedRole,
+        is_admin: document.getElementById('editIsAdmin').checked,
         discord_id: document.getElementById('editDiscordId').value || null,
         discord_username: document.getElementById('editDiscordUsername').value || null
     };
+    
+    console.log('Data being sent to server:', data);
+    console.log('JSON payload:', JSON.stringify(data));
     
     fetch(`/admin/users/edit/${userId}`, {
         method: 'PUT',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(data)
     })
-    .then(r => r.json())
+    .then(r => {
+        console.log('Response status:', r.status);
+        return r.json();
+    })
     .then(result => {
+        console.log('Server response:', result);
+        console.log('=== END USER EDIT ===');
+        
         if (result.success) {
             showAlert('User updated successfully!', 'success');
             setTimeout(() => location.reload(), 1000);
         } else {
             showAlert(result.error || 'Error updating user', 'error');
         }
+    })
+    .catch(err => {
+        console.error('Update error:', err);
+        console.log('=== END USER EDIT (ERROR) ===');
+        showAlert('Error: ' + err.message, 'error');
     });
 });
 
@@ -483,6 +610,10 @@ document.getElementById('csvForm').addEventListener('submit', function(e) {
         } else {
             showAlert(result.error, 'error');
         }
+    })
+    .catch(err => {
+        console.error('CSV import error:', err);
+        showAlert('Error: ' + err.message, 'error');
     });
 });
 
@@ -506,12 +637,21 @@ document.getElementById('sheetdbForm').addEventListener('submit', function(e) {
         } else {
             showAlert(result.error, 'error');
         }
+    })
+    .catch(err => {
+        console.error('SheetDB import error:', err);
+        showAlert('Error: ' + err.message, 'error');
     });
 });
 
 // Restore database
 document.getElementById('restoreForm').addEventListener('submit', function(e) {
     e.preventDefault();
+    
+    if (!confirm('⚠️ WARNING: This will replace your entire database!\n\nAre you absolutely sure?')) {
+        return;
+    }
+    
     const formData = new FormData();
     formData.append('file', document.getElementById('restoreFile').files[0]);
     
@@ -527,19 +667,30 @@ document.getElementById('restoreForm').addEventListener('submit', function(e) {
         } else {
             showAlert(result.error, 'error');
         }
+    })
+    .catch(err => {
+        console.error('Restore error:', err);
+        showAlert('Error: ' + err.message, 'error');
     });
 });
 
+// Delete user
 function deleteUser(id) {
     if (!confirm('Delete this user? This action cannot be undone.')) return;
+    
     fetch(`/admin/users/delete/${id}`, {method: 'DELETE'})
         .then(r => r.json())
         .then(result => {
             if (result.success) {
-                location.reload();
+                showAlert('User deleted successfully!', 'success');
+                setTimeout(() => location.reload(), 1000);
             } else {
                 showAlert(result.error, 'error');
             }
+        })
+        .catch(err => {
+            console.error('Delete user error:', err);
+            showAlert('Error: ' + err.message, 'error');
         });
 }
 
@@ -548,4 +699,5 @@ loadStats();
 loadBackups();
 setInterval(loadBackups, 30000); // Refresh every 30 seconds
 </script>
+
 {% endblock %}
