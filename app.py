@@ -606,106 +606,13 @@ def crew_required(f):
     return decorated_function
 
 
-
-#logedout routes
-
-@app.route('/home')
-def home():
-    """Landing page - accessible to everyone"""
-    return render_template('/logedout/home.html')
-
-@app.route('/learn-more')
-def learn_more():
-    """Learn more page with detailed features"""
-    return render_template('/logedout/learn_more.html')
-
-@app.route('/contact')
-def contact():
-    """Contact page"""
-    return render_template('/logedout/contact.html')
-
-@app.route('/contact/send', methods=['POST'])
-def send_contact_message():
-    """Send contact message"""
-    data = request.json
-    name = data.get('name', '').strip()
-    email = data.get('email', '').strip()
-    subject = data.get('subject', '').strip()
-    message = data.get('message', '').strip()
-    
-    # Validation
-    if not all([name, email, subject, message]):
-        return jsonify({'error': 'All fields are required'}), 400
-    
-    if len(message) < 10:
-        return jsonify({'error': 'Message must be at least 10 characters'}), 400
-    
-    # Send email to admin
-    try:
-        admin_email = app.config['MAIL_DEFAULT_SENDER']
-        email_body = f"""
-New Contact Message from {name}
-
-Email: {email}
-Subject: {subject}
-
-Message:
-{message}
-
----
-This is an automated message from the ShowWise System contact form.
-"""
-        send_email(f"Contact Form: {subject}", admin_email, email_body)
-        
-        # Optional: Send confirmation email to user
-        user_email_body = f"""
-Hello {name},
-
-Thank you for reaching out to the ShowWise team!
-
-We received your message about: {subject}
-
-We'll get back to you as soon as possible.
-
-Best regards,
-ShowWise Team
-"""
-        send_email("We received your message", email, user_email_body)
-        
-        return jsonify({'success': True, 'message': 'Message sent successfully! Check your email for confirmation.'})
-    except Exception as e:
-        print(f"Contact form error: {e}")
-        return jsonify({'error': 'Failed to send message. Please try again later.'}), 500
-
-
-@app.route('/quote', methods=['GET', 'POST'])
-def quote():
-    if request.method == 'POST':
-        name = request.form.get('name')
-        email = request.form.get('email')
-        organization = request.form.get('organization')
-        message = request.form.get('message')
-
-        # You can add email sending or database storage here
-        print("Quote enquiry received:")
-        print(f"Name: {name}")
-        print(f"Email: {email}")
-        print(f"Organization: {organization}")
-        print(f"Message: {message}")
-
-        flash('Your enquiry has been submitted successfully. We’ll be in touch soon!', 'success')
-        return redirect('/quote')
-
-    return render_template('/logedout/quote.html')
-
-
 # AUTH ROUTES
 
 @app.route('/')
 def index():
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
-    return redirect(url_for('home'))
+    return redirect('http://sfx-crew.com')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -736,7 +643,7 @@ def login():
         
         flash('Invalid username or password')
     
-    return render_template('/logedout/login.html')
+    return render_template('login.html')
 
 @app.route('/session-info')
 @login_required
