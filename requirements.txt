@@ -10,3 +10,5 @@ gunicorn==21.2.0
 discord.py==2.3.2
 pytz==2023.3.post1
 reportlab==4.0.7
+python-barcode==0.15.1
+Pillow==10.1.0

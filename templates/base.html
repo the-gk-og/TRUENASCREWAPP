@@ -495,6 +495,12 @@
             <i class="fas fa-box"></i>
             <span>Equipment</span>
         </a>
+        {% if current_user.is_admin %}
+        <a href="{{ url_for('barcode_page') }}" class="nav-item {% if request.endpoint == 'barcode_page' %}active{% endif %}">
+            <i class="fas fa-barcode"></i>
+            <span>Barcode Generator</span>
+         </a>
+       {% endif %}
         <a href="{{ url_for('hired_equipment_list') }}" class="nav-item {% if request.endpoint == 'hired_equipment_list' %}active{% endif %}">
             <i class="fas fa-handshake"></i>
             <span>Hired Equipment</span>

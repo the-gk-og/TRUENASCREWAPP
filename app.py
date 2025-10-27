@@ -27,6 +27,10 @@ from datetime import datetime, timedelta
 from functools import wraps
 from flask import redirect, url_for, flash
 from flask_login import current_user
+import barcode
+from barcode.writer import ImageWriter
+from PIL import Image
+import tempfile
 
 
 
@@ -799,7 +803,158 @@ def import_sheetdb():
         return jsonify({'success': True, 'imported': count})
     except Exception as e:
         return jsonify({'error': f'Import failed: {str(e)}'}), 400
+    
 
+
+# Add this route to app.py after the equipment routes
+
+@app.route('/equipment/barcodes')
+@login_required
+@crew_required
+def barcode_page():
+    """Barcode generation page"""
+    if not current_user.is_admin:
+        flash('Admin access required')
+        return redirect(url_for('equipment_list'))
+    
+    equipment = Equipment.query.all()
+    equipment_json = [e.to_dict() for e in equipment]
+    return render_template('crew/barcodes.html', equipment=equipment, equipment_json=equipment_json)
+
+@app.route('/equipment/generate-barcodes', methods=['POST'])
+@login_required
+@crew_required
+def generate_barcodes():
+    """Generate printable barcodes for selected equipment"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+
+    try:
+        import io
+        import os
+        import tempfile
+        from datetime import datetime
+        from reportlab.lib.pagesizes import A4
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.units import mm
+        from barcode import Code128
+        from barcode.writer import ImageWriter
+
+        data = request.json
+        equipment_ids = data.get('equipment_ids', [])
+        barcode_size = data.get('size', 'medium')
+
+        # Debugging output
+        print("🔧 Received equipment IDs:", equipment_ids)
+        print("📏 Selected barcode size:", barcode_size)
+
+        if not equipment_ids:
+            return jsonify({'error': 'No equipment selected'}), 400
+
+        equipment_items = Equipment.query.filter(Equipment.id.in_(equipment_ids)).all()
+
+        if not equipment_items:
+            return jsonify({'error': 'No equipment found'}), 404
+
+        # PDF setup
+        pdf_buffer = io.BytesIO()
+        c = canvas.Canvas(pdf_buffer, pagesize=A4)
+        page_width, page_height = A4
+
+        # Size configurations
+        sizes = {
+            'small': (60 * mm, 40 * mm, 8),
+            'medium': (80 * mm, 50 * mm, 10),
+            'large': (100 * mm, 60 * mm, 12)
+        }
+
+        barcode_width, barcode_height, font_size = sizes.get(barcode_size, sizes['medium'])
+
+        # Grid layout
+        margin = 10 * mm
+        x_spacing = barcode_width + 5 * mm
+        y_spacing = barcode_height + 5 * mm
+
+        cols = int((page_width - 2 * margin) / x_spacing)
+        rows = int((page_height - 2 * margin) / y_spacing)
+
+        x_start = margin
+        y_start = page_height - margin - barcode_height
+
+        current_x = x_start
+        current_y = y_start
+        item_count = 0
+
+        for item in equipment_items:
+            if not item.barcode:
+                continue  # Skip items with no barcode
+
+            try:
+                # Generate barcode image
+                code128 = Code128(item.barcode, writer=ImageWriter())
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_file:
+                    barcode_path = tmp_file.name[:-4]  # remove ".png"
+                    code128.save(barcode_path)
+                    image_path = barcode_path + '.png'
+
+                # Draw barcode image
+                c.drawImage(image_path, current_x, current_y,
+                            width=barcode_width, height=barcode_height - 20 * mm,
+                            preserveAspectRatio=True, mask='auto')
+
+                # Draw equipment name
+                c.setFont('Helvetica-Bold', font_size)
+                text_width = c.stringWidth(item.name, 'Helvetica-Bold', font_size)
+                text_x = current_x + (barcode_width - text_width) / 2
+                c.drawString(text_x, current_y + barcode_height - 15 * mm, item.name)
+
+                # Draw barcode number
+                c.setFont('Helvetica', font_size - 2)
+                num_width = c.stringWidth(item.barcode, 'Helvetica', font_size - 2)
+                num_x = current_x + (barcode_width - num_width) / 2
+                c.drawString(num_x, current_y - 5 * mm, item.barcode)
+
+                # Clean up temp file
+                try:
+                    os.remove(image_path)
+                except Exception as cleanup_error:
+                    print(f"Cleanup error: {cleanup_error}")
+
+            except Exception as e:
+                print(f"❌ Error drawing barcode for item {item.id}: {e}")
+                import traceback
+                traceback.print_exc()
+
+            item_count += 1
+            current_x += x_spacing
+
+            if item_count % cols == 0:
+                current_x = x_start
+                current_y -= y_spacing
+
+                if current_y < margin:
+                    c.showPage()
+                    current_y = y_start
+
+        c.save()
+        pdf_buffer.seek(0)
+
+        filename = f"equipment_barcodes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+
+        return send_file(
+            pdf_buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=filename
+        )
+
+    except Exception as e:
+        print(f"🚨 Barcode generation error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+    
 # PICKLIST ROUTES
 
 @app.route('/picklist')

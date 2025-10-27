@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+
+{% block title %}Barcode Generator - ShowWise{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title"><i class="fas fa-barcode"></i> Barcode Generator</h1>
+    <p class="page-subtitle">Generate printable barcodes for your equipment</p>
+</div>
+
+<div style="display: flex; gap: 1rem; margin-bottom: 2rem;">
+    <a href="{{ url_for('equipment_list') }}" class="btn btn-primary">
+        <i class="fas fa-arrow-left"></i> Back to Equipment
+    </a>
+</div>
+
+<!-- Configuration Card -->
+<div class="card">
+    <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-cog"></i> Barcode Configuration</h3>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+        <div>
+            <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Barcode Size</label>
+            <select id="barcodeSize" style="width: 100%; padding: 0.75rem; border: 2px solid var(--border); border-radius: 8px; font-size: 1rem;">
+                <option value="small">Small (60x40mm) - ~24 per page</option>
+                <option value="medium" selected>Medium (80x50mm) - ~15 per page</option>
+                <option value="large">Large (100x60mm) - ~9 per page</option>
+            </select>
+        </div>
+        
+        <div>
+            <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Filter by Category</label>
+            <select id="categoryFilter" onchange="filterByCategory()" style="width: 100%; padding: 0.75rem; border: 2px solid var(--border); border-radius: 8px; font-size: 1rem;">
+                <option value="">All Categories</option>
+            </select>
+        </div>
+    </div>
+    
+    <div style="background: #f0f9ff; padding: 1.5rem; border-radius: 8px; border-left: 4px solid var(--primary);">
+        <h4 style="margin: 0 0 0.5rem 0; color: var(--primary);"><i class="fas fa-info-circle"></i> How to Use</h4>
+        <ol style="margin: 0; padding-left: 1.5rem; line-height: 1.8;">
+            <li>Select equipment items using the checkboxes below</li>
+            <li>Choose your preferred barcode size from the dropdown</li>
+            <li>Click "Generate PDF" to download your printable barcode sheet</li>
+            <li>Print on A4 paper at 100% scale (no scaling)</li>
+            <li>Cut out barcodes and apply to equipment</li>
+        </ol>
+    </div>
+</div>
+
+<!-- Selection Controls -->
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+        <div>
+            <h3 style="margin: 0;"><i class="fas fa-check-square"></i> Select Equipment</h3>
+            <p style="margin: 0.5rem 0 0 0; color: #666; font-size: 0.9rem;">
+                <span id="selectedCount" style="font-weight: 600; color: var(--primary);">0</span> items selected
+            </p>
+        </div>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button onclick="selectAll()" class="btn btn-primary">
+                <i class="fas fa-check-double"></i> Select All
+            </button>
+            <button onclick="clearAll()" class="btn btn-primary">
+                <i class="fas fa-times"></i> Clear All
+            </button>
+            <button onclick="generateBarcodePDF()" class="btn btn-success" id="generateBtn">
+                <i class="fas fa-file-pdf"></i> Generate PDF
+            </button>
+        </div>
+    </div>
+    
+    <!-- Search -->
+    <div class="form-group">
+        <input type="text" id="searchInput" placeholder="🔍 Search by name, barcode, or location..." style="font-size: 1rem;">
+    </div>
+    
+    <!-- Equipment Grid -->
+    <div id="equipmentGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
+        {% for item in equipment %}
+        <div class="equipment-card" data-id="{{ item.id }}" data-category="{{ item.category or '' }}" style="background: white; border: 2px solid var(--border); border-radius: 8px; padding: 1rem; cursor: pointer; transition: all 0.2s ease;">
+            <div style="display: flex; align-items: start; gap: 0.75rem;">
+                <input type="checkbox" class="barcode-checkbox" data-id="{{ item.id }}" onclick="event.stopPropagation(); updateCount();" style="width: 24px; height: 24px; cursor: pointer; flex-shrink: 0; margin-top: 0.25rem;">
+                
+                <div style="flex: 1; min-width: 0;" onclick="toggleCard({{ item.id }})">
+                    <h4 style="margin: 0 0 0.5rem 0; color: var(--dark); word-break: break-word;">{{ item.name }}</h4>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem;">
+                        <span style="color: #6b7280;">
+                            <i class="fas fa-barcode"></i> <code>{{ item.barcode }}</code>
+                        </span>
+                        
+                        {% if item.category %}
+                        <span style="color: #6b7280;">
+                            <i class="fas fa-tag"></i> {{ item.category }}
+                        </span>
+                        {% endif %}
+                        
+                        {% if item.location %}
+                        <span style="color: #6b7280;">
+                            <i class="fas fa-map-marker-alt"></i> {{ item.location }}
+                        </span>
+                        {% endif %}
+                        
+                        <span style="background: #e0e7ff; color: var(--primary); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; display: inline-block; width: fit-content;">
+                            Qty: {{ item.quantity_owned if item.quantity_owned else 1 }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    {% if not equipment %}
+    <div style="text-align: center; padding: 3rem; color: #666;">
+        <p style="font-size: 3rem; margin-bottom: 1rem;">📦</p>
+        <p>No equipment found. Add equipment first to generate barcodes.</p>
+        <a href="{{ url_for('equipment_list') }}" class="btn btn-primary" style="margin-top: 1rem;">Go to Equipment</a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Preview Card -->
+<div class="card" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-left: 4px solid var(--warning);">
+    <h3 style="margin-bottom: 1rem; color: #78350f;"><i class="fas fa-eye"></i> What You'll Get</h3>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        <div style="background: white; padding: 1rem; border-radius: 6px;">
+            <p style="margin: 0; font-weight: 600; color: var(--dark);">📄 A4 PDF Document</p>
+            <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: #666;">Ready to print on standard paper</p>
+        </div>
+        <div style="background: white; padding: 1rem; border-radius: 6px;">
+            <p style="margin: 0; font-weight: 600; color: var(--dark);">📊 Code 128 Barcodes</p>
+            <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: #666;">Industry standard format</p>
+        </div>
+        <div style="background: white; padding: 1rem; border-radius: 6px;">
+            <p style="margin: 0; font-weight: 600; color: var(--dark);">🏷️ Equipment Names</p>
+            <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: #666;">Clear labels above each barcode</p>
+        </div>
+        <div style="background: white; padding: 1rem; border-radius: 6px;">
+            <p style="margin: 0; font-weight: 600; color: var(--dark);">🔢 Barcode Numbers</p>
+            <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: #666;">For manual reference</p>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let equipmentData = {{ equipment_json|tojson }};
+let selectedIds = new Set();
+
+// Load categories
+function loadCategories() {
+    const categories = new Set();
+    equipmentData.forEach(item => {
+        if (item.category) categories.add(item.category);
+    });
+    
+    const select = document.getElementById('categoryFilter');
+    categories.forEach(cat => {
+        const option = document.createElement('option');
+        option.value = cat;
+        option.textContent = cat;
+        select.appendChild(option);
+    });
+}
+
+// Search filter
+document.getElementById('searchInput').addEventListener('input', function(e) {
+    const query = e.target.value.toLowerCase();
+    const cards = document.querySelectorAll('.equipment-card');
+    
+    cards.forEach(card => {
+        const text = card.textContent.toLowerCase();
+        card.style.display = text.includes(query) ? 'block' : 'none';
+    });
+});
+
+// Category filter
+function filterByCategory() {
+    const category = document.getElementById('categoryFilter').value;
+    const cards = document.querySelectorAll('.equipment-card');
+    
+    cards.forEach(card => {
+        if (!category || card.dataset.category === category) {
+            card.style.display = 'block';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+}
+
+// Toggle card selection
+function toggleCard(id) {
+    const checkbox = document.querySelector(`.barcode-checkbox[data-id="${id}"]`);
+    checkbox.checked = !checkbox.checked;
+    updateCount();
+}
+
+// Update selected count
+function updateCount() {
+    selectedIds.clear();
+    document.querySelectorAll('.barcode-checkbox:checked').forEach(cb => {
+        selectedIds.add(parseInt(cb.dataset.id));
+        const card = cb.closest('.equipment-card');
+        card.style.borderColor = 'var(--primary)';
+        card.style.background = '#f0f4ff';
+    });
+    
+    document.querySelectorAll('.barcode-checkbox:not(:checked)').forEach(cb => {
+        const card = cb.closest('.equipment-card');
+        card.style.borderColor = 'var(--border)';
+        card.style.background = 'white';
+    });
+    
+    document.getElementById('selectedCount').textContent = selectedIds.size;
+    
+    const generateBtn = document.getElementById('generateBtn');
+    if (selectedIds.size > 0) {
+        generateBtn.innerHTML = `<i class="fas fa-file-pdf"></i> Generate PDF (${selectedIds.size})`;
+    } else {
+        generateBtn.innerHTML = '<i class="fas fa-file-pdf"></i> Generate PDF';
+    }
+}
+
+// Select all
+function selectAll() {
+    document.querySelectorAll('.equipment-card').forEach(card => {
+        if (card.style.display !== 'none') {
+            const checkbox = card.querySelector('.barcode-checkbox');
+            checkbox.checked = true;
+        }
+    });
+    updateCount();
+}
+
+// Clear all
+function clearAll() {
+    document.querySelectorAll('.barcode-checkbox').forEach(cb => {
+        cb.checked = false;
+    });
+    updateCount();
+}
+
+// Generate PDF
+function generateBarcodePDF() {
+    if (selectedIds.size === 0) {
+        showAlert('Please select at least one equipment item', 'error');
+        return;
+    }
+    
+    const generateBtn = document.getElementById('generateBtn');
+    generateBtn.disabled = true;
+    generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating PDF...';
+    
+    const data = {
+        equipment_ids: Array.from(selectedIds),
+        size: document.getElementById('barcodeSize').value
+    };
+    
+    fetch('/equipment/generate-barcodes', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => {
+                throw new Error(err.error || 'Failed to generate barcodes');
+            });
+        }
+        return response.blob();
+    })
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `equipment_barcodes_${new Date().getTime()}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        showAlert(`Successfully generated barcodes for ${selectedIds.size} items!`, 'success');
+        
+        generateBtn.disabled = false;
+        updateCount();
+    })
+    .catch(err => {
+        showAlert('Error generating barcodes: ' + err.message, 'error');
+        generateBtn.disabled = false;
+        generateBtn.innerHTML = '<i class="fas fa-file-pdf"></i> Generate PDF';
+    });
+}
+
+// Initialize
+loadCategories();
+</script>
+{% endblock %}

@@ -3,12 +3,16 @@
 {% block title %}Equipment Manager - ShowWise{% endblock %}
 
 {% block content %}
+
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
         <h2>📦 Equipment Management</h2>
-        <div>
+        <div style="display: flex; gap: 0.5rem;">
             <button onclick="showModal('scanModal')" class="btn btn-primary">📱 Scan Barcode</button>
             {% if current_user.is_admin %}
+            <a href="{{ url_for('barcode_page') }}" class="btn btn-success" style="text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;">
+                <i class="fas fa-barcode"></i> Generate Barcodes
+            </a>
             <button onclick="showModal('addModal')" class="btn btn-success">+ Add Equipment</button>
             {% endif %}
         </div>
@@ -19,6 +23,7 @@
     </div>
 
     <div id="equipmentList">
+       
  <table>
     <thead>
         <tr>
