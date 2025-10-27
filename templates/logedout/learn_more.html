@@ -1,508 +1,824 @@
 {% extends "base_alt.html" %}
 
-{% block title %}learn-more - ShowWise{% endblock %}
+{% block title %}Learn More - ShowWise{% endblock %}
 
-{% block content %}
+{% block head %}
+<style>
+    :root {
+        --primary: #0051ff;
+        --primary-dark: #0041cc;
+        --dark: #000;
+        --gray-50: #fafafa;
+        --gray-100: #f5f5f5;
+        --gray-200: #e5e5e5;
+        --gray-300: #d4d4d4;
+        --gray-600: #525252;
+        --gray-800: #262626;
+        --gray-900: #171717;
+    }
 
+    body {
+        background: #fff;
+        overflow-x: hidden;
+    }
 
-    <style>
+    /* Page Header */
+    .page-header {
+        padding: 8rem 2rem 4rem;
+        background: linear-gradient(180deg, var(--gray-50) 0%, #fff 100%);
+        text-align: center;
+    }
 
-        
-        .btn-login:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(255, 255, 255, 0.3);
+    .page-header-container {
+        max-width: 900px;
+        margin: 0 auto;
+    }
+
+    .page-header h1 {
+        font-size: 4rem;
+        font-weight: 800;
+        margin-bottom: 1.5rem;
+        letter-spacing: -0.02em;
+        line-height: 1.1;
+    }
+
+    .page-header p {
+        font-size: 1.5rem;
+        color: var(--gray-600);
+        max-width: 700px;
+        margin: 0 auto;
+    }
+
+    /* Content Sections */
+    .content-section {
+        padding: 6rem 2rem;
+        border-bottom: 1px solid var(--gray-200);
+    }
+
+    .content-section:last-of-type {
+        border-bottom: none;
+    }
+
+    .content-section.dark {
+        background: var(--gray-900);
+        color: white;
+    }
+
+    .content-container {
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .section-tag {
+        display: inline-block;
+        background: var(--gray-100);
+        color: var(--gray-600);
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 1.5rem;
+    }
+
+    .dark .section-tag {
+        background: var(--gray-800);
+        color: var(--gray-300);
+    }
+
+    .section-title {
+        font-size: 2.5rem;
+        font-weight: 800;
+        margin-bottom: 1.5rem;
+        letter-spacing: -0.02em;
+    }
+
+    .section-description {
+        font-size: 1.25rem;
+        color: var(--gray-600);
+        margin-bottom: 3rem;
+        max-width: 800px;
+    }
+
+    .dark .section-description {
+        color: var(--gray-300);
+    }
+
+    /* Two Column Layout */
+    .two-column {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4rem;
+        align-items: center;
+    }
+
+    .two-column.reverse {
+        direction: rtl;
+    }
+
+    .two-column.reverse > * {
+        direction: ltr;
+    }
+
+    .column-content h3 {
+        font-size: 2rem;
+        font-weight: 700;
+        margin-bottom: 1.5rem;
+    }
+
+    .column-content p {
+        font-size: 1.125rem;
+        line-height: 1.8;
+        color: var(--gray-600);
+        margin-bottom: 1.5rem;
+    }
+
+    .dark .column-content p {
+        color: var(--gray-300);
+    }
+
+    .feature-list {
+        list-style: none;
+        padding: 0;
+    }
+
+    .feature-list li {
+        padding: 1rem 0;
+        border-bottom: 1px solid var(--gray-200);
+        display: flex;
+        align-items: start;
+        gap: 1rem;
+        font-size: 1.125rem;
+        color: var(--gray-600);
+    }
+
+    .dark .feature-list li {
+        border-bottom-color: var(--gray-800);
+        color: var(--gray-300);
+    }
+
+    .feature-list li:last-child {
+        border-bottom: none;
+    }
+
+    .feature-list i {
+        color: var(--primary);
+        margin-top: 0.25rem;
+        flex-shrink: 0;
+    }
+
+    .column-image {
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+        border: 1px solid var(--gray-200);
+    }
+
+    .column-image img {
+        width: 100%;
+        height: auto;
+        display: block;
+    }
+
+    /* Feature Grid */
+    .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 2rem;
+        margin-top: 3rem;
+    }
+
+    .feature-item {
+        padding: 2rem;
+        background: var(--gray-50);
+        border-radius: 12px;
+        border: 1px solid var(--gray-200);
+    }
+
+    .dark .feature-item {
+        background: var(--gray-800);
+        border-color: var(--gray-700);
+    }
+
+    .feature-item h4 {
+        font-size: 1.25rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .feature-item i {
+        color: var(--primary);
+        font-size: 1.5rem;
+    }
+
+    .feature-item p {
+        color: var(--gray-600);
+        line-height: 1.7;
+        font-size: 1rem;
+    }
+
+    .dark .feature-item p {
+        color: var(--gray-400);
+    }
+
+    /* Use Cases */
+    .use-cases-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 2.5rem;
+        margin-top: 3rem;
+    }
+
+    .use-case-card {
+        padding: 2.5rem;
+        background: white;
+        border-radius: 12px;
+        border: 1px solid var(--gray-200);
+        transition: all 0.3s;
+    }
+
+    .use-case-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 40px rgba(0,0,0,0.08);
+        border-color: var(--primary);
+    }
+
+    .use-case-icon {
+        width: 64px;
+        height: 64px;
+        background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 1.5rem;
+        font-size: 2rem;
+        color: white;
+    }
+
+    .use-case-card h3 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+    }
+
+    .use-case-card p {
+        color: var(--gray-600);
+        line-height: 1.7;
+        font-size: 1.063rem;
+    }
+
+    /* Comparison Table */
+    .comparison-table {
+        width: 100%;
+        margin-top: 3rem;
+        border-collapse: separate;
+        border-spacing: 0;
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid var(--gray-200);
+    }
+
+    .comparison-table th,
+    .comparison-table td {
+        padding: 1.5rem;
+        text-align: left;
+        border-bottom: 1px solid var(--gray-200);
+    }
+
+    .comparison-table thead th {
+        background: var(--dark);
+        color: white;
+        font-weight: 700;
+        font-size: 1rem;
+    }
+
+    .comparison-table tbody tr {
+        background: white;
+        transition: background 0.2s;
+    }
+
+    .comparison-table tbody tr:hover {
+        background: var(--gray-50);
+    }
+
+    .comparison-table tbody tr:last-child td {
+        border-bottom: none;
+    }
+
+    .comparison-table td:first-child {
+        font-weight: 600;
+    }
+
+    .check {
+        color: var(--primary);
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .check i {
+        font-size: 1.25rem;
+    }
+
+    /* CTA Section */
+    .cta-section {
+        padding: 8rem 2rem;
+        background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+        color: white;
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .cta-section::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: url('data:image/svg+xml,<svg width="60" height="60" xmlns="http://www.w3.org/2000/svg"><circle cx="30" cy="30" r="1" fill="white" opacity="0.1"/></svg>');
+        opacity: 0.3;
+    }
+
+    .cta-container {
+        max-width: 800px;
+        margin: 0 auto;
+        position: relative;
+        z-index: 1;
+    }
+
+    .cta-section h2 {
+        font-size: 3rem;
+        font-weight: 800;
+        margin-bottom: 1.5rem;
+        letter-spacing: -0.02em;
+    }
+
+    .cta-section p {
+        font-size: 1.25rem;
+        margin-bottom: 2.5rem;
+        opacity: 0.95;
+    }
+
+    .btn {
+        padding: 1rem 2rem;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 1rem;
+        text-decoration: none;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        border: none;
+        cursor: pointer;
+    }
+
+    .btn-primary {
+        background: white;
+        color: var(--primary);
+    }
+
+    .btn-primary:hover {
+        background: var(--gray-100);
+        transform: translateY(-2px);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        .page-header {
+            padding: 4rem 1.5rem 2rem;
         }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 3rem 2rem;
-        }
-        
-        h1 {
+
+        .page-header h1 {
             font-size: 2.5rem;
-            margin-bottom: 1rem;
-            color: var(--dark);
         }
-        
-        h2 {
+
+        .page-header p {
+            font-size: 1.125rem;
+        }
+
+        .content-section {
+            padding: 4rem 1.5rem;
+        }
+
+        .section-title {
             font-size: 2rem;
-            margin-top: 2rem;
-            margin-bottom: 1.5rem;
-            color: var(--primary);
-            border-bottom: 3px solid var(--primary);
-            padding-bottom: 0.5rem;
         }
-        
-        h3 {
-            font-size: 1.5rem;
-            margin-top: 1.5rem;
-            margin-bottom: 1rem;
-            color: var(--dark);
-        }
-        
-        p {
-            line-height: 1.8;
-            color: #555;
-            margin-bottom: 1rem;
-        }
-        
-        ul {
-            margin-left: 2rem;
-            margin-bottom: 1.5rem;
-        }
-        
-        li {
-            margin-bottom: 0.75rem;
-            color: #555;
-            line-height: 1.6;
-        }
-        
-        .section {
-            background: white;
-            padding: 2rem;
-            border-radius: 12px;
-            margin-bottom: 2rem;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
-            border: 1px solid var(--border);
-        }
-        
-        .feature-showcase {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.5rem;
-            margin: 2rem 0;
-        }
-        
-        .feature-box {
-            background: linear-gradient(135deg, #f0f4ff 0%, #f9f5ff 100%);
-            padding: 1.5rem;
-            border-radius: 8px;
-            border-left: 4px solid var(--primary);
-        }
-        
-        .feature-box h4 {
-            color: var(--primary);
-            margin-bottom: 0.5rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        .feature-box p {
-            font-size: 0.95rem;
-            margin: 0;
-        }
-        
-        .highlight {
-            background: #fef3c7;
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            font-weight: 600;
-            color: #b45309;
-        }
-        
-        .btn-primary {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-            color: white;
-            padding: 0.75rem 1.5rem;
-            border-radius: 6px;
-            text-decoration: none;
-            font-weight: 600;
-            display: inline-block;
-            transition: all 0.3s;
-            border: none;
-            cursor: pointer;
-        }
-        
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
-        }
-        
-        footer {
-            background: var(--dark);
-            color: white;
-            padding: 2rem;
-            text-align: center;
-            margin-top: 4rem;
-        }
-        
-        .footer-links {
-            display: flex;
+
+        .two-column {
+            grid-template-columns: 1fr;
             gap: 2rem;
-            justify-content: center;
-            margin-bottom: 1rem;
-            flex-wrap: wrap;
         }
-        
-        .footer-links a {
-            color: #aaa;
-            text-decoration: none;
-            transition: color 0.3s;
+
+        .two-column.reverse {
+            direction: ltr;
         }
-        
-        .footer-links a:hover {
-            color: white;
+
+        .cta-section {
+            padding: 4rem 1.5rem;
         }
-        
+
+        .cta-section h2 {
+            font-size: 2rem;
+        }
+
+        .use-cases-grid {
+            grid-template-columns: 1fr;
+        }
+
         .comparison-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 2rem 0;
+            font-size: 0.875rem;
         }
-        
+
         .comparison-table th,
         .comparison-table td {
             padding: 1rem;
-            text-align: left;
-            border-bottom: 1px solid var(--border);
         }
-        
-        .comparison-table th {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-            color: white;
-            font-weight: 600;
-        }
-        
-        .comparison-table tr:hover {
-            background: #f9fafb;
-        }
-        
-        .check {
-            color: var(--success);
-            font-weight: bold;
-        }
-        
-        @media (max-width: 768px) {
-            .nav-links {
-                gap: 1rem;
-                font-size: 0.9rem;
-            }
-            
-            h1 {
-                font-size: 1.75rem;
-            }
-            
-            h2 {
-                font-size: 1.5rem;
-            }
-            
-            .container {
-                padding: 1.5rem 1rem;
-            }
-        }
-    </style>
-</head>
-<body>
+    }
+</style>
+{% endblock %}
 
+{% block content %}
+<section class="page-header">
+    <div class="page-header-container">
+        <h1>Everything you need to succeed</h1>
+        <p>Comprehensive production management tools designed for modern teams</p>
+    </div>
+</section>
 
-    <div class="container">
-        <h1>Learn More About ShowWise</h1>
-        <p style="font-size: 1.1rem; color: #666; margin-bottom: 2rem;">Everything you need to know about organizing your production team efficiently</p>
-
-        <!-- Equipment Management -->
-        <div class="section">
-            <h2>📦 Equipment Management</h2>
-            <p>Keep track of all your production equipment with detailed information and instant location lookups.</p>
-            
-            <h3>Features:</h3>
-            <ul>
-                <li><span class="highlight">Image Upload</span> - Share photos of stage setup</li>
-                <li><span class="highlight">PDF Support</span> - Upload detailed floor plans and diagrams</li>
-                <li><span class="highlight">Event Linking</span> - Attach plans to specific events</li>
-                <li><span class="highlight">Team Access</span> - All crew members can view plans</li>
-                <li><span class="highlight">Easy Sharing</span> - Download or view directly in the system</li>
-            </ul>
-        </div>
-
-        <!-- Data Management -->
-        <div class="section">
-            <h2>💾 Data Management & Backups</h2>
-            <p>Keep your data safe with automated backups and restore functionality.</p>
-            
-            <h3>Features:</h3>
-            <ul>
-                <li><span class="highlight">One-Click Backups</span> - Create database backups anytime</li>
-                <li><span class="highlight">Download Backups</span> - Save backups to your computer</li>
-                <li><span class="highlight">Restore Function</span> - Restore from any previous backup</li>
-                <li><span class="highlight">Timestamp Tracking</span> - Know exactly when each backup was created</li>
-                <li><span class="highlight">No Data Loss</span> - Peace of mind that your data is protected</li>
-            </ul>
-        </div>
-
-        <!-- Integrations -->
-        <div class="section">
-            <h2>🤖 Discord Integration</h2>
-            <p>Connect with your team on Discord for real-time notifications and collaboration.</p>
-            
-            <h3>Features:</h3>
-            <ul>
-                <li><span class="highlight">Event Announcements</span> - New events posted to Discord automatically</li>
-                <li><span class="highlight">React to Join</span> - Crew can react with ✋ to add themselves to events</li>
-                <li><span class="highlight">Reminders</span> - Automated reminders 1 week before and day-of events</li>
-                <li><span class="highlight">Account Linking</span> - Link your Discord to your Production Crew account</li>
-                <li><span class="highlight">Command Support</span> - Discord bot commands for quick access</li>
-            </ul>
-        </div>
-
-        <!-- Imports -->
-        <div class="section">
-            <h2>📤 Data Import & Sync</h2>
-            <p>Easily populate your equipment database from existing sources.</p>
-            
-            <h3>Import Methods:</h3>
-            <ul>
-                <li><span class="highlight">CSV Upload</span> - Import equipment from spreadsheets</li>
-                <li><span class="highlight">Google Sheets</span> - Sync directly from Google Sheets via SheetDB</li>
-                <li><span class="highlight">Manual Entry</span> - Add equipment one by one through the UI</li>
-            </ul>
-            
-            <h3>CSV Format Example:</h3>
-            <p style="background: #f3f4f6; padding: 1rem; border-radius: 6px; font-family: monospace;">
-                barcode, name, category, location, notes<br>
-                PROD-001, Spotlight A, Lighting, Equipment Room Shelf 1, 500W working<br>
-                PROD-002, Microphone 1, Audio, Equipment Room Shelf 2, Condenser mic<br>
-            </p>
-        </div>
-
-        <!-- Admin Panel -->
-        <div class="section">
-            <h2>⚙️ Admin Panel</h2>
-            <p>Comprehensive control panel for system administrators.</p>
-            
-            <h3>Admin Features:</h3>
-            <ul>
-                <li><span class="highlight">User Management</span> - Create, edit, and delete user accounts</li>
-                <li><span class="highlight">Edit User Data</span> - Update username, email, password, Discord info</li>
-                <li><span class="highlight">Admin Privileges</span> - Grant or revoke admin access</li>
-                <li><span class="highlight">Equipment Management</span> - Add, edit, delete equipment</li>
-                <li><span class="highlight">Database Management</span> - Backups, restores, and data imports</li>
-                <li><span class="highlight">System Statistics</span> - See at a glance: users, equipment, events</li>
-            </ul>
-        </div>
-
-        <!-- Mobile -->
-        <div class="section">
-            <h2>📱 Mobile & Responsive Design</h2>
-            <p>Work from anywhere with our fully responsive web application.</p>
-            
-            <h3>Mobile Features:</h3>
-            <ul>
-                <li><span class="highlight">Phone Optimized</span> - Full functionality on iOS and Android</li>
-                <li><span class="highlight">Camera Scanning</span> - Use phone camera for barcode scanning</li>
-                <li><span class="highlight">Touch Friendly</span> - Large buttons and easy navigation</li>
-                <li><span class="highlight">Tablet Support</span> - Works great on all screen sizes</li>
-                <li><span class="highlight">Install as App</span> - Can be installed on home screen (PWA)</li>
-            </ul>
-        </div>
-
-        <!-- Use Cases -->
-        <div class="section">
-            <h2>🎬 Perfect For</h2>
-            
-            <div class="feature-showcase">
-                <div class="feature-box">
-                    <h4>🏫 School Productions</h4>
-                    <p>Theater departments and school productions managing equipment and crew</p>
-                </div>
-                <div class="feature-box">
-                    <h4>🎪 Theater Companies</h4>
-                    <p>Professional theaters with complex productions and large equipment inventories</p>
-                </div>
-                <div class="feature-box">
-                    <h4>🎤 Event Planning</h4>
-                    <p>Event organizers coordinating multiple events and crew assignments</p>
-                </div>
-                <div class="feature-box">
-                    <h4>📹 Media Studios</h4>
-                    <p>Production studios managing equipment, crew schedules, and project coordination</p>
-                </div>
-                <div class="feature-box">
-                    <h4>🎭 Performance Groups</h4>
-                    <p>Dance, music, and performance groups coordinating productions</p>
-                </div>
-                <div class="feature-box">
-                    <h4>📺 Broadcasting</h4>
-                    <p>Broadcast and streaming organizations managing complex productions</p>
-                </div>
+<!-- Equipment Management -->
+<section class="content-section">
+    <div class="content-container">
+        <div class="two-column">
+            <div class="column-content">
+                <span class="section-tag">Equipment Tracking</span>
+                <h3>Complete equipment visibility</h3>
+                <p>Track every piece of equipment with detailed information, locations, and real-time availability. Never lose track of your assets again.</p>
+                <ul class="feature-list">
+                    <li>
+                        <i class="fas fa-check-circle"></i>
+                        <span>Barcode scanning with phone camera or scanner</span>
+                    </li>
+                    <li>
+                        <i class="fas fa-check-circle"></i>
+                        <span>Storage location tracking and categorization</span>
+                    </li>
+                    <li>
+                        <i class="fas fa-check-circle"></i>
+                        <span>Quantity management and allocation tracking</span>
+                    </li>
+                    <li>
+                        <i class="fas fa-check-circle"></i>
+                        <span>CSV and Google Sheets import capabilities</span>
+                    </li>
+                    <li>
+                        <i class="fas fa-check-circle"></i>
+                        <span>Instant equipment lookup and search</span>
+                    </li>
+                </ul>
+            </div>
+            <div class="column-image">
+                <img src="https://images.unsplash.com/photo-1586281380349-632531db7ed4?w=800&h=600&fit=crop&q=80" alt="Equipment management" loading="lazy">
             </div>
         </div>
+    </div>
+</section>
 
-        <!-- Comparison -->
-        <div class="section">
-            <h2>📊 Why Choose Production Crew?</h2>
-            
-            <table class="comparison-table">
+<!-- Barcode Scanning -->
+<section class="content-section dark">
+    <div class="content-container">
+        <div class="two-column reverse">
+            <div class="column-image">
+                <img src="https://images.unsplash.com/photo-1609921212029-bb5a28e60960?w=800&h=600&fit=crop&q=80" alt="Barcode scanning" loading="lazy">
+            </div>
+            <div class="column-content">
+                <span class="section-tag">Smart Scanning</span>
+                <h3>Revolutionary barcode scanning</h3>
+                <p>Use any camera-enabled device to instantly scan and lookup equipment. No special hardware required - just point and scan.</p>
+                <ul class="feature-list">
+                    <li>
+                        <i class="fas fa-check-circle"></i>
+                        <span>Works on all phones, tablets, and computers</span>
+                    </li>
+                    <li>
+                        <i class="fas fa-check-circle"></i>
+                        <span>Real-time barcode recognition and lookup</span>
+                    </li>
+                    <li>
+                        <i class="fas fa-check-circle"></i>
+                        <span>Supports Code 128, QR codes, and more</span>
+                    </li>
+                    <li>
+                        <i class="fas fa-check-circle"></i>
+                        <span>Manual entry fallback option</span>
+                    </li>
+                    <li>
+                        <i class="fas fa-check-circle"></i>
+                        <span>Instant location and details display</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Pick Lists -->
+<section class="content-section">
+    <div class="content-container">
+        <div class="two-column">
+            <div class="column-content">
+                <span class="section-tag">Collaboration</span>
+                <h3>Intelligent pick lists</h3>
+                <p>Create collaborative checklists that link directly to your equipment database. Real-time updates keep everyone synchronized.</p>
+                <ul class="feature-list">
+                    <li>
+                        <i class="fas fa-check-circle"></i>
+                        <span>Auto-linked equipment with full details</span>
+                    </li>
+                    <li>
+                        <i class="fas fa-check-circle"></i>
+                        <span>Real-time check-off system for team collaboration</span>
+                    </li>
+                    <li>
+                        <i class="fas fa-check-circle"></i>
+                        <span>Progress tracking with visual indicators</span>
+                    </li>
+                    <li>
+                        <i class="fas fa-check-circle"></i>
+                        <span>Event-specific or general list creation</span>
+                    </li>
+                    <li>
+                        <i class="fas fa-check-circle"></i>
+                        <span>Quantity allocation and availability warnings</span>
+                    </li>
+                </ul>
+            </div>
+            <div class="column-image">
+                <img src="https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=800&h=600&fit=crop&q=80" alt="Pick lists and collaboration" loading="lazy">
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- All Features Grid -->
+<section class="content-section" style="background: var(--gray-50);">
+    <div class="content-container">
+        <div style="text-align: center; margin-bottom: 4rem;">
+            <span class="section-tag">Complete Feature Set</span>
+            <h2 class="section-title">Everything included</h2>
+            <p class="section-description">Professional-grade tools for every aspect of production management</p>
+        </div>
+
+        <div class="feature-grid">
+            <div class="feature-item">
+                <h4>
+                    <i class="fas fa-calendar-alt"></i>
+                    Event Scheduling
+                </h4>
+                <p>Schedule events with crew assignments, automatic notifications, and Google Calendar sync.</p>
+            </div>
+
+            <div class="feature-item">
+                <h4>
+                    <i class="fas fa-users"></i>
+                    Crew Management
+                </h4>
+                <p>Assign roles, track availability, and coordinate your entire team with automated notifications.</p>
+            </div>
+
+            <div class="feature-item">
+                <h4>
+                    <i class="fas fa-images"></i>
+                    Stage Plans
+                </h4>
+                <p>Upload and share stage layouts, diagrams, and setup guides with your entire team.</p>
+            </div>
+
+            <div class="feature-item">
+                <h4>
+                    <i class="fas fa-database"></i>
+                    Database Backups
+                </h4>
+                <p>One-click backups and restore functionality to keep your data safe and secure.</p>
+            </div>
+
+            <div class="feature-item">
+                <h4>
+                    <i class="fab fa-discord"></i>
+                    Discord Integration
+                </h4>
+                <p>Get notifications on Discord, join events with reactions, and manage crew seamlessly.</p>
+            </div>
+
+            <div class="feature-item">
+                <h4>
+                    <i class="fas fa-mobile-alt"></i>
+                    Mobile Responsive
+                </h4>
+                <p>Full functionality on phones, tablets, and desktops. Work from anywhere, anytime.</p>
+            </div>
+
+            <div class="feature-item">
+                <h4>
+                    <i class="fas fa-file-pdf"></i>
+                    PDF Export
+                </h4>
+                <p>Generate professional event briefs with schedules, crew lists, and pick lists.</p>
+            </div>
+
+            <div class="feature-item">
+                <h4>
+                    <i class="fas fa-handshake"></i>
+                    Hired Equipment
+                </h4>
+                <p>Track rental equipment, return dates, and pre-return checklists.</p>
+            </div>
+
+            <div class="feature-item">
+                <h4>
+                    <i class="fas fa-tasks"></i>
+                    To-Do Lists
+                </h4>
+                <p>Personal task management with priorities, due dates, and event linking.</p>
+            </div>
+
+            <div class="feature-item">
+                <h4>
+                    <i class="fas fa-theater-masks"></i>
+                    Cast Management
+                </h4>
+                <p>Manage cast members, roles, and production-specific information separately from crew.</p>
+            </div>
+
+            <div class="feature-item">
+                <h4>
+                    <i class="fas fa-bell"></i>
+                    Smart Notifications
+                </h4>
+                <p>Automated email and Discord notifications for events, assignments, and reminders.</p>
+            </div>
+
+            <div class="feature-item">
+                <h4>
+                    <i class="fas fa-shield-alt"></i>
+                    User Permissions
+                </h4>
+                <p>Admin controls, user management, and role-based access for security.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Use Cases -->
+<section class="content-section">
+    <div class="content-container">
+        <div style="text-align: center; margin-bottom: 4rem;">
+            <span class="section-tag">Use Cases</span>
+            <h2 class="section-title">Built for production teams</h2>
+            <p class="section-description">Trusted by theaters, schools, studios, and event companies worldwide</p>
+        </div>
+
+        <div class="use-cases-grid">
+            <div class="use-case-card">
+                <div class="use-case-icon">
+                    <i class="fas fa-school"></i>
+                </div>
+                <h3>School Productions</h3>
+                <p>Perfect for theater departments and school productions managing equipment, crew schedules, and student involvement across multiple shows.</p>
+            </div>
+
+            <div class="use-case-card">
+                <div class="use-case-icon">
+                    <i class="fas fa-building"></i>
+                </div>
+                <h3>Theater Companies</h3>
+                <p>Professional theaters with complex productions and large equipment inventories. Streamline your entire production workflow.</p>
+            </div>
+
+            <div class="use-case-card">
+                <div class="use-case-icon">
+                    <i class="fas fa-calendar-check"></i>
+                </div>
+                <h3>Event Planning</h3>
+                <p>Event organizers coordinating multiple events and crew assignments with tight schedules and complex logistics.</p>
+            </div>
+
+            <div class="use-case-card">
+                <div class="use-case-icon">
+                    <i class="fas fa-video"></i>
+                </div>
+                <h3>Media Studios</h3>
+                <p>Production studios managing equipment, crew schedules, and project coordination across multiple simultaneous shoots.</p>
+            </div>
+
+            <div class="use-case-card">
+                <div class="use-case-icon">
+                    <i class="fas fa-music"></i>
+                </div>
+                <h3>Performance Groups</h3>
+                <p>Dance, music, and performance groups coordinating rehearsals, equipment, and production logistics for tours and shows.</p>
+            </div>
+
+            <div class="use-case-card">
+                <div class="use-case-icon">
+                    <i class="fas fa-broadcast-tower"></i>
+                </div>
+                <h3>Broadcasting</h3>
+                <p>Broadcast and streaming organizations managing complex multi-camera productions and technical equipment inventories.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Comparison -->
+<section class="content-section" style="background: var(--gray-50);">
+    <div class="content-container">
+        <div style="text-align: center; margin-bottom: 4rem;">
+            <span class="section-tag">Comparison</span>
+            <h2 class="section-title">Why choose ShowWise?</h2>
+            <p class="section-description">See how we compare to traditional methods</p>
+        </div>
+
+        <table class="comparison-table">
+            <thead>
                 <tr>
                     <th>Feature</th>
-                    <th>Production Crew</th>
+                    <th>ShowWise</th>
                     <th>Spreadsheets</th>
                     <th>Manual System</th>
                 </tr>
+            </thead>
+            <tbody>
                 <tr>
-                    <td><strong>Equipment Tracking</strong></td>
-                    <td><span class="check">✓</span> Live database</td>
+                    <td>Equipment Tracking</td>
+                    <td><span class="check"><i class="fas fa-check-circle"></i> Live database</span></td>
                     <td>Error-prone</td>
                     <td>Lost data</td>
                 </tr>
                 <tr>
-                    <td><strong>Barcode Scanning</strong></td>
-                    <td><span class="check">✓</span> Phone camera</td>
+                    <td>Barcode Scanning</td>
+                    <td><span class="check"><i class="fas fa-check-circle"></i> Phone camera</span></td>
                     <td>No</td>
                     <td>No</td>
                 </tr>
                 <tr>
-                    <td><strong>Crew Scheduling</strong></td>
-                    <td><span class="check">✓</span> Auto notifications</td>
+                    <td>Crew Scheduling</td>
+                    <td><span class="check"><i class="fas fa-check-circle"></i> Auto notifications</span></td>
                     <td>Manual calls</td>
                     <td>Paper notes</td>
                 </tr>
                 <tr>
-                    <td><strong>Pick Lists</strong></td>
-                    <td><span class="check">✓</span> Auto-linked</td>
+                    <td>Pick Lists</td>
+                    <td><span class="check"><i class="fas fa-check-circle"></i> Auto-linked</span></td>
                     <td>Manual lists</td>
                     <td>Handwritten</td>
                 </tr>
                 <tr>
-                    <td><strong>Data Backup</strong></td>
-                    <td><span class="check">✓</span> One-click</td>
+                    <td>Data Backup</td>
+                    <td><span class="check"><i class="fas fa-check-circle"></i> One-click</span></td>
                     <td>Manual</td>
                     <td>No backup</td>
                 </tr>
                 <tr>
-                    <td><strong>Mobile Access</strong></td>
-                    <td><span class="check">✓</span> Full app</td>
+                    <td>Mobile Access</td>
+                    <td><span class="check"><i class="fas fa-check-circle"></i> Full app</span></td>
                     <td>Limited</td>
                     <td>No</td>
                 </tr>
                 <tr>
-                    <td><strong>Team Collaboration</strong></td>
-                    <td><span class="check">✓</span> Real-time</td>
+                    <td>Team Collaboration</td>
+                    <td><span class="check"><i class="fas fa-check-circle"></i> Real-time</span></td>
                     <td>Delayed</td>
                     <td>None</td>
                 </tr>
-            </table>
-        </div>
+                <tr>
+                    <td>Integration</td>
+                    <td><span class="check"><i class="fas fa-check-circle"></i> Discord, Google Calendar</span></td>
+                    <td>Limited</td>
+                    <td>None</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
 
-        <!-- Getting Started -->
-        <div class="section">
-            <h2>🚀 Getting Started</h2>
-            
-            <h3>Step 1: Create Account</h3>
-            <p>Contact your administrator to create a user account, or log in with existing credentials.</p>
-            
-            <h3>Step 2: Add Equipment</h3>
-            <p>Upload your equipment list via CSV, Google Sheets, or add manually. Assign barcodes to each item.</p>
-            
-            <h3>Step 3: Schedule Events</h3>
-            <p>Create production events and assign crew members. Notifications are sent automatically.</p>
-            
-            <h3>Step 4: Create Pick Lists</h3>
-            <p>For each event, create pick lists by selecting equipment or adding custom items.</p>
-            
-            <h3>Step 5: Execute & Track</h3>
-            <p>Use the system during your production to scan barcodes, check off items, and collaborate with your team.</p>
-            
-            <div style="text-align: center; margin-top: 2rem;">
-                <a href="/quote" class="btn-primary"><i class="fas fa-sign-in-alt"></i> Enquire Now</a>
-            </div>
-        </div>
-
-        <!-- FAQ -->
-        <div class="section">
-            <h2>❓ Frequently Asked Questions</h2>
-            
-            <h3>Is my data secure?</h3>
-            <p>Yes! All data is stored securely with encryption. Regular backups ensure you never lose important information. You control all access with user accounts and admin privileges.</p>
-            
-            <h3>Can I use this on my phone?</h3>
-            <p>Absolutely! The system is fully responsive and works perfectly on phones, tablets, and desktops. You can even install it as an app on your home screen.</p>
-            
-            <h3>How do I import existing equipment?</h3>
-            <p>Use CSV upload or connect your Google Sheet via SheetDB. No technical knowledge required—just a spreadsheet with equipment information.</p>
-            
-            <h3>What if I lose my password?</h3>
-            <p>Contact your administrator. They can reset your password from the admin panel.</p>
-            
-            <h3>Can I use this offline?</h3>
-            <p>The system requires an internet connection to function. However, you can install it as a PWA (Progressive Web App) for faster loading and offline awareness.</p>
-            
-            <h3>How many users can I have?</h3>
-            <p>Unlimited users! Each team member gets their own account with customizable permissions.</p>
-        </div>
-
-
-
-</body>
-</html>
-
-        <div class="section">
-            <h2>📷 Camera Barcode Scanning</h2>
-            <p>Revolutionary barcode scanning that works directly in your browser—no special apps needed!</p>
-            
-            <h3>How It Works:</h3>
-            <ul>
-                <li>Use your <span class="highlight">phone camera</span> to scan barcodes instantly</li>
-                <li><span class="highlight">Real-time recognition</span> of multiple barcode formats</li>
-                <li><span class="highlight">Manual entry fallback</span> if camera is unavailable</li>
-                <li>Automatically displays <span class="highlight">equipment location</span> after scanning</li>
-                <li>Works on <span class="highlight">all devices</span> - iOS, Android, Windows, Mac</li>
-            </ul>
-            
-            <h3>Supported Barcode Formats:</h3>
-            <p>Code 128, EAN-13/8, UPC-A/E, Code 39, QR Codes, and more</p>
-        </div>
-
-        <!-- Pick Lists -->
-        <div class="section">
-            <h2>📋 Smart Pick Lists</h2>
-            <p>Create collaborative checklists for events, linked directly to your equipment database.</p>
-            
-            <h3>Key Features:</h3>
-            <ul>
-                <li><span class="highlight">Equipment Linking</span> - Add items directly from your equipment database</li>
-                <li><span class="highlight">Manual Entry</span> - Add consumables, rentals, or custom items</li>
-                <li><span class="highlight">Real-time Updates</span> - See equipment details automatically</li>
-                <li><span class="highlight">Progress Tracking</span> - Visual progress bar shows completion</li>
-                <li><span class="highlight">Check-off System</span> - Crew members mark items as they gather them</li>
-                <li><span class="highlight">Multi-event Support</span> - Create lists for different events</li>
-            </ul>
-            
-            <p><strong>Benefit:</strong> No more confusion about what's needed—everything is in one place with real-time updates from your equipment database.</p>
-        </div>
-
-        <!-- Event Calendar -->
-        <div class="section">
-            <h2>📅 Event Calendar & Scheduling</h2>
-            <p>Organize all your production events in one centralized calendar.</p>
-            
-            <h3>Features:</h3>
-            <ul>
-                <li><span class="highlight">Create Events</span> - Add title, date, time, location, and description</li>
-                <li><span class="highlight">Assign Crew</span> - Add team members with specific roles</li>
-                <li><span class="highlight">Email Notifications</span> - Automatic emails when crew are assigned</li>
-                <li><span class="highlight">Google Calendar Sync</span> - Export events to your calendar app</li>
-                <li><span class="highlight">Linked Resources</span> - Attach pick lists and stage plans to events</li>
-            </ul>
-        </div>
-
-        <!-- Crew Management -->
-        <div class="section">
-            <h2>👥 Crew Management & Scheduling</h2>
-            <p>Assign roles to team members and manage your entire production team efficiently.</p>
-            
-            <h3>Features:</h3>
-            <ul>
-                <li><span class="highlight">Role Assignment</span> - Assign specific roles (Stage Manager, Lighting Op, etc.)</li>
-                <li><span class="highlight">Email Notifications</span> - Team members get notified when assigned</li>
-                <li><span class="highlight">User Accounts</span> - Each team member has their own login</li>
-                <li><span class="highlight">Event View</span> - Crew can see their assigned events and roles</li>
-                <li><span class="highlight">Admin Privileges</span> - Control who can edit equipment and users</li>
-            </ul>
-        </div>
-
-
-
-
+<!-- CTA -->
+<section class="cta-section">
+    <div class="cta-container">
+        <h2>Start transforming your workflow today</h2>
+        <p>Join production teams who are already managing their operations more efficiently with ShowWise.</p>
+        <a href="/quote" class="btn btn-primary">
+            Request a Demo
+            <i class="fas fa-arrow-right"></i>
+        </a>
+    </div>
+</section>
 {% endblock %}
