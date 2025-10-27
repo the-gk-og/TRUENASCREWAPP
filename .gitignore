@@ -11,3 +11,5 @@ instance/
 # Ignore local environment variables
 .env
 .env1
+
+crewapp.sql

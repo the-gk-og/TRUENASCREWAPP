@@ -36,7 +36,59 @@ import tempfile
 
 #setup
 app = Flask(__name__, static_folder='static', static_url_path='/static')
-app.config['SECRET_KEY'] = 'your-secret-key-change-this'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-this')
+
+# Session configuration for "Remember Me" functionality
+# SESSION_DURATION can be set in .env file (e.g., "7d", "1w", "30d", "1h")
+# Default is 1 week if not specified
+SESSION_DURATION = os.environ.get('SESSION_DURATION', '1w')
+
+def parse_duration(duration_str):
+    """
+    Parse duration string into timedelta
+    Supports: 1d (1 day), 1w (1 week), 1h (1 hour), 30m (30 minutes)
+    Examples: "7d", "1w", "2w", "24h", "30m"
+    """
+    duration_str = duration_str.strip().lower()
+    
+    try:
+        if duration_str.endswith('w'):
+            # Weeks
+            weeks = int(duration_str[:-1])
+            return timedelta(weeks=weeks)
+        elif duration_str.endswith('d'):
+            # Days
+            days = int(duration_str[:-1])
+            return timedelta(days=days)
+        elif duration_str.endswith('h'):
+            # Hours
+            hours = int(duration_str[:-1])
+            return timedelta(hours=hours)
+        elif duration_str.endswith('m'):
+            # Minutes
+            minutes = int(duration_str[:-1])
+            return timedelta(minutes=minutes)
+        else:
+            # Default to days if no suffix
+            days = int(duration_str)
+            return timedelta(days=days)
+    except (ValueError, AttributeError):
+        # Default to 1 week if parsing fails
+        print(f"⚠️  Invalid SESSION_DURATION format: '{duration_str}'. Using default 1 week.")
+        return timedelta(weeks=1)
+
+# Set session lifetime
+app.config['PERMANENT_SESSION_LIFETIME'] = parse_duration(SESSION_DURATION)
+app.config['REMEMBER_COOKIE_DURATION'] = parse_duration(SESSION_DURATION)
+app.config['REMEMBER_COOKIE_SECURE'] = False  # Set to True if using HTTPS
+app.config['REMEMBER_COOKIE_HTTPONLY'] = True
+app.config['REMEMBER_COOKIE_SAMESITE'] = 'Lax'
+
+# Session security settings
+app.config['SESSION_COOKIE_SECURE'] = False  # Set to True if using HTTPS
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///production_crew.db'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
@@ -660,16 +712,48 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
+        remember = request.form.get('remember', 'off') == 'on'  # Check if "Remember Me" is checked
+        
         user = User.query.filter_by(username=username).first()
+        
         if user and check_password_hash(user.password_hash, password):
-            login_user(user)
+            # Log the user in with remember me option
+            login_user(user, remember=remember)
+            
+            # Make session permanent if remember me is checked
+            if remember:
+                from flask import session
+                session.permanent = True
+                print(f"✓ User {username} logged in with 'Remember Me' for {SESSION_DURATION}")
+            else:
+                print(f"✓ User {username} logged in (session only)")
+            
             # Redirect based on role
             if user.is_cast:
                 return redirect(url_for('cast_events'))
             else:
                 return redirect(url_for('dashboard'))
+        
         flash('Invalid username or password')
+    
     return render_template('/logedout/login.html')
+
+@app.route('/session-info')
+@login_required
+def session_info():
+    """Show current session information (for debugging)"""
+    from flask import session
+    
+    info = {
+        'username': current_user.username,
+        'is_permanent': session.permanent,
+        'session_duration': SESSION_DURATION,
+        'expires_in': str(app.config['PERMANENT_SESSION_LIFETIME']),
+        'logged_in': current_user.is_authenticated
+    }
+    
+    return jsonify(info)
+
 
 @app.route('/logout')
 @login_required

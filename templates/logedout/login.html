@@ -78,7 +78,8 @@
     color: #333;
   }
 
-  input {
+  input[type="text"],
+  input[type="password"] {
     width: 100%;
     padding: 0.875rem 1rem;
     border: 2px solid #e0e0e0;
@@ -87,10 +88,32 @@
     transition: all 0.3s ease;
   }
 
-  input:focus {
+  input[type="text"]:focus,
+  input[type="password"]:focus {
     outline: none;
     border-color: #667eea;
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  }
+
+  .remember-me {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .remember-me input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: #667eea;
+  }
+
+  .remember-me label {
+    margin: 0;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
   }
 
   .btn {
@@ -154,10 +177,17 @@
       <label for="username"><i class="fas fa-user"></i> Username</label>
       <input type="text" id="username" name="username" required autofocus placeholder="Enter your username" />
     </div>
+    
     <div class="form-group">
       <label for="password"><i class="fas fa-lock"></i> Password</label>
       <input type="password" id="password" name="password" required placeholder="Enter your password" />
     </div>
+    
+    <div class="remember-me">
+      <input type="checkbox" id="remember" name="remember" checked />
+      <label for="remember">Remember me</label>
+    </div>
+    
     <button type="submit" class="btn">
       <i class="fas fa-sign-in-alt"></i> Login
     </button>
