@@ -278,14 +278,13 @@
       {% if organization.logo %}
       <img src="{{ organization.logo }}" alt="{{ organization.name }}" class="org-logo" />
       {% endif %}
-      <h1 class="org-name">{{ organization.name }}</h1>
       {% if organization.tagline %}
       <p class="org-tagline">{{ organization.tagline }}</p>
       {% endif %}
     </div>
 
     <h2 class="login-title">
-      <i class="fas fa-sign-in-alt"></i> Login
+      <i class="fas fa-sign-in-alt"></i> Login - {{ organization.name }}
     </h2>
     <p class="login-subtitle">Access your ShowWise dashboard</p>
 
@@ -321,7 +320,7 @@
     <div class="footer">
       
       <div class="footer-links">
-        <a href="{{ organization.website }}" target="_blank">
+        <a href="https://sfx-crew.com" target="_blank">
           <i class="fas fa-home"></i> Home
         </a>
         <a href="https://sfx-crew.com/contact" target="_blank">
@@ -333,7 +332,7 @@
         </a>
       </div>
       {% endif %}
-      <p class="footer-text">&copy; {{ now.strftime('%Y') }} {{ organization.name }}. All rights reserved.</p>
+      <p class="footer-text">&copy; {{ now.strftime('%Y') }} ShowWise. All rights reserved.</p>
       <p class="powered-by">Powered by <strong>ShowWise</strong></p>
     </div>
   </div>
