@@ -31,6 +31,7 @@ import barcode
 from barcode.writer import ImageWriter
 from PIL import Image
 import tempfile
+from functools import lru_cache
 
 
 
@@ -113,6 +114,10 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs('backups', exist_ok=True)
 
 notification_tracker = {}
+
+# Organization Settings
+ORGANIZATION_SLUG = os.environ.get('ORGANIZATION_SLUG', '')
+MAIN_SERVER_URL = os.environ.get('MAIN_SERVER_URL', 'https://sfx-crew.com')
 
 # DATABASE MODELS
 
@@ -605,6 +610,34 @@ def crew_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+@lru_cache(maxsize=1)
+def get_organization():
+    """Fetch organization data from main server with caching"""
+    try:
+        response = requests.get(
+            f"{MAIN_SERVER_URL}/api/organizations/{ORGANIZATION_SLUG}", 
+            timeout=5
+        )
+        if response.status_code == 200:
+            data = response.json()
+            return data.get('organization', {})
+        else:
+            print(f"Error fetching organization: {response.status_code}")
+            return {}
+    except Exception as e:
+        print(f"Error connecting to main server: {e}")
+        return {}
+
+# Fallback organization data if API fails
+DEFAULT_ORG = {
+    'name': 'ShowWise',
+    'slug': 'showwise',
+    'tagline': 'Crew Management',
+    'primary_color': '#6366f1',
+    'secondary_color': '#ec4899',
+    'logo': '',
+    'website': 'https://sfx-crew.com'
+}
 
 # AUTH ROUTES
 
@@ -619,15 +652,13 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        remember = request.form.get('remember', 'off') == 'on'  # Check if "Remember Me" is checked
+        remember = request.form.get('remember', 'off') == 'on'
         
         user = User.query.filter_by(username=username).first()
         
         if user and check_password_hash(user.password_hash, password):
-            # Log the user in with remember me option
             login_user(user, remember=remember)
             
-            # Make session permanent if remember me is checked
             if remember:
                 from flask import session
                 session.permanent = True
@@ -635,7 +666,6 @@ def login():
             else:
                 print(f"✓ User {username} logged in (session only)")
             
-            # Redirect based on role
             if user.is_cast:
                 return redirect(url_for('cast_events'))
             else:
@@ -643,7 +673,16 @@ def login():
         
         flash('Invalid username or password')
     
-    return render_template('login.html')
+    # Fetch organization data
+    org = get_organization()
+    if not org:
+        org = DEFAULT_ORG
+    
+    # Pass organization, session duration, and current datetime to template
+    return render_template('login.html', 
+                         organization=org, 
+                         SESSION_DURATION=SESSION_DURATION,
+                         now=datetime.now())
 
 @app.route('/session-info')
 @login_required
