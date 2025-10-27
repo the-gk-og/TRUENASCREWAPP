@@ -2,7 +2,7 @@
 #uploads/**
 
 # But keep the uploads/ folder itself
-#!uploads/
+!uploads/
 #!uploads/.gitkeep  # Optional: placeholder file to keep the folder tracked
 
 # Ignore the entire instance/ folder
@@ -13,3 +13,4 @@ instance/
 .env1
 
 crewapp.sql
+__pycache__/
