@@ -369,6 +369,16 @@
         white-space: nowrap;
     }
     
+    /* Drawing paths */
+    .canvas-drawing {
+        cursor: pointer;
+    }
+    
+    .canvas-drawing.selected {
+        filter: drop-shadow(0 0 3px var(--primary));
+        stroke-width: 4;
+    }
+    
     .resize-handle {
         position: absolute;
         width: 10px;
