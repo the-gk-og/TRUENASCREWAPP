@@ -1,0 +1,824 @@
+{% extends "base.html" %}
+
+{% block title %}Stage Plan Designer - ShowWise{% endblock %}
+
+{% block content %}
+<style>
+    .designer-container {
+        display: grid;
+        grid-template-columns: 280px 1fr 300px;
+        gap: 1rem;
+        height: calc(100vh - 140px);
+    }
+    
+    .designer-panel {
+        background: white;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .panel-header {
+        padding: 1rem;
+        background: #f9fafb;
+        border-bottom: 2px solid var(--border);
+        font-weight: 600;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .panel-content {
+        padding: 1rem;
+        overflow-y: auto;
+        flex: 1;
+    }
+    
+    /* Toolbar */
+    .toolbar {
+        display: flex;
+        gap: 0.5rem;
+        padding: 1rem;
+        background: white;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+    }
+    
+    .tool-btn {
+        padding: 0.75rem 1rem;
+        border: 2px solid var(--border);
+        background: white;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 500;
+    }
+    
+    .tool-btn:hover {
+        border-color: var(--primary);
+        color: var(--primary);
+        transform: translateY(-2px);
+    }
+    
+    .tool-btn.active {
+        background: var(--primary);
+        color: white;
+        border-color: var(--primary);
+    }
+    
+    /* Canvas */
+    .canvas-container {
+        position: relative;
+        background: #fff;
+        border: 2px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        height: 100%;
+    }
+    
+    #stageCanvas {
+        cursor: crosshair;
+        background: 
+            linear-gradient(to right, #f0f0f0 1px, transparent 1px),
+            linear-gradient(to bottom, #f0f0f0 1px, transparent 1px);
+        background-size: 20px 20px;
+        background-position: -1px -1px;
+    }
+    
+    /* Selection box */
+    .selection-box {
+        position: absolute;
+        border: 2px dashed var(--primary);
+        background: rgba(99, 102, 241, 0.1);
+        pointer-events: none;
+        display: none;
+    }
+    
+    /* Object Library */
+    .object-category {
+        margin-bottom: 1.5rem;
+    }
+    
+    .category-title {
+        font-weight: 600;
+        color: var(--dark);
+        margin-bottom: 0.5rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .object-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+    }
+    
+    .object-item {
+        padding: 0.75rem;
+        border: 2px solid var(--border);
+        border-radius: 8px;
+        text-align: center;
+        cursor: grab;
+        transition: all 0.2s;
+        background: white;
+        position: relative;
+    }
+    
+    .object-item:hover {
+        border-color: var(--primary);
+        transform: scale(1.05);
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+    }
+    
+    .object-item:active {
+        cursor: grabbing;
+    }
+    
+    .object-delete-btn {
+        position: absolute;
+        top: 0.25rem;
+        right: 0.25rem;
+        background: var(--danger);
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        line-height: 1;
+        opacity: 0;
+        transition: opacity 0.2s;
+        z-index: 10;
+    }
+    
+    .object-item:hover .object-delete-btn {
+        opacity: 1;
+    }
+    
+    .object-delete-btn:hover {
+        background: #dc2626;
+        transform: scale(1.1);
+    }
+    
+    .object-item img {
+        max-width: 60px;
+        max-height: 60px;
+        margin-bottom: 0.5rem;
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+    }
+    
+    .object-item span {
+        display: block;
+        font-size: 0.75rem;
+        color: var(--dark);
+        font-weight: 500;
+    }
+    
+    /* Properties Panel */
+    .property-group {
+        margin-bottom: 1.5rem;
+        padding: 1rem;
+        background: #f9fafb;
+        border-radius: 8px;
+    }
+    
+    .property-group h4 {
+        margin-bottom: 0.75rem;
+        color: var(--dark);
+        font-size: 0.9rem;
+    }
+    
+    .property-row {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+    }
+    
+    .property-row label {
+        flex: 0 0 70px;
+        font-size: 0.85rem;
+        color: #6b7280;
+        display: flex;
+        align-items: center;
+    }
+    
+    .property-row input,
+    .property-row select {
+        flex: 1;
+        padding: 0.5rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-size: 0.85rem;
+    }
+    
+    .color-picker-wrapper {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+    }
+    
+    .color-picker-wrapper input[type="color"] {
+        width: 50px;
+        height: 35px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+    
+    /* Action buttons */
+    .action-buttons {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+        margin-top: 1rem;
+    }
+    
+    .action-btn {
+        padding: 0.75rem;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+    
+    .action-btn-primary {
+        background: var(--primary);
+        color: white;
+    }
+    
+    .action-btn-danger {
+        background: var(--danger);
+        color: white;
+    }
+    
+    .action-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    
+    /* Templates */
+    .template-grid {
+        display: grid;
+        gap: 1rem;
+    }
+    
+    .template-card {
+        border: 2px solid var(--border);
+        border-radius: 8px;
+        padding: 1rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        position: relative;
+    }
+    
+    .template-card:hover {
+        border-color: var(--primary);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+    }
+    
+    .template-thumbnail {
+        width: 100%;
+        height: 120px;
+        background: #f3f4f6;
+        border-radius: 6px;
+        margin-bottom: 0.5rem;
+        overflow: hidden;
+    }
+    
+    .template-thumbnail img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
+    
+    .template-name {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+    
+    .template-meta {
+        font-size: 0.75rem;
+        color: #6b7280;
+    }
+    
+    .template-delete {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        background: var(--danger);
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 24px;
+        height: 24px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+    }
+    
+    /* Canvas objects */
+    .canvas-object, .canvas-label {
+        position: absolute;
+        cursor: move;
+        user-select: none;
+        border: 2px solid transparent;
+        transition: border-color 0.2s;
+    }
+    
+    .canvas-object.selected, .canvas-label.selected {
+        border: 2px solid var(--primary);
+        box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+    }
+    
+    .canvas-object img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        pointer-events: none;
+    }
+    
+    .canvas-label {
+        background: rgba(255, 255, 255, 0.95);
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-weight: 600;
+        color: var(--dark);
+        border: 1px solid var(--border);
+        white-space: nowrap;
+    }
+    
+    .resize-handle {
+        position: absolute;
+        width: 10px;
+        height: 10px;
+        background: white;
+        border: 2px solid var(--primary);
+        border-radius: 50%;
+        display: none;
+    }
+    
+    .canvas-object.selected .resize-handle,
+    .canvas-label.selected .resize-handle {
+        display: block;
+    }
+    
+    .resize-handle.nw { top: -5px; left: -5px; cursor: nw-resize; }
+    .resize-handle.ne { top: -5px; right: -5px; cursor: ne-resize; }
+    .resize-handle.sw { bottom: -5px; left: -5px; cursor: sw-resize; }
+    .resize-handle.se { bottom: -5px; right: -5px; cursor: se-resize; }
+    
+    /* Line drawing */
+    .canvas-line {
+        stroke: #1f2937;
+        stroke-width: 2;
+        stroke-linecap: round;
+    }
+    
+    .canvas-line.selected {
+        stroke: var(--primary);
+        stroke-width: 3;
+    }
+    
+    /* Line resize handles */
+    .line-handle {
+        fill: white;
+        stroke: var(--primary);
+        stroke-width: 2;
+        cursor: move;
+        display: none;
+    }
+    
+    .canvas-line.selected + .line-handle {
+        display: block;
+    }
+    
+    /* Saved designs list */
+    .design-card {
+        border: 2px solid var(--border);
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        position: relative;
+    }
+    
+    .design-card:hover {
+        border-color: var(--primary);
+        transform: translateY(-2px);
+    }
+    
+    .design-thumbnail {
+        width: 100%;
+        height: 100px;
+        background: #f3f4f6;
+        border-radius: 6px;
+        margin-bottom: 0.5rem;
+        overflow: hidden;
+    }
+    
+    .design-thumbnail img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
+    
+    .design-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+    
+    /* Mobile responsive */
+    @media (max-width: 1200px) {
+        .designer-container {
+            grid-template-columns: 1fr;
+            grid-template-rows: auto 1fr auto;
+        }
+        
+        .designer-panel {
+            max-height: 300px;
+        }
+    }
+</style>
+
+<div class="page-header">
+    <h1 class="page-title">
+        <i class="fas fa-drafting-compass"></i>
+        Stage Plan Designer
+    </h1>
+    <p class="page-subtitle">Create professional stage plans with drag-and-drop simplicity</p>
+</div>
+
+<!-- Toolbar -->
+<div class="toolbar">
+    <button class="tool-btn active" id="selectTool" onclick="setTool('select')" title="Select (V)">
+        <i class="fas fa-mouse-pointer"></i> Select
+    </button>
+    <button class="tool-btn" id="lineTool" onclick="setTool('line')" title="Draw Line (L)">
+        <i class="fas fa-grip-lines"></i> Line
+    </button>
+    <button class="tool-btn" id="penTool" onclick="setTool('pen')" title="Pen Tool (P)">
+        <i class="fas fa-pen"></i> Pen
+    </button>
+    <button class="tool-btn" id="brushTool" onclick="setTool('brush')" title="Brush Tool (B)">
+        <i class="fas fa-paint-brush"></i> Brush
+    </button>
+    <button class="tool-btn" id="labelTool" onclick="setTool('label')" title="Add Label (T)">
+        <i class="fas fa-font"></i> Label
+    </button>
+    <div style="flex: 1"></div>
+    <button class="tool-btn" onclick="undo()" title="Undo (Ctrl+Z)">
+        <i class="fas fa-undo"></i> Undo
+    </button>
+    <button class="tool-btn" onclick="redo()" title="Redo (Ctrl+Y)">
+        <i class="fas fa-redo"></i> Redo
+    </button>
+    <button class="tool-btn" onclick="clearCanvas()">
+        <i class="fas fa-trash"></i> Clear All
+    </button>
+    <button class="tool-btn" onclick="showLoadModal()">
+        <i class="fas fa-folder-open"></i> Load
+    </button>
+    <button class="tool-btn" onclick="showSaveModal()">
+        <i class="fas fa-save"></i> Save
+    </button>
+    <button class="tool-btn" onclick="exportToPNG()">
+        <i class="fas fa-download"></i> Export PNG
+    </button>
+</div>
+
+<!-- Designer Layout -->
+<div class="designer-container">
+    <!-- Left Panel: Object Library & Templates -->
+    <div class="designer-panel">
+        <div class="panel-header">
+            <span><i class="fas fa-shapes"></i> Library</span>
+            {% if current_user.is_admin %}
+            <button class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="showUploadObjectModal()">
+                <i class="fas fa-plus"></i>
+            </button>
+            {% endif %}
+        </div>
+        <div class="panel-content">
+            <div style="margin-bottom: 1rem;">
+                <button class="btn btn-primary" style="width: 100%; margin-bottom: 0.5rem;" onclick="showTab('objects')">
+                    <i class="fas fa-shapes"></i> Objects
+                </button>
+                <button class="btn btn-primary" style="width: 100%;" onclick="showTab('templates')">
+                    <i class="fas fa-bookmark"></i> Templates
+                </button>
+            </div>
+            
+            <div id="objectsTab">
+                <div id="objectLibrary">
+                    <div class="object-category">
+                        <div class="category-title">
+                            <span>Loading objects...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="templatesTab" style="display: none;">
+                <div id="templateLibrary">
+                    <p style="text-align: center; color: #9ca3af;">Loading templates...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Center Panel: Canvas -->
+    <div class="designer-panel" style="position: relative;">
+        <div class="panel-header">
+            <span><i class="fas fa-draw-polygon"></i> Stage Canvas</span>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <label style="font-size: 0.85rem; font-weight: normal;">
+                    Grid: <input type="checkbox" id="gridToggle" checked onchange="toggleGrid()">
+                </label>
+                <label style="font-size: 0.85rem; font-weight: normal;">
+                    Snap: <input type="checkbox" id="snapToggle" checked>
+                </label>
+            </div>
+        </div>
+        <div class="canvas-container">
+            <svg id="stageCanvas" width="100%" height="100%">
+                <g id="linesLayer"></g>
+            </svg>
+            <div id="objectsLayer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"></div>
+            <div id="selectionBox" class="selection-box"></div>
+        </div>
+    </div>
+    
+    <!-- Right Panel: Properties -->
+    <div class="designer-panel">
+        <div class="panel-header">
+            <span><i class="fas fa-sliders-h"></i> Properties</span>
+        </div>
+        <div class="panel-content" id="propertiesPanel">
+            <div id="noSelection" style="text-align: center; color: #9ca3af; padding: 2rem 0;">
+                <i class="fas fa-hand-pointer" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.3;"></i>
+                <p>Select an object to edit its properties</p>
+                <p style="font-size: 0.85rem; margin-top: 1rem;">
+                    <strong>Tip:</strong> Drag to select multiple objects
+                </p>
+            </div>
+            
+            <div id="multiSelection" style="display: none;">
+                <div class="property-group">
+                    <h4><i class="fas fa-layer-group"></i> Multiple Selection</h4>
+                    <p id="selectedCount" style="margin-bottom: 1rem; color: #6b7280;"></p>
+                    <div class="action-buttons">
+                        <button class="action-btn action-btn-primary" onclick="groupMove()">
+                            <i class="fas fa-arrows-alt"></i> Move Together
+                        </button>
+                        <button class="action-btn action-btn-danger" onclick="deleteSelected()">
+                            <i class="fas fa-trash"></i> Delete All
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="objectProperties" style="display: none;">
+                <div class="property-group">
+                    <h4><i class="fas fa-ruler-combined"></i> Position & Size</h4>
+                    <div class="property-row">
+                        <label>X:</label>
+                        <input type="number" id="propX" onchange="updateSelectedObject()">
+                    </div>
+                    <div class="property-row">
+                        <label>Y:</label>
+                        <input type="number" id="propY" onchange="updateSelectedObject()">
+                    </div>
+                    <div class="property-row">
+                        <label>Width:</label>
+                        <input type="number" id="propWidth" onchange="updateSelectedObject()">
+                    </div>
+                    <div class="property-row">
+                        <label>Height:</label>
+                        <input type="number" id="propHeight" onchange="updateSelectedObject()">
+                    </div>
+                    <div class="property-row">
+                        <label>Rotation:</label>
+                        <input type="number" id="propRotation" min="0" max="360" onchange="updateSelectedObject()">
+                    </div>
+                </div>
+                
+                <div class="property-group">
+                    <h4><i class="fas fa-tag"></i> Label</h4>
+                    <div class="property-row">
+                        <label>Text:</label>
+                        <input type="text" id="propLabel" onchange="updateSelectedObject()">
+                    </div>
+                    <div class="property-row">
+                        <label>Size:</label>
+                        <input type="number" id="propLabelSize" min="8" max="72" value="14" onchange="updateSelectedObject()">
+                    </div>
+                </div>
+                
+                <div class="action-buttons">
+                    <button class="action-btn action-btn-primary" onclick="duplicateSelected()">
+                        <i class="fas fa-clone"></i> Duplicate
+                    </button>
+                    <button class="action-btn action-btn-danger" onclick="deleteSelected()">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
+                </div>
+            </div>
+            
+            <div id="lineProperties" style="display: none;">
+                <div class="property-group">
+                    <h4><i class="fas fa-grip-lines"></i> Line Properties</h4>
+                    <div class="property-row">
+                        <label>Color:</label>
+                        <div class="color-picker-wrapper">
+                            <input type="color" id="lineColor" value="#1f2937" onchange="updateSelectedLine()">
+                            <input type="text" id="lineColorHex" value="#1f2937" onchange="updateSelectedLine()">
+                        </div>
+                    </div>
+                    <div class="property-row">
+                        <label>Width:</label>
+                        <input type="number" id="lineWidth" min="1" max="20" value="2" onchange="updateSelectedLine()">
+                    </div>
+                    <div class="property-row">
+                        <label>Style:</label>
+                        <select id="lineStyle" onchange="updateSelectedLine()">
+                            <option value="solid">Solid</option>
+                            <option value="dashed">Dashed</option>
+                            <option value="dotted">Dotted</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="action-buttons">
+                    <button class="action-btn action-btn-danger" onclick="deleteSelected()" style="grid-column: 1 / -1;">
+                        <i class="fas fa-trash"></i> Delete Line
+                    </button>
+                </div>
+            </div>
+            
+            <div id="labelProperties" style="display: none;">
+                <div class="property-group">
+                    <h4><i class="fas fa-font"></i> Label Properties</h4>
+                    <div class="property-row">
+                        <label>Text:</label>
+                        <input type="text" id="labelText" onchange="updateSelectedLabel()">
+                    </div>
+                    <div class="property-row">
+                        <label>Size:</label>
+                        <input type="number" id="labelFontSize" min="8" max="72" value="14" onchange="updateSelectedLabel()">
+                    </div>
+                    <div class="property-row">
+                        <label>Color:</label>
+                        <div class="color-picker-wrapper">
+                            <input type="color" id="labelColor" value="#1f2937" onchange="updateSelectedLabel()">
+                        </div>
+                    </div>
+                    <div class="property-row">
+                        <label>Bold:</label>
+                        <input type="checkbox" id="labelBold" onchange="updateSelectedLabel()">
+                    </div>
+                </div>
+                
+                <div class="action-buttons">
+                    <button class="action-btn action-btn-danger" onclick="deleteSelected()" style="grid-column: 1 / -1;">
+                        <i class="fas fa-trash"></i> Delete Label
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Save Modal -->
+<div id="saveModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('saveModal')">&times;</span>
+        <h2><i class="fas fa-save"></i> Save Stage Plan</h2>
+        
+        <div class="form-group">
+            <label>Plan Name *</label>
+            <input type="text" id="saveName" placeholder="e.g., Main Stage Setup">
+        </div>
+        
+        <div class="form-group">
+            <label>Link to Event (Optional)</label>
+            <select id="saveEvent">
+                <option value="">-- No Event --</option>
+                {% for event in events %}
+                <option value="{{ event.id }}">{{ event.title }} - {{ event.event_date.strftime('%b %d, %Y') }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                <input type="checkbox" id="saveToStagePlans" checked>
+                <span>Also save to Stage Plans page</span>
+            </label>
+            <p style="font-size: 0.85rem; color: #6b7280; margin-top: 0.5rem;">
+                This will create a PNG export in the Stage Plans section for easy reference
+            </p>
+        </div>
+        
+        <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+            <button class="btn btn-primary" onclick="saveDesign()">
+                <i class="fas fa-save"></i> Save Design
+            </button>
+            {% if current_user.is_admin %}
+            <button class="btn btn-success" onclick="saveAsTemplate()">
+                <i class="fas fa-bookmark"></i> Save as Template
+            </button>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Load Design Modal -->
+<div id="loadModal" class="modal">
+    <div class="modal-content" style="max-width: 800px;">
+        <span class="close" onclick="hideModal('loadModal')">&times;</span>
+        <h2><i class="fas fa-folder-open"></i> Load Saved Design</h2>
+        <div id="designsList" style="max-height: 500px; overflow-y: auto;">
+            <p style="text-align: center; color: #9ca3af;">Loading...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Upload Object Modal -->
+<div id="uploadObjectModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('uploadObjectModal')">&times;</span>
+        <h2><i class="fas fa-upload"></i> Upload New Object</h2>
+        
+        <div class="form-group">
+            <label>Object Name *</label>
+            <input type="text" id="objectName" placeholder="e.g., Speaker">
+        </div>
+        
+        <div class="form-group">
+            <label>Category</label>
+            <select id="objectCategory">
+                <option value="Lighting">Lighting</option>
+                <option value="Audio">Audio</option>
+                <option value="Props">Props</option>
+                <option value="Furniture">Furniture</option>
+                <option value="Structure">Structure</option>
+                <option value="Other">Other</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label>Upload Image (PNG recommended) *</label>
+            <input type="file" id="objectImage" accept="image/*">
+        </div>
+        
+        <div class="form-group">
+            <label>Default Size</label>
+            <div class="property-row">
+                <label style="flex: 0 0 auto;">Width:</label>
+                <input type="number" id="objectDefaultWidth" value="100" min="20" max="500">
+                <label style="flex: 0 0 auto;">Height:</label>
+                <input type="number" id="objectDefaultHeight" value="100" min="20" max="500">
+            </div>
+        </div>
+        
+        <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+            <button class="btn btn-primary" onclick="uploadObject()">
+                <i class="fas fa-upload"></i> Upload Object
+            </button>
+        </div>
+    </div>
+</div>
+
+{% block scripts %}
+<script>
+// Pass admin status to JavaScript
+document.body.dataset.userIsAdmin = '{{ current_user.is_admin|lower }}';
+</script>
+<script src="/static/stage-designer.js"></script>
+{% endblock %}
+
+{% endblock %}

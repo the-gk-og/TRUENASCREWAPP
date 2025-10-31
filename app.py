@@ -331,6 +331,53 @@ class CastRunItem(db.Model):
     
     event = db.relationship('Event', backref=db.backref('cast_run_items', cascade='all, delete-orphan', order_by='CastRunItem.order_number'))
 
+# ==================== STAGE PLAN DESIGNER ROUTES ====================
+
+# Add these routes to your app.py file
+
+# ==================== STAGE PLAN DESIGNER ROUTES ====================
+
+class StagePlanTemplate(db.Model):
+    """Templates for reusable stage plans"""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    design_data = db.Column(db.Text, nullable=False)
+    thumbnail = db.Column(db.String(300))
+    created_by = db.Column(db.String(80))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_public = db.Column(db.Boolean, default=False)
+
+class StagePlanDesign(db.Model):
+    """Saved stage plan designs linked to events"""
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=True)
+    template_id = db.Column(db.Integer, db.ForeignKey('stage_plan_template.id'), nullable=True)
+    name = db.Column(db.String(200), nullable=False)
+    design_data = db.Column(db.Text, nullable=False)
+    thumbnail = db.Column(db.Text)
+    created_by = db.Column(db.String(80))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    event = db.relationship('Event', backref='stage_designs')
+    template = db.relationship('StagePlanTemplate', backref='designs')
+
+class StagePlanObject(db.Model):
+    """Library of reusable objects (PNG images)"""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    category = db.Column(db.String(100))
+    image_data = db.Column(db.Text, nullable=False)
+    default_width = db.Column(db.Integer, default=100)
+    default_height = db.Column(db.Integer, default=100)
+    created_by = db.Column(db.String(80))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_public = db.Column(db.Boolean, default=True)
+
+
+
 
 # LOGIN & UTILITIES
 
@@ -3514,11 +3561,331 @@ def reorder_cast_run_items(event_id):
 
 
 
+# ==================== STAGE PLAN DESIGNER ROUTES ====================
+# Add ALL these routes BEFORE the "if __name__ == '__main__':" line
+@app.route('/stage-designer')
+@login_required
+@crew_required
+def stage_designer():
+    """Main stage plan designer interface"""
+    events = Event.query.order_by(Event.event_date.desc()).all()
+    templates = StagePlanTemplate.query.filter(
+        (StagePlanTemplate.is_public == True) | 
+        (StagePlanTemplate.created_by == current_user.username)
+    ).order_by(StagePlanTemplate.created_at.desc()).all()
+    
+    objects = StagePlanObject.query.filter(
+        (StagePlanObject.is_public == True) | 
+        (StagePlanObject.created_by == current_user.username)
+    ).order_by(StagePlanObject.category, StagePlanObject.name).all()
+    
+    return render_template('crew/stage_designer.html', 
+                         events=events, 
+                         templates=templates,
+                         objects=objects)
+
+# DESIGN ROUTES
+@app.route('/stage-designer/design', methods=['POST'])
+@login_required
+@crew_required
+def create_stage_design():
+    """Create new stage plan design"""
+    try:
+        data = request.json
+        print(f"Creating design: {data.get('name')}")
+        
+        design = StagePlanDesign(
+            name=data['name'],
+            design_data=json.dumps(data['design_data']),
+            thumbnail=data.get('thumbnail'),
+            event_id=data.get('event_id'),
+            created_by=current_user.username
+        )
+        db.session.add(design)
+        db.session.commit()
+        
+        # NEW: Also save to Stage Plans if requested
+        if data.get('save_to_stageplans') and data.get('event_id'):
+            try:
+                # Create a basic stage plan entry
+                stage_plan = StagePlan(
+                    title=data['name'],
+                    filename=f"designer_{design.id}.png",  # Placeholder
+                    uploaded_by=current_user.username,
+                    event_id=data.get('event_id')
+                )
+                db.session.add(stage_plan)
+                db.session.commit()
+                print(f"Also created stage plan entry with ID: {stage_plan.id}")
+            except Exception as e:
+                print(f"Could not create stage plan entry: {e}")
+        
+        print(f"Design created successfully with ID: {design.id}")
+        return jsonify({'success': True, 'design_id': design.id})
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error creating design: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/stage-designer/design/<int:id>', methods=['PUT'])
+@login_required
+@crew_required
+def update_stage_design(id):
+    """Update existing stage plan design"""
+    try:
+        design = StagePlanDesign.query.get_or_404(id)
+        data = request.json
+        
+        print(f"Updating design {id}: {data.get('name')}")
+        
+        design.name = data.get('name', design.name)
+        design.design_data = json.dumps(data['design_data'])
+        design.thumbnail = data.get('thumbnail')
+        design.event_id = data.get('event_id')
+        design.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        print(f"Design {id} updated successfully")
+        return jsonify({'success': True, 'design_id': design.id})
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error updating design: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/stage-designer/designs')
+@login_required
+@crew_required
+def list_stage_designs():
+    """List all stage plan designs"""
+    try:
+        designs = StagePlanDesign.query.order_by(StagePlanDesign.updated_at.desc()).all()
+        return jsonify([{
+            'id': d.id,
+            'name': d.name,
+            'event_id': d.event_id,
+            'event_name': d.event.title if d.event else None,
+            'thumbnail': d.thumbnail,
+            'created_by': d.created_by,
+            'created_at': d.created_at.isoformat(),
+            'updated_at': d.updated_at.isoformat(),
+            'description': d.event.description if d.event else None
+        } for d in designs])
+    except Exception as e:
+        print(f"Error listing designs: {e}")
+        return jsonify([])
+
+@app.route('/stage-designer/design/<int:id>/data')
+@login_required
+@crew_required
+def get_stage_design(id):
+    """Get design data for editing"""
+    try:
+        design = StagePlanDesign.query.get_or_404(id)
+        return jsonify({
+            'id': design.id,
+            'name': design.name,
+            'design_data': json.loads(design.design_data),
+            'event_id': design.event_id,
+            'thumbnail': design.thumbnail
+        })
+    except Exception as e:
+        print(f"Error getting design {id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/stage-designer/design/<int:id>', methods=['DELETE'])
+@login_required
+@crew_required
+def delete_stage_design(id):
+    """Delete a stage plan design"""
+    try:
+        design = StagePlanDesign.query.get_or_404(id)
+        db.session.delete(design)
+        db.session.commit()
+        print(f"Design {id} deleted")
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error deleting design {id}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# TEMPLATE ROUTES
+@app.route('/stage-designer/template', methods=['POST'])
+@login_required
+@crew_required
+def save_stage_template():
+    """Save design as template (ADMIN ONLY)"""
+    if not current_user.is_admin:
+        print(f"User {current_user.username} tried to save template without admin access")
+        return jsonify({'success': False, 'error': 'Admin access required'}), 403
+    
+    try:
+        data = request.json
+        print(f"Saving template: {data.get('name')}")
+        
+        template = StagePlanTemplate(
+            name=data['name'],
+            description=data.get('description', ''),
+            design_data=json.dumps(data['design_data']),
+            thumbnail=data.get('thumbnail'),
+            created_by=current_user.username,
+            is_public=data.get('is_public', True)
+        )
+        db.session.add(template)
+        db.session.commit()
+        
+        print(f"Template created successfully with ID: {template.id}")
+        return jsonify({'success': True, 'id': template.id})
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error saving template: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/stage-designer/templates')
+@login_required
+@crew_required
+def get_stage_templates():
+    """Get all templates"""
+    try:
+        templates = StagePlanTemplate.query.filter(
+            (StagePlanTemplate.is_public == True) | 
+            (StagePlanTemplate.created_by == current_user.username)
+        ).order_by(StagePlanTemplate.created_at.desc()).all()
+        
+        return jsonify([{
+            'id': t.id,
+            'name': t.name,
+            'description': t.description,
+            'thumbnail': t.thumbnail,
+            'created_by': t.created_by,
+            'created_at': t.created_at.isoformat()
+        } for t in templates])
+    except Exception as e:
+        print(f"Error getting templates: {e}")
+        return jsonify([])
+
+@app.route('/stage-designer/template/<int:id>/data')
+@login_required
+@crew_required
+def get_stage_template(id):
+    """Get template data"""
+    try:
+        template = StagePlanTemplate.query.get_or_404(id)
+        return jsonify({
+            'id': template.id,
+            'name': template.name,
+            'design_data': json.loads(template.design_data)
+        })
+    except Exception as e:
+        print(f"Error getting template {id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/stage-designer/template/<int:id>', methods=['DELETE'])
+@login_required
+@crew_required
+def delete_stage_template(id):
+    """Delete a template (ADMIN ONLY)"""
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'error': 'Admin access required'}), 403
+    
+    try:
+        template = StagePlanTemplate.query.get_or_404(id)
+        db.session.delete(template)
+        db.session.commit()
+        print(f"Template {id} deleted")
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error deleting template {id}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# OBJECT LIBRARY ROUTES
+@app.route('/stage-designer/object', methods=['POST'])
+@login_required
+@crew_required
+def upload_stage_object():
+    """Upload a new object to the library (ADMIN ONLY)"""
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'error': 'Admin access required'}), 403
+    
+    try:
+        data = request.json
+        print(f"Uploading object: {data.get('name')}")
+        
+        obj = StagePlanObject(
+            name=data['name'],
+            category=data.get('category', 'Uncategorized'),
+            image_data=data['image_data'],
+            default_width=data.get('default_width', 100),
+            default_height=data.get('default_height', 100),
+            created_by=current_user.username,
+            is_public=data.get('is_public', True)
+        )
+        db.session.add(obj)
+        db.session.commit()
+        
+        print(f"Object created successfully with ID: {obj.id}")
+        return jsonify({'success': True, 'id': obj.id})
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error uploading object: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/stage-designer/objects')
+@login_required
+@crew_required
+def get_stage_objects():
+    """Get all objects in the library"""
+    try:
+        objects = StagePlanObject.query.filter(
+            (StagePlanObject.is_public == True) | 
+            (StagePlanObject.created_by == current_user.username)
+        ).order_by(StagePlanObject.category, StagePlanObject.name).all()
+        
+        return jsonify([{
+            'id': obj.id,
+            'name': obj.name,
+            'category': obj.category,
+            'image_data': obj.image_data,
+            'default_width': obj.default_width,
+            'default_height': obj.default_height
+        } for obj in objects])
+    except Exception as e:
+        print(f"Error getting objects: {e}")
+        return jsonify([])
+
+@app.route('/stage-designer/objects/<int:id>', methods=['DELETE'])
+@login_required
+@crew_required
+def delete_stage_object(id):
+    """Delete an object from the library (ADMIN ONLY)"""
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'error': 'Admin access required'}), 403
+    
+    try:
+        obj = StagePlanObject.query.get_or_404(id)
+        db.session.delete(obj)
+        db.session.commit()
+        print(f"Object {id} deleted")
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error deleting object {id}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 # RUN APP
 
 if __name__ == '__main__':
     init_db()
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 5001))
     
     # Start Flask app
     app.run(host='0.0.0.0', port=port, debug=False)

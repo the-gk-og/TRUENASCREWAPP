@@ -4,9 +4,16 @@
 
 {% block content %}
 <div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
         <h2>🎨 Stage Plans</h2>
-        <button onclick="showModal('uploadModal')" class="btn btn-success">+ Upload Stage Plan</button>
+        <div style="display: flex; gap: 0.5rem;">
+            <a href="{{ url_for('stage_designer') }}" class="btn btn-primary">
+                <i class="fas fa-drafting-compass"></i> Open Designer
+            </a>
+            <button onclick="showModal('uploadModal')" class="btn btn-success">
+                <i class="fas fa-upload"></i> Upload File
+            </button>
+        </div>
     </div>
     
     <div class="form-group">
@@ -29,7 +36,7 @@
     {% endif %}
     
     {% if plans %}
-    <div class="grid">
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
         {% for plan in plans %}
         <div class="card" style="padding: 1rem;">
             <h3 style="margin-bottom: 0.5rem;">{{ plan.title }}</h3>
@@ -49,20 +56,44 @@
             </div>
             {% endif %}
             
-            <div style="display: flex; gap: 0.5rem;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem;">
+                <a href="{{ url_for('stage_designer') }}?plan_id={{ plan.id }}" 
+                   class="btn btn-primary" 
+                   style="text-align: center; padding: 0.5rem; font-size: 0.85rem;"
+                   title="Edit in Designer">
+                    <i class="fas fa-drafting-compass"></i>
+                </a>
                 <a href="{{ url_for('uploaded_file', filename=plan.filename) }}" 
                    download="{{ plan.filename }}" 
-                   class="btn btn-primary" 
-                   style="flex: 1; text-align: center; padding: 0.5rem;">Download</a>
+                   class="btn btn-success" 
+                   style="text-align: center; padding: 0.5rem; font-size: 0.85rem;"
+                   title="Download">
+                    <i class="fas fa-download"></i>
+                </a>
                 <button onclick="deletePlan({{ plan.id }})" 
                         class="btn btn-danger" 
-                        style="padding: 0.5rem 1rem;">Delete</button>
+                        style="padding: 0.5rem; font-size: 0.85rem;"
+                        title="Delete">
+                    <i class="fas fa-trash"></i>
+                </button>
             </div>
         </div>
         {% endfor %}
     </div>
     {% else %}
-    <p style="text-align: center; color: #666; padding: 2rem;">No stage plans uploaded yet.</p>
+    <div style="text-align: center; padding: 3rem; color: #9ca3af;">
+        <i class="fas fa-drafting-compass" style="font-size: 4rem; margin-bottom: 1rem; opacity: 0.3;"></i>
+        <h3 style="margin-bottom: 0.5rem;">No Stage Plans Yet</h3>
+        <p>Create your first stage plan using the designer or upload an existing file</p>
+        <div style="display: flex; gap: 1rem; justify-content: center; margin-top: 1.5rem;">
+            <a href="{{ url_for('stage_designer') }}" class="btn btn-primary">
+                <i class="fas fa-drafting-compass"></i> Open Designer
+            </a>
+            <button onclick="showModal('uploadModal')" class="btn btn-success">
+                <i class="fas fa-upload"></i> Upload File
+            </button>
+        </div>
+    </div>
     {% endif %}
 </div>
 
@@ -70,7 +101,7 @@
 <div id="uploadModal" class="modal">
     <div class="modal-content">
         <span class="close" onclick="hideModal('uploadModal')">&times;</span>
-        <h2>Upload Stage Plan</h2>
+        <h2><i class="fas fa-upload"></i> Upload Stage Plan</h2>
         <form id="uploadForm" enctype="multipart/form-data">
             <div class="form-group">
                 <label>Title *</label>
@@ -91,7 +122,12 @@
                 <label>File * (Images, PDFs accepted)</label>
                 <input type="file" name="file" id="file" required accept="image/*,.pdf">
             </div>
-            <button type="submit" class="btn btn-success">Upload</button>
+            <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
+                <button type="button" onclick="hideModal('uploadModal')" class="btn" style="background: #6b7280; color: white;">Cancel</button>
+                <button type="submit" class="btn btn-success">
+                    <i class="fas fa-upload"></i> Upload
+                </button>
+            </div>
         </form>
     </div>
 </div>
@@ -113,6 +149,9 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
     e.preventDefault();
     
     const formData = new FormData(this);
+    const submitBtn = this.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
     
     fetch('/stageplans/upload', {
         method: 'POST',
@@ -124,10 +163,14 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
             location.reload();
         } else {
             alert('Upload failed: ' + (result.error || 'Unknown error'));
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-upload"></i> Upload';
         }
     })
     .catch(err => {
         alert('Upload failed: ' + err.message);
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-upload"></i> Upload';
     });
 });
 
@@ -138,13 +181,24 @@ function showImageModal(src, title) {
 }
 
 function deletePlan(id) {
-    if (!confirm('Delete this stage plan?')) return;
+    if (!confirm('Delete this stage plan? This cannot be undone.')) return;
     
     fetch(`/stageplans/delete/${id}`, {method: 'DELETE'})
         .then(r => r.json())
         .then(result => {
-            if (result.success) location.reload();
+            if (result.success) {
+                showAlert('Stage plan deleted');
+                setTimeout(() => location.reload(), 1000);
+            }
         });
+}
+
+function showAlert(message) {
+    const alert = document.createElement('div');
+    alert.className = 'alert alert-success';
+    alert.innerHTML = `<i class="fas fa-check-circle"></i> ${message}`;
+    document.querySelector('.main-content').insertBefore(alert, document.querySelector('.main-content').firstChild);
+    setTimeout(() => alert.remove(), 3000);
 }
 </script>
 {% endblock %}
