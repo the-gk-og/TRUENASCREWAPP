@@ -4,8 +4,8 @@ let selectedElements = [];
 let objects = [];
 let lines = [];
 let labels = [];
-let drawings = []; // NEW: For freehand drawings
-let currentPath = null; // NEW: Current path being drawn
+let drawings = []; // For freehand drawings
+let currentPath = null; // Current path being drawn
 let currentDesignId = null;
 let objectLibrary = [];
 let templates = [];
@@ -14,7 +14,7 @@ let lineStart = null;
 let isDragging = false;
 let isResizing = false;
 let isSelecting = false;
-let isDrawing = false; // NEW: For pen/brush tool
+let isDrawing = false; // For pen/brush tool
 let resizeHandle = null;
 let dragOffset = { x: 0, y: 0 };
 let objectIdCounter = 1;
@@ -22,8 +22,8 @@ let selectionStart = null;
 let history = [];
 let historyIndex = -1;
 let maxHistory = 50;
-let brushSize = 3; // NEW: Brush size
-let brushColor = '#1f2937'; // NEW: Brush color
+let brushSize = 3; // Brush size
+let brushColor = '#1f2937'; // Brush color
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
@@ -88,6 +88,12 @@ function handleKeyDown(e) {
     if (e.key === 't' || e.key === 'T') {
         setTool('label');
     }
+    if (e.key === 'p' || e.key === 'P') {
+        setTool('pen');
+    }
+    if (e.key === 'b' || e.key === 'B') {
+        setTool('brush');
+    }
     // Ctrl+A - Select all
     if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
         selectAll();
@@ -106,27 +112,28 @@ function setTool(tool) {
         canvas.style.cursor = 'crosshair';
     } else if (tool === 'label') {
         canvas.style.cursor = 'text';
+    } else if (tool === 'pen' || tool === 'brush') {
+        canvas.style.cursor = 'crosshair';
     } else {
         canvas.style.cursor = 'default';
     }
 }
 
-// History management (Ctrl+Z)
+// History management
 function saveState() {
     const state = {
         objects: JSON.parse(JSON.stringify(objects)),
         lines: JSON.parse(JSON.stringify(lines)),
-        labels: JSON.parse(JSON.stringify(labels))
+        labels: JSON.parse(JSON.stringify(labels)),
+        drawings: JSON.parse(JSON.stringify(drawings))
     };
     
-    // Remove future history if we're not at the end
     if (historyIndex < history.length - 1) {
         history = history.slice(0, historyIndex + 1);
     }
     
     history.push(state);
     
-    // Limit history size
     if (history.length > maxHistory) {
         history.shift();
     } else {
@@ -154,14 +161,15 @@ function restoreState(state) {
     objects = JSON.parse(JSON.stringify(state.objects));
     lines = JSON.parse(JSON.stringify(state.lines));
     labels = JSON.parse(JSON.stringify(state.labels));
+    drawings = JSON.parse(JSON.stringify(state.drawings || []));
     
-    // Clear and re-render
     document.getElementById('objectsLayer').innerHTML = '';
     document.getElementById('linesLayer').innerHTML = '';
     
     objects.forEach(obj => renderObject(obj));
     lines.forEach(line => renderLine(line));
     labels.forEach(label => renderLabel(label));
+    drawings.forEach(drawing => renderDrawing(drawing));
     
     deselectAll();
 }
@@ -211,7 +219,13 @@ function renderObjectLibrary() {
             const item = document.createElement('div');
             item.className = 'object-item';
             item.draggable = true;
+            
+            // Check if user is admin
+            const isAdmin = document.body.dataset.userIsAdmin === 'true';
+            const deleteBtn = isAdmin ? `<button class="object-delete-btn" onclick="deleteLibraryObject(${obj.id}, event)" title="Delete object">×</button>` : '';
+            
             item.innerHTML = `
+                ${deleteBtn}
                 <img src="${obj.image_data}" alt="${obj.name}">
                 <span>${obj.name}</span>
             `;
@@ -228,7 +242,29 @@ function renderObjectLibrary() {
     });
 }
 
-// Load templates (Template Library)
+// NEW: Delete library object (admin only)
+function deleteLibraryObject(id, event) {
+    event.stopPropagation();
+    
+    if (!confirm('Delete this object from the library? This cannot be undone.')) return;
+    
+    fetch(`/stage-designer/objects/${id}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                showAlert('Object deleted from library');
+                loadObjectLibrary();
+            } else {
+                showAlert('Error deleting object: ' + (result.error || 'Unknown error'), 'error');
+            }
+        })
+        .catch(err => {
+            console.error('Error deleting object:', err);
+            showAlert('Error deleting object', 'error');
+        });
+}
+
+// Load templates
 function loadTemplates() {
     console.log('Loading templates...');
     fetch('/stage-designer/templates')
@@ -282,6 +318,7 @@ function loadTemplate(id) {
             objects = data.design_data.objects || [];
             lines = data.design_data.lines || [];
             labels = data.design_data.labels || [];
+            drawings = data.design_data.drawings || [];
             
             document.getElementById('objectsLayer').innerHTML = '';
             document.getElementById('linesLayer').innerHTML = '';
@@ -289,6 +326,7 @@ function loadTemplate(id) {
             objects.forEach(obj => renderObject(obj));
             lines.forEach(line => renderLine(line));
             labels.forEach(label => renderLabel(label));
+            drawings.forEach(drawing => renderDrawing(drawing));
             
             saveState();
             showAlert('Template loaded successfully!');
@@ -343,41 +381,73 @@ function setupCanvasEvents() {
         }
     });
     
-    // Mouse events for selection box, line drawing, label placement
+    // Mouse events
     canvas.addEventListener('mousedown', handleCanvasMouseDown);
     canvas.addEventListener('mousemove', handleCanvasMouseMove);
     canvas.addEventListener('mouseup', handleCanvasMouseUp);
     canvas.addEventListener('click', handleCanvasClick);
 }
 
-// Drag to select functionality
+// NEW: Drawing tool handlers
 function handleCanvasMouseDown(e) {
-    if (currentTool === 'select' && e.target === document.getElementById('stageCanvas')) {
-        isSelecting = true;
-        const rect = document.getElementById('stageCanvas').getBoundingClientRect();
-        selectionStart = {
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top
+    const rect = document.getElementById('stageCanvas').getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    if (currentTool === 'pen' || currentTool === 'brush') {
+        isDrawing = true;
+        const strokeWidth = currentTool === 'brush' ? brushSize * 2 : brushSize;
+        
+        currentPath = {
+            id: 'drawing_' + Date.now(),
+            points: [{x, y}],
+            color: brushColor,
+            width: strokeWidth,
+            tool: currentTool
         };
+    } else if (currentTool === 'select' && e.target === document.getElementById('stageCanvas')) {
+        isSelecting = true;
+        selectionStart = { x, y };
     }
 }
 
 function handleCanvasMouseMove(e) {
+    const rect = document.getElementById('stageCanvas').getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // Drawing with pen/brush
+    if (isDrawing && currentPath) {
+        currentPath.points.push({x, y});
+        renderDrawingPreview(currentPath);
+    }
+    
+    // Selection box
     if (isSelecting && selectionStart) {
-        const rect = document.getElementById('stageCanvas').getBoundingClientRect();
-        const currentX = e.clientX - rect.left;
-        const currentY = e.clientY - rect.top;
-        
         const box = document.getElementById('selectionBox');
         box.style.display = 'block';
-        box.style.left = Math.min(selectionStart.x, currentX) + 'px';
-        box.style.top = Math.min(selectionStart.y, currentY) + 'px';
-        box.style.width = Math.abs(currentX - selectionStart.x) + 'px';
-        box.style.height = Math.abs(currentY - selectionStart.y) + 'px';
+        box.style.left = Math.min(selectionStart.x, x) + 'px';
+        box.style.top = Math.min(selectionStart.y, y) + 'px';
+        box.style.width = Math.abs(x - selectionStart.x) + 'px';
+        box.style.height = Math.abs(y - selectionStart.y) + 'px';
     }
 }
 
 function handleCanvasMouseUp(e) {
+    // Finish drawing
+    if (isDrawing && currentPath && currentPath.points.length > 1) {
+        drawings.push(currentPath);
+        renderDrawing(currentPath);
+        saveState();
+        currentPath = null;
+        isDrawing = false;
+        
+        // Clear preview
+        const preview = document.getElementById('drawingPreview');
+        if (preview) preview.remove();
+    }
+    
+    // Finish selection
     if (isSelecting) {
         isSelecting = false;
         const box = document.getElementById('selectionBox');
@@ -398,6 +468,52 @@ function handleCanvasMouseUp(e) {
     }
 }
 
+// NEW: Render drawing preview while drawing
+function renderDrawingPreview(path) {
+    let preview = document.getElementById('drawingPreview');
+    if (!preview) {
+        preview = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        preview.id = 'drawingPreview';
+        preview.style.fill = 'none';
+        preview.style.stroke = path.color;
+        preview.style.strokeWidth = path.width;
+        preview.style.strokeLinecap = 'round';
+        preview.style.strokeLinejoin = 'round';
+        document.getElementById('linesLayer').appendChild(preview);
+    }
+    
+    const pathData = 'M ' + path.points.map(p => `${p.x},${p.y}`).join(' L ');
+    preview.setAttribute('d', pathData);
+}
+
+// NEW: Render finished drawing
+function renderDrawing(drawing) {
+    const svg = document.getElementById('linesLayer');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.id = drawing.id;
+    path.classList.add('canvas-drawing');
+    
+    const pathData = 'M ' + drawing.points.map(p => `${p.x},${p.y}`).join(' L ');
+    path.setAttribute('d', pathData);
+    path.style.fill = 'none';
+    path.style.stroke = drawing.color;
+    path.style.strokeWidth = drawing.width;
+    path.style.strokeLinecap = 'round';
+    path.style.strokeLinejoin = 'round';
+    
+    path.addEventListener('click', function(e) {
+        if (currentTool === 'select') {
+            if (!e.ctrlKey && !e.shiftKey) {
+                deselectAll();
+            }
+            selectElement(drawing, 'drawing');
+            e.stopPropagation();
+        }
+    });
+    
+    svg.appendChild(path);
+}
+
 function handleCanvasClick(e) {
     if (currentTool === 'line') {
         handleLineDrawing(e);
@@ -411,7 +527,6 @@ function handleCanvasClick(e) {
 function selectElementsInBox(rect) {
     deselectAll();
     
-    // Check objects
     objects.forEach(obj => {
         const objRect = {
             left: obj.x,
@@ -425,7 +540,6 @@ function selectElementsInBox(rect) {
         }
     });
     
-    // Check labels
     labels.forEach(label => {
         const labelEl = document.getElementById(label.id);
         if (labelEl) {
@@ -444,7 +558,6 @@ function selectElementsInBox(rect) {
         }
     });
     
-    // Check lines
     lines.forEach(line => {
         const lineRect = {
             left: Math.min(line.x1, line.x2) - 5,
@@ -470,7 +583,8 @@ function rectIntersect(rect1, rect2) {
 
 function addToSelection(element, type) {
     selectedElements.push({ element, type });
-    document.getElementById(element.id).classList.add('selected');
+    const el = document.getElementById(element.id);
+    if (el) el.classList.add('selected');
 }
 
 function selectAll() {
@@ -479,6 +593,7 @@ function selectAll() {
     objects.forEach(obj => addToSelection(obj, 'object'));
     labels.forEach(label => addToSelection(label, 'label'));
     lines.forEach(line => addToSelection(line, 'line'));
+    drawings.forEach(drawing => addToSelection(drawing, 'drawing'));
     
     updatePropertiesPanel();
     showAlert(`Selected ${selectedElements.length} elements`);
@@ -565,7 +680,6 @@ function startDrag(obj, e) {
         let newX = e.clientX - canvasRect.left - dragOffset.x;
         let newY = e.clientY - canvasRect.top - dragOffset.y;
         
-        // Snap to grid if enabled
         if (document.getElementById('snapToggle') && document.getElementById('snapToggle').checked) {
             newX = Math.round(newX / 20) * 20;
             newY = Math.round(newY / 20) * 20;
@@ -577,7 +691,6 @@ function startDrag(obj, e) {
         obj.x = Math.max(0, Math.min(newX, canvasRect.width - obj.width));
         obj.y = Math.max(0, Math.min(newY, canvasRect.height - obj.height));
         
-        // Move all selected objects together
         selectedElements.forEach(sel => {
             if (sel.element.id !== obj.id) {
                 if (sel.type === 'object') {
@@ -680,7 +793,7 @@ function updateObjectPosition(obj) {
     }
 }
 
-// Line drawing with resize handles
+// Line drawing
 function handleLineDrawing(e) {
     const rect = document.getElementById('stageCanvas').getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -741,7 +854,6 @@ function renderLine(line) {
         }
     });
     
-    // Add resize handles for lines
     const handle1 = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     handle1.classList.add('line-handle');
     handle1.setAttribute('cx', line.x1);
@@ -764,7 +876,6 @@ function renderLine(line) {
     g.appendChild(handle2);
     svg.appendChild(g);
     
-    // Show handles when selected
     const observer = new MutationObserver(() => {
         if (g.classList.contains('selected')) {
             handle1.style.display = 'block';
@@ -828,7 +939,7 @@ function updateLinePosition(line) {
     }
 }
 
-// Label placement with resize
+// Label placement
 function handleLabelPlacement(e) {
     const rect = document.getElementById('stageCanvas').getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -865,7 +976,6 @@ function renderLabel(label) {
     div.style.pointerEvents = 'auto';
     div.textContent = label.text;
     
-    // Add resize handles
     const handles = `
         <div class="resize-handle nw"></div>
         <div class="resize-handle ne"></div>
@@ -976,7 +1086,6 @@ function updateLabelPosition(label) {
         div.style.color = label.color;
         div.style.fontWeight = label.bold ? 'bold' : 'normal';
         
-        // Update text content while preserving handles
         const textContent = label.text;
         div.childNodes[0].textContent = textContent;
     }
@@ -1011,6 +1120,8 @@ function deleteSelected() {
             lines = lines.filter(l => l.id !== sel.element.id);
         } else if (sel.type === 'label') {
             labels = labels.filter(l => l.id !== sel.element.id);
+        } else if (sel.type === 'drawing') {
+            drawings = drawings.filter(d => d.id !== sel.element.id);
         }
         
         const el = document.getElementById(sel.element.id);
@@ -1181,6 +1292,25 @@ function updatePropertiesPanel() {
                     </button>
                 </div>
             `;
+        } else if (sel.type === 'drawing') {
+            panel.innerHTML = `
+                <div class="property-group">
+                    <h4><i class="fas fa-paint-brush"></i> Drawing Properties</h4>
+                    <div class="property-row">
+                        <label>Tool:</label>
+                        <span>${sel.element.tool === 'pen' ? 'Pen' : 'Brush'}</span>
+                    </div>
+                    <div class="property-row">
+                        <label>Points:</label>
+                        <span>${sel.element.points.length}</span>
+                    </div>
+                </div>
+                <div class="action-buttons">
+                    <button class="action-btn action-btn-danger" onclick="deleteSelected()" style="grid-column: 1 / -1;">
+                        <i class="fas fa-trash"></i> Delete Drawing
+                    </button>
+                </div>
+            `;
         }
     } else {
         panel.innerHTML = `
@@ -1326,6 +1456,7 @@ function showSaveModal() {
 function saveDesign() {
     const name = document.getElementById('saveName').value.trim();
     const eventId = document.getElementById('saveEvent').value;
+    const saveToStagePlans = document.getElementById('saveToStagePlans').checked;
     
     if (!name) {
         showAlert('Please enter a design name', 'error');
@@ -1337,14 +1468,16 @@ function saveDesign() {
     const designData = {
         objects: objects,
         lines: lines,
-        labels: labels
+        labels: labels,
+        drawings: drawings
     };
     
     const payload = {
         name: name,
         event_id: eventId || null,
         design_data: designData,
-        thumbnail: null
+        thumbnail: null,
+        save_to_stageplans: saveToStagePlans
     };
     
     const url = currentDesignId 
@@ -1394,7 +1527,8 @@ function saveAsTemplate() {
     const designData = {
         objects: objects,
         lines: lines,
-        labels: labels
+        labels: labels,
+        drawings: drawings
     };
     
     const payload = {
@@ -1440,6 +1574,7 @@ function loadDesignData(designId) {
             objects = data.design_data.objects || [];
             lines = data.design_data.lines || [];
             labels = data.design_data.labels || [];
+            drawings = data.design_data.drawings || [];
             
             document.getElementById('objectsLayer').innerHTML = '';
             document.getElementById('linesLayer').innerHTML = '';
@@ -1447,8 +1582,8 @@ function loadDesignData(designId) {
             objects.forEach(obj => renderObject(obj));
             lines.forEach(line => renderLine(line));
             labels.forEach(label => renderLabel(label));
+            drawings.forEach(drawing => renderDrawing(drawing));
             
-            // Update object counter
             if (objects.length > 0) {
                 const maxId = Math.max(...objects.map(o => parseInt(o.id.replace('obj_', '')) || 0));
                 objectIdCounter = maxId + 1;
@@ -1469,6 +1604,7 @@ function clearCanvas() {
     objects = [];
     lines = [];
     labels = [];
+    drawings = [];
     selectedElements = [];
     currentDesignId = null;
     

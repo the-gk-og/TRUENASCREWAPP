@@ -32,6 +32,8 @@ from barcode.writer import ImageWriter
 from PIL import Image
 import tempfile
 from functools import lru_cache
+import base64
+
 
 
 
@@ -3594,31 +3596,55 @@ def create_stage_design():
         data = request.json
         print(f"Creating design: {data.get('name')}")
         
+        # Save thumbnail to file if provided
+        thumbnail_filename = None
+        if data.get('thumbnail'):
+            try:
+                # Extract base64 image data
+                thumbnail_data = data['thumbnail'].split(',')[1] if ',' in data['thumbnail'] else data['thumbnail']
+                thumbnail_bytes = base64.b64decode(thumbnail_data)
+                
+                # Generate filename
+                safe_name = ''.join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in data['name'])
+                thumbnail_filename = f"designer_thumb_{int(datetime.now().timestamp())}_{safe_name}.png"
+                thumbnail_path = os.path.join(app.config['UPLOAD_FOLDER'], thumbnail_filename)
+                
+                # Save thumbnail
+                with open(thumbnail_path, 'wb') as f:
+                    f.write(thumbnail_bytes)
+                
+                print(f"✓ Saved thumbnail: {thumbnail_filename}")
+            except Exception as e:
+                print(f"⚠️ Could not save thumbnail: {e}")
+        
         design = StagePlanDesign(
             name=data['name'],
             design_data=json.dumps(data['design_data']),
-            thumbnail=data.get('thumbnail'),
+            thumbnail=thumbnail_filename,  # Store filename instead of data URL
             event_id=data.get('event_id'),
             created_by=current_user.username
         )
         db.session.add(design)
-        db.session.commit()
+        db.session.flush()
         
-        # NEW: Also save to Stage Plans if requested
-        if data.get('save_to_stageplans') and data.get('event_id'):
+        # Save to Stage Plans if requested
+        if data.get('save_to_stageplans'):
             try:
-                # Create a basic stage plan entry
+                safe_name = ''.join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in data['name'])
+                filename = f"designer_{design.id}_{safe_name}.json"
+                
                 stage_plan = StagePlan(
                     title=data['name'],
-                    filename=f"designer_{design.id}.png",  # Placeholder
+                    filename=thumbnail_filename if thumbnail_filename else filename,  # Use thumbnail as filename
                     uploaded_by=current_user.username,
                     event_id=data.get('event_id')
                 )
                 db.session.add(stage_plan)
-                db.session.commit()
-                print(f"Also created stage plan entry with ID: {stage_plan.id}")
+                print(f"✓ Created stage plan entry: {stage_plan.title}")
             except Exception as e:
-                print(f"Could not create stage plan entry: {e}")
+                print(f"⚠️ Could not create stage plan entry: {e}")
+        
+        db.session.commit()
         
         print(f"Design created successfully with ID: {design.id}")
         return jsonify({'success': True, 'design_id': design.id})
@@ -3628,6 +3654,7 @@ def create_stage_design():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/stage-designer/design/<int:id>', methods=['PUT'])
 @login_required
@@ -3640,11 +3667,61 @@ def update_stage_design(id):
         
         print(f"Updating design {id}: {data.get('name')}")
         
+        # Update thumbnail if provided
+        thumbnail_filename = design.thumbnail
+        if data.get('thumbnail'):
+            try:
+                # Delete old thumbnail if exists
+                if design.thumbnail and os.path.exists(os.path.join(app.config['UPLOAD_FOLDER'], design.thumbnail)):
+                    os.remove(os.path.join(app.config['UPLOAD_FOLDER'], design.thumbnail))
+                
+                # Save new thumbnail
+                thumbnail_data = data['thumbnail'].split(',')[1] if ',' in data['thumbnail'] else data['thumbnail']
+                thumbnail_bytes = base64.b64decode(thumbnail_data)
+                
+                safe_name = ''.join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in data['name'])
+                thumbnail_filename = f"designer_thumb_{int(datetime.now().timestamp())}_{safe_name}.png"
+                thumbnail_path = os.path.join(app.config['UPLOAD_FOLDER'], thumbnail_filename)
+                
+                with open(thumbnail_path, 'wb') as f:
+                    f.write(thumbnail_bytes)
+                
+                print(f"✓ Updated thumbnail: {thumbnail_filename}")
+            except Exception as e:
+                print(f"⚠️ Could not update thumbnail: {e}")
+        
         design.name = data.get('name', design.name)
         design.design_data = json.dumps(data['design_data'])
-        design.thumbnail = data.get('thumbnail')
+        design.thumbnail = thumbnail_filename
         design.event_id = data.get('event_id')
         design.updated_at = datetime.utcnow()
+        
+        # Update associated stage plan if it exists
+        if data.get('save_to_stageplans'):
+            stage_plan = StagePlan.query.filter(
+                StagePlan.filename.like(f'designer_%') & 
+                (StagePlan.uploaded_by == current_user.username)
+            ).filter(
+                StagePlan.title == design.name
+            ).first()
+            
+            if stage_plan:
+                stage_plan.title = design.name
+                stage_plan.event_id = design.event_id
+                stage_plan.filename = thumbnail_filename if thumbnail_filename else stage_plan.filename
+                print(f"✓ Updated stage plan entry")
+            else:
+                safe_name = ''.join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in design.name)
+                filename = thumbnail_filename if thumbnail_filename else f"designer_{design.id}_{safe_name}.json"
+                
+                stage_plan = StagePlan(
+                    title=design.name,
+                    filename=filename,
+                    uploaded_by=current_user.username,
+                    event_id=design.event_id
+                )
+                db.session.add(stage_plan)
+                print(f"✓ Created new stage plan entry")
         
         db.session.commit()
         
@@ -3656,6 +3733,7 @@ def update_stage_design(id):
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/stage-designer/designs')
 @login_required
@@ -3669,7 +3747,7 @@ def list_stage_designs():
             'name': d.name,
             'event_id': d.event_id,
             'event_name': d.event.title if d.event else None,
-            'thumbnail': d.thumbnail,
+            'thumbnail': url_for('uploaded_file', filename=d.thumbnail) if d.thumbnail else None,
             'created_by': d.created_by,
             'created_at': d.created_at.isoformat(),
             'updated_at': d.updated_at.isoformat(),
@@ -3762,7 +3840,7 @@ def get_stage_templates():
             'id': t.id,
             'name': t.name,
             'description': t.description,
-            'thumbnail': t.thumbnail,
+            'thumbnail': url_for('uploaded_file', filename=t.thumbnail) if t.thumbnail else None,
             'created_by': t.created_by,
             'created_at': t.created_at.isoformat()
         } for t in templates])
@@ -3880,6 +3958,14 @@ def delete_stage_object(id):
         db.session.rollback()
         print(f"Error deleting object {id}: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+# Add this new route to load designer plans on the stage plans page
+@app.route('/stageplans/from-designer/<int:design_id>')
+@login_required
+@crew_required
+def view_designer_plan(design_id):
+    """Redirect to designer to view a saved design"""
+    return redirect(url_for('stage_designer', design_id=design_id))
 
 # RUN APP
 

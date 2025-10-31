@@ -39,15 +39,24 @@
     <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
         {% for plan in plans %}
         <div class="card" style="padding: 1rem;">
-            <h3 style="margin-bottom: 0.5rem;">{{ plan.title }}</h3>
+            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+                <h3 style="margin: 0;">{{ plan.title }}</h3>
+                {% if plan.filename.startswith('designer_thumb_') %}
+                <span style="background: #6366f1; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">
+                    <i class="fas fa-drafting-compass"></i> Designer
+                </span>
+                {% endif %}
+            </div>
+            
             <p style="color: #666; font-size: 0.9rem; margin-bottom: 1rem;">
                 Uploaded by {{ plan.uploaded_by }} on {{ plan.created_at.strftime('%b %d, %Y') }}
             </p>
             
+            {# Display thumbnail for designer plans or regular images #}
             {% if plan.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')) %}
             <img src="{{ url_for('uploaded_file', filename=plan.filename) }}" 
                  alt="{{ plan.title }}" 
-                 style="width: 100%; border-radius: 6px; margin-bottom: 1rem; cursor: pointer;"
+                 style="width: 100%; height: 200px; object-fit: contain; background: #f5f5f5; border-radius: 6px; margin-bottom: 1rem; cursor: pointer; border: 2px solid #e5e7eb;"
                  onclick="showImageModal('{{ url_for('uploaded_file', filename=plan.filename) }}', '{{ plan.title }}')">
             {% else %}
             <div style="background: #f0f0f0; padding: 2rem; text-align: center; border-radius: 6px; margin-bottom: 1rem;">
@@ -57,12 +66,25 @@
             {% endif %}
             
             <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem;">
-                <a href="{{ url_for('stage_designer') }}?plan_id={{ plan.id }}" 
+                {% if plan.filename.startswith('designer_thumb_') %}
+                {# For designer plans, try to find the design ID from the StagePlanDesign table #}
+                {# We'll need to add a helper route for this #}
+                <button onclick="openDesignerPlan('{{ plan.filename }}')" 
                    class="btn btn-primary" 
                    style="text-align: center; padding: 0.5rem; font-size: 0.85rem;"
                    title="Edit in Designer">
+                    <i class="fas fa-edit"></i>
+                </button>
+                {% else %}
+                <a href="{{ url_for('stage_designer') }}" 
+                   class="btn btn-primary" 
+                   style="text-align: center; padding: 0.5rem; font-size: 0.85rem;"
+                   title="Open Designer">
                     <i class="fas fa-drafting-compass"></i>
                 </a>
+                {% endif %}
+                
+                {% if not plan.filename.startswith('designer_thumb_') %}
                 <a href="{{ url_for('uploaded_file', filename=plan.filename) }}" 
                    download="{{ plan.filename }}" 
                    class="btn btn-success" 
@@ -70,6 +92,16 @@
                    title="Download">
                     <i class="fas fa-download"></i>
                 </a>
+                {% else %}
+                <a href="{{ url_for('uploaded_file', filename=plan.filename) }}" 
+                   download="{{ plan.filename }}" 
+                   class="btn btn-success" 
+                   style="text-align: center; padding: 0.5rem; font-size: 0.85rem;"
+                   title="Download Preview">
+                    <i class="fas fa-download"></i>
+                </a>
+                {% endif %}
+                
                 <button onclick="deletePlan({{ plan.id }})" 
                         class="btn btn-danger" 
                         style="padding: 0.5rem; font-size: 0.85rem;"
@@ -180,6 +212,30 @@ function showImageModal(src, title) {
     showModal('imageModal');
 }
 
+function openDesignerPlan(filename) {
+    // Extract timestamp from filename to find matching design
+    // Filename format: designer_thumb_1234567890_name.png
+    const parts = filename.split('_');
+    if (parts.length >= 3) {
+        const timestamp = parts[2];
+        // Fetch designs and find one with matching timestamp in thumbnail
+        fetch('/stage-designer/designs')
+            .then(r => r.json())
+            .then(designs => {
+                const matchingDesign = designs.find(d => d.thumbnail && d.thumbnail.includes(timestamp));
+                if (matchingDesign) {
+                    window.location.href = `/stage-designer?design_id=${matchingDesign.id}`;
+                } else {
+                    showAlert('Could not find matching design', 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Error finding design:', err);
+                showAlert('Error opening designer', 'error');
+            });
+    }
+}
+
 function deletePlan(id) {
     if (!confirm('Delete this stage plan? This cannot be undone.')) return;
     
@@ -193,10 +249,10 @@ function deletePlan(id) {
         });
 }
 
-function showAlert(message) {
+function showAlert(message, type = 'success') {
     const alert = document.createElement('div');
-    alert.className = 'alert alert-success';
-    alert.innerHTML = `<i class="fas fa-check-circle"></i> ${message}`;
+    alert.className = `alert alert-${type}`;
+    alert.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i> ${message}`;
     document.querySelector('.main-content').insertBefore(alert, document.querySelector('.main-content').firstChild);
     setTimeout(() => alert.remove(), 3000);
 }
