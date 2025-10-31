@@ -394,6 +394,10 @@ function handleCanvasMouseDown(e) {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
+    // Only start selection if clicking directly on the SVG canvas (not on objects)
+    const target = e.target;
+    const isCanvas = target.id === 'stageCanvas' || target.id === 'linesLayer';
+    
     if (currentTool === 'pen' || currentTool === 'brush') {
         isDrawing = true;
         const strokeWidth = currentTool === 'brush' ? brushSize * 2 : brushSize;
@@ -405,9 +409,15 @@ function handleCanvasMouseDown(e) {
             width: strokeWidth,
             tool: currentTool
         };
-    } else if (currentTool === 'select' && e.target === document.getElementById('stageCanvas')) {
+    } else if (currentTool === 'select' && isCanvas) {
+        // Only start selection box if clicking on canvas, not on objects
         isSelecting = true;
         selectionStart = { x, y };
+        
+        // Clear selection if not holding Ctrl/Shift
+        if (!e.ctrlKey && !e.shiftKey) {
+            deselectAll();
+        }
     }
 }
 
@@ -420,16 +430,23 @@ function handleCanvasMouseMove(e) {
     if (isDrawing && currentPath) {
         currentPath.points.push({x, y});
         renderDrawingPreview(currentPath);
+        return; // Don't do selection while drawing
     }
     
     // Selection box
     if (isSelecting && selectionStart) {
         const box = document.getElementById('selectionBox');
         box.style.display = 'block';
-        box.style.left = Math.min(selectionStart.x, x) + 'px';
-        box.style.top = Math.min(selectionStart.y, y) + 'px';
-        box.style.width = Math.abs(x - selectionStart.x) + 'px';
-        box.style.height = Math.abs(y - selectionStart.y) + 'px';
+        
+        const left = Math.min(selectionStart.x, x);
+        const top = Math.min(selectionStart.y, y);
+        const width = Math.abs(x - selectionStart.x);
+        const height = Math.abs(y - selectionStart.y);
+        
+        box.style.left = left + 'px';
+        box.style.top = top + 'px';
+        box.style.width = width + 'px';
+        box.style.height = height + 'px';
     }
 }
 
@@ -460,13 +477,20 @@ function handleCanvasMouseUp(e) {
                 bottom: parseInt(box.style.top) + parseInt(box.style.height)
             };
             
-            selectElementsInBox(rect);
+            // Only select if the box is big enough (more than 5px in either direction)
+            const boxWidth = parseInt(box.style.width);
+            const boxHeight = parseInt(box.style.height);
+            
+            if (boxWidth > 5 || boxHeight > 5) {
+                selectElementsInBox(rect);
+            }
         }
         
         box.style.display = 'none';
         selectionStart = null;
     }
 }
+
 
 // NEW: Render drawing preview while drawing
 function renderDrawingPreview(path) {
@@ -525,8 +549,10 @@ function handleCanvasClick(e) {
 }
 
 function selectElementsInBox(rect) {
-    deselectAll();
+    // Don't clear selection - we handle that in mousedown
+    let foundElements = [];
     
+    // Check objects
     objects.forEach(obj => {
         const objRect = {
             left: obj.x,
@@ -536,10 +562,13 @@ function selectElementsInBox(rect) {
         };
         
         if (rectIntersect(rect, objRect)) {
-            addToSelection(obj, 'object');
+            if (!isElementSelected(obj)) {
+                foundElements.push({ element: obj, type: 'object' });
+            }
         }
     });
     
+    // Check labels
     labels.forEach(label => {
         const labelEl = document.getElementById(label.id);
         if (labelEl) {
@@ -553,11 +582,14 @@ function selectElementsInBox(rect) {
             };
             
             if (rectIntersect(rect, objRect)) {
-                addToSelection(label, 'label');
+                if (!isElementSelected(label)) {
+                    foundElements.push({ element: label, type: 'label' });
+                }
             }
         }
     });
     
+    // Check lines
     lines.forEach(line => {
         const lineRect = {
             left: Math.min(line.x1, line.x2) - 5,
@@ -567,11 +599,53 @@ function selectElementsInBox(rect) {
         };
         
         if (rectIntersect(rect, lineRect)) {
-            addToSelection(line, 'line');
+            if (!isElementSelected(line)) {
+                foundElements.push({ element: line, type: 'line' });
+            }
         }
     });
     
+    // Check drawings
+    drawings.forEach(drawing => {
+        // Calculate bounding box of drawing
+        if (drawing.points.length > 0) {
+            let minX = drawing.points[0].x;
+            let minY = drawing.points[0].y;
+            let maxX = drawing.points[0].x;
+            let maxY = drawing.points[0].y;
+            
+            drawing.points.forEach(point => {
+                minX = Math.min(minX, point.x);
+                minY = Math.min(minY, point.y);
+                maxX = Math.max(maxX, point.x);
+                maxY = Math.max(maxY, point.y);
+            });
+            
+            const drawingRect = {
+                left: minX - 5,
+                top: minY - 5,
+                right: maxX + 5,
+                bottom: maxY + 5
+            };
+            
+            if (rectIntersect(rect, drawingRect)) {
+                if (!isElementSelected(drawing)) {
+                    foundElements.push({ element: drawing, type: 'drawing' });
+                }
+            }
+        }
+    });
+    
+    // Add found elements to selection
+    foundElements.forEach(item => {
+        addToSelection(item.element, item.type);
+    });
+    
     updatePropertiesPanel();
+    
+    if (foundElements.length > 0) {
+        showAlert(`Selected ${foundElements.length} element(s)`);
+    }
 }
 
 function rectIntersect(rect1, rect2) {
@@ -581,11 +655,7 @@ function rectIntersect(rect1, rect2) {
              rect2.bottom < rect1.top);
 }
 
-function addToSelection(element, type) {
-    selectedElements.push({ element, type });
-    const el = document.getElementById(element.id);
-    if (el) el.classList.add('selected');
-}
+
 
 function selectAll() {
     deselectAll();
@@ -662,6 +732,14 @@ function renderObject(obj) {
 
 function isElementSelected(element) {
     return selectedElements.some(sel => sel.element.id === element.id);
+}
+
+function addToSelection(element, type) {
+    if (!isElementSelected(element)) {
+        selectedElements.push({ element, type });
+        const el = document.getElementById(element.id);
+        if (el) el.classList.add('selected');
+    }
 }
 
 function startDrag(obj, e) {
@@ -1453,7 +1531,7 @@ function showSaveModal() {
     document.getElementById('saveModal').style.display = 'block';
 }
 
-function saveDesign() {
+async function saveDesign() {
     const name = document.getElementById('saveName').value.trim();
     const eventId = document.getElementById('saveEvent').value;
     const saveToStagePlans = document.getElementById('saveToStagePlans').checked;
@@ -1464,6 +1542,10 @@ function saveDesign() {
     }
     
     console.log('Saving design:', name);
+    
+    // Generate thumbnail
+    showAlert('Generating preview...', 'success');
+    const thumbnail = await generateThumbnail();
     
     const designData = {
         objects: objects,
@@ -1476,7 +1558,7 @@ function saveDesign() {
         name: name,
         event_id: eventId || null,
         design_data: designData,
-        thumbnail: null,
+        thumbnail: thumbnail, // Now includes actual thumbnail
         save_to_stageplans: saveToStagePlans
     };
     
@@ -1487,7 +1569,6 @@ function saveDesign() {
     const method = currentDesignId ? 'PUT' : 'POST';
     
     console.log('Saving to:', url, 'Method:', method);
-    console.log('Payload:', payload);
     
     fetch(url, {
         method: method,
@@ -1514,7 +1595,8 @@ function saveDesign() {
     });
 }
 
-function saveAsTemplate() {
+// Also update saveAsTemplate to include thumbnail
+async function saveAsTemplate() {
     const name = document.getElementById('saveName').value.trim();
     
     if (!name) {
@@ -1523,6 +1605,10 @@ function saveAsTemplate() {
     }
     
     console.log('Saving template:', name);
+    
+    // Generate thumbnail
+    showAlert('Generating preview...', 'success');
+    const thumbnail = await generateThumbnail();
     
     const designData = {
         objects: objects,
@@ -1534,7 +1620,7 @@ function saveAsTemplate() {
     const payload = {
         name: name,
         design_data: designData,
-        thumbnail: null
+        thumbnail: thumbnail
     };
     
     console.log('Template payload:', payload);
@@ -1617,8 +1703,304 @@ function clearCanvas() {
 }
 
 // Export to PNG
+// Add this function to stage-designer.js (replace the existing exportToPNG function)
+
 function exportToPNG() {
-    showAlert('Use browser screenshot (Print Screen) for now');
+    // Deselect all elements first (hide selection borders)
+    const previousSelection = [...selectedElements];
+    deselectAll();
+    
+    // Get canvas dimensions
+    const canvas = document.getElementById('stageCanvas');
+    const rect = canvas.getBoundingClientRect();
+    
+    // Create a temporary canvas
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = rect.width;
+    tempCanvas.height = rect.height;
+    const ctx = tempCanvas.getContext('2d');
+    
+    // Fill white background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+    
+    // Draw grid if enabled
+    const gridToggle = document.getElementById('gridToggle');
+    if (gridToggle && gridToggle.checked) {
+        ctx.strokeStyle = '#f0f0f0';
+        ctx.lineWidth = 1;
+        
+        // Vertical lines
+        for (let x = 0; x < tempCanvas.width; x += 20) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, tempCanvas.height);
+            ctx.stroke();
+        }
+        
+        // Horizontal lines
+        for (let y = 0; y < tempCanvas.height; y += 20) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(tempCanvas.width, y);
+            ctx.stroke();
+        }
+    }
+    
+    // Function to draw everything
+    const drawCanvas = () => {
+        return new Promise((resolve) => {
+            let loadedImages = 0;
+            let totalImages = objects.length;
+            
+            // If no objects, just draw lines and labels
+            if (totalImages === 0) {
+                drawLinesAndLabels();
+                resolve();
+                return;
+            }
+            
+            // Draw all objects
+            objects.forEach(obj => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = function() {
+                    ctx.save();
+                    ctx.translate(obj.x + obj.width / 2, obj.y + obj.height / 2);
+                    ctx.rotate((obj.rotation * Math.PI) / 180);
+                    ctx.drawImage(img, -obj.width / 2, -obj.height / 2, obj.width, obj.height);
+                    ctx.restore();
+                    
+                    loadedImages++;
+                    if (loadedImages === totalImages) {
+                        drawLinesAndLabels();
+                        resolve();
+                    }
+                };
+                img.onerror = function() {
+                    console.error('Failed to load image:', obj.imageData);
+                    loadedImages++;
+                    if (loadedImages === totalImages) {
+                        drawLinesAndLabels();
+                        resolve();
+                    }
+                };
+                img.src = obj.imageData;
+            });
+        });
+    };
+    
+    // Function to draw lines, drawings, and labels
+    const drawLinesAndLabels = () => {
+        // Draw lines
+        lines.forEach(line => {
+            ctx.strokeStyle = line.color;
+            ctx.lineWidth = line.width;
+            ctx.lineCap = 'round';
+            
+            if (line.style === 'dashed') {
+                ctx.setLineDash([10, 5]);
+            } else if (line.style === 'dotted') {
+                ctx.setLineDash([2, 5]);
+            } else {
+                ctx.setLineDash([]);
+            }
+            
+            ctx.beginPath();
+            ctx.moveTo(line.x1, line.y1);
+            ctx.lineTo(line.x2, line.y2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        });
+        
+        // Draw freehand drawings
+        drawings.forEach(drawing => {
+            ctx.strokeStyle = drawing.color;
+            ctx.lineWidth = drawing.width;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            if (drawing.points.length > 1) {
+                ctx.beginPath();
+                ctx.moveTo(drawing.points[0].x, drawing.points[0].y);
+                for (let i = 1; i < drawing.points.length; i++) {
+                    ctx.lineTo(drawing.points[i].x, drawing.points[i].y);
+                }
+                ctx.stroke();
+            }
+        });
+        
+        // Draw labels
+        labels.forEach(label => {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+            ctx.strokeStyle = '#e5e7eb';
+            ctx.lineWidth = 1;
+            
+            // Measure text
+            ctx.font = `${label.bold ? 'bold' : 'normal'} ${label.fontSize}px sans-serif`;
+            const textWidth = ctx.measureText(label.text).width;
+            const padding = 8;
+            
+            // Draw background
+            ctx.fillRect(
+                label.x - padding / 2,
+                label.y - label.fontSize - padding / 2,
+                textWidth + padding,
+                label.fontSize + padding
+            );
+            ctx.strokeRect(
+                label.x - padding / 2,
+                label.y - label.fontSize - padding / 2,
+                textWidth + padding,
+                label.fontSize + padding
+            );
+            
+            // Draw text
+            ctx.fillStyle = label.color;
+            ctx.fillText(label.text, label.x, label.y);
+        });
+    };
+    
+    // Draw everything and export
+    drawCanvas().then(() => {
+        // Convert to blob and download
+        tempCanvas.toBlob(function(blob) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            
+            // Generate filename
+            const timestamp = new Date().toISOString().slice(0, 10);
+            const designName = document.getElementById('saveName')?.value || 'stage_plan';
+            const safeName = designName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+            a.download = `${safeName}_${timestamp}.png`;
+            
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            showAlert('PNG exported successfully!');
+            
+            // Restore selection
+            if (previousSelection.length > 0) {
+                previousSelection.forEach(sel => {
+                    selectedElements.push(sel);
+                    const el = document.getElementById(sel.element.id);
+                    if (el) el.classList.add('selected');
+                });
+                updatePropertiesPanel();
+            }
+        }, 'image/png');
+    });
+}
+
+// Helper function to generate thumbnail for saving
+function generateThumbnail() {
+    return new Promise((resolve) => {
+        const canvas = document.getElementById('stageCanvas');
+        const rect = canvas.getBoundingClientRect();
+        
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = 400; // Thumbnail width
+        tempCanvas.height = 300; // Thumbnail height
+        const ctx = tempCanvas.getContext('2d');
+        
+        // Calculate scale to fit
+        const scale = Math.min(
+            tempCanvas.width / rect.width,
+            tempCanvas.height / rect.height
+        );
+        
+        // Center the scaled content
+        const scaledWidth = rect.width * scale;
+        const scaledHeight = rect.height * scale;
+        const offsetX = (tempCanvas.width - scaledWidth) / 2;
+        const offsetY = (tempCanvas.height - scaledHeight) / 2;
+        
+        // Fill background
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+        
+        ctx.save();
+        ctx.translate(offsetX, offsetY);
+        ctx.scale(scale, scale);
+        
+        let loadedImages = 0;
+        const totalImages = objects.length;
+        
+        const finishThumbnail = () => {
+            // Draw lines
+            lines.forEach(line => {
+                ctx.strokeStyle = line.color;
+                ctx.lineWidth = line.width;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(line.x1, line.y1);
+                ctx.lineTo(line.x2, line.y2);
+                ctx.stroke();
+            });
+            
+            // Draw drawings
+            drawings.forEach(drawing => {
+                ctx.strokeStyle = drawing.color;
+                ctx.lineWidth = drawing.width;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                
+                if (drawing.points.length > 1) {
+                    ctx.beginPath();
+                    ctx.moveTo(drawing.points[0].x, drawing.points[0].y);
+                    for (let i = 1; i < drawing.points.length; i++) {
+                        ctx.lineTo(drawing.points[i].x, drawing.points[i].y);
+                    }
+                    ctx.stroke();
+                }
+            });
+            
+            // Draw labels
+            labels.forEach(label => {
+                ctx.font = `${label.bold ? 'bold' : 'normal'} ${label.fontSize}px sans-serif`;
+                ctx.fillStyle = label.color;
+                ctx.fillText(label.text, label.x, label.y);
+            });
+            
+            ctx.restore();
+            
+            // Convert to data URL
+            resolve(tempCanvas.toDataURL('image/png'));
+        };
+        
+        if (totalImages === 0) {
+            finishThumbnail();
+            return;
+        }
+        
+        // Draw objects
+        objects.forEach(obj => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = function() {
+                ctx.save();
+                ctx.translate(obj.x + obj.width / 2, obj.y + obj.height / 2);
+                ctx.rotate((obj.rotation * Math.PI) / 180);
+                ctx.drawImage(img, -obj.width / 2, -obj.height / 2, obj.width, obj.height);
+                ctx.restore();
+                
+                loadedImages++;
+                if (loadedImages === totalImages) {
+                    finishThumbnail();
+                }
+            };
+            img.onerror = function() {
+                loadedImages++;
+                if (loadedImages === totalImages) {
+                    finishThumbnail();
+                }
+            };
+            img.src = obj.imageData;
+        });
+    });
 }
 
 // Grid toggle
