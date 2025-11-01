@@ -36,6 +36,36 @@
         flex: 1;
     }
     
+    /* NEW: Panel toggle buttons */
+    .panel-toggle-btn {
+        position: fixed;
+        top: 50%;
+        transform: translateY(-50%);
+        background: var(--primary);
+        color: white;
+        border: none;
+        padding: 0.75rem 0.5rem;
+        cursor: pointer;
+        z-index: 100;
+        transition: all 0.3s;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    
+    .panel-toggle-btn:hover {
+        background: var(--primary-dark);
+        padding-right: 0.75rem;
+    }
+    
+    .panel-toggle-left {
+        left: 0;
+        border-radius: 0 8px 8px 0;
+    }
+    
+    .panel-toggle-right {
+        right: 0;
+        border-radius: 8px 0 0 8px;
+    }
+    
     /* Toolbar */
     .toolbar {
         display: flex;
@@ -46,6 +76,40 @@
         border: 1px solid var(--border);
         margin-bottom: 1rem;
         flex-wrap: wrap;
+        align-items: center;
+    }
+    
+    /* NEW: Zoom controls */
+    .zoom-controls {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem;
+        background: #f9fafb;
+        border-radius: 8px;
+        margin-left: auto;
+    }
+    
+    .zoom-btn {
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--border);
+        background: white;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .zoom-btn:hover {
+        background: var(--primary);
+        color: white;
+        border-color: var(--primary);
+    }
+    
+    .zoom-level {
+        font-weight: 600;
+        min-width: 60px;
+        text-align: center;
+        color: var(--dark);
     }
     
     .tool-btn {
@@ -92,7 +156,6 @@
         background-position: -1px -1px;
     }
     
-    /* Selection box */
     .selection-box {
         position: absolute;
         border: 2px dashed var(--primary);
@@ -369,7 +432,6 @@
         white-space: nowrap;
     }
     
-    /* Drawing paths */
     .canvas-drawing {
         cursor: pointer;
     }
@@ -399,7 +461,6 @@
     .resize-handle.sw { bottom: -5px; left: -5px; cursor: sw-resize; }
     .resize-handle.se { bottom: -5px; right: -5px; cursor: se-resize; }
     
-    /* Line drawing */
     .canvas-line {
         stroke: #1f2937;
         stroke-width: 2;
@@ -411,7 +472,6 @@
         stroke-width: 3;
     }
     
-    /* Line resize handles */
     .line-handle {
         fill: white;
         stroke: var(--primary);
@@ -499,38 +559,67 @@
     <button class="tool-btn" id="labelTool" onclick="setTool('label')" title="Add Label (T)">
         <i class="fas fa-font"></i> Label
     </button>
-    <div style="flex: 1"></div>
+    
+    <div style="border-left: 2px solid var(--border); height: 30px; margin: 0 0.5rem;"></div>
+    
     <button class="tool-btn" onclick="undo()" title="Undo (Ctrl+Z)">
-        <i class="fas fa-undo"></i> Undo
+        <i class="fas fa-undo"></i>
     </button>
     <button class="tool-btn" onclick="redo()" title="Redo (Ctrl+Y)">
-        <i class="fas fa-redo"></i> Redo
+        <i class="fas fa-redo"></i>
     </button>
     <button class="tool-btn" onclick="clearCanvas()">
-        <i class="fas fa-trash"></i> Clear All
+        <i class="fas fa-trash"></i>
     </button>
     <button class="tool-btn" onclick="showLoadModal()">
         <i class="fas fa-folder-open"></i> Load
     </button>
     <button class="tool-btn" onclick="showSaveModal()">
+        <i class="fas fa-save"></i> Save As
+    </button>
+    <button class="tool-btn" onclick="quickSave()" title="Quick Save (Ctrl+S)">
         <i class="fas fa-save"></i> Save
     </button>
     <button class="tool-btn" onclick="exportToPNG()">
-        <i class="fas fa-download"></i> Export PNG
+        <i class="fas fa-download"></i> Export
     </button>
+    
+    <!-- NEW: Zoom Controls -->
+    <div class="zoom-controls">
+        <button class="zoom-btn" onclick="zoomOut()" title="Zoom Out (Ctrl+-)">
+            <i class="fas fa-search-minus"></i>
+        </button>
+        <span class="zoom-level" id="zoomLevel">100%</span>
+        <button class="zoom-btn" onclick="zoomIn()" title="Zoom In (Ctrl++)">
+            <i class="fas fa-search-plus"></i>
+        </button>
+        <button class="zoom-btn" onclick="resetZoom()" title="Reset Zoom (Ctrl+0)">
+            <i class="fas fa-compress"></i>
+        </button>
+    </div>
 </div>
 
 <!-- Designer Layout -->
 <div class="designer-container">
+    <!-- NEW: Left Panel Toggle Button (shown when panel is hidden) -->
+    <button class="panel-toggle-btn panel-toggle-left" id="leftPanelToggle" onclick="togglePanel('leftPanel')" style="display: none;">
+        <i class="fas fa-chevron-right"></i>
+    </button>
+    
     <!-- Left Panel: Object Library & Templates -->
-    <div class="designer-panel">
+    <div class="designer-panel" id="leftPanel">
         <div class="panel-header">
             <span><i class="fas fa-shapes"></i> Library</span>
-            {% if current_user.is_admin %}
-            <button class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="showUploadObjectModal()">
-                <i class="fas fa-plus"></i>
-            </button>
-            {% endif %}
+            <div style="display: flex; gap: 0.5rem;">
+                {% if current_user.is_admin %}
+                <button class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="showUploadObjectModal()">
+                    <i class="fas fa-plus"></i>
+                </button>
+                {% endif %}
+                <button class="btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background: #6b7280; color: white;" onclick="togglePanel('leftPanel')" title="Hide panel">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+            </div>
         </div>
         <div class="panel-content">
             <div style="margin-bottom: 1rem;">
@@ -582,10 +671,18 @@
         </div>
     </div>
     
+    <!-- NEW: Right Panel Toggle Button (shown when panel is hidden) -->
+    <button class="panel-toggle-btn panel-toggle-right" id="rightPanelToggle" onclick="togglePanel('rightPanel')" style="display: none;">
+        <i class="fas fa-chevron-left"></i>
+    </button>
+    
     <!-- Right Panel: Properties -->
-    <div class="designer-panel">
+    <div class="designer-panel" id="rightPanel">
         <div class="panel-header">
             <span><i class="fas fa-sliders-h"></i> Properties</span>
+            <button class="btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background: #6b7280; color: white;" onclick="togglePanel('rightPanel')" title="Hide panel">
+                <i class="fas fa-chevron-right"></i>
+            </button>
         </div>
         <div class="panel-content" id="propertiesPanel">
             <div id="noSelection" style="text-align: center; color: #9ca3af; padding: 2rem 0;">
@@ -594,129 +691,6 @@
                 <p style="font-size: 0.85rem; margin-top: 1rem;">
                     <strong>Tip:</strong> Drag to select multiple objects
                 </p>
-            </div>
-            
-            <div id="multiSelection" style="display: none;">
-                <div class="property-group">
-                    <h4><i class="fas fa-layer-group"></i> Multiple Selection</h4>
-                    <p id="selectedCount" style="margin-bottom: 1rem; color: #6b7280;"></p>
-                    <div class="action-buttons">
-                        <button class="action-btn action-btn-primary" onclick="groupMove()">
-                            <i class="fas fa-arrows-alt"></i> Move Together
-                        </button>
-                        <button class="action-btn action-btn-danger" onclick="deleteSelected()">
-                            <i class="fas fa-trash"></i> Delete All
-                        </button>
-                    </div>
-                </div>
-            </div>
-            
-            <div id="objectProperties" style="display: none;">
-                <div class="property-group">
-                    <h4><i class="fas fa-ruler-combined"></i> Position & Size</h4>
-                    <div class="property-row">
-                        <label>X:</label>
-                        <input type="number" id="propX" onchange="updateSelectedObject()">
-                    </div>
-                    <div class="property-row">
-                        <label>Y:</label>
-                        <input type="number" id="propY" onchange="updateSelectedObject()">
-                    </div>
-                    <div class="property-row">
-                        <label>Width:</label>
-                        <input type="number" id="propWidth" onchange="updateSelectedObject()">
-                    </div>
-                    <div class="property-row">
-                        <label>Height:</label>
-                        <input type="number" id="propHeight" onchange="updateSelectedObject()">
-                    </div>
-                    <div class="property-row">
-                        <label>Rotation:</label>
-                        <input type="number" id="propRotation" min="0" max="360" onchange="updateSelectedObject()">
-                    </div>
-                </div>
-                
-                <div class="property-group">
-                    <h4><i class="fas fa-tag"></i> Label</h4>
-                    <div class="property-row">
-                        <label>Text:</label>
-                        <input type="text" id="propLabel" onchange="updateSelectedObject()">
-                    </div>
-                    <div class="property-row">
-                        <label>Size:</label>
-                        <input type="number" id="propLabelSize" min="8" max="72" value="14" onchange="updateSelectedObject()">
-                    </div>
-                </div>
-                
-                <div class="action-buttons">
-                    <button class="action-btn action-btn-primary" onclick="duplicateSelected()">
-                        <i class="fas fa-clone"></i> Duplicate
-                    </button>
-                    <button class="action-btn action-btn-danger" onclick="deleteSelected()">
-                        <i class="fas fa-trash"></i> Delete
-                    </button>
-                </div>
-            </div>
-            
-            <div id="lineProperties" style="display: none;">
-                <div class="property-group">
-                    <h4><i class="fas fa-grip-lines"></i> Line Properties</h4>
-                    <div class="property-row">
-                        <label>Color:</label>
-                        <div class="color-picker-wrapper">
-                            <input type="color" id="lineColor" value="#1f2937" onchange="updateSelectedLine()">
-                            <input type="text" id="lineColorHex" value="#1f2937" onchange="updateSelectedLine()">
-                        </div>
-                    </div>
-                    <div class="property-row">
-                        <label>Width:</label>
-                        <input type="number" id="lineWidth" min="1" max="20" value="2" onchange="updateSelectedLine()">
-                    </div>
-                    <div class="property-row">
-                        <label>Style:</label>
-                        <select id="lineStyle" onchange="updateSelectedLine()">
-                            <option value="solid">Solid</option>
-                            <option value="dashed">Dashed</option>
-                            <option value="dotted">Dotted</option>
-                        </select>
-                    </div>
-                </div>
-                
-                <div class="action-buttons">
-                    <button class="action-btn action-btn-danger" onclick="deleteSelected()" style="grid-column: 1 / -1;">
-                        <i class="fas fa-trash"></i> Delete Line
-                    </button>
-                </div>
-            </div>
-            
-            <div id="labelProperties" style="display: none;">
-                <div class="property-group">
-                    <h4><i class="fas fa-font"></i> Label Properties</h4>
-                    <div class="property-row">
-                        <label>Text:</label>
-                        <input type="text" id="labelText" onchange="updateSelectedLabel()">
-                    </div>
-                    <div class="property-row">
-                        <label>Size:</label>
-                        <input type="number" id="labelFontSize" min="8" max="72" value="14" onchange="updateSelectedLabel()">
-                    </div>
-                    <div class="property-row">
-                        <label>Color:</label>
-                        <div class="color-picker-wrapper">
-                            <input type="color" id="labelColor" value="#1f2937" onchange="updateSelectedLabel()">
-                        </div>
-                    </div>
-                    <div class="property-row">
-                        <label>Bold:</label>
-                        <input type="checkbox" id="labelBold" onchange="updateSelectedLabel()">
-                    </div>
-                </div>
-                
-                <div class="action-buttons">
-                    <button class="action-btn action-btn-danger" onclick="deleteSelected()" style="grid-column: 1 / -1;">
-                        <i class="fas fa-trash"></i> Delete Label
-                    </button>
-                </div>
             </div>
         </div>
     </div>

@@ -4,9 +4,10 @@ let selectedElements = [];
 let objects = [];
 let lines = [];
 let labels = [];
-let drawings = []; // For freehand drawings
-let currentPath = null; // Current path being drawn
+let drawings = [];
+let currentPath = null;
 let currentDesignId = null;
+let currentDesignName = null; // NEW: Track design name
 let objectLibrary = [];
 let templates = [];
 let isDrawingLine = false;
@@ -14,7 +15,7 @@ let lineStart = null;
 let isDragging = false;
 let isResizing = false;
 let isSelecting = false;
-let isDrawing = false; // For pen/brush tool
+let isDrawing = false;
 let resizeHandle = null;
 let dragOffset = { x: 0, y: 0 };
 let objectIdCounter = 1;
@@ -22,8 +23,21 @@ let selectionStart = null;
 let history = [];
 let historyIndex = -1;
 let maxHistory = 50;
-let brushSize = 3; // Brush size
-let brushColor = '#1f2937'; // Brush color
+let brushSize = 3;
+let brushColor = '#1f2937';
+
+// NEW: Zoom functionality
+let zoomLevel = 1;
+let isPanning = false;
+let panStart = { x: 0, y: 0 };
+let canvasOffset = { x: 0, y: 0 };
+
+// NEW: Group manipulation
+let groupDragStart = null;
+let groupResizeStart = null;
+let groupResizeStartBounds = null;
+let isGroupDragging = false;
+let isGroupResizing = false;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
@@ -31,8 +45,8 @@ document.addEventListener('DOMContentLoaded', function() {
     loadObjectLibrary();
     loadTemplates();
     setupCanvasEvents();
+    setupZoomControls(); // NEW
     
-    // Load design if editing
     const urlParams = new URLSearchParams(window.location.search);
     const designId = urlParams.get('design_id');
     if (designId) {
@@ -40,67 +54,209 @@ document.addEventListener('DOMContentLoaded', function() {
         loadDesignData(parseInt(designId));
     }
     
-    // Keyboard shortcuts
     document.addEventListener('keydown', handleKeyDown);
-    
-    // Initialize history with empty state
     saveState();
     console.log('Stage Designer initialized');
 });
 
+// NEW: Setup zoom controls
+function setupZoomControls() {
+    const canvas = document.getElementById('stageCanvas');
+    
+    // Mouse wheel zoom
+    canvas.addEventListener('wheel', function(e) {
+        if (e.ctrlKey) {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            const newZoom = Math.max(0.1, Math.min(3, zoomLevel * delta));
+            setZoom(newZoom);
+        }
+    }, { passive: false });
+    
+    // Space + drag to pan
+    document.addEventListener('keydown', function(e) {
+        if (e.code === 'Space' && !isPanning && currentTool === 'select') {
+            e.preventDefault();
+            canvas.style.cursor = 'grab';
+        }
+    });
+    
+    document.addEventListener('keyup', function(e) {
+        if (e.code === 'Space') {
+            isPanning = false;
+            canvas.style.cursor = currentTool === 'select' ? 'default' : 'crosshair';
+        }
+    });
+}
+
+// NEW: Set zoom level
+function setZoom(level) {
+    zoomLevel = level;
+    const canvas = document.getElementById('stageCanvas');
+    const objectsLayer = document.getElementById('objectsLayer');
+    const linesLayer = document.getElementById('linesLayer');
+    
+    const transform = `scale(${zoomLevel}) translate(${canvasOffset.x}px, ${canvasOffset.y}px)`;
+    objectsLayer.style.transform = transform;
+    linesLayer.style.transform = transform;
+    objectsLayer.style.transformOrigin = '0 0';
+    linesLayer.style.transformOrigin = '0 0';
+    
+    // Update zoom display
+    const zoomDisplay = document.getElementById('zoomLevel');
+    if (zoomDisplay) {
+        zoomDisplay.textContent = Math.round(zoomLevel * 100) + '%';
+    }
+}
+
+// NEW: Zoom controls
+function zoomIn() {
+    setZoom(Math.min(3, zoomLevel * 1.2));
+}
+
+function zoomOut() {
+    setZoom(Math.max(0.1, zoomLevel / 1.2));
+}
+
+function resetZoom() {
+    zoomLevel = 1;
+    canvasOffset = { x: 0, y: 0 };
+    setZoom(1);
+}
+
+// NEW: Toggle panel visibility
+function togglePanel(panelId) {
+    const panel = document.getElementById(panelId);
+    const icon = document.querySelector(`[onclick="togglePanel('${panelId}')"] i`);
+    
+    if (panel.style.display === 'none') {
+        panel.style.display = 'flex';
+        if (icon) icon.className = 'fas fa-chevron-left';
+    } else {
+        panel.style.display = 'none';
+        if (icon) icon.className = 'fas fa-chevron-right';
+    }
+    
+    // Adjust grid layout
+    updateGridLayout();
+}
+
+// NEW: Update grid layout based on visible panels
+function updateGridLayout() {
+    const container = document.querySelector('.designer-container');
+    const leftPanel = document.getElementById('leftPanel');
+    const rightPanel = document.getElementById('rightPanel');
+    
+    const leftVisible = leftPanel.style.display !== 'none';
+    const rightVisible = rightPanel.style.display !== 'none';
+    
+    if (leftVisible && rightVisible) {
+        container.style.gridTemplateColumns = '280px 1fr 300px';
+    } else if (leftVisible) {
+        container.style.gridTemplateColumns = '280px 1fr';
+    } else if (rightVisible) {
+        container.style.gridTemplateColumns = '1fr 300px';
+    } else {
+        container.style.gridTemplateColumns = '1fr';
+    }
+}
+
 function handleKeyDown(e) {
-    // Prevent default for shortcuts we handle
     if ((e.ctrlKey || e.metaKey) && ['s', 'd', 'z', 'y', 'a'].includes(e.key.toLowerCase())) {
         e.preventDefault();
     }
     
-    // Delete
     if (e.key === 'Delete' && selectedElements.length > 0) {
         deleteSelected();
     }
-    // Escape - deselect
     if (e.key === 'Escape') {
         deselectAll();
     }
-    // Ctrl+S - Save
+    // NEW: Quick save with Ctrl+S
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        showSaveModal();
+        if (currentDesignId) {
+            quickSave(); // Save current design
+        } else {
+            showSaveModal(); // Show modal for new design
+        }
     }
-    // Ctrl+D - Duplicate
     if ((e.ctrlKey || e.metaKey) && e.key === 'd' && selectedElements.length > 0) {
         duplicateSelected();
     }
-    // Ctrl+Z - Undo
     if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
         undo();
     }
-    // Ctrl+Y - Redo
     if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
         redo();
     }
-    // Tool shortcuts
-    if (e.key === 'v' || e.key === 'V') {
-        setTool('select');
-    }
-    if (e.key === 'l' || e.key === 'L') {
-        setTool('line');
-    }
-    if (e.key === 't' || e.key === 'T') {
-        setTool('label');
-    }
-    if (e.key === 'p' || e.key === 'P') {
-        setTool('pen');
-    }
-    if (e.key === 'b' || e.key === 'B') {
-        setTool('brush');
-    }
-    // Ctrl+A - Select all
+    if (e.key === 'v' || e.key === 'V') setTool('select');
+    if (e.key === 'l' || e.key === 'L') setTool('line');
+    if (e.key === 't' || e.key === 'T') setTool('label');
+    if (e.key === 'p' || e.key === 'P') setTool('pen');
+    if (e.key === 'b' || e.key === 'B') setTool('brush');
     if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
         selectAll();
     }
+    // NEW: Zoom shortcuts
+    if ((e.ctrlKey || e.metaKey) && e.key === '=') {
+        e.preventDefault();
+        zoomIn();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === '-') {
+        e.preventDefault();
+        zoomOut();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === '0') {
+        e.preventDefault();
+        resetZoom();
+    }
 }
 
-// Tool selection
+// NEW: Quick save (save without showing modal)
+async function quickSave() {
+    if (!currentDesignId) {
+        showSaveModal();
+        return;
+    }
+    
+    showAlert('Saving...', 'success');
+    
+    const thumbnail = await generateThumbnail();
+    
+    const designData = {
+        objects: objects,
+        lines: lines,
+        labels: labels,
+        drawings: drawings
+    };
+    
+    const payload = {
+        name: currentDesignName || 'Untitled Design',
+        design_data: designData,
+        thumbnail: thumbnail,
+        event_id: null, // Keep existing event
+        save_to_stageplans: true
+    };
+    
+    fetch(`/stage-designer/design/${currentDesignId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert('Design saved successfully!');
+        } else {
+            showAlert('Error saving: ' + (result.error || 'Unknown error'), 'error');
+        }
+    })
+    .catch(err => {
+        console.error('Save error:', err);
+        showAlert('Error saving: ' + err.message, 'error');
+    });
+}
+
 function setTool(tool) {
     currentTool = tool;
     document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
@@ -119,7 +275,6 @@ function setTool(tool) {
     }
 }
 
-// History management
 function saveState() {
     const state = {
         objects: JSON.parse(JSON.stringify(objects)),
@@ -174,7 +329,6 @@ function restoreState(state) {
     deselectAll();
 }
 
-// Load object library
 function loadObjectLibrary() {
     console.log('Loading object library...');
     fetch('/stage-designer/objects')
@@ -220,7 +374,6 @@ function renderObjectLibrary() {
             item.className = 'object-item';
             item.draggable = true;
             
-            // Check if user is admin
             const isAdmin = document.body.dataset.userIsAdmin === 'true';
             const deleteBtn = isAdmin ? `<button class="object-delete-btn" onclick="deleteLibraryObject(${obj.id}, event)" title="Delete object">×</button>` : '';
             
@@ -242,7 +395,6 @@ function renderObjectLibrary() {
     });
 }
 
-// NEW: Delete library object (admin only)
 function deleteLibraryObject(id, event) {
     event.stopPropagation();
     
@@ -264,7 +416,6 @@ function deleteLibraryObject(id, event) {
         });
 }
 
-// Load templates
 function loadTemplates() {
     console.log('Loading templates...');
     fetch('/stage-designer/templates')
@@ -355,17 +506,14 @@ function deleteTemplate(id, event) {
         });
 }
 
-// Tab switching
 function showTab(tab) {
     document.getElementById('objectsTab').style.display = tab === 'objects' ? 'block' : 'none';
     document.getElementById('templatesTab').style.display = tab === 'templates' ? 'block' : 'none';
 }
 
-// Canvas setup
 function setupCanvasEvents() {
     const canvas = document.getElementById('stageCanvas');
     
-    // Drop objects
     canvas.addEventListener('dragover', e => e.preventDefault());
     canvas.addEventListener('drop', function(e) {
         e.preventDefault();
@@ -374,29 +522,35 @@ function setupCanvasEvents() {
         
         if (obj) {
             const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
+            const x = (e.clientX - rect.left) / zoomLevel - canvasOffset.x;
+            const y = (e.clientY - rect.top) / zoomLevel - canvasOffset.y;
             
             addObject(obj, x, y);
         }
     });
     
-    // Mouse events
     canvas.addEventListener('mousedown', handleCanvasMouseDown);
     canvas.addEventListener('mousemove', handleCanvasMouseMove);
     canvas.addEventListener('mouseup', handleCanvasMouseUp);
     canvas.addEventListener('click', handleCanvasClick);
 }
 
-// NEW: Drawing tool handlers
 function handleCanvasMouseDown(e) {
     const rect = document.getElementById('stageCanvas').getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const x = (e.clientX - rect.left) / zoomLevel - canvasOffset.x;
+    const y = (e.clientY - rect.top) / zoomLevel - canvasOffset.y;
     
-    // Only start selection if clicking directly on the SVG canvas (not on objects)
+    // Space + drag for panning
+    if (e.code === 'Space' || (currentTool === 'select' && e.button === 1)) {
+        isPanning = true;
+        panStart = { x: e.clientX, y: e.clientY };
+        document.getElementById('stageCanvas').style.cursor = 'grabbing';
+        e.preventDefault();
+        return;
+    }
+    
     const target = e.target;
-    const isCanvas = target.id === 'stageCanvas' || target.id === 'linesLayer';
+    const isCanvas = target.id === 'stageCanvas' || target.id === 'linesLayer' || target.classList.contains('selection-box');
     
     if (currentTool === 'pen' || currentTool === 'brush') {
         isDrawing = true;
@@ -410,38 +564,219 @@ function handleCanvasMouseDown(e) {
             tool: currentTool
         };
     } else if (currentTool === 'select' && isCanvas) {
-        // Only start selection box if clicking on canvas, not on objects
+        // Check if clicking on the group bounding box handles
+        if (selectedElements.length > 1) {
+            const handle = checkGroupHandleClick(e);
+            if (handle === 'move') {
+                isGroupDragging = true;
+                groupDragStart = { x, y };
+                return;
+            } else if (handle) {
+                isGroupResizing = true;
+                groupResizeStart = { x, y, handle };
+                groupResizeStartBounds = getSelectionBounds();
+                return;
+            }
+        }
+        
+        // Start selection box
         isSelecting = true;
         selectionStart = { x, y };
         
-        // Clear selection if not holding Ctrl/Shift
         if (!e.ctrlKey && !e.shiftKey) {
             deselectAll();
         }
     }
 }
 
+// NEW: Check if clicking on group bounding box handles
+function checkGroupHandleClick(e) {
+    const bounds = getSelectionBounds();
+    if (!bounds) return null;
+    
+    const rect = document.getElementById('stageCanvas').getBoundingClientRect();
+    const clickX = (e.clientX - rect.left) / zoomLevel - canvasOffset.x;
+    const clickY = (e.clientY - rect.top) / zoomLevel - canvasOffset.y;
+    
+    const handleSize = 15 / zoomLevel;
+    
+    // Check corners for resize
+    const corners = [
+        { x: bounds.left, y: bounds.top, type: 'nw' },
+        { x: bounds.right, y: bounds.top, type: 'ne' },
+        { x: bounds.left, y: bounds.bottom, type: 'sw' },
+        { x: bounds.right, y: bounds.bottom, type: 'se' }
+    ];
+    
+    for (let corner of corners) {
+        if (Math.abs(clickX - corner.x) < handleSize && Math.abs(clickY - corner.y) < handleSize) {
+            return corner.type;
+        }
+    }
+    
+    // Check if inside bounding box for move
+    if (clickX >= bounds.left && clickX <= bounds.right && 
+        clickY >= bounds.top && clickY <= bounds.bottom) {
+        return 'move';
+    }
+    
+    return null;
+}
+
 function handleCanvasMouseMove(e) {
     const rect = document.getElementById('stageCanvas').getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const x = (e.clientX - rect.left) / zoomLevel - canvasOffset.x;
+    const y = (e.clientY - rect.top) / zoomLevel - canvasOffset.y;
     
-    // Drawing with pen/brush
+    // Handle panning
+    if (isPanning) {
+        const dx = e.clientX - panStart.x;
+        const dy = e.clientY - panStart.y;
+        canvasOffset.x += dx / zoomLevel;
+        canvasOffset.y += dy / zoomLevel;
+        panStart = { x: e.clientX, y: e.clientY };
+        setZoom(zoomLevel);
+        return;
+    }
+    
+    // NEW: Group dragging
+    if (isGroupDragging && selectedElements.length > 1) {
+        const dx = x - groupDragStart.x;
+        const dy = y - groupDragStart.y;
+        
+        selectedElements.forEach(sel => {
+            if (sel.type === 'object') {
+                sel.element.x += dx;
+                sel.element.y += dy;
+                updateObjectPosition(sel.element);
+            } else if (sel.type === 'label') {
+                sel.element.x += dx;
+                sel.element.y += dy;
+                updateLabelPosition(sel.element);
+            } else if (sel.type === 'line') {
+                sel.element.x1 += dx;
+                sel.element.y1 += dy;
+                sel.element.x2 += dx;
+                sel.element.y2 += dy;
+                updateLinePosition(sel.element);
+            } else if (sel.type === 'drawing') {
+                sel.element.points.forEach(point => {
+                    point.x += dx;
+                    point.y += dy;
+                });
+                const el = document.getElementById(sel.element.id);
+                if (el) {
+                    const pathData = 'M ' + sel.element.points.map(p => `${p.x},${p.y}`).join(' L ');
+                    el.setAttribute('d', pathData);
+                }
+            }
+        });
+        
+        groupDragStart = { x, y };
+        updatePropertiesPanel();
+        renderGroupBoundingBox();
+        return;
+    }
+    
+    // NEW: Group resizing
+    if (isGroupResizing && selectedElements.length > 1) {
+        const bounds = groupResizeStartBounds;
+        const centerX = bounds.left + bounds.width / 2;
+        const centerY = bounds.top + bounds.height / 2;
+        
+        const handle = groupResizeStart.handle;
+        let scaleX = 1, scaleY = 1;
+        
+        if (handle === 'se' || handle === 'ne' || handle === 'sw' || handle === 'nw') {
+            const startDist = Math.sqrt(
+                Math.pow(groupResizeStart.x - centerX, 2) + 
+                Math.pow(groupResizeStart.y - centerY, 2)
+            );
+            const currentDist = Math.sqrt(
+                Math.pow(x - centerX, 2) + 
+                Math.pow(y - centerY, 2)
+            );
+            
+            scaleX = scaleY = currentDist / startDist;
+        }
+        
+        selectedElements.forEach(sel => {
+            if (sel.type === 'object') {
+                if (!sel.originalState) {
+                    sel.originalState = {
+                        x: sel.element.x,
+                        y: sel.element.y,
+                        width: sel.element.width,
+                        height: sel.element.height
+                    };
+                }
+                const relX = sel.originalState.x - centerX;
+                const relY = sel.originalState.y - centerY;
+                sel.element.x = centerX + relX * scaleX;
+                sel.element.y = centerY + relY * scaleY;
+                sel.element.width = sel.originalState.width * scaleX;
+                sel.element.height = sel.originalState.height * scaleY;
+                updateObjectPosition(sel.element);
+            } else if (sel.type === 'label') {
+                if (!sel.originalState) {
+                    sel.originalState = {
+                        x: sel.element.x,
+                        y: sel.element.y,
+                        fontSize: sel.element.fontSize
+                    };
+                }
+                const relX = sel.originalState.x - centerX;
+                const relY = sel.originalState.y - centerY;
+                sel.element.x = centerX + relX * scaleX;
+                sel.element.y = centerY + relY * scaleY;
+                sel.element.fontSize = Math.max(8, sel.originalState.fontSize * scaleX);
+                updateLabelPosition(sel.element);
+            } else if (sel.type === 'line') {
+                if (!sel.originalState) {
+                    sel.originalState = {
+                        x1: sel.element.x1,
+                        y1: sel.element.y1,
+                        x2: sel.element.x2,
+                        y2: sel.element.y2
+                    };
+                }
+                const relX1 = sel.originalState.x1 - centerX;
+                const relY1 = sel.originalState.y1 - centerY;
+                const relX2 = sel.originalState.x2 - centerX;
+                const relY2 = sel.originalState.y2 - centerY;
+                sel.element.x1 = centerX + relX1 * scaleX;
+                sel.element.y1 = centerY + relY1 * scaleY;
+                sel.element.x2 = centerX + relX2 * scaleX;
+                sel.element.y2 = centerY + relY2 * scaleY;
+                updateLinePosition(sel.element);
+            }
+        });
+        
+        updatePropertiesPanel();
+        renderGroupBoundingBox();
+        return;
+    }
+    
     if (isDrawing && currentPath) {
         currentPath.points.push({x, y});
         renderDrawingPreview(currentPath);
-        return; // Don't do selection while drawing
+        return;
     }
     
-    // Selection box
+    // NEW: Show line preview while drawing
+    if (currentTool === 'line' && isDrawingLine && lineStart) {
+        renderLinePreview(lineStart.x, lineStart.y, x, y);
+        return;
+    }
+    
     if (isSelecting && selectionStart) {
         const box = document.getElementById('selectionBox');
         box.style.display = 'block';
         
-        const left = Math.min(selectionStart.x, x);
-        const top = Math.min(selectionStart.y, y);
-        const width = Math.abs(x - selectionStart.x);
-        const height = Math.abs(y - selectionStart.y);
+        const left = Math.min(selectionStart.x, x) * zoomLevel + canvasOffset.x * zoomLevel;
+        const top = Math.min(selectionStart.y, y) * zoomLevel + canvasOffset.y * zoomLevel;
+        const width = Math.abs(x - selectionStart.x) * zoomLevel;
+        const height = Math.abs(y - selectionStart.y) * zoomLevel;
         
         box.style.left = left + 'px';
         box.style.top = top + 'px';
@@ -450,8 +785,84 @@ function handleCanvasMouseMove(e) {
     }
 }
 
+// NEW: Render line preview (dotted)
+function renderLinePreview(x1, y1, x2, y2) {
+    let preview = document.getElementById('linePreview');
+    if (!preview) {
+        preview = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        preview.id = 'linePreview';
+        preview.style.stroke = '#1f2937';
+        preview.style.strokeWidth = '2';
+        preview.style.strokeDasharray = '5,5';
+        preview.style.opacity = '0.6';
+        document.getElementById('linesLayer').appendChild(preview);
+    }
+    
+    preview.setAttribute('x1', x1);
+    preview.setAttribute('y1', y1);
+    preview.setAttribute('x2', x2);
+    preview.setAttribute('y2', y2);
+}
+
+// NEW: Render group bounding box
+function renderGroupBoundingBox() {
+    if (selectedElements.length < 2) {
+        const existingBox = document.getElementById('groupBoundingBox');
+        if (existingBox) existingBox.remove();
+        return;
+    }
+    
+    const bounds = getSelectionBounds();
+    if (!bounds) return;
+    
+    let bbox = document.getElementById('groupBoundingBox');
+    if (!bbox) {
+        bbox = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        bbox.id = 'groupBoundingBox';
+        document.getElementById('linesLayer').appendChild(bbox);
+    }
+    
+    const padding = 5;
+    
+    bbox.innerHTML = `
+        <rect x="${bounds.left - padding}" y="${bounds.top - padding}" 
+              width="${bounds.width + padding * 2}" height="${bounds.height + padding * 2}"
+              fill="none" stroke="#6366f1" stroke-width="2" stroke-dasharray="5,5" />
+        
+        <!-- Resize handles -->
+        <circle cx="${bounds.left}" cy="${bounds.top}" r="8" fill="white" stroke="#6366f1" stroke-width="2" class="group-handle" data-handle="nw" />
+        <circle cx="${bounds.right}" cy="${bounds.top}" r="8" fill="white" stroke="#6366f1" stroke-width="2" class="group-handle" data-handle="ne" />
+        <circle cx="${bounds.left}" cy="${bounds.bottom}" r="8" fill="white" stroke="#6366f1" stroke-width="2" class="group-handle" data-handle="sw" />
+        <circle cx="${bounds.right}" cy="${bounds.bottom}" r="8" fill="white" stroke="#6366f1" stroke-width="2" class="group-handle" data-handle="se" />
+    `;
+}
+
 function handleCanvasMouseUp(e) {
-    // Finish drawing
+    // Stop panning
+    if (isPanning) {
+        isPanning = false;
+        document.getElementById('stageCanvas').style.cursor = currentTool === 'select' ? 'default' : 'crosshair';
+        return;
+    }
+    
+    // NEW: Stop group operations
+    if (isGroupDragging) {
+        isGroupDragging = false;
+        saveState();
+        return;
+    }
+    
+    if (isGroupResizing) {
+        isGroupResizing = false;
+        // Clear original states
+        selectedElements.forEach(sel => {
+            delete sel.originalState;
+        });
+        groupResizeStartBounds = null;
+        saveState();
+        return;
+    }
+    
     if (isDrawing && currentPath && currentPath.points.length > 1) {
         drawings.push(currentPath);
         renderDrawing(currentPath);
@@ -459,25 +870,22 @@ function handleCanvasMouseUp(e) {
         currentPath = null;
         isDrawing = false;
         
-        // Clear preview
         const preview = document.getElementById('drawingPreview');
         if (preview) preview.remove();
     }
     
-    // Finish selection
     if (isSelecting) {
         isSelecting = false;
         const box = document.getElementById('selectionBox');
         
         if (box.style.display === 'block') {
             const rect = {
-                left: parseInt(box.style.left),
-                top: parseInt(box.style.top),
-                right: parseInt(box.style.left) + parseInt(box.style.width),
-                bottom: parseInt(box.style.top) + parseInt(box.style.height)
+                left: parseInt(box.style.left) / zoomLevel - canvasOffset.x,
+                top: parseInt(box.style.top) / zoomLevel - canvasOffset.y,
+                right: (parseInt(box.style.left) + parseInt(box.style.width)) / zoomLevel - canvasOffset.x,
+                bottom: (parseInt(box.style.top) + parseInt(box.style.height)) / zoomLevel - canvasOffset.y
             };
             
-            // Only select if the box is big enough (more than 5px in either direction)
             const boxWidth = parseInt(box.style.width);
             const boxHeight = parseInt(box.style.height);
             
@@ -491,8 +899,6 @@ function handleCanvasMouseUp(e) {
     }
 }
 
-
-// NEW: Render drawing preview while drawing
 function renderDrawingPreview(path) {
     let preview = document.getElementById('drawingPreview');
     if (!preview) {
@@ -510,7 +916,6 @@ function renderDrawingPreview(path) {
     preview.setAttribute('d', pathData);
 }
 
-// NEW: Render finished drawing
 function renderDrawing(drawing) {
     const svg = document.getElementById('linesLayer');
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -548,11 +953,70 @@ function handleCanvasClick(e) {
     }
 }
 
+// NEW: Get bounding box of all selected elements
+function getSelectionBounds() {
+    if (selectedElements.length === 0) return null;
+    
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    
+    selectedElements.forEach(sel => {
+        if (sel.type === 'object') {
+            minX = Math.min(minX, sel.element.x);
+            minY = Math.min(minY, sel.element.y);
+            maxX = Math.max(maxX, sel.element.x + sel.element.width);
+            maxY = Math.max(maxY, sel.element.y + sel.element.height);
+        } else if (sel.type === 'label') {
+            minX = Math.min(minX, sel.element.x);
+            minY = Math.min(minY, sel.element.y);
+            maxX = Math.max(maxX, sel.element.x + 100);
+            maxY = Math.max(maxY, sel.element.y + sel.element.fontSize);
+        } else if (sel.type === 'line') {
+            minX = Math.min(minX, sel.element.x1, sel.element.x2);
+            minY = Math.min(minY, sel.element.y1, sel.element.y2);
+            maxX = Math.max(maxX, sel.element.x1, sel.element.x2);
+            maxY = Math.max(maxY, sel.element.y1, sel.element.y2);
+        }
+    });
+    
+    return {
+        left: minX,
+        top: minY,
+        right: maxX,
+        bottom: maxY,
+        width: maxX - minX,
+        height: maxY - minY
+    };
+}
+
+// NEW: Start group drag
+function startGroupDrag() {
+    if (selectedElements.length < 2) return;
+    
+    const rect = document.getElementById('stageCanvas').getBoundingClientRect();
+    const x = (event.clientX - rect.left) / zoomLevel - canvasOffset.x;
+    const y = (event.clientY - rect.top) / zoomLevel - canvasOffset.y;
+    
+    isGroupDragging = true;
+    groupDragStart = { x, y };
+    showAlert(`Moving ${selectedElements.length} elements`);
+}
+
+// NEW: Start group resize
+function startGroupResize() {
+    if (selectedElements.length < 2) return;
+    
+    const rect = document.getElementById('stageCanvas').getBoundingClientRect();
+    const x = (event.clientX - rect.left) / zoomLevel - canvasOffset.x;
+    const y = (event.clientY - rect.top) / zoomLevel - canvasOffset.y;
+    
+    isGroupResizing = true;
+    groupResizeStart = { x, y };
+    showAlert(`Resizing ${selectedElements.length} elements`);
+}
+
 function selectElementsInBox(rect) {
-    // Don't clear selection - we handle that in mousedown
     let foundElements = [];
     
-    // Check objects
     objects.forEach(obj => {
         const objRect = {
             left: obj.x,
@@ -568,28 +1032,21 @@ function selectElementsInBox(rect) {
         }
     });
     
-    // Check labels
     labels.forEach(label => {
-        const labelEl = document.getElementById(label.id);
-        if (labelEl) {
-            const labelRect = labelEl.getBoundingClientRect();
-            const canvasRect = document.getElementById('stageCanvas').getBoundingClientRect();
-            const objRect = {
-                left: labelRect.left - canvasRect.left,
-                top: labelRect.top - canvasRect.top,
-                right: labelRect.right - canvasRect.left,
-                bottom: labelRect.bottom - canvasRect.top
-            };
-            
-            if (rectIntersect(rect, objRect)) {
-                if (!isElementSelected(label)) {
-                    foundElements.push({ element: label, type: 'label' });
-                }
+        const objRect = {
+            left: label.x,
+            top: label.y - label.fontSize,
+            right: label.x + 100,
+            bottom: label.y
+        };
+        
+        if (rectIntersect(rect, objRect)) {
+            if (!isElementSelected(label)) {
+                foundElements.push({ element: label, type: 'label' });
             }
         }
     });
     
-    // Check lines
     lines.forEach(line => {
         const lineRect = {
             left: Math.min(line.x1, line.x2) - 5,
@@ -605,9 +1062,7 @@ function selectElementsInBox(rect) {
         }
     });
     
-    // Check drawings
     drawings.forEach(drawing => {
-        // Calculate bounding box of drawing
         if (drawing.points.length > 0) {
             let minX = drawing.points[0].x;
             let minY = drawing.points[0].y;
@@ -636,15 +1091,15 @@ function selectElementsInBox(rect) {
         }
     });
     
-    // Add found elements to selection
     foundElements.forEach(item => {
         addToSelection(item.element, item.type);
     });
     
     updatePropertiesPanel();
+    renderGroupBoundingBox();
     
     if (foundElements.length > 0) {
-        showAlert(`Selected ${foundElements.length} element(s)`);
+        showAlert(`Selected ${selectedElements.length} element(s)`);
     }
 }
 
@@ -654,8 +1109,6 @@ function rectIntersect(rect1, rect2) {
              rect2.top > rect1.bottom ||
              rect2.bottom < rect1.top);
 }
-
-
 
 function selectAll() {
     deselectAll();
@@ -669,7 +1122,6 @@ function selectAll() {
     showAlert(`Selected ${selectedElements.length} elements`);
 }
 
-// Add object to canvas
 function addObject(libraryObj, x, y) {
     const obj = {
         id: 'obj_' + objectIdCounter++,
@@ -748,15 +1200,15 @@ function startDrag(obj, e) {
     const rect = document.getElementById(obj.id).getBoundingClientRect();
     const canvasRect = document.getElementById('stageCanvas').getBoundingClientRect();
     
-    dragOffset.x = e.clientX - rect.left;
-    dragOffset.y = e.clientY - rect.top;
+    dragOffset.x = (e.clientX - rect.left) / zoomLevel;
+    dragOffset.y = (e.clientY - rect.top) / zoomLevel;
     
     function onMouseMove(e) {
         if (!isDragging) return;
         
         const canvasRect = document.getElementById('stageCanvas').getBoundingClientRect();
-        let newX = e.clientX - canvasRect.left - dragOffset.x;
-        let newY = e.clientY - canvasRect.top - dragOffset.y;
+        let newX = (e.clientX - canvasRect.left) / zoomLevel - canvasOffset.x - dragOffset.x;
+        let newY = (e.clientY - canvasRect.top) / zoomLevel - canvasOffset.y - dragOffset.y;
         
         if (document.getElementById('snapToggle') && document.getElementById('snapToggle').checked) {
             newX = Math.round(newX / 20) * 20;
@@ -766,8 +1218,8 @@ function startDrag(obj, e) {
         const dx = newX - obj.x;
         const dy = newY - obj.y;
         
-        obj.x = Math.max(0, Math.min(newX, canvasRect.width - obj.width));
-        obj.y = Math.max(0, Math.min(newY, canvasRect.height - obj.height));
+        obj.x = Math.max(0, newX);
+        obj.y = Math.max(0, newY);
         
         selectedElements.forEach(sel => {
             if (sel.element.id !== obj.id) {
@@ -821,8 +1273,8 @@ function startResize(obj, handle, e) {
     function onMouseMove(e) {
         if (!isResizing) return;
         
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
+        const dx = (e.clientX - startX) / zoomLevel;
+        const dy = (e.clientY - startY) / zoomLevel;
         
         if (handle.includes('e')) {
             obj.width = Math.max(20, startWidth + dx);
@@ -871,11 +1323,10 @@ function updateObjectPosition(obj) {
     }
 }
 
-// Line drawing
 function handleLineDrawing(e) {
     const rect = document.getElementById('stageCanvas').getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const x = (e.clientX - rect.left) / zoomLevel - canvasOffset.x;
+    const y = (e.clientY - rect.top) / zoomLevel - canvasOffset.y;
     
     if (!isDrawingLine) {
         lineStart = { x, y };
@@ -899,6 +1350,10 @@ function handleLineDrawing(e) {
         
         isDrawingLine = false;
         lineStart = null;
+        
+        // Remove preview
+        const preview = document.getElementById('linePreview');
+        if (preview) preview.remove();
     }
 }
 
@@ -971,8 +1426,8 @@ function startLineHandleDrag(line, point, e) {
     
     function onMouseMove(e) {
         const rect = document.getElementById('stageCanvas').getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const x = (e.clientX - rect.left) / zoomLevel - canvasOffset.x;
+        const y = (e.clientY - rect.top) / zoomLevel - canvasOffset.y;
         
         if (point === 'start') {
             line.x1 = x;
@@ -1017,11 +1472,10 @@ function updateLinePosition(line) {
     }
 }
 
-// Label placement
 function handleLabelPlacement(e) {
     const rect = document.getElementById('stageCanvas').getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const x = (e.clientX - rect.left) / zoomLevel - canvasOffset.x;
+    const y = (e.clientY - rect.top) / zoomLevel - canvasOffset.y;
     
     const labelText = prompt('Enter label text:');
     if (!labelText) return;
@@ -1088,15 +1542,15 @@ function startLabelDrag(label, e) {
     const rect = document.getElementById(label.id).getBoundingClientRect();
     const canvasRect = document.getElementById('stageCanvas').getBoundingClientRect();
     
-    dragOffset.x = e.clientX - rect.left;
-    dragOffset.y = e.clientY - rect.top;
+    dragOffset.x = (e.clientX - rect.left) / zoomLevel;
+    dragOffset.y = (e.clientY - rect.top) / zoomLevel;
     
     function onMouseMove(e) {
         if (!isDragging) return;
         
         const canvasRect = document.getElementById('stageCanvas').getBoundingClientRect();
-        let newX = e.clientX - canvasRect.left - dragOffset.x;
-        let newY = e.clientY - canvasRect.top - dragOffset.y;
+        let newX = (e.clientX - canvasRect.left) / zoomLevel - canvasOffset.x - dragOffset.x;
+        let newY = (e.clientY - canvasRect.top) / zoomLevel - canvasOffset.y - dragOffset.y;
         
         if (document.getElementById('snapToggle') && document.getElementById('snapToggle').checked) {
             newX = Math.round(newX / 20) * 20;
@@ -1133,7 +1587,7 @@ function startLabelResize(label, handle, e) {
     function onMouseMove(e) {
         if (!isResizing) return;
         
-        const dy = e.clientY - startY;
+        const dy = (e.clientY - startY) / zoomLevel;
         label.fontSize = Math.max(8, Math.min(72, startFontSize + Math.round(dy / 5)));
         
         updateLabelPosition(label);
@@ -1169,12 +1623,12 @@ function updateLabelPosition(label) {
     }
 }
 
-// Selection management
 function selectElement(element, type) {
     if (!isElementSelected(element)) {
         addToSelection(element, type);
     }
     updatePropertiesPanel();
+    renderGroupBoundingBox();
 }
 
 function deselectAll() {
@@ -1184,6 +1638,7 @@ function deselectAll() {
     });
     selectedElements = [];
     updatePropertiesPanel();
+    renderGroupBoundingBox();
 }
 
 function deleteSelected() {
@@ -1258,7 +1713,7 @@ function duplicateSelected() {
     showAlert(`Duplicated ${selectedElements.length} element(s)`);
 }
 
-// Properties panel
+// NEW: Updated properties panel with group operations
 function updatePropertiesPanel() {
     const panel = document.getElementById('propertiesPanel');
     
@@ -1391,11 +1846,23 @@ function updatePropertiesPanel() {
             `;
         }
     } else {
+        // NEW: Multiple selection - just show info, bounding box handles interaction
+        const bounds = getSelectionBounds();
         panel.innerHTML = `
             <div id="multiSelection">
                 <div class="property-group">
                     <h4><i class="fas fa-layer-group"></i> Multiple Selection</h4>
                     <p id="selectedCount" style="margin-bottom: 1rem; color: #6b7280;">${selectedElements.length} elements selected</p>
+                    
+                    <div class="property-row" style="margin-bottom: 1rem;">
+                        <label style="flex: 1;">Group Bounds:</label>
+                        <span style="font-size: 0.85rem; color: #6b7280;">${Math.round(bounds.width)} × ${Math.round(bounds.height)}px</span>
+                    </div>
+                    
+                    <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem; padding: 0.75rem; background: #ede9fe; border-radius: 6px;">
+                        <i class="fas fa-info-circle"></i> Use the bounding box to move or resize all selected elements together
+                    </p>
+                    
                     <div class="action-buttons">
                         <button class="action-btn action-btn-primary" onclick="duplicateSelected()">
                             <i class="fas fa-clone"></i> Duplicate All
@@ -1457,7 +1924,6 @@ function updateLabelProperty(prop, value) {
     saveState();
 }
 
-// Load saved designs modal
 function showLoadModal() {
     document.getElementById('loadModal').style.display = 'block';
     loadSavedDesigns();
@@ -1526,8 +1992,11 @@ function deleteDesign(id) {
         });
 }
 
-// Save and load
 function showSaveModal() {
+    // Pre-fill with current design name if editing
+    if (currentDesignId && currentDesignName) {
+        document.getElementById('saveName').value = currentDesignName;
+    }
     document.getElementById('saveModal').style.display = 'block';
 }
 
@@ -1543,7 +2012,6 @@ async function saveDesign() {
     
     console.log('Saving design:', name);
     
-    // Generate thumbnail
     showAlert('Generating preview...', 'success');
     const thumbnail = await generateThumbnail();
     
@@ -1558,7 +2026,7 @@ async function saveDesign() {
         name: name,
         event_id: eventId || null,
         design_data: designData,
-        thumbnail: thumbnail, // Now includes actual thumbnail
+        thumbnail: thumbnail,
         save_to_stageplans: saveToStagePlans
     };
     
@@ -1583,6 +2051,7 @@ async function saveDesign() {
         console.log('Save result:', result);
         if (result.success) {
             currentDesignId = result.design_id;
+            currentDesignName = name; // Save name for quick save
             showAlert('Design saved successfully!');
             hideModal('saveModal');
         } else {
@@ -1595,7 +2064,6 @@ async function saveDesign() {
     });
 }
 
-// Also update saveAsTemplate to include thumbnail
 async function saveAsTemplate() {
     const name = document.getElementById('saveName').value.trim();
     
@@ -1606,7 +2074,6 @@ async function saveAsTemplate() {
     
     console.log('Saving template:', name);
     
-    // Generate thumbnail
     showAlert('Generating preview...', 'success');
     const thumbnail = await generateThumbnail();
     
@@ -1657,6 +2124,7 @@ function loadDesignData(designId) {
         .then(data => {
             console.log('Design data loaded:', data);
             currentDesignId = designId;
+            currentDesignName = data.name; // Store name for quick save
             objects = data.design_data.objects || [];
             lines = data.design_data.lines || [];
             labels = data.design_data.labels || [];
@@ -1693,6 +2161,7 @@ function clearCanvas() {
     drawings = [];
     selectedElements = [];
     currentDesignId = null;
+    currentDesignName = null;
     
     document.getElementById('objectsLayer').innerHTML = '';
     document.getElementById('linesLayer').innerHTML = '';
@@ -1702,35 +2171,26 @@ function clearCanvas() {
     showAlert('Canvas cleared');
 }
 
-// Export to PNG
-// Add this function to stage-designer.js (replace the existing exportToPNG function)
-
 function exportToPNG() {
-    // Deselect all elements first (hide selection borders)
     const previousSelection = [...selectedElements];
     deselectAll();
     
-    // Get canvas dimensions
     const canvas = document.getElementById('stageCanvas');
     const rect = canvas.getBoundingClientRect();
     
-    // Create a temporary canvas
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = rect.width;
     tempCanvas.height = rect.height;
     const ctx = tempCanvas.getContext('2d');
     
-    // Fill white background
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
     
-    // Draw grid if enabled
     const gridToggle = document.getElementById('gridToggle');
     if (gridToggle && gridToggle.checked) {
         ctx.strokeStyle = '#f0f0f0';
         ctx.lineWidth = 1;
         
-        // Vertical lines
         for (let x = 0; x < tempCanvas.width; x += 20) {
             ctx.beginPath();
             ctx.moveTo(x, 0);
@@ -1738,7 +2198,6 @@ function exportToPNG() {
             ctx.stroke();
         }
         
-        // Horizontal lines
         for (let y = 0; y < tempCanvas.height; y += 20) {
             ctx.beginPath();
             ctx.moveTo(0, y);
@@ -1747,20 +2206,17 @@ function exportToPNG() {
         }
     }
     
-    // Function to draw everything
     const drawCanvas = () => {
         return new Promise((resolve) => {
             let loadedImages = 0;
             let totalImages = objects.length;
             
-            // If no objects, just draw lines and labels
             if (totalImages === 0) {
                 drawLinesAndLabels();
                 resolve();
                 return;
             }
             
-            // Draw all objects
             objects.forEach(obj => {
                 const img = new Image();
                 img.crossOrigin = 'anonymous';
@@ -1790,9 +2246,7 @@ function exportToPNG() {
         });
     };
     
-    // Function to draw lines, drawings, and labels
     const drawLinesAndLabels = () => {
-        // Draw lines
         lines.forEach(line => {
             ctx.strokeStyle = line.color;
             ctx.lineWidth = line.width;
@@ -1813,7 +2267,6 @@ function exportToPNG() {
             ctx.setLineDash([]);
         });
         
-        // Draw freehand drawings
         drawings.forEach(drawing => {
             ctx.strokeStyle = drawing.color;
             ctx.lineWidth = drawing.width;
@@ -1830,18 +2283,15 @@ function exportToPNG() {
             }
         });
         
-        // Draw labels
         labels.forEach(label => {
             ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
             ctx.strokeStyle = '#e5e7eb';
             ctx.lineWidth = 1;
             
-            // Measure text
             ctx.font = `${label.bold ? 'bold' : 'normal'} ${label.fontSize}px sans-serif`;
             const textWidth = ctx.measureText(label.text).width;
             const padding = 8;
             
-            // Draw background
             ctx.fillRect(
                 label.x - padding / 2,
                 label.y - label.fontSize - padding / 2,
@@ -1855,23 +2305,19 @@ function exportToPNG() {
                 label.fontSize + padding
             );
             
-            // Draw text
             ctx.fillStyle = label.color;
             ctx.fillText(label.text, label.x, label.y);
         });
     };
     
-    // Draw everything and export
     drawCanvas().then(() => {
-        // Convert to blob and download
         tempCanvas.toBlob(function(blob) {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             
-            // Generate filename
             const timestamp = new Date().toISOString().slice(0, 10);
-            const designName = document.getElementById('saveName')?.value || 'stage_plan';
+            const designName = currentDesignName || 'stage_plan';
             const safeName = designName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
             a.download = `${safeName}_${timestamp}.png`;
             
@@ -1882,7 +2328,6 @@ function exportToPNG() {
             
             showAlert('PNG exported successfully!');
             
-            // Restore selection
             if (previousSelection.length > 0) {
                 previousSelection.forEach(sel => {
                     selectedElements.push(sel);
@@ -1895,30 +2340,26 @@ function exportToPNG() {
     });
 }
 
-// Helper function to generate thumbnail for saving
 function generateThumbnail() {
     return new Promise((resolve) => {
         const canvas = document.getElementById('stageCanvas');
         const rect = canvas.getBoundingClientRect();
         
         const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = 400; // Thumbnail width
-        tempCanvas.height = 300; // Thumbnail height
+        tempCanvas.width = 400;
+        tempCanvas.height = 300;
         const ctx = tempCanvas.getContext('2d');
         
-        // Calculate scale to fit
         const scale = Math.min(
             tempCanvas.width / rect.width,
             tempCanvas.height / rect.height
         );
         
-        // Center the scaled content
         const scaledWidth = rect.width * scale;
         const scaledHeight = rect.height * scale;
         const offsetX = (tempCanvas.width - scaledWidth) / 2;
         const offsetY = (tempCanvas.height - scaledHeight) / 2;
         
-        // Fill background
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
         
@@ -1930,7 +2371,6 @@ function generateThumbnail() {
         const totalImages = objects.length;
         
         const finishThumbnail = () => {
-            // Draw lines
             lines.forEach(line => {
                 ctx.strokeStyle = line.color;
                 ctx.lineWidth = line.width;
@@ -1941,7 +2381,6 @@ function generateThumbnail() {
                 ctx.stroke();
             });
             
-            // Draw drawings
             drawings.forEach(drawing => {
                 ctx.strokeStyle = drawing.color;
                 ctx.lineWidth = drawing.width;
@@ -1958,7 +2397,6 @@ function generateThumbnail() {
                 }
             });
             
-            // Draw labels
             labels.forEach(label => {
                 ctx.font = `${label.bold ? 'bold' : 'normal'} ${label.fontSize}px sans-serif`;
                 ctx.fillStyle = label.color;
@@ -1967,7 +2405,6 @@ function generateThumbnail() {
             
             ctx.restore();
             
-            // Convert to data URL
             resolve(tempCanvas.toDataURL('image/png'));
         };
         
@@ -1976,7 +2413,6 @@ function generateThumbnail() {
             return;
         }
         
-        // Draw objects
         objects.forEach(obj => {
             const img = new Image();
             img.crossOrigin = 'anonymous';
@@ -2003,7 +2439,6 @@ function generateThumbnail() {
     });
 }
 
-// Grid toggle
 function toggleGrid() {
     const canvas = document.getElementById('stageCanvas');
     const gridToggle = document.getElementById('gridToggle');
@@ -2017,7 +2452,6 @@ function toggleGrid() {
     }
 }
 
-// Modal functions
 function hideModal(modalId) {
     const modal = document.getElementById(modalId);
     if (modal) {
@@ -2025,7 +2459,6 @@ function hideModal(modalId) {
     }
 }
 
-// Upload object modal
 function showUploadObjectModal() {
     document.getElementById('uploadObjectModal').style.display = 'block';
 }
@@ -2067,7 +2500,6 @@ function uploadObject() {
                 hideModal('uploadObjectModal');
                 loadObjectLibrary();
                 
-                // Clear form
                 document.getElementById('objectName').value = '';
                 document.getElementById('objectImage').value = '';
             } else {
@@ -2083,7 +2515,6 @@ function uploadObject() {
     reader.readAsDataURL(fileInput.files[0]);
 }
 
-// Utility functions
 function showAlert(message, type = 'success') {
     console.log('Alert:', message, type);
     
@@ -2113,7 +2544,6 @@ function showAlert(message, type = 'success') {
     }, 3000);
 }
 
-// Close modals when clicking outside
 window.onclick = function(event) {
     if (event.target.classList.contains('modal')) {
         event.target.style.display = 'none';
