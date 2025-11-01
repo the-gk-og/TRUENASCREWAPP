@@ -7,7 +7,7 @@ let labels = [];
 let drawings = [];
 let currentPath = null;
 let currentDesignId = null;
-let currentDesignName = null; // NEW: Track design name
+let currentDesignName = null;
 let objectLibrary = [];
 let templates = [];
 let isDrawingLine = false;
@@ -26,18 +26,19 @@ let maxHistory = 50;
 let brushSize = 3;
 let brushColor = '#1f2937';
 
-// NEW: Zoom functionality
+// Zoom functionality
 let zoomLevel = 1;
 let isPanning = false;
 let panStart = { x: 0, y: 0 };
 let canvasOffset = { x: 0, y: 0 };
 
-// NEW: Group manipulation
+// Group manipulation
 let groupDragStart = null;
 let groupResizeStart = null;
 let groupResizeStartBounds = null;
 let isGroupDragging = false;
 let isGroupResizing = false;
+let groupResizeHandle = null;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
@@ -45,7 +46,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadObjectLibrary();
     loadTemplates();
     setupCanvasEvents();
-    setupZoomControls(); // NEW
+    setupZoomControls();
     
     const urlParams = new URLSearchParams(window.location.search);
     const designId = urlParams.get('design_id');
@@ -59,11 +60,10 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('Stage Designer initialized');
 });
 
-// NEW: Setup zoom controls
+// Setup zoom controls
 function setupZoomControls() {
     const canvas = document.getElementById('stageCanvas');
     
-    // Mouse wheel zoom
     canvas.addEventListener('wheel', function(e) {
         if (e.ctrlKey) {
             e.preventDefault();
@@ -73,7 +73,6 @@ function setupZoomControls() {
         }
     }, { passive: false });
     
-    // Space + drag to pan
     document.addEventListener('keydown', function(e) {
         if (e.code === 'Space' && !isPanning && currentTool === 'select') {
             e.preventDefault();
@@ -89,10 +88,8 @@ function setupZoomControls() {
     });
 }
 
-// NEW: Set zoom level
 function setZoom(level) {
     zoomLevel = level;
-    const canvas = document.getElementById('stageCanvas');
     const objectsLayer = document.getElementById('objectsLayer');
     const linesLayer = document.getElementById('linesLayer');
     
@@ -102,14 +99,12 @@ function setZoom(level) {
     objectsLayer.style.transformOrigin = '0 0';
     linesLayer.style.transformOrigin = '0 0';
     
-    // Update zoom display
     const zoomDisplay = document.getElementById('zoomLevel');
     if (zoomDisplay) {
         zoomDisplay.textContent = Math.round(zoomLevel * 100) + '%';
     }
 }
 
-// NEW: Zoom controls
 function zoomIn() {
     setZoom(Math.min(3, zoomLevel * 1.2));
 }
@@ -124,24 +119,25 @@ function resetZoom() {
     setZoom(1);
 }
 
-// NEW: Toggle panel visibility
+// FIXED: Toggle panel visibility with persistent toggle buttons
 function togglePanel(panelId) {
     const panel = document.getElementById(panelId);
-    const icon = document.querySelector(`[onclick="togglePanel('${panelId}')"] i`);
+    const toggleBtnId = panelId === 'leftPanel' ? 'leftPanelToggle' : 'rightPanelToggle';
+    const toggleBtn = document.getElementById(toggleBtnId);
     
     if (panel.style.display === 'none') {
+        // Show panel
         panel.style.display = 'flex';
-        if (icon) icon.className = 'fas fa-chevron-left';
+        toggleBtn.style.display = 'none';
     } else {
+        // Hide panel
         panel.style.display = 'none';
-        if (icon) icon.className = 'fas fa-chevron-right';
+        toggleBtn.style.display = 'block';
     }
     
-    // Adjust grid layout
     updateGridLayout();
 }
 
-// NEW: Update grid layout based on visible panels
 function updateGridLayout() {
     const container = document.querySelector('.designer-container');
     const leftPanel = document.getElementById('leftPanel');
@@ -172,12 +168,11 @@ function handleKeyDown(e) {
     if (e.key === 'Escape') {
         deselectAll();
     }
-    // NEW: Quick save with Ctrl+S
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         if (currentDesignId) {
-            quickSave(); // Save current design
+            quickSave();
         } else {
-            showSaveModal(); // Show modal for new design
+            showSaveModal();
         }
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'd' && selectedElements.length > 0) {
@@ -197,7 +192,6 @@ function handleKeyDown(e) {
     if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
         selectAll();
     }
-    // NEW: Zoom shortcuts
     if ((e.ctrlKey || e.metaKey) && e.key === '=') {
         e.preventDefault();
         zoomIn();
@@ -212,7 +206,6 @@ function handleKeyDown(e) {
     }
 }
 
-// NEW: Quick save (save without showing modal)
 async function quickSave() {
     if (!currentDesignId) {
         showSaveModal();
@@ -234,7 +227,7 @@ async function quickSave() {
         name: currentDesignName || 'Untitled Design',
         design_data: designData,
         thumbnail: thumbnail,
-        event_id: null, // Keep existing event
+        event_id: null,
         save_to_stageplans: true
     };
     
@@ -540,7 +533,6 @@ function handleCanvasMouseDown(e) {
     const x = (e.clientX - rect.left) / zoomLevel - canvasOffset.x;
     const y = (e.clientY - rect.top) / zoomLevel - canvasOffset.y;
     
-    // Space + drag for panning
     if (e.code === 'Space' || (currentTool === 'select' && e.button === 1)) {
         isPanning = true;
         panStart = { x: e.clientX, y: e.clientY };
@@ -564,17 +556,46 @@ function handleCanvasMouseDown(e) {
             tool: currentTool
         };
     } else if (currentTool === 'select' && isCanvas) {
-        // Check if clicking on the group bounding box handles
+        // FIXED: Check for group resize handles
         if (selectedElements.length > 1) {
             const handle = checkGroupHandleClick(e);
-            if (handle === 'move') {
+            if (handle && handle !== 'move') {
+                isGroupResizing = true;
+                groupResizeHandle = handle;
+                groupResizeStart = { x, y };
+                groupResizeStartBounds = getSelectionBounds();
+                // Store original states
+                selectedElements.forEach(sel => {
+                    if (sel.type === 'object') {
+                        sel.originalState = {
+                            x: sel.element.x,
+                            y: sel.element.y,
+                            width: sel.element.width,
+                            height: sel.element.height
+                        };
+                    } else if (sel.type === 'label') {
+                        sel.originalState = {
+                            x: sel.element.x,
+                            y: sel.element.y,
+                            fontSize: sel.element.fontSize
+                        };
+                    } else if (sel.type === 'line') {
+                        sel.originalState = {
+                            x1: sel.element.x1,
+                            y1: sel.element.y1,
+                            x2: sel.element.x2,
+                            y2: sel.element.y2
+                        };
+                    } else if (sel.type === 'drawing') {
+                        sel.originalState = {
+                            points: JSON.parse(JSON.stringify(sel.element.points))
+                        };
+                    }
+                });
+                return;
+            } else if (handle === 'move') {
                 isGroupDragging = true;
                 groupDragStart = { x, y };
-                return;
-            } else if (handle) {
-                isGroupResizing = true;
-                groupResizeStart = { x, y, handle };
-                groupResizeStartBounds = getSelectionBounds();
                 return;
             }
         }
@@ -589,7 +610,7 @@ function handleCanvasMouseDown(e) {
     }
 }
 
-// NEW: Check if clicking on group bounding box handles
+// FIXED: Better handle detection for group bounding box
 function checkGroupHandleClick(e) {
     const bounds = getSelectionBounds();
     if (!bounds) return null;
@@ -598,7 +619,7 @@ function checkGroupHandleClick(e) {
     const clickX = (e.clientX - rect.left) / zoomLevel - canvasOffset.x;
     const clickY = (e.clientY - rect.top) / zoomLevel - canvasOffset.y;
     
-    const handleSize = 15 / zoomLevel;
+    const handleSize = 10;
     
     // Check corners for resize
     const corners = [
@@ -628,7 +649,6 @@ function handleCanvasMouseMove(e) {
     const x = (e.clientX - rect.left) / zoomLevel - canvasOffset.x;
     const y = (e.clientY - rect.top) / zoomLevel - canvasOffset.y;
     
-    // Handle panning
     if (isPanning) {
         const dx = e.clientX - panStart.x;
         const dy = e.clientY - panStart.y;
@@ -639,7 +659,7 @@ function handleCanvasMouseMove(e) {
         return;
     }
     
-    // NEW: Group dragging
+    // FIXED: Group dragging
     if (isGroupDragging && selectedElements.length > 1) {
         const dx = x - groupDragStart.x;
         const dy = y - groupDragStart.y;
@@ -678,16 +698,17 @@ function handleCanvasMouseMove(e) {
         return;
     }
     
-    // NEW: Group resizing
+    // FIXED: Group resizing with proper scaling
     if (isGroupResizing && selectedElements.length > 1) {
         const bounds = groupResizeStartBounds;
         const centerX = bounds.left + bounds.width / 2;
         const centerY = bounds.top + bounds.height / 2;
         
-        const handle = groupResizeStart.handle;
+        const handle = groupResizeHandle;
         let scaleX = 1, scaleY = 1;
         
-        if (handle === 'se' || handle === 'ne' || handle === 'sw' || handle === 'nw') {
+        // Calculate scale based on handle
+        if (handle === 'se') {
             const startDist = Math.sqrt(
                 Math.pow(groupResizeStart.x - centerX, 2) + 
                 Math.pow(groupResizeStart.y - centerY, 2)
@@ -696,20 +717,41 @@ function handleCanvasMouseMove(e) {
                 Math.pow(x - centerX, 2) + 
                 Math.pow(y - centerY, 2)
             );
-            
-            scaleX = scaleY = currentDist / startDist;
+            scaleX = scaleY = Math.max(0.1, currentDist / startDist);
+        } else if (handle === 'sw') {
+            const startDist = Math.sqrt(
+                Math.pow(groupResizeStart.x - centerX, 2) + 
+                Math.pow(groupResizeStart.y - centerY, 2)
+            );
+            const currentDist = Math.sqrt(
+                Math.pow(x - centerX, 2) + 
+                Math.pow(y - centerY, 2)
+            );
+            scaleX = scaleY = Math.max(0.1, currentDist / startDist);
+        } else if (handle === 'ne') {
+            const startDist = Math.sqrt(
+                Math.pow(groupResizeStart.x - centerX, 2) + 
+                Math.pow(groupResizeStart.y - centerY, 2)
+            );
+            const currentDist = Math.sqrt(
+                Math.pow(x - centerX, 2) + 
+                Math.pow(y - centerY, 2)
+            );
+            scaleX = scaleY = Math.max(0.1, currentDist / startDist);
+        } else if (handle === 'nw') {
+            const startDist = Math.sqrt(
+                Math.pow(groupResizeStart.x - centerX, 2) + 
+                Math.pow(groupResizeStart.y - centerY, 2)
+            );
+            const currentDist = Math.sqrt(
+                Math.pow(x - centerX, 2) + 
+                Math.pow(y - centerY, 2)
+            );
+            scaleX = scaleY = Math.max(0.1, currentDist / startDist);
         }
         
         selectedElements.forEach(sel => {
-            if (sel.type === 'object') {
-                if (!sel.originalState) {
-                    sel.originalState = {
-                        x: sel.element.x,
-                        y: sel.element.y,
-                        width: sel.element.width,
-                        height: sel.element.height
-                    };
-                }
+            if (sel.type === 'object' && sel.originalState) {
                 const relX = sel.originalState.x - centerX;
                 const relY = sel.originalState.y - centerY;
                 sel.element.x = centerX + relX * scaleX;
@@ -717,29 +759,14 @@ function handleCanvasMouseMove(e) {
                 sel.element.width = sel.originalState.width * scaleX;
                 sel.element.height = sel.originalState.height * scaleY;
                 updateObjectPosition(sel.element);
-            } else if (sel.type === 'label') {
-                if (!sel.originalState) {
-                    sel.originalState = {
-                        x: sel.element.x,
-                        y: sel.element.y,
-                        fontSize: sel.element.fontSize
-                    };
-                }
+            } else if (sel.type === 'label' && sel.originalState) {
                 const relX = sel.originalState.x - centerX;
                 const relY = sel.originalState.y - centerY;
                 sel.element.x = centerX + relX * scaleX;
                 sel.element.y = centerY + relY * scaleY;
                 sel.element.fontSize = Math.max(8, sel.originalState.fontSize * scaleX);
                 updateLabelPosition(sel.element);
-            } else if (sel.type === 'line') {
-                if (!sel.originalState) {
-                    sel.originalState = {
-                        x1: sel.element.x1,
-                        y1: sel.element.y1,
-                        x2: sel.element.x2,
-                        y2: sel.element.y2
-                    };
-                }
+            } else if (sel.type === 'line' && sel.originalState) {
                 const relX1 = sel.originalState.x1 - centerX;
                 const relY1 = sel.originalState.y1 - centerY;
                 const relX2 = sel.originalState.x2 - centerX;
@@ -749,6 +776,16 @@ function handleCanvasMouseMove(e) {
                 sel.element.x2 = centerX + relX2 * scaleX;
                 sel.element.y2 = centerY + relY2 * scaleY;
                 updateLinePosition(sel.element);
+            } else if (sel.type === 'drawing' && sel.originalState) {
+                sel.element.points = sel.originalState.points.map(point => ({
+                    x: centerX + (point.x - centerX) * scaleX,
+                    y: centerY + (point.y - centerY) * scaleY
+                }));
+                const el = document.getElementById(sel.element.id);
+                if (el) {
+                    const pathData = 'M ' + sel.element.points.map(p => `${p.x},${p.y}`).join(' L ');
+                    el.setAttribute('d', pathData);
+                }
             }
         });
         
@@ -763,20 +800,20 @@ function handleCanvasMouseMove(e) {
         return;
     }
     
-    // NEW: Show line preview while drawing
     if (currentTool === 'line' && isDrawingLine && lineStart) {
         renderLinePreview(lineStart.x, lineStart.y, x, y);
         return;
     }
     
+    // FIXED: Selection box
     if (isSelecting && selectionStart) {
         const box = document.getElementById('selectionBox');
         box.style.display = 'block';
         
-        const left = Math.min(selectionStart.x, x) * zoomLevel + canvasOffset.x * zoomLevel;
-        const top = Math.min(selectionStart.y, y) * zoomLevel + canvasOffset.y * zoomLevel;
-        const width = Math.abs(x - selectionStart.x) * zoomLevel;
-        const height = Math.abs(y - selectionStart.y) * zoomLevel;
+        const left = Math.min(selectionStart.x, x);
+        const top = Math.min(selectionStart.y, y);
+        const width = Math.abs(x - selectionStart.x);
+        const height = Math.abs(y - selectionStart.y);
         
         box.style.left = left + 'px';
         box.style.top = top + 'px';
@@ -785,7 +822,6 @@ function handleCanvasMouseMove(e) {
     }
 }
 
-// NEW: Render line preview (dotted)
 function renderLinePreview(x1, y1, x2, y2) {
     let preview = document.getElementById('linePreview');
     if (!preview) {
@@ -804,7 +840,7 @@ function renderLinePreview(x1, y1, x2, y2) {
     preview.setAttribute('y2', y2);
 }
 
-// NEW: Render group bounding box
+// FIXED: Better group bounding box rendering
 function renderGroupBoundingBox() {
     if (selectedElements.length < 2) {
         const existingBox = document.getElementById('groupBoundingBox');
@@ -829,23 +865,20 @@ function renderGroupBoundingBox() {
               width="${bounds.width + padding * 2}" height="${bounds.height + padding * 2}"
               fill="none" stroke="#6366f1" stroke-width="2" stroke-dasharray="5,5" />
         
-        <!-- Resize handles -->
-        <circle cx="${bounds.left}" cy="${bounds.top}" r="8" fill="white" stroke="#6366f1" stroke-width="2" class="group-handle" data-handle="nw" />
-        <circle cx="${bounds.right}" cy="${bounds.top}" r="8" fill="white" stroke="#6366f1" stroke-width="2" class="group-handle" data-handle="ne" />
-        <circle cx="${bounds.left}" cy="${bounds.bottom}" r="8" fill="white" stroke="#6366f1" stroke-width="2" class="group-handle" data-handle="sw" />
-        <circle cx="${bounds.right}" cy="${bounds.bottom}" r="8" fill="white" stroke="#6366f1" stroke-width="2" class="group-handle" data-handle="se" />
+        <circle cx="${bounds.left}" cy="${bounds.top}" r="8" fill="white" stroke="#6366f1" stroke-width="2" style="cursor: nw-resize;" />
+        <circle cx="${bounds.right}" cy="${bounds.top}" r="8" fill="white" stroke="#6366f1" stroke-width="2" style="cursor: ne-resize;" />
+        <circle cx="${bounds.left}" cy="${bounds.bottom}" r="8" fill="white" stroke="#6366f1" stroke-width="2" style="cursor: sw-resize;" />
+        <circle cx="${bounds.right}" cy="${bounds.bottom}" r="8" fill="white" stroke="#6366f1" stroke-width="2" style="cursor: se-resize;" />
     `;
 }
 
 function handleCanvasMouseUp(e) {
-    // Stop panning
     if (isPanning) {
         isPanning = false;
         document.getElementById('stageCanvas').style.cursor = currentTool === 'select' ? 'default' : 'crosshair';
         return;
     }
     
-    // NEW: Stop group operations
     if (isGroupDragging) {
         isGroupDragging = false;
         saveState();
@@ -854,11 +887,11 @@ function handleCanvasMouseUp(e) {
     
     if (isGroupResizing) {
         isGroupResizing = false;
-        // Clear original states
         selectedElements.forEach(sel => {
             delete sel.originalState;
         });
         groupResizeStartBounds = null;
+        groupResizeHandle = null;
         saveState();
         return;
     }
@@ -874,22 +907,23 @@ function handleCanvasMouseUp(e) {
         if (preview) preview.remove();
     }
     
+    // FIXED: Selection box logic
     if (isSelecting) {
         isSelecting = false;
         const box = document.getElementById('selectionBox');
         
         if (box.style.display === 'block') {
-            const rect = {
-                left: parseInt(box.style.left) / zoomLevel - canvasOffset.x,
-                top: parseInt(box.style.top) / zoomLevel - canvasOffset.y,
-                right: (parseInt(box.style.left) + parseInt(box.style.width)) / zoomLevel - canvasOffset.x,
-                bottom: (parseInt(box.style.top) + parseInt(box.style.height)) / zoomLevel - canvasOffset.y
-            };
-            
-            const boxWidth = parseInt(box.style.width);
-            const boxHeight = parseInt(box.style.height);
+            const boxWidth = parseInt(box.style.width) || 0;
+            const boxHeight = parseInt(box.style.height) || 0;
             
             if (boxWidth > 5 || boxHeight > 5) {
+                const rect = {
+                    left: parseFloat(box.style.left),
+                    top: parseFloat(box.style.top),
+                    right: parseFloat(box.style.left) + boxWidth,
+                    bottom: parseFloat(box.style.top) + boxHeight
+                };
+                
                 selectElementsInBox(rect);
             }
         }
@@ -953,7 +987,6 @@ function handleCanvasClick(e) {
     }
 }
 
-// NEW: Get bounding box of all selected elements
 function getSelectionBounds() {
     if (selectedElements.length === 0) return null;
     
@@ -975,6 +1008,13 @@ function getSelectionBounds() {
             minY = Math.min(minY, sel.element.y1, sel.element.y2);
             maxX = Math.max(maxX, sel.element.x1, sel.element.x2);
             maxY = Math.max(maxY, sel.element.y1, sel.element.y2);
+        } else if (sel.type === 'drawing') {
+            sel.element.points.forEach(point => {
+                minX = Math.min(minX, point.x);
+                minY = Math.min(minY, point.y);
+                maxX = Math.max(maxX, point.x);
+                maxY = Math.max(maxY, point.y);
+            });
         }
     });
     
@@ -988,32 +1028,7 @@ function getSelectionBounds() {
     };
 }
 
-// NEW: Start group drag
-function startGroupDrag() {
-    if (selectedElements.length < 2) return;
-    
-    const rect = document.getElementById('stageCanvas').getBoundingClientRect();
-    const x = (event.clientX - rect.left) / zoomLevel - canvasOffset.x;
-    const y = (event.clientY - rect.top) / zoomLevel - canvasOffset.y;
-    
-    isGroupDragging = true;
-    groupDragStart = { x, y };
-    showAlert(`Moving ${selectedElements.length} elements`);
-}
-
-// NEW: Start group resize
-function startGroupResize() {
-    if (selectedElements.length < 2) return;
-    
-    const rect = document.getElementById('stageCanvas').getBoundingClientRect();
-    const x = (event.clientX - rect.left) / zoomLevel - canvasOffset.x;
-    const y = (event.clientY - rect.top) / zoomLevel - canvasOffset.y;
-    
-    isGroupResizing = true;
-    groupResizeStart = { x, y };
-    showAlert(`Resizing ${selectedElements.length} elements`);
-}
-
+// FIXED: Selection box element detection
 function selectElementsInBox(rect) {
     let foundElements = [];
     
@@ -1119,6 +1134,7 @@ function selectAll() {
     drawings.forEach(drawing => addToSelection(drawing, 'drawing'));
     
     updatePropertiesPanel();
+    renderGroupBoundingBox();
     showAlert(`Selected ${selectedElements.length} elements`);
 }
 
@@ -1351,7 +1367,6 @@ function handleLineDrawing(e) {
         isDrawingLine = false;
         lineStart = null;
         
-        // Remove preview
         const preview = document.getElementById('linePreview');
         if (preview) preview.remove();
     }
@@ -1699,6 +1714,13 @@ function duplicateSelected() {
             lines.push(newLine);
             renderLine(newLine);
             newSelections.push({ element: newLine, type: 'line' });
+        } else if (sel.type === 'drawing') {
+            const newDrawing = JSON.parse(JSON.stringify(sel.element));
+            newDrawing.id = 'drawing_' + Date.now() + '_' + Math.random();
+            newDrawing.points = newDrawing.points.map(p => ({x: p.x + 20, y: p.y + 20}));
+            drawings.push(newDrawing);
+            renderDrawing(newDrawing);
+            newSelections.push({ element: newDrawing, type: 'drawing' });
         }
     });
     
@@ -1710,10 +1732,10 @@ function duplicateSelected() {
     
     saveState();
     updatePropertiesPanel();
+    renderGroupBoundingBox();
     showAlert(`Duplicated ${selectedElements.length} element(s)`);
 }
 
-// NEW: Updated properties panel with group operations
 function updatePropertiesPanel() {
     const panel = document.getElementById('propertiesPanel');
     
@@ -1837,16 +1859,22 @@ function updatePropertiesPanel() {
                         <label>Points:</label>
                         <span>${sel.element.points.length}</span>
                     </div>
+                    <div class="property-row">
+                        <label>Color:</label>
+                        <span style="display: inline-block; width: 20px; height: 20px; background: ${sel.element.color}; border: 1px solid #ccc; border-radius: 3px;"></span>
+                    </div>
                 </div>
                 <div class="action-buttons">
-                    <button class="action-btn action-btn-danger" onclick="deleteSelected()" style="grid-column: 1 / -1;">
-                        <i class="fas fa-trash"></i> Delete Drawing
+                    <button class="action-btn action-btn-primary" onclick="duplicateSelected()">
+                        <i class="fas fa-clone"></i> Duplicate
+                    </button>
+                    <button class="action-btn action-btn-danger" onclick="deleteSelected()">
+                        <i class="fas fa-trash"></i> Delete
                     </button>
                 </div>
             `;
         }
     } else {
-        // NEW: Multiple selection - just show info, bounding box handles interaction
         const bounds = getSelectionBounds();
         panel.innerHTML = `
             <div id="multiSelection">
@@ -1993,7 +2021,6 @@ function deleteDesign(id) {
 }
 
 function showSaveModal() {
-    // Pre-fill with current design name if editing
     if (currentDesignId && currentDesignName) {
         document.getElementById('saveName').value = currentDesignName;
     }
@@ -2051,7 +2078,7 @@ async function saveDesign() {
         console.log('Save result:', result);
         if (result.success) {
             currentDesignId = result.design_id;
-            currentDesignName = name; // Save name for quick save
+            currentDesignName = name;
             showAlert('Design saved successfully!');
             hideModal('saveModal');
         } else {
@@ -2124,7 +2151,7 @@ function loadDesignData(designId) {
         .then(data => {
             console.log('Design data loaded:', data);
             currentDesignId = designId;
-            currentDesignName = data.name; // Store name for quick save
+            currentDesignName = data.name;
             objects = data.design_data.objects || [];
             lines = data.design_data.lines || [];
             labels = data.design_data.labels || [];
@@ -2335,6 +2362,7 @@ function exportToPNG() {
                     if (el) el.classList.add('selected');
                 });
                 updatePropertiesPanel();
+                renderGroupBoundingBox();
             }
         }, 'image/png');
     });
