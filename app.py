@@ -696,8 +696,20 @@ def index():
         return redirect(url_for('dashboard'))
     return redirect('http://sfx-crew.com')
 
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+
+    if current_user.is_authenticated:
+        print(f"✓ User {current_user.username} already authenticated, redirecting...")
+        
+    
+        if current_user.is_cast:
+            return redirect(url_for('cast_events'))
+        else:
+            return redirect(url_for('dashboard'))
+    
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
@@ -715,6 +727,7 @@ def login():
             else:
                 print(f"✓ User {username} logged in (session only)")
             
+            # Redirect based on user type
             if user.is_cast:
                 return redirect(url_for('cast_events'))
             else:
@@ -732,7 +745,6 @@ def login():
                          organization=org, 
                          SESSION_DURATION=SESSION_DURATION,
                          now=datetime.now())
-
 @app.route('/session-info')
 @login_required
 def session_info():
