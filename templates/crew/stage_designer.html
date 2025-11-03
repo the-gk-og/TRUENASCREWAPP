@@ -532,6 +532,49 @@
             max-height: 300px;
         }
     }
+    
+    /* FIXED: Higher z-index for left panel toggle to appear above sidebar */
+    .panel-toggle-btn {
+        position: fixed;
+        top: 50%;
+        transform: translateY(-50%);
+        background: var(--primary);
+        color: white;
+        border: none;
+        padding: 0.75rem 0.5rem;
+        cursor: pointer;
+        transition: all 0.3s;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        border-radius: 0 8px 8px 0;
+    }
+    
+    .panel-toggle-btn:hover {
+        background: var(--primary-dark);
+        padding-right: 0.75rem;
+    }
+    
+    .panel-toggle-left {
+        left: 0;
+        z-index: 1100; /* FIXED: Higher than sidebar (1000) */
+    }
+    
+    .panel-toggle-right {
+        right: 0;
+        z-index: 100;
+        border-radius: 8px 0 0 8px;
+    }
+
+    /* Ensure the designer container respects the sidebar */
+    .main-content {
+        position: relative;
+        z-index: 1;
+    }
+
+    .designer-container {
+        position: relative;
+        z-index: 10;
+    }
+
 </style>
 
 <div class="page-header">

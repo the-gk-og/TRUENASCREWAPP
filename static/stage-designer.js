@@ -119,7 +119,7 @@ function resetZoom() {
     setZoom(1);
 }
 
-// FIXED: Toggle panel visibility with persistent toggle buttons
+// FIXED: Toggle panel visibility with higher z-index for left toggle
 function togglePanel(panelId) {
     const panel = document.getElementById(panelId);
     const toggleBtnId = panelId === 'leftPanel' ? 'leftPanelToggle' : 'rightPanelToggle';
@@ -885,14 +885,18 @@ function handleCanvasMouseUp(e) {
         return;
     }
     
+    // FIXED: Group resizing - clear original states after saving
     if (isGroupResizing) {
         isGroupResizing = false;
+        // Clear original states AFTER saving state
         selectedElements.forEach(sel => {
             delete sel.originalState;
         });
         groupResizeStartBounds = null;
         groupResizeHandle = null;
         saveState();
+        // Re-render bounding box for next resize
+        renderGroupBoundingBox();
         return;
     }
     
