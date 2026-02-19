@@ -6,6 +6,7 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from flask_mail import Mail, Message
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+from werkzeug.middleware.proxy_fix import ProxyFix
 from datetime import datetime, timedelta
 import os
 import json
@@ -63,6 +64,11 @@ load_dotenv()
 #setup
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-this')
+
+# ==================== PROXY FIX FOR CLOUDFLARE ====================
+# Configure Flask to trust X-Forwarded-Proto from reverse proxies (Cloudflare, nginx, etc.)
+# This is essential for OAuth2 to work with HTTPS when the server uses HTTP internally
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
 # Session configuration for "Remember Me" functionality
 # SESSION_DURATION can be set in .env file (e.g., "7d", "1w", "30d", "1h")
