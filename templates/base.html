@@ -487,10 +487,6 @@
             <i class="fas fa-calendar"></i>
             <span>Calendar</span>
         </a>
-        <a href="{{ url_for('inbox_page') }}" class="nav-item {% if request.endpoint == 'inbox_page' %}active{% endif %}">
-            <i class="fas fa-inbox"></i>
-            <span>Inbox</span>
-        </a>
         <a href="{{ url_for('chat_page') }}" class="nav-item {% if request.endpoint == 'chat_page' %}active{% endif %}">
             <i class="fas fa-comments"></i>
             <span>Chat</span>
@@ -527,6 +523,10 @@
     
     <div class="nav-section">
         <div class="nav-section-title">Settings</div>
+        <a href="{{ url_for('totp_settings') }}" class="nav-item {% if request.endpoint == 'totp_settings' %}active{% endif %}">
+            <i class="fas fa-lock"></i>
+            <span>2FA Security</span>
+        </a>
         <a href="{{ url_for('discord_settings') }}" class="nav-item {% if request.endpoint == 'discord_settings' %}active{% endif %}">
             <i class="fab fa-discord"></i>
             <span>Discord</span>
