@@ -1289,10 +1289,10 @@ def disable_totp():
 
 @app.route('/auth/google')
 def google_login():
-    """Initiate Google OAuth flow"""
+    """Initiate Google OAuth flow (both login and linking)"""
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
         flash('Google OAuth is not configured')
-        return redirect(url_for('login'))
+        return redirect(url_for('login') if not current_user.is_authenticated else url_for('security_settings'))
     
     # Create flow
     flow = Flow.from_client_config(
@@ -1324,11 +1324,30 @@ def google_login():
     # Store state in session for verification
     session['oauth_state'] = state
     
+    print(f"🔐 Initiating Google OAuth flow (linking={current_user.is_authenticated})")
+    
     return redirect(authorization_url)
+
+@app.route('/auth/google/link')
+@login_required
+def google_link_initiate():
+    """Initiate Google linking for authenticated user"""
+    # Check if already linked
+    existing = OAuthConnection.query.filter_by(
+        user_id=current_user.id,
+        provider='google'
+    ).first()
+    
+    if existing:
+        flash('Google account already linked to your account. Unlink it first to link a different account.')
+        return redirect(url_for('security_settings'))
+    
+    # Redirect to normal Google login flow, but the callback will detect we're authenticated
+    return redirect(url_for('google_login'))
 
 @app.route('/auth/google/callback')
 def google_callback():
-    """Handle Google OAuth callback"""
+    """Handle Google OAuth callback - supports both login and linking"""
     # Verify required environment variables
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
         print("❌ Google OAuth not configured: Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET")
@@ -1348,7 +1367,9 @@ def google_callback():
         error_description = request.args.get('error_description', 'Unknown error')
         print(f"❌ Google OAuth error returned: {error} - {error_description}")
         flash(f'Google login failed: {error_description}')
-        return redirect(url_for('login'))
+        return redirect(url_for('login') if not current_user.is_authenticated else url_for('security_settings'))
+    
+    is_linking = current_user.is_authenticated  # If user is logged in, we're linking
     
     try:
         # Create flow
@@ -1382,7 +1403,8 @@ def google_callback():
         if not credentials or not credentials.id_token:
             print("❌ No credentials or ID token returned from Google")
             flash('Google login failed: No credentials received')
-            return redirect(url_for('login'))
+            redirect_target = url_for('security_settings') if is_linking else url_for('login')
+            return redirect(redirect_target)
         
         # Verify ID token
         print(f"🔐 Verifying ID token with client ID: {GOOGLE_CLIENT_ID[:10]}...")
@@ -1398,6 +1420,50 @@ def google_callback():
         name = idinfo.get('name')
         
         print(f"✓ Google user verified: {email} (ID: {google_user_id})")
+        
+        # ============ LINKING FLOW (User already authenticated) ============
+        if is_linking:
+            print(f"🔗 Linking Google account to user: {current_user.username}")
+            
+            # Check if this Google ID is already linked to someone
+            existing_oauth = OAuthConnection.query.filter_by(
+                provider='google',
+                provider_user_id=google_user_id
+            ).first()
+            
+            if existing_oauth:
+                if existing_oauth.user_id == current_user.id:
+                    # Already linked to current user
+                    flash('This Google account is already linked to your account')
+                    return redirect(url_for('security_settings'))
+                else:
+                    # Linked to different user
+                    print(f"❌ Google ID {google_user_id} already linked to different user")
+                    flash('This Google account is already linked to another user account')
+                    return redirect(url_for('security_settings'))
+            
+            # Create new OAuth connection for current user
+            oauth_conn = OAuthConnection(
+                user_id=current_user.id,
+                provider='google',
+                provider_user_id=google_user_id,
+                email=email,
+                access_token=credentials.token,
+                refresh_token=credentials.refresh_token,
+                token_expiry=credentials.expiry,
+                last_login=datetime.utcnow()
+            )
+            db.session.add(oauth_conn)
+            db.session.commit()
+            
+            if 'log_security_event' in globals():
+                log_security_event('GOOGLE_LINK', username=current_user.username)
+            
+            print(f"✓ Google account linked successfully to {current_user.username}")
+            flash('✓ Google account linked successfully!')
+            return redirect(url_for('security_settings'))
+        
+        # ============ LOGIN/SIGNUP FLOW (User not authenticated) ============
         
         # Check if OAuth connection exists
         oauth_conn = OAuthConnection.query.filter_by(
@@ -1443,7 +1509,8 @@ def google_callback():
             existing_user = User.query.filter_by(email=email).first()
             
             if existing_user:
-                # Link to existing account
+                # Email already exists - link to that account and login
+                print(f"📧 Email {email} exists - linking OAuth to existing user")
                 oauth_conn = OAuthConnection(
                     user_id=existing_user.id,
                     provider='google',
@@ -1459,7 +1526,10 @@ def google_callback():
                 
                 login_user(existing_user, remember=False)
                 
-                flash('Google account linked successfully!')
+                if 'log_security_event' in globals():
+                    log_security_event('GOOGLE_LOGIN', username=existing_user.username)
+                
+                flash('Google account linked and signed in successfully!')
                 
                 if existing_user.is_cast:
                     return redirect(url_for('cast_events'))
@@ -1468,6 +1538,7 @@ def google_callback():
             
             else:
                 # Create new user
+                print(f"✨ Creating new user from Google: {email}")
                 # Generate username from email
                 username = email.split('@')[0]
                 
@@ -1479,7 +1550,6 @@ def google_callback():
                     counter += 1
                 
                 # Create user (no password needed for OAuth-only users)
-                import secrets
                 random_password = secrets.token_urlsafe(32)
                 
                 new_user = User(
@@ -1525,10 +1595,12 @@ def google_callback():
             backend.log_error(
                 f'Google OAuth Error: {str(e)}',
                 'oauth',
-                {'traceback': error_trace}
+                {'traceback': error_trace, 'is_linking': is_linking}
             )
-        flash('Google login failed. Please try again.')
-        return redirect(url_for('login'))
+        
+        redirect_target = url_for('security_settings') if is_linking else url_for('login')
+        flash(f'Google login failed: {str(e)[:100]}')
+        return redirect(redirect_target)
 
 @app.route('/auth/google/unlink', methods=['POST'])
 @login_required
