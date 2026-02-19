@@ -34,7 +34,6 @@ import barcode
 from barcode.writer import ImageWriter
 from PIL import Image
 import tempfile
-from functools import lru_cache
 import base64
 import pyotp
 import qrcode
@@ -857,23 +856,16 @@ def crew_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-@lru_cache(maxsize=1)
 def get_organization():
-    """Fetch organization data from main server with caching"""
-    try:
-        response = requests.get(
-            f"{MAIN_SERVER_URL}/api/organizations/{ORGANIZATION_SLUG}", 
-            timeout=5
-        )
-        if response.status_code == 200:
-            data = response.json()
-            return data.get('organization', {})
-        else:
-            print(f"Error fetching organization: {response.status_code}")
-            return {}
-    except Exception as e:
-        print(f"Error connecting to main server: {e}")
-        return {}
+    """Fetch organization data from backend API (with caching)"""
+    backend = get_backend_client()
+    if backend:
+        org_config = backend.get_organization()
+        if org_config:
+            return org_config
+    
+    # Fallback to empty dict if backend unavailable
+    return {}
 
 # Fallback organization data if API fails
 DEFAULT_ORG = {
