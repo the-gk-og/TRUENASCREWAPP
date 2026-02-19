@@ -1329,11 +1329,25 @@ def google_login():
 @app.route('/auth/google/callback')
 def google_callback():
     """Handle Google OAuth callback"""
+    # Verify required environment variables
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        print("❌ Google OAuth not configured: Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET")
+        flash('Google OAuth is not configured')
+        return redirect(url_for('login'))
+    
     # Verify state
     state = session.get('oauth_state')
     
     if not state or state != request.args.get('state'):
         flash('Invalid OAuth state')
+        return redirect(url_for('login'))
+    
+    # Check for authorization errors from Google
+    error = request.args.get('error')
+    if error:
+        error_description = request.args.get('error_description', 'Unknown error')
+        print(f"❌ Google OAuth error returned: {error} - {error_description}")
+        flash(f'Google login failed: {error_description}')
         return redirect(url_for('login'))
     
     try:
@@ -1359,12 +1373,19 @@ def google_callback():
         flow.redirect_uri = GOOGLE_REDIRECT_URI
         
         # Exchange authorization code for tokens
+        print(f"🔐 Exchanging authorization code at redirect URI: {GOOGLE_REDIRECT_URI}")
         flow.fetch_token(authorization_response=request.url)
         
         # Get credentials
         credentials = flow.credentials
         
+        if not credentials or not credentials.id_token:
+            print("❌ No credentials or ID token returned from Google")
+            flash('Google login failed: No credentials received')
+            return redirect(url_for('login'))
+        
         # Verify ID token
+        print(f"🔐 Verifying ID token with client ID: {GOOGLE_CLIENT_ID[:10]}...")
         idinfo = id_token.verify_oauth2_token(
             credentials.id_token,
             google_requests.Request(),
@@ -1375,6 +1396,8 @@ def google_callback():
         google_user_id = idinfo['sub']
         email = idinfo.get('email')
         name = idinfo.get('name')
+        
+        print(f"✓ Google user verified: {email} (ID: {google_user_id})")
         
         # Check if OAuth connection exists
         oauth_conn = OAuthConnection.query.filter_by(
@@ -1493,7 +1516,17 @@ def google_callback():
                 return redirect(url_for('dashboard'))
     
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
         print(f"Google OAuth error: {e}")
+        print(f"Full traceback:\n{error_trace}")
+        backend = get_backend_client()
+        if backend:
+            backend.log_error(
+                f'Google OAuth Error: {str(e)}',
+                'oauth',
+                {'traceback': error_trace}
+            )
         flash('Google login failed. Please try again.')
         return redirect(url_for('login'))
 
