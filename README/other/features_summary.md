@@ -1,4 +1,4 @@
-## 📚 Documentation
+## Documentation
 
 Complete guides included:
 
@@ -9,7 +9,7 @@ Complete guides included:
 5. **SHEETDB_SETUP.md** - Google Sheets integration
 6. **FEATURES_SUMMARY.md** - This file!
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Local Development (5 min)
 
@@ -39,13 +39,13 @@ git push origin main
 
 Access at: `https://your-app.onrender.com`
 
-## 💡 Use Cases
+## Use Cases
 
 ### Small School Production
 - Track 50-100 equipment items
 - 5-10 crew members
 - Monthly events
-- **Perfect fit** ✅
+- **Perfect fit** 
 
 ### Large Theater Program
 - Track 500+ items (use PostgreSQL)

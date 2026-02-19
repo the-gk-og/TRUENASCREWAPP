@@ -1,0 +1,573 @@
+{% extends "base.html" %}
+
+{% block title %}Messages - ShowWise{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title"><i class="fas fa-comments"></i> Messages</h1>
+  <p class="page-subtitle">Inbox with DMs, groups, team chats & support</p>
+</div>
+
+<style>
+  .inbox-container {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 1rem;
+    height: calc(100vh - 200px);
+  }
+
+  .conversation-list {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: white;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .conv-header {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border);
+    background: #f9fafb;
+  }
+
+  .conv-header h3 {
+    margin: 0 0 0.75rem 0;
+    font-size: 0.95rem;
+  }
+
+  .conv-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .conv-actions button {
+    flex: 1;
+    min-width: 80px;
+    padding: 0.5rem;
+    font-size: 0.85rem;
+  }
+
+  .conv-item {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.2s;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .conv-item:hover {
+    background: #f3f4f6;
+  }
+
+  .conv-item.active {
+    background: #ede9fe;
+    border-left: 3px solid var(--primary);
+  }
+
+  .conv-item-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .conv-item-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--dark);
+  }
+
+  .conv-item-preview {
+    font-size: 0.8rem;
+    color: #6b7280;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .conv-badge {
+    background: var(--danger);
+    color: white;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: bold;
+    margin-left: 0.5rem;
+  }
+
+  .message-panel {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: white;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .msg-header {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border);
+    background: #f9fafb;
+  }
+
+  .msg-header h2 {
+    margin: 0;
+    font-size: 1.1rem;
+  }
+
+  .msg-header p {
+    margin: 0.25rem 0 0 0;
+    font-size: 0.85rem;
+    color: #6b7280;
+  }
+
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+  }
+
+  .message {
+    margin-bottom: 1rem;
+    display: flex;
+    animation: fadeIn 0.3s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .message.own {
+    justify-content: flex-end;
+  }
+
+  .message-bubble {
+    max-width: 70%;
+    padding: 0.75rem 1rem;
+    border-radius: 12px;
+    word-wrap: break-word;
+  }
+
+  .message.own .message-bubble {
+    background: var(--primary);
+    color: white;
+  }
+
+  .message.other .message-bubble {
+    background: #e5e7eb;
+    color: var(--dark);
+  }
+
+  .message-time {
+    font-size: 0.75rem;
+    margin-top: 0.25rem;
+    opacity: 0.6;
+  }
+
+  .msg-input-area {
+    padding: 1rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .msg-input-area input {
+    flex: 1;
+  }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #6b7280;
+  }
+
+  .empty-state i {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+    opacity: 0.3;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-overlay.show {
+    display: flex;
+  }
+
+  .modal-box {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    max-width: 500px;
+    width: 90%;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  }
+
+  .modal-box h3 {
+    margin-top: 0;
+  }
+
+  .user-list {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin: 1rem 0;
+  }
+
+  .user-item {
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .user-item:hover {
+    background: #f3f4f6;
+  }
+
+  .user-item input {
+    width: auto;
+  }
+
+  @media (max-width: 768px) {
+    .inbox-container {
+      grid-template-columns: 1fr;
+    }
+    .conversation-list {
+      display: none;
+    }
+  }
+</style>
+
+<div class="inbox-container">
+  <!-- Conversations Sidebar -->
+  <div class="conversation-list">
+    <div class="conv-header">
+      <h3>💬 Conversations</h3>
+      <div class="conv-actions">
+        <button class="btn btn-sm btn-primary" onclick="showNewDMModal()" title="Start DM"><i class="fas fa-user-plus"></i> DM</button>
+        <button class="btn btn-sm btn-success" onclick="showNewGroupModal()" title="Create Group"><i class="fas fa-users"></i> Group</button>
+      </div>
+    </div>
+
+    <!-- Support DM -->
+    <div class="conv-item" onclick="openConversation('support', 'Support', 'direct')" id="conv-support">
+      <div class="conv-item-content">
+        <div class="conv-item-name">🛟 Support</div>
+        <div class="conv-item-preview">Contact support team</div>
+      </div>
+      <div class="conv-badge" id="support-badge" style="display:none;">0</div>
+    </div>
+
+    <!-- Team Chat -->
+    <div class="conv-item" onclick="openConversation('team', 'Team Chat', 'team')" id="conv-team">
+      <div class="conv-item-content">
+        <div class="conv-item-name">👥 Team Chat</div>
+        <div class="conv-item-preview">Everyone can see</div>
+      </div>
+      <div class="conv-badge" id="team-badge" style="display:none;">0</div>
+    </div>
+
+    <!-- DMs -->
+    <div style="padding:0.5rem 1rem; font-size:0.75rem; font-weight:600; text-transform:uppercase; color:#6b7280; margin-top:0.5rem;">Direct Messages</div>
+    <div id="dm-list"></div>
+
+    <!-- Groups -->
+    <div style="padding:0.5rem 1rem; font-size:0.75rem; font-weight:600; text-transform:uppercase; color:#6b7280; margin-top:1rem;">Groups</div>
+    <div id="group-list"></div>
+  </div>
+
+  <!-- Message Panel -->
+  <div class="message-panel">
+    <div id="msg-panel-content" style="display:none; height:100%; display:flex; flex-direction:column;">
+      <div class="msg-header">
+        <h2 id="msg-title">Select a conversation</h2>
+        <p id="msg-subtitle"></p>
+      </div>
+      <div class="messages" id="messages-area"></div>
+      <div class="msg-input-area">
+        <input type="text" id="msg-input" placeholder="Type a message..." />
+        <button class="btn btn-primary" onclick="sendMessage()"><i class="fas fa-paper-plane"></i> Send</button>
+      </div>
+    </div>
+    <div id="msg-panel-empty" class="empty-state">
+      <i class="fas fa-inbox"></i>
+      <p>Select a conversation to start messaging</p>
+    </div>
+  </div>
+</div>
+
+<!-- New DM Modal -->
+<div class="modal-overlay" id="newDMModal" onclick="if(event.target.id==='newDMModal') closeModals()">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <h3><i class="fas fa-user-plus"></i> Start Direct Message</h3>
+    <input type="text" id="dm-search" placeholder="Search crew members..." style="width:100%; margin-bottom:0.5rem;">
+    <div class="user-list" id="dm-user-list"></div>
+    <button class="btn btn-secondary" onclick="closeModals()" style="width:100%;">Cancel</button>
+  </div>
+</div>
+
+<!-- New Group Modal -->
+<div class="modal-overlay" id="newGroupModal" onclick="if(event.target.id==='newGroupModal') closeModals()">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <h3><i class="fas fa-users"></i> Create Group Chat</h3>
+    <label>Group Name:</label>
+    <input type="text" id="group-name" placeholder="e.g., Design Team" style="width:100%; margin-bottom:1rem;">
+    <label>Select Members:</label>
+    <div class="user-list" id="group-user-list"></div>
+    <div style="display:flex; gap:0.5rem; margin-top:1rem;">
+      <button class="btn btn-success" onclick="createGroup()" style="flex:1;"><i class="fas fa-check"></i> Create</button>
+      <button class="btn btn-secondary" onclick="closeModals()" style="flex:1;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const username = '{{ current_user.username }}';
+const orgSlug = '{{ ORG_SLUG }}';
+let allUsers = [];
+let conversations = {};
+let currentConv = null;
+let currentConvType = null;
+
+// Load initial data
+async function initInbox() {
+  await loadUsers();
+  await loadConversations();
+  setupSSE();
+}
+
+async function loadUsers() {
+  try {
+    const r = await fetch('/api/users');
+    const d = await r.json();
+    allUsers = d.users || [];
+    populateUserLists();
+  } catch(e) { console.error(e); }
+}
+
+function populateUserLists() {
+  // DM search
+  const dmList = document.getElementById('dm-user-list');
+  dmList.innerHTML = allUsers.map(u => `
+    <div class="user-item" onclick="startDM('${u.username}', '${u.username}')">
+      <i class="fas fa-user-circle"></i>
+      <span style="flex:1">${u.username}</span>
+    </div>
+  `).join('');
+
+  // Group creation
+  const grpList = document.getElementById('group-user-list');
+  grpList.innerHTML = allUsers.map(u => `
+    <label class="user-item" style="cursor:pointer;">
+      <input type="checkbox" value="${u.username}" class="group-member-select">
+      <span>${u.username}</span>
+    </label>
+  `).join('');
+}
+
+async function loadConversations() {
+  try {
+    const r = await fetch(`/api/chat/inbox/${username}?per_page=200`);
+    const d = await r.json();
+    const msgs = d.messages || [];
+
+    // Group by conversation
+    const convs = {};
+    msgs.forEach(m => {
+      let key, type;
+      if (m.recipients && m.recipients.includes('support')) {
+        key = 'support'; type = 'direct';
+      } else if (m.group_id) {
+        key = m.group_id; type = 'group'; 
+      } else if (m.team) {
+        key = 'team'; type = 'team';
+      } else if (m.recipients && m.recipients.length > 0) {
+        key = m.recipients.sort().join('-'); type = 'direct';
+      }
+      if (key) {
+        if (!convs[key]) convs[key] = { msgs: [], type, name: m.group_name || (m.from_name === username ? m.recipients?.[0] : m.from_name) || 'Chat' };
+        convs[key].msgs.push(m);
+      }
+    });
+
+    conversations = convs;
+    renderConversations();
+  } catch(e) { console.error(e); }
+}
+
+function renderConversations() {
+  const dmList = document.getElementById('dm-list');
+  const grpList = document.getElementById('group-list');
+  dmList.innerHTML = '';
+  grpList.innerHTML = '';
+
+  Object.entries(conversations).forEach(([key, data]) => {
+    const last = data.msgs[data.msgs.length - 1];
+    const unread = data.msgs.filter(m => !(m.read_by || []).includes(username)).length;
+    const name = key === 'support' ? '🛟 Support' : key === 'team' ? '👥 Team' : data.name;
+    const icon = data.type === 'group' ? '👥' : data.type === 'team' ? '👥' : '👤';
+    
+    const div = document.createElement('div');
+    div.className = 'conv-item';
+    div.onclick = () => openConversation(key, name, data.type);
+    div.innerHTML = `
+      <div class="conv-item-content">
+        <div class="conv-item-name">${icon} ${name}</div>
+        <div class="conv-item-preview">${(last?.message || '').slice(0, 50)}</div>
+      </div>
+      ${unread > 0 ? `<div class="conv-badge">${unread}</div>` : ''}
+    `;
+
+    if (data.type === 'direct') dmList.appendChild(div);
+    else if (data.type === 'group') grpList.appendChild(div);
+  });
+}
+
+function openConversation(key, name, type) {
+  currentConv = key;
+  currentConvType = type;
+
+  document.getElementById('msg-title').textContent = name;
+  document.getElementById('msg-subtitle').textContent = type === 'direct' ? 'Direct Message' : type === 'team' ? 'Team Chat' : 'Group Chat';
+  document.getElementById('msg-panel-empty').style.display = 'none';
+  document.getElementById('msg-panel-content').style.display = 'flex';
+
+  const data = conversations[key];
+  const msgs = data ? data.msgs.slice().sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp)) : [];
+  
+  const el = document.getElementById('messages-area');
+  el.innerHTML = '';
+  msgs.forEach(m => {
+    const div = document.createElement('div');
+    div.className = 'message ' + (m.from_name === username ? 'own' : 'other');
+    div.innerHTML = `
+      <div class="message-bubble">
+        ${m.from_name !== username ? `<div style="font-weight:600; margin-bottom:0.25rem; font-size:0.9rem;">${m.from_name}</div>` : ''}
+        ${m.message}
+        <div class="message-time">${new Date(m.timestamp).toLocaleTimeString()}</div>
+      </div>
+    `;
+    el.appendChild(div);
+
+    // Mark as read
+    if (!(m.read_by || []).includes(username)) {
+      fetch('/api/chat/mark-read', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({msg_id: m.id, username})
+      });
+    }
+  });
+  el.scrollTop = el.scrollHeight;
+}
+
+async function sendMessage() {
+  const input = document.getElementById('msg-input');
+  const txt = input.value.trim();
+  if (!txt || !currentConv) return;
+
+  const payload = {
+    org_slug: orgSlug,
+    user_name: username,
+    message: txt
+  };
+
+  if (currentConvType === 'direct') {
+    if (currentConv === 'support') {
+      payload.recipients = ['support'];
+    } else {
+      payload.recipients = currentConv.split('-').filter(u => u !== username);
+    }
+  } else if (currentConvType === 'team') {
+    payload.team = 'general';
+  } else if (currentConvType === 'group') {
+    payload.group_id = parseInt(currentConv);
+  }
+
+  await fetch('/api/chat/send', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+  input.value = '';
+  setTimeout(() => loadConversations(), 200);
+}
+
+async function startDM(user, name) {
+  closeModals();
+  const key = [username, user].sort().join('-');
+  if (!conversations[key]) {
+    conversations[key] = { msgs: [], type: 'direct', name };
+  }
+  renderConversations();
+  openConversation(key, name, 'direct');
+}
+
+async function createGroup() {
+  const name = document.getElementById('group-name').value.trim();
+  const members = Array.from(document.querySelectorAll('.group-member-select:checked')).map(el => el.value);
+  members.push(username);
+
+  if (!name || members.length < 2) {
+    alert('Enter a name and select at least one member');
+    return;
+  }
+
+  const r = await fetch('/api/chat/groups', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name, members, created_by: username})
+  });
+  const d = await r.json();
+  if (d.success) {
+    closeModals();
+    await loadConversations();
+  }
+}
+
+function showNewDMModal() {
+  document.getElementById('newDMModal').classList.add('show');
+}
+
+function showNewGroupModal() {
+  document.getElementById('newGroupModal').classList.add('show');
+  document.getElementById('group-name').value = '';
+  document.querySelectorAll('.group-member-select').forEach(el => el.checked = false);
+}
+
+function closeModals() {
+  document.getElementById('newDMModal').classList.remove('show');
+  document.getElementById('newGroupModal').classList.remove('show');
+}
+
+function setupSSE() {
+  const es = new EventSource('/api/chat/stream');
+  es.onmessage = e => {
+    try {
+      JSON.parse(e.data);
+      loadConversations();
+    } catch(err) { console.error(err); }
+  };
+}
+
+initInbox();
+</script>
+
+{% endblock %}

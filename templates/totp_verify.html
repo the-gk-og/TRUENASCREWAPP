@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Two-Factor Authentication - {{ organization.name }}</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <style>
+    :root {
+      --primary: {{ organization.primary_color or '#6366f1' }};
+      --primary-dark: {{ organization.primary_color or '#4f46e5' }};
+      --secondary: {{ organization.secondary_color or '#898989' }};
+      --dark: #1f2937;
+      --light: #f9fafb;
+      --border: #e5e7eb;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      color: var(--dark);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .background-animation {
+      position: absolute;
+      width: 400px;
+      height: 400px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 50%;
+      animation: float 20s infinite;
+      z-index: 0;
+    }
+
+    .bg-circle-1 {
+      top: -50px;
+      left: -50px;
+      animation-delay: 0s;
+    }
+
+    .bg-circle-2 {
+      bottom: -100px;
+      right: -50px;
+      animation-delay: 2s;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(20px); }
+    }
+
+    .login-container {
+      background: white;
+      padding: 3rem;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      width: 100%;
+      max-width: 420px;
+      margin: 2rem;
+      position: relative;
+      z-index: 10;
+      animation: slideUp 0.5s ease;
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .form-header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .form-header h1 {
+      font-size: 1.8rem;
+      color: var(--primary);
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    .form-header p {
+      color: #666;
+      font-size: 0.95rem;
+    }
+
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+      color: var(--dark);
+      font-size: 0.95rem;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 0.75rem;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      font-size: 1rem;
+      transition: all 0.3s ease;
+      font-family: 'Courier New', monospace;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+
+    .code-input {
+      text-align: center;
+      font-size: 1.5rem;
+      letter-spacing: 8px;
+      font-weight: 600;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 0.75rem;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-dark);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(99, 102, 241, 0.2);
+    }
+
+    .btn-primary:active {
+      transform: translateY(0);
+    }
+
+    .btn-secondary {
+      background: var(--light);
+      color: var(--dark);
+      border: 2px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: #f3f4f6;
+      border-color: var(--primary);
+    }
+
+    .alert {
+      padding: 1rem;
+      border-radius: 8px;
+      margin-bottom: 1.5rem;
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-start;
+    }
+
+    .alert-info {
+      background: #f0f9ff;
+      border-left: 4px solid #0ea5e9;
+      color: #164e63;
+    }
+
+    .alert-error {
+      background: #fef2f2;
+      border-left: 4px solid var(--danger);
+      color: #7f1d1d;
+    }
+
+    .alert-success {
+      background: #f0fdf4;
+      border-left: 4px solid var(--success);
+      color: #166534;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 2rem;
+      border-bottom: 2px solid var(--border);
+    }
+
+    .tab-btn {
+      padding: 1rem;
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-weight: 600;
+      color: #999;
+      border-bottom: 3px solid transparent;
+      transition: all 0.3s ease;
+    }
+
+    .tab-btn.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+      animation: slideUp 0.3s ease;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      color: var(--primary);
+    }
+
+    .loading.show {
+      display: block;
+    }
+
+    .spinner {
+      border: 3px solid var(--light);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      width: 30px;
+      height: 30px;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 1rem;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .divider {
+      text-align: center;
+      margin: 1.5rem 0;
+      position: relative;
+      color: #999;
+    }
+
+    .divider::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      width: 100%;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .divider span {
+      position: relative;
+      background: white;
+      padding: 0 0.5rem;
+    }
+
+    .back-link {
+      text-align: center;
+      margin-top: 1.5rem;
+    }
+
+    .back-link a {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 600;
+      transition: all 0.3s ease;
+    }
+
+    .back-link a:hover {
+      color: var(--primary-dark);
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="background-animation bg-circle-1"></div>
+  <div class="background-animation bg-circle-2"></div>
+
+  <div class="login-container">
+    <div class="form-header">
+      <h1><i class="fas fa-shield-alt"></i> Two-Factor Authentication</h1>
+      <p>Welcome back, <strong>{{ username }}</strong></p>
+    </div>
+
+    <div id="totpTab" class="tab-content active">
+      <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i>
+        <span>Enter the 6-digit code from your authenticator app</span>
+      </div>
+
+      <form onsubmit="verifyTOTP(event)">
+        <div class="form-group">
+          <label for="totpCode">Authentication Code</label>
+          <input 
+            type="text" 
+            id="totpCode" 
+            placeholder="000000" 
+            maxlength="6" 
+            pattern="[0-9]{6}" 
+            inputmode="numeric"
+            class="code-input"
+            autocomplete="off"
+            autofocus
+            required
+          />
+        </div>
+
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-lock-open"></i> Verify & Login
+        </button>
+      </form>
+
+      <div class="divider">
+        <span>OR</span>
+      </div>
+
+      <button type="button" class="btn btn-secondary" onclick="switchToBackupCodes()">
+        <i class="fas fa-key"></i> Use Backup Code
+      </button>
+    </div>
+
+    <div id="backupTab" class="tab-content">
+      <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i>
+        <span>Enter one of your backup codes (format: XXXX-XXXX)</span>
+      </div>
+
+      <form onsubmit="verifyBackupCode(event)">
+        <div class="form-group">
+          <label for="backupCode">Backup Code</label>
+          <input 
+            type="text" 
+            id="backupCode" 
+            placeholder="XXXX-XXXX" 
+            autocomplete="off"
+            style="font-family: 'Courier New', monospace; letter-spacing: 2px;"
+            required
+          />
+        </div>
+
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-lock-open"></i> Verify & Login
+        </button>
+      </form>
+
+      <div class="divider">
+        <span>OR</span>
+      </div>
+
+      <button type="button" class="btn btn-secondary" onclick="switchToTOTP()">
+        <i class="fas fa-mobile-alt"></i> Use Authenticator App
+      </button>
+    </div>
+
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <p>Verifying code...</p>
+    </div>
+
+    <div id="errorAlert" class="alert alert-error" style="display: none; margin-top: 1.5rem;">
+      <i class="fas fa-exclamation-circle"></i>
+      <span id="errorMessage"></span>
+    </div>
+
+    <div class="back-link">
+      <a href="{{ url_for('login') }}"><i class="fas fa-arrow-left"></i> Back to Login</a>
+    </div>
+  </div>
+
+  <script>
+    function switchToTOTP() {
+      document.getElementById('totpTab').classList.add('active');
+      document.getElementById('backupTab').classList.remove('active');
+      document.getElementById('totpCode').focus();
+    }
+
+    function switchToBackupCodes() {
+      document.getElementById('backupTab').classList.add('active');
+      document.getElementById('totpTab').classList.remove('active');
+      document.getElementById('backupCode').focus();
+    }
+
+    async function verifyTOTP(event) {
+      event.preventDefault();
+      const code = document.getElementById('totpCode').value.trim();
+      
+      if (code.length !== 6 || !/^\d{6}$/.test(code)) {
+        showError('Please enter a valid 6-digit code');
+        return;
+      }
+
+      await verifyCode(code, false);
+    }
+
+    async function verifyBackupCode(event) {
+      event.preventDefault();
+      const code = document.getElementById('backupCode').value.trim();
+      
+      if (!code) {
+        showError('Please enter a backup code');
+        return;
+      }
+
+      await verifyCode(code, true);
+    }
+
+    async function verifyCode(code, isBackup) {
+      showLoading(true);
+      hideError();
+
+      try {
+        const response = await fetch('/api/2fa/verify-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: '{{ username }}',
+            code: code,
+            is_backup: isBackup
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          // Login successful - redirect
+          window.location.href = data.redirect;
+        } else {
+          showError(data.error || 'Verification failed. Please try again.');
+          if (isBackup) {
+            document.getElementById('backupCode').value = '';
+            document.getElementById('backupCode').focus();
+          } else {
+            document.getElementById('totpCode').value = '';
+            document.getElementById('totpCode').focus();
+          }
+        }
+      } catch (error) {
+        console.error(error);
+        showError('An error occurred. Please try again.');
+      } finally {
+        showLoading(false);
+      }
+    }
+
+    function showLoading(show) {
+      document.getElementById('loading').style.display = show ? 'block' : 'none';
+    }
+
+    function showError(message) {
+      const alert = document.getElementById('errorAlert');
+      document.getElementById('errorMessage').textContent = message;
+      alert.style.display = 'flex';
+    }
+
+    function hideError() {
+      document.getElementById('errorAlert').style.display = 'none';
+    }
+
+    // Auto-focus on page load
+    document.getElementById('totpCode').focus();
+  </script>
+</body>
+</html>

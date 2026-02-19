@@ -1,0 +1,536 @@
+{% extends "base.html" %}
+
+{% block title %}Chat - ShowWise{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title"><i class="fas fa-comments"></i> Team Chat</h1>
+  <p class="page-subtitle">Real-time team conversations & announcements</p>
+</div>
+
+<style>
+  .chat-container {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    height: calc(100vh - 200px);
+  }
+
+  .rc-container {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: white;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .rc-iframe {
+    border: none;
+    flex: 1;
+    width: 100%;
+    height: 100%;
+  }
+
+  .rc-header {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border);
+    background: #f9fafb;
+  }
+
+  .rc-header h2 {
+    margin: 0;
+    font-size: 1.1rem;
+  }
+
+  .rc-status {
+    font-size: 0.85rem;
+    color: #6b7280;
+    margin-top: 0.25rem;
+  }
+
+  .rc-status.connected {
+    color: #059669;
+  }
+
+  .rc-status.error {
+    color: #dc2626;
+  }
+
+  .rc-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 1rem;
+  }
+
+  .rc-spinner {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  .rc-error-message {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #dc2626;
+    text-align: center;
+    padding: 2rem;
+  }
+
+  .rc-error-message i {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+  }
+
+  .rc-fallback-chat {
+    display: grid;
+    grid-template-columns: 250px 1fr;
+    gap: 1rem;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .team-sidebar {
+    border-right: 1px solid var(--border);
+    background: white;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .team-header {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border);
+    background: #f9fafb;
+  }
+
+  .team-header h3 {
+    margin: 0;
+    font-size: 0.95rem;
+  }
+
+  .team-tabs {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .team-tab {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.2s;
+    font-size: 0.9rem;
+  }
+
+  .team-tab:hover {
+    background: #f3f4f6;
+  }
+
+  .team-tab.active {
+    background: #ede9fe;
+    border-left: 3px solid var(--primary);
+    font-weight: 600;
+  }
+
+  .chat-panel {
+    background: white;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .chat-header {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border);
+    background: #f9fafb;
+  }
+
+  .chat-header h2 {
+    margin: 0;
+    font-size: 1.1rem;
+  }
+
+  .chat-header p {
+    margin: 0.25rem 0 0 0;
+    font-size: 0.85rem;
+    color: #6b7280;
+  }
+
+  .messages-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .message {
+    margin-bottom: 1rem;
+    display: flex;
+    animation: slideIn 0.3s ease;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .message.own {
+    justify-content: flex-end;
+  }
+
+  .message-bubble {
+    max-width: 70%;
+    padding: 0.75rem 1rem;
+    border-radius: 12px;
+    word-wrap: break-word;
+  }
+
+  .message.own .message-bubble {
+    background: var(--primary);
+    color: white;
+  }
+
+  .message.other .message-bubble {
+    background: #e5e7eb;
+    color: var(--dark);
+  }
+
+  .message-sender {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    font-size: 0.9rem;
+  }
+
+  .message-time {
+    font-size: 0.75rem;
+    margin-top: 0.25rem;
+    opacity: 0.6;
+  }
+
+  .msg-input-area {
+    padding: 1rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .msg-input-area input {
+    flex: 1;
+  }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #6b7280;
+  }
+
+  .empty-state i {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+    opacity: 0.3;
+  }
+
+  .broadcast-badge {
+    display: inline-block;
+    background: #fbbf24;
+    color: #78350f;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    margin-top: 0.25rem;
+  }
+
+  @media (max-width: 768px) {
+    .rc-fallback-chat {
+      grid-template-columns: 1fr;
+    }
+    .team-sidebar {
+      display: none;
+    }
+  }
+</style>
+
+<div class="chat-container">
+  <!-- Rocket.Chat Container -->
+  <div class="rc-container" id="rc-container" style="display: none;">
+    <div class="rc-header">
+      <h2><i class="fas fa-rocket"></i> Rocket.Chat</h2>
+      <p class="rc-status connected" id="rc-status">Connected</p>
+    </div>
+    <div id="rc-loading" class="rc-loading" style="display: none;">
+      <i class="fas fa-spinner rc-spinner"></i>
+      <span>Loading Rocket.Chat...</span>
+    </div>
+    <div id="rc-error" class="rc-error-message" style="display: none;">
+      <i class="fas fa-exclamation-circle"></i>
+      <p id="rc-error-text">Unable to connect to Rocket.Chat</p>
+    </div>
+    <iframe id="rc-iframe" class="rc-iframe" src="" allow="microphone; camera; clipboard-write"></iframe>
+  </div>
+
+  <!-- Fallback ShowWise Chat (shown if RC not available) -->
+  <div class="rc-fallback-chat" id="fallback-chat" style="display: none;">
+    <!-- Team Sidebar -->
+    <div class="team-sidebar">
+      <div class="team-header">
+        <h3>💬 Channels</h3>
+      </div>
+      <ul class="team-tabs" id="team-tabs"></ul>
+    </div>
+
+    <!-- Chat Panel -->
+    <div class="chat-panel">
+      <div class="chat-header">
+        <h2 id="chat-title">Select a channel</h2>
+        <p id="chat-subtitle"></p>
+      </div>
+      <div class="messages-area" id="messages-area"></div>
+      <div class="msg-input-area">
+        <input type="text" id="msg-input" placeholder="Type a message..." />
+        <button class="btn btn-primary" onclick="sendChatMessage()"><i class="fas fa-paper-plane"></i> Send</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const username = '{{ current_user.username }}';
+const orgSlug = '{{ ORG_SLUG }}';
+let allMessages = [];
+let teams = [];
+let currentTeam = null;
+let usingRocketChat = false;
+
+// Initialize chat system
+async function initChat() {
+  // Try to load Rocket.Chat
+  const rcInfo = await checkRocketChatAvailability();
+  
+  if (rcInfo && rcInfo.connected) {
+    // Use Rocket.Chat
+    loadRocketChat(rcInfo);
+    usingRocketChat = true;
+  } else {
+    // Fallback to ShowWise chat
+    showFallbackChat(rcInfo);
+  }
+}
+
+async function checkRocketChatAvailability() {
+  try {
+    const response = await fetch('/api/rocketchat/info');
+    if (response.ok) {
+      return await response.json();
+    }
+    return null;
+  } catch (e) {
+    console.error('Error checking Rocket.Chat availability:', e);
+    return null;
+  }
+}
+
+function loadRocketChat(rcInfo) {
+  const container = document.getElementById('rc-container');
+  const iframe = document.getElementById('rc-iframe');
+  const loading = document.getElementById('rc-loading');
+  
+  // Show loading
+  loading.style.display = 'flex';
+  container.style.display = 'flex';
+  
+  // Set iframe source - RC home redirects logged-in users to their workspace
+  iframe.src = rcInfo.iframe_url;
+  
+  // Hide loading once iframe loads
+  iframe.addEventListener('load', function() {
+    loading.style.display = 'none';
+  });
+  
+  // Handle iframe errors
+  iframe.addEventListener('error', function() {
+    showRCError('Failed to load Rocket.Chat');
+  });
+  
+  // Timeout if iframe takes too long to load
+  setTimeout(() => {
+    if (loading.style.display !== 'none') {
+      loading.style.display = 'none';
+    }
+  }, 5000);
+}
+
+function showRCError(message) {
+  const container = document.getElementById('rc-container');
+  const error = document.getElementById('rc-error');
+  const errorText = document.getElementById('rc-error-text');
+  const loading = document.getElementById('rc-loading');
+  const iframe = document.getElementById('rc-iframe');
+  
+  errorText.textContent = message;
+  error.style.display = 'flex';
+  iframe.style.display = 'none';
+  loading.style.display = 'none';
+  container.style.display = 'flex';
+}
+
+function showFallbackChat(rcInfo) {
+  // Show reason why RC is not available
+  if (rcInfo && rcInfo.error) {
+    console.warn('Rocket.Chat unavailable:', rcInfo.error);
+  }
+  
+  const fallback = document.getElementById('fallback-chat');
+  fallback.style.display = 'grid';
+  
+  // Load ShowWise chat
+  loadShowWiseChat();
+}
+
+async function loadShowWiseChat() {
+  try {
+    const r = await fetch(`/api/chat/inbox/${username}?per_page=200`);
+    const d = await r.json();
+    allMessages = d.messages || [];
+    
+    // Extract unique teams
+    teams = ['general', 'broadcast', ...new Set(allMessages
+      .filter(m => m.team)
+      .map(m => m.team)
+      .filter(t => t !== 'general' && t !== 'broadcast')
+    )].filter((v, i, a) => a.indexOf(v) === i);
+    
+    renderTeamTabs();
+    if (!currentTeam && teams.length > 0) {
+      selectTeam(teams[0]);
+    }
+  } catch(e) { console.error(e); }
+}
+
+function renderTeamTabs() {
+  const el = document.getElementById('team-tabs');
+  if (!el) return;
+  el.innerHTML = '';
+  
+  teams.forEach(team => {
+    const li = document.createElement('li');
+    li.className = 'team-tab' + (currentTeam === team ? ' active' : '');
+    li.textContent = team === 'broadcast' ? '📢 Broadcast' : '👥 ' + team;
+    li.onclick = () => selectTeam(team);
+    el.appendChild(li);
+  });
+}
+
+function selectTeam(team) {
+  currentTeam = team;
+  renderTeamTabs();
+  renderMessages();
+}
+
+function renderMessages() {
+  const header = document.getElementById('chat-title');
+  const subtitle = document.getElementById('chat-subtitle');
+  
+  if (currentTeam === 'broadcast') {
+    header.textContent = '📢 Broadcast';
+    subtitle.textContent = 'Announcements visible to entire team';
+  } else {
+    header.textContent = '👥 ' + currentTeam;
+    subtitle.textContent = currentTeam === 'general' ? 'General team chat' : 'Team channel';
+  }
+
+  const msgs = allMessages
+    .filter(m => (m.team || 'general') === currentTeam)
+    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+  const el = document.getElementById('messages-area');
+  
+  if (msgs.length === 0) {
+    el.innerHTML = `
+      <div class="empty-state">
+        <i class="fas fa-comment-slash"></i>
+        <p>No messages yet in this channel</p>
+      </div>
+    `;
+    return;
+  }
+
+  el.innerHTML = '';
+  msgs.forEach(m => {
+    const div = document.createElement('div');
+    div.className = 'message ' + (m.from_name === username ? 'own' : 'other');
+    
+    let content = `
+      <div class="message-bubble">
+        ${m.from_name !== username ? `<div class="message-sender">${m.from_name}</div>` : ''}
+        ${m.message}
+        ${currentTeam === 'broadcast' ? '<div class="broadcast-badge">📢 Broadcast</div>' : ''}
+        <div class="message-time">${new Date(m.timestamp).toLocaleTimeString()}</div>
+      </div>
+    `;
+    
+    div.innerHTML = content;
+    el.appendChild(div);
+  });
+  
+  el.scrollTop = el.scrollHeight;
+}
+
+async function sendChatMessage() {
+  const input = document.getElementById('msg-input');
+  const txt = input.value.trim();
+  if (!txt || !currentTeam) return;
+
+  const payload = {
+    org_slug: orgSlug,
+    user_name: username,
+    message: txt,
+    team: currentTeam === 'broadcast' ? 'broadcast' : currentTeam,
+    recipients: []
+  };
+
+  await fetch('/api/chat/send', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+
+  input.value = '';
+  setTimeout(() => loadShowWiseChat(), 200);
+}
+
+function setupSSE() {
+  // Only setup SSE if using fallback chat (not Rocket.Chat)
+  if (usingRocketChat) return;
+  
+  const es = new EventSource('/api/chat/stream');
+  es.onmessage = e => {
+    try {
+      JSON.parse(e.data);
+      loadShowWiseChat();
+    } catch(err) { console.error(err); }
+  };
+}
+
+// Initialize
+initChat();
+setTimeout(() => setupSSE(), 1000);
+</script>
+
+{% endblock %}
