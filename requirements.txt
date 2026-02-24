@@ -5,10 +5,15 @@ Flask-Mail==0.9.1
 Werkzeug==3.0.1
 python-dotenv==1.0.0
 requests==2.31.0
-psycopg2-binary==2.9.9
+#psycopg2-binary==2.9.9
 gunicorn==21.2.0
 discord.py==2.3.2
 pytz==2023.3.post1
 reportlab==4.0.7
 python-barcode==0.15.1
 Pillow==10.1.0
+pyotp==2.9.0
+qrcode==7.4.2
+google-auth==2.23.0
+google-auth-oauthlib==1.1.0
+google-auth-httplib2==0.1.1

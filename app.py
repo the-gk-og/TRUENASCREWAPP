@@ -33,7 +33,14 @@ from PIL import Image
 import tempfile
 from functools import lru_cache
 import base64
-
+import pyotp
+import qrcode
+import io
+import base64
+import json
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+from google_auth_oauthlib.flow import Flow
 
 
 
@@ -120,6 +127,12 @@ notification_tracker = {}
 # Organization Settings
 ORGANIZATION_SLUG = os.environ.get('ORGANIZATION_SLUG', '')
 MAIN_SERVER_URL = os.environ.get('MAIN_SERVER_URL', 'https://sfx-crew.com')
+
+# GOOGLE OAUTH SETTINGS
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
+GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
+GOOGLE_REDIRECT_URI = os.environ.get('GOOGLE_REDIRECT_URI', 'http://localhost:5001/auth/google/callback')
+
 
 # DATABASE MODELS
 
@@ -378,6 +391,35 @@ class StagePlanObject(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_public = db.Column(db.Boolean, default=True)
 
+class TwoFactorAuth(db.Model):
+    """Store 2FA TOTP secrets for users"""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), unique=True, nullable=False)
+    secret = db.Column(db.String(32), nullable=False)
+    enabled = db.Column(db.Boolean, default=False)
+    backup_codes = db.Column(db.Text)  # JSON array of backup codes
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    user = db.relationship('User', backref='two_factor_auth')
+
+class OAuthConnection(db.Model):
+    """Store OAuth connections for users"""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    provider = db.Column(db.String(50), nullable=False)  # 'google', 'discord', etc.
+    provider_user_id = db.Column(db.String(200), nullable=False)
+    email = db.Column(db.String(200))
+    access_token = db.Column(db.String(500))
+    refresh_token = db.Column(db.String(500))
+    token_expiry = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_login = db.Column(db.DateTime)
+    
+    user = db.relationship('User', backref='oauth_connections')
+    
+    __table_args__ = (
+        db.UniqueConstraint('provider', 'provider_user_id', name='unique_provider_user'),
+    )
 
 
 
@@ -688,6 +730,36 @@ DEFAULT_ORG = {
     'website': 'https://sfx-crew.com'
 }
 
+# ==================== TOTP FUNCTIONS ====================
+
+def generate_backup_codes(count=10):
+    """Generate backup codes for 2FA"""
+    import secrets
+    import string
+    codes = []
+    for _ in range(count):
+        code = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(8))
+        # Format as XXXX-XXXX
+        formatted_code = f"{code[:4]}-{code[4:]}"
+        codes.append(formatted_code)
+    return codes
+
+def hash_backup_codes(codes):
+    """Hash backup codes for storage"""
+    from werkzeug.security import generate_password_hash
+    return [generate_password_hash(code.replace('-', '')) for code in codes]
+
+def verify_backup_code(stored_hashes, provided_code):
+    """Verify a backup code"""
+    from werkzeug.security import check_password_hash
+    provided_code = provided_code.replace('-', '').strip().upper()
+    
+    for i, hashed in enumerate(stored_hashes):
+        if check_password_hash(hashed, provided_code):
+            return i  # Return index to remove it
+    return None
+
+
 # AUTH ROUTES
 
 @app.route('/')
@@ -697,14 +769,9 @@ def index():
     return redirect('http://sfx-crew.com')
 
 
-
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-
     if current_user.is_authenticated:
-        print(f"✓ User {current_user.username} already authenticated, redirecting...")
-        
-    
         if current_user.is_cast:
             return redirect(url_for('cast_events'))
         else:
@@ -718,6 +785,18 @@ def login():
         user = User.query.filter_by(username=username).first()
         
         if user and check_password_hash(user.password_hash, password):
+            # Check if 2FA is enabled
+            tfa = TwoFactorAuth.query.filter_by(user_id=user.id).first()
+            
+            if tfa and tfa.enabled:
+                # Store user ID in session for 2FA verification
+                session['pending_2fa_user_id'] = user.id
+                session['pending_2fa_remember'] = remember
+                
+                # Redirect to 2FA verification page
+                return redirect(url_for('totp_verify_page'))
+            
+            # No 2FA - proceed with normal login
             login_user(user, remember=remember)
             
             if remember:
@@ -727,7 +806,6 @@ def login():
             else:
                 print(f"✓ User {username} logged in (session only)")
             
-            # Redirect based on user type
             if user.is_cast:
                 return redirect(url_for('cast_events'))
             else:
@@ -735,16 +813,17 @@ def login():
         
         flash('Invalid username or password')
     
-    # Fetch organization data
     org = get_organization()
     if not org:
         org = DEFAULT_ORG
     
-    # Pass organization, session duration, and current datetime to template
     return render_template('login.html', 
                          organization=org, 
                          SESSION_DURATION=SESSION_DURATION,
-                         now=datetime.now())
+                         now=datetime.now(),
+                         google_oauth_enabled=bool(GOOGLE_CLIENT_ID))
+
+
 @app.route('/session-info')
 @login_required
 def session_info():
@@ -761,6 +840,447 @@ def session_info():
     
     return jsonify(info)
 
+@app.route('/login/2fa')
+def totp_verify_page():
+    """2FA verification page"""
+    if 'pending_2fa_user_id' not in session:
+        return redirect(url_for('login'))
+    
+    user_id = session.get('pending_2fa_user_id')
+    user = User.query.get(user_id)
+    
+    if not user:
+        session.pop('pending_2fa_user_id', None)
+        return redirect(url_for('login'))
+    
+    org = get_organization()
+    if not org:
+        org = DEFAULT_ORG
+    
+    return render_template('totp_verify.html', organization=org, username=user.username)
+
+# ==================== TOTP ROUTES ====================
+
+@app.route('/settings/2fa')
+@login_required
+def totp_settings():
+    """2FA settings page"""
+    tfa = TwoFactorAuth.query.filter_by(user_id=current_user.id).first()
+    return render_template('crew/totp_settings.html', tfa=tfa)
+
+@app.route('/api/2fa/setup', methods=['POST'])
+@login_required
+def setup_totp():
+    """Initialize TOTP setup"""
+    # Check if already exists
+    tfa = TwoFactorAuth.query.filter_by(user_id=current_user.id).first()
+    
+    if tfa and tfa.enabled:
+        return jsonify({'error': '2FA is already enabled'}), 400
+    
+    # Generate secret
+    secret = pyotp.random_base32()
+    
+    # Create or update record
+    if not tfa:
+        tfa = TwoFactorAuth(user_id=current_user.id, secret=secret, enabled=False)
+        db.session.add(tfa)
+    else:
+        tfa.secret = secret
+        tfa.enabled = False
+    
+    db.session.commit()
+    
+    # Generate provisioning URI for QR code
+    totp = pyotp.TOTP(secret)
+    provisioning_uri = totp.provisioning_uri(
+        name=current_user.username,
+        issuer_name='ShowWise'
+    )
+    
+    # Generate QR code
+    qr = qrcode.QRCode(version=1, box_size=10, border=5)
+    qr.add_data(provisioning_uri)
+    qr.make(fit=True)
+    
+    img = qr.make_image(fill_color="black", back_color="white")
+    
+    # Convert to base64
+    buffer = io.BytesIO()
+    img.save(buffer, format='PNG')
+    buffer.seek(0)
+    qr_base64 = base64.b64encode(buffer.getvalue()).decode()
+    
+    return jsonify({
+        'success': True,
+        'secret': secret,
+        'qr_code': f'data:image/png;base64,{qr_base64}',
+        'provisioning_uri': provisioning_uri
+    })
+
+@app.route('/api/2fa/verify-setup', methods=['POST'])
+@login_required
+def verify_totp_setup():
+    """Verify TOTP code and enable 2FA"""
+    data = request.json
+    code = data.get('code', '').strip()
+    
+    tfa = TwoFactorAuth.query.filter_by(user_id=current_user.id).first()
+    
+    if not tfa:
+        return jsonify({'error': '2FA not initialized'}), 400
+    
+    # Verify code
+    totp = pyotp.TOTP(tfa.secret)
+    
+    if totp.verify(code, valid_window=1):  # Allow 1 time step before/after
+        # Enable 2FA
+        tfa.enabled = True
+        
+        # Generate backup codes
+        backup_codes = generate_backup_codes(10)
+        hashed_codes = hash_backup_codes(backup_codes)
+        tfa.backup_codes = json.dumps(hashed_codes)
+        
+        db.session.commit()
+        
+        # Log event
+        if 'log_security_event' in globals():
+            log_security_event('2FA_ENABLED', username=current_user.username)
+        
+        return jsonify({
+            'success': True,
+            'message': '2FA enabled successfully',
+            'backup_codes': backup_codes  # Show once, never again!
+        })
+    
+    return jsonify({'error': 'Invalid code. Please try again.'}), 400
+
+@app.route('/api/2fa/verify-login', methods=['POST'])
+def verify_totp_login():
+    """Verify TOTP code during login"""
+    data = request.json
+    username = data.get('username')
+    code = data.get('code', '').strip()
+    is_backup = data.get('is_backup', False)
+    
+    # Get user from session (set during initial login)
+    user_id = session.get('pending_2fa_user_id')
+    
+    if not user_id:
+        return jsonify({'error': 'No pending 2FA verification'}), 400
+    
+    user = User.query.get(user_id)
+    
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    tfa = TwoFactorAuth.query.filter_by(user_id=user.id).first()
+    
+    if not tfa or not tfa.enabled:
+        return jsonify({'error': '2FA not enabled'}), 400
+    
+    verified = False
+    
+    if is_backup:
+        # Verify backup code
+        backup_codes = json.loads(tfa.backup_codes) if tfa.backup_codes else []
+        index = verify_backup_code(backup_codes, code)
+        
+        if index is not None:
+            # Remove used backup code
+            backup_codes.pop(index)
+            tfa.backup_codes = json.dumps(backup_codes)
+            db.session.commit()
+            verified = True
+    else:
+        # Verify TOTP code
+        totp = pyotp.TOTP(tfa.secret)
+        verified = totp.verify(code, valid_window=1)
+    
+    if verified:
+        # Clear pending 2FA session
+        session.pop('pending_2fa_user_id', None)
+        
+        # Complete login
+        login_user(user, remember=session.get('pending_2fa_remember', False))
+        session.pop('pending_2fa_remember', None)
+        
+        # Log successful login
+        if 'log_security_event' in globals():
+            log_security_event('2FA_LOGIN_SUCCESS', username=user.username)
+        
+        return jsonify({
+            'success': True,
+            'redirect': url_for('cast_events') if user.is_cast else url_for('dashboard')
+        })
+    
+    return jsonify({'error': 'Invalid code. Please try again.'}), 400
+
+@app.route('/api/2fa/disable', methods=['POST'])
+@login_required
+def disable_totp():
+    """Disable 2FA (requires password confirmation)"""
+    data = request.json
+    password = data.get('password')
+    
+    # Verify password
+    if not check_password_hash(current_user.password_hash, password):
+        return jsonify({'error': 'Invalid password'}), 401
+    
+    tfa = TwoFactorAuth.query.filter_by(user_id=current_user.id).first()
+    
+    if tfa:
+        db.session.delete(tfa)
+        db.session.commit()
+        
+        if 'log_security_event' in globals():
+            log_security_event('2FA_DISABLED', username=current_user.username)
+        
+        return jsonify({'success': True, 'message': '2FA disabled successfully'})
+    
+    return jsonify({'error': '2FA not enabled'}), 400
+
+# ==================== GOOGLE OAUTH ROUTES ====================
+
+@app.route('/auth/google')
+def google_login():
+    """Initiate Google OAuth flow"""
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        flash('Google OAuth is not configured')
+        return redirect(url_for('login'))
+    
+    # Create flow
+    flow = Flow.from_client_config(
+        {
+            "web": {
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [GOOGLE_REDIRECT_URI]
+            }
+        },
+        scopes=[
+            'openid',
+            'https://www.googleapis.com/auth/userinfo.email',
+            'https://www.googleapis.com/auth/userinfo.profile'
+        ]
+    )
+    
+    flow.redirect_uri = GOOGLE_REDIRECT_URI
+    
+    # Generate authorization URL
+    authorization_url, state = flow.authorization_url(
+        access_type='offline',
+        include_granted_scopes='true',
+        prompt='consent'
+    )
+    
+    # Store state in session for verification
+    session['oauth_state'] = state
+    
+    return redirect(authorization_url)
+
+@app.route('/auth/google/callback')
+def google_callback():
+    """Handle Google OAuth callback"""
+    # Verify state
+    state = session.get('oauth_state')
+    
+    if not state or state != request.args.get('state'):
+        flash('Invalid OAuth state')
+        return redirect(url_for('login'))
+    
+    try:
+        # Create flow
+        flow = Flow.from_client_config(
+            {
+                "web": {
+                    "client_id": GOOGLE_CLIENT_ID,
+                    "client_secret": GOOGLE_CLIENT_SECRET,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "redirect_uris": [GOOGLE_REDIRECT_URI]
+                }
+            },
+            scopes=[
+                'openid',
+                'https://www.googleapis.com/auth/userinfo.email',
+                'https://www.googleapis.com/auth/userinfo.profile'
+            ],
+            state=state
+        )
+        
+        flow.redirect_uri = GOOGLE_REDIRECT_URI
+        
+        # Exchange authorization code for tokens
+        flow.fetch_token(authorization_response=request.url)
+        
+        # Get credentials
+        credentials = flow.credentials
+        
+        # Verify ID token
+        idinfo = id_token.verify_oauth2_token(
+            credentials.id_token,
+            google_requests.Request(),
+            GOOGLE_CLIENT_ID
+        )
+        
+        # Extract user info
+        google_user_id = idinfo['sub']
+        email = idinfo.get('email')
+        name = idinfo.get('name')
+        
+        # Check if OAuth connection exists
+        oauth_conn = OAuthConnection.query.filter_by(
+            provider='google',
+            provider_user_id=google_user_id
+        ).first()
+        
+        if oauth_conn:
+            # Existing user - login
+            user = oauth_conn.user
+            
+            # Update OAuth tokens
+            oauth_conn.access_token = credentials.token
+            oauth_conn.refresh_token = credentials.refresh_token
+            oauth_conn.token_expiry = credentials.expiry
+            oauth_conn.last_login = datetime.utcnow()
+            db.session.commit()
+            
+            # Check if 2FA is enabled
+            tfa = TwoFactorAuth.query.filter_by(user_id=user.id).first()
+            
+            if tfa and tfa.enabled:
+                # Require 2FA
+                session['pending_2fa_user_id'] = user.id
+                session['pending_2fa_remember'] = False
+                return redirect(url_for('totp_verify_page'))
+            
+            # Login user
+            login_user(user, remember=False)
+            
+            if 'log_security_event' in globals():
+                log_security_event('GOOGLE_LOGIN', username=user.username)
+            
+            flash(f'Welcome back, {user.username}!')
+            
+            if user.is_cast:
+                return redirect(url_for('cast_events'))
+            else:
+                return redirect(url_for('dashboard'))
+        
+        else:
+            # New user - check if email exists
+            existing_user = User.query.filter_by(email=email).first()
+            
+            if existing_user:
+                # Link to existing account
+                oauth_conn = OAuthConnection(
+                    user_id=existing_user.id,
+                    provider='google',
+                    provider_user_id=google_user_id,
+                    email=email,
+                    access_token=credentials.token,
+                    refresh_token=credentials.refresh_token,
+                    token_expiry=credentials.expiry,
+                    last_login=datetime.utcnow()
+                )
+                db.session.add(oauth_conn)
+                db.session.commit()
+                
+                login_user(existing_user, remember=False)
+                
+                flash('Google account linked successfully!')
+                
+                if existing_user.is_cast:
+                    return redirect(url_for('cast_events'))
+                else:
+                    return redirect(url_for('dashboard'))
+            
+            else:
+                # Create new user
+                # Generate username from email
+                username = email.split('@')[0]
+                
+                # Ensure username is unique
+                counter = 1
+                original_username = username
+                while User.query.filter_by(username=username).first():
+                    username = f"{original_username}{counter}"
+                    counter += 1
+                
+                # Create user (no password needed for OAuth-only users)
+                import secrets
+                random_password = secrets.token_urlsafe(32)
+                
+                new_user = User(
+                    username=username,
+                    email=email,
+                    password_hash=generate_password_hash(random_password),
+                    is_admin=False,
+                    is_cast=False
+                )
+                db.session.add(new_user)
+                db.session.flush()
+                
+                # Create OAuth connection
+                oauth_conn = OAuthConnection(
+                    user_id=new_user.id,
+                    provider='google',
+                    provider_user_id=google_user_id,
+                    email=email,
+                    access_token=credentials.token,
+                    refresh_token=credentials.refresh_token,
+                    token_expiry=credentials.expiry,
+                    last_login=datetime.utcnow()
+                )
+                db.session.add(oauth_conn)
+                db.session.commit()
+                
+                # Login user
+                login_user(new_user, remember=False)
+                
+                if 'log_security_event' in globals():
+                    log_security_event('GOOGLE_SIGNUP', username=new_user.username)
+                
+                flash(f'Account created successfully! Welcome, {new_user.username}!')
+                return redirect(url_for('dashboard'))
+    
+    except Exception as e:
+        print(f"Google OAuth error: {e}")
+        flash('Google login failed. Please try again.')
+        return redirect(url_for('login'))
+
+@app.route('/auth/google/unlink', methods=['POST'])
+@login_required
+def google_unlink():
+    """Unlink Google account"""
+    data = request.json
+    password = data.get('password')
+    
+    # Verify password (unless OAuth-only account)
+    if current_user.password_hash and not check_password_hash(current_user.password_hash, password):
+        return jsonify({'error': 'Invalid password'}), 401
+    
+    oauth_conn = OAuthConnection.query.filter_by(
+        user_id=current_user.id,
+        provider='google'
+    ).first()
+    
+    if oauth_conn:
+        db.session.delete(oauth_conn)
+        db.session.commit()
+        
+        if 'log_security_event' in globals():
+            log_security_event('GOOGLE_UNLINK', username=current_user.username)
+        
+        return jsonify({'success': True, 'message': 'Google account unlinked'})
+    
+    return jsonify({'error': 'Google account not linked'}), 400
+
+
 
 @app.route('/logout')
 @login_required
@@ -774,6 +1294,7 @@ def logout():
 def dashboard():
     upcoming_events = Event.query.filter(Event.event_date >= datetime.now()).order_by(Event.event_date).limit(5).all()
     return render_template('/crew/dashboard.html', upcoming_events=upcoming_events)
+
 
 # EQUIPMENT ROUTES
 

@@ -1,0 +1,367 @@
+{% extends "base.html" %}
+
+{% block title %}Two-Factor Authentication - ShowWise{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title"><i class="fas fa-shield-alt"></i> Two-Factor Authentication</h1>
+    <p class="page-subtitle">Add an extra layer of security to your account</p>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">2FA Status</h2>
+        {% if tfa and tfa.enabled %}
+        <span style="color: var(--success); font-weight: 600;">
+            <i class="fas fa-check-circle"></i> Enabled
+        </span>
+        {% else %}
+        <span style="color: var(--warning); font-weight: 600;">
+            <i class="fas fa-exclamation-triangle"></i> Disabled
+        </span>
+        {% endif %}
+    </div>
+
+    {% if not tfa or not tfa.enabled %}
+    <!-- ENABLE 2FA SECTION -->
+    <div id="enable2faSection">
+        <p style="margin-bottom: 1.5rem;">
+            Two-factor authentication (2FA) adds an extra layer of security to your account. 
+            You'll need to enter a code from your authenticator app each time you log in.
+        </p>
+
+        <h3 style="margin-bottom: 1rem;">What you'll need:</h3>
+        <ul style="margin-bottom: 1.5rem; padding-left: 1.5rem;">
+            <li>An authenticator app (Google Authenticator, Authy, Microsoft Authenticator, etc.)</li>
+            <li>Your phone or device with the app installed</li>
+        </ul>
+
+        <button onclick="startSetup2FA()" class="btn btn-primary">
+            <i class="fas fa-qrcode"></i> Set Up 2FA
+        </button>
+    </div>
+
+    <!-- SETUP MODAL -->
+    <div id="setup2faModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close" onclick="hideModal('setup2faModal')">&times;</span>
+            
+            <div id="step1" style="display: block;">
+                <h2 style="margin-bottom: 1rem;"><i class="fas fa-qrcode"></i> Step 1: Scan QR Code</h2>
+                <p style="margin-bottom: 1rem;">Scan this QR code with your authenticator app:</p>
+                
+                <div style="text-align: center; margin: 2rem 0;">
+                    <img id="qrCode" src="" alt="QR Code" style="max-width: 300px; border: 2px solid var(--border); padding: 1rem; border-radius: 8px;">
+                </div>
+
+                <p style="margin-bottom: 0.5rem; font-weight: 600;">Or enter this code manually:</p>
+                <div style="background: var(--light); padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem;">
+                    <code id="secretKey" style="font-size: 1.1rem; letter-spacing: 2px;"></code>
+                    <button onclick="copySecret()" class="btn btn-sm" style="margin-left: 1rem;">
+                        <i class="fas fa-copy"></i> Copy
+                    </button>
+                </div>
+
+                <button onclick="nextStep()" class="btn btn-primary">
+                    <i class="fas fa-arrow-right"></i> Next: Verify Code
+                </button>
+            </div>
+
+            <div id="step2" style="display: none;">
+                <h2 style="margin-bottom: 1rem;"><i class="fas fa-key"></i> Step 2: Verify Code</h2>
+                <p style="margin-bottom: 1.5rem;">Enter the 6-digit code from your authenticator app:</p>
+
+                <div class="form-group">
+                    <input type="text" id="verifyCode" placeholder="000000" maxlength="6" 
+                           pattern="[0-9]{6}" inputmode="numeric"
+                           style="text-align: center; font-size: 1.5rem; letter-spacing: 8px; font-family: monospace;">
+                </div>
+
+                <div style="display: flex; gap: 1rem;">
+                    <button onclick="previousStep()" class="btn" style="flex: 1;">
+                        <i class="fas fa-arrow-left"></i> Back
+                    </button>
+                    <button onclick="verifySetup()" class="btn btn-success" style="flex: 2;">
+                        <i class="fas fa-check"></i> Verify & Enable 2FA
+                    </button>
+                </div>
+            </div>
+
+            <div id="step3" style="display: none;">
+                <h2 style="margin-bottom: 1rem; color: var(--success);">
+                    <i class="fas fa-check-circle"></i> 2FA Enabled Successfully!
+                </h2>
+                
+                <div class="alert alert-success" style="border-left-color: var(--warning);">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>Important:</strong> Save these backup codes in a safe place. 
+                    You can use them to access your account if you lose your authenticator device.
+                </div>
+
+                <div style="background: var(--light); padding: 1.5rem; border-radius: 8px; margin: 1.5rem 0;">
+                    <h3 style="margin-bottom: 1rem;">Backup Codes:</h3>
+                    <div id="backupCodes" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; font-family: monospace; font-size: 1.1rem;">
+                        <!-- Codes will be inserted here -->
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 1rem;">
+                    <button onclick="downloadBackupCodes()" class="btn btn-primary">
+                        <i class="fas fa-download"></i> Download Codes
+                    </button>
+                    <button onclick="copyBackupCodes()" class="btn">
+                        <i class="fas fa-copy"></i> Copy Codes
+                    </button>
+                    <button onclick="finish2FASetup()" class="btn btn-success" style="margin-left: auto;">
+                        <i class="fas fa-check"></i> Finish
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <!-- DISABLE 2FA SECTION -->
+    <div>
+        <p style="margin-bottom: 1.5rem;">
+            Two-factor authentication is currently <strong>enabled</strong> on your account.
+        </p>
+
+        <div style="background: #ecfdf5; border: 2px solid #10b981; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem;">
+            <i class="fas fa-info-circle" style="color: #10b981;"></i>
+            Your account is protected with 2FA. You'll need to enter a code from your authenticator app when logging in.
+        </div>
+
+        <button onclick="showDisable2FA()" class="btn btn-danger">
+            <i class="fas fa-times-circle"></i> Disable 2FA
+        </button>
+    </div>
+
+    <!-- DISABLE MODAL -->
+    <div id="disable2faModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close" onclick="hideModal('disable2faModal')">&times;</span>
+            
+            <h2 style="margin-bottom: 1rem; color: var(--danger);">
+                <i class="fas fa-exclamation-triangle"></i> Disable Two-Factor Authentication
+            </h2>
+            
+            <div class="alert alert-error">
+                <i class="fas fa-exclamation-triangle"></i>
+                <strong>Warning:</strong> Disabling 2FA will make your account less secure.
+            </div>
+
+            <p style="margin-bottom: 1.5rem;">Enter your password to confirm:</p>
+
+            <div class="form-group">
+                <input type="password" id="disablePassword" placeholder="Enter your password">
+            </div>
+
+            <div style="display: flex; gap: 1rem;">
+                <button onclick="hideModal('disable2faModal')" class="btn" style="flex: 1;">
+                    Cancel
+                </button>
+                <button onclick="disable2FA()" class="btn btn-danger" style="flex: 1;">
+                    <i class="fas fa-times"></i> Disable 2FA
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Google OAuth Section -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Google Account</h2>
+        {% if current_user.oauth_connections|selectattr("provider", "equalto", "google")|list %}
+        <span style="color: var(--success); font-weight: 600;">
+            <i class="fab fa-google"></i> Connected
+        </span>
+        {% else %}
+        <span style="color: #6b7280; font-weight: 600;">
+            <i class="fas fa-unlink"></i> Not Connected
+        </span>
+        {% endif %}
+    </div>
+
+    {% set google_conn = current_user.oauth_connections|selectattr("provider", "equalto", "google")|first %}
+    
+    {% if google_conn %}
+    <p style="margin-bottom: 1rem;">
+        Your ShowWise account is linked to: <strong>{{ google_conn.email }}</strong>
+    </p>
+    <p style="margin-bottom: 1.5rem; color: #6b7280; font-size: 0.9rem;">
+        You can sign in using your Google account.
+    </p>
+    <button onclick="showUnlinkGoogle()" class="btn btn-danger">
+        <i class="fab fa-google"></i> Unlink Google Account
+    </button>
+    {% else %}
+    <p style="margin-bottom: 1.5rem;">
+        Link your Google account to sign in with one click.
+    </p>
+    <a href="{{ url_for('google_login') }}" class="btn btn-primary">
+        <i class="fab fa-google"></i> Connect Google Account
+    </a>
+    {% endif %}
+</div>
+
+<script>
+let currentSecret = '';
+let backupCodesData = [];
+
+function startSetup2FA() {
+    fetch('/api/2fa/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            currentSecret = data.secret;
+            document.getElementById('qrCode').src = data.qr_code;
+            document.getElementById('secretKey').textContent = data.secret;
+            document.getElementById('setup2faModal').style.display = 'block';
+        } else {
+            alert(data.error || 'Setup failed');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('Setup failed');
+    });
+}
+
+function nextStep() {
+    document.getElementById('step1').style.display = 'none';
+    document.getElementById('step2').style.display = 'block';
+    document.getElementById('verifyCode').focus();
+}
+
+function previousStep() {
+    document.getElementById('step2').style.display = 'none';
+    document.getElementById('step1').style.display = 'block';
+}
+
+function verifySetup() {
+    const code = document.getElementById('verifyCode').value.trim();
+    
+    if (code.length !== 6) {
+        alert('Please enter a 6-digit code');
+        return;
+    }
+    
+    fetch('/api/2fa/verify-setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            backupCodesData = data.backup_codes;
+            
+            // Display backup codes
+            const codesDiv = document.getElementById('backupCodes');
+            codesDiv.innerHTML = data.backup_codes.map(code => 
+                `<div style="padding: 0.5rem; background: white; border-radius: 4px;">${code}</div>`
+            ).join('');
+            
+            // Show final step
+            document.getElementById('step2').style.display = 'none';
+            document.getElementById('step3').style.display = 'block';
+        } else {
+            alert(data.error || 'Verification failed');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('Verification failed');
+    });
+}
+
+function copySecret() {
+    navigator.clipboard.writeText(currentSecret);
+    showAlert('Secret key copied to clipboard');
+}
+
+function downloadBackupCodes() {
+    const text = backupCodesData.join('\n');
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'showwise-backup-codes.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function copyBackupCodes() {
+    const text = backupCodesData.join('\n');
+    navigator.clipboard.writeText(text);
+    showAlert('Backup codes copied to clipboard');
+}
+
+function finish2FASetup() {
+    location.reload();
+}
+
+function showDisable2FA() {
+    document.getElementById('disable2faModal').style.display = 'block';
+}
+
+function disable2FA() {
+    const password = document.getElementById('disablePassword').value;
+    
+    if (!password) {
+        alert('Please enter your password');
+        return;
+    }
+    
+    fetch('/api/2fa/disable', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('2FA disabled successfully', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            alert(data.error || 'Failed to disable 2FA');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('Failed to disable 2FA');
+    });
+}
+
+function showUnlinkGoogle() {
+    const password = prompt('Enter your password to unlink Google account:');
+    
+    if (!password) return;
+    
+    fetch('/auth/google/unlink', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('Google account unlinked', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            alert(data.error || 'Failed to unlink');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('Failed to unlink');
+    });
+}
+</script>
+{% endblock %}
