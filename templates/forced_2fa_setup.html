@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}Set Up 2FA - Required - ShowWise{% endblock %}
+
+{% block content %}
+<div style="max-width: 600px; margin: 2rem auto;">
+    <div class="card" style="border: 2px solid var(--warning); background: linear-gradient(135deg, #fff 0%, #fef9ec 100%);">
+        <div style="text-align: center; padding: 1rem 0 1.5rem;">
+            <div style="font-size: 3rem; margin-bottom: 0.75rem;">🔐</div>
+            <h2 style="color: #92400e; margin-bottom: 0.5rem;">Two-Factor Authentication Required</h2>
+            <p style="color: #78350f;">Your administrator requires you to set up 2FA before continuing.</p>
+        </div>
+
+        <div style="background: #fef3c7; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; border-left: 4px solid var(--warning);">
+            <p style="margin: 0; color: #78350f; font-size: 0.95rem;">
+                <i class="fas fa-info-circle"></i>
+                <strong>What you need to do:</strong> Install an authenticator app (Google Authenticator, Authy, or Microsoft Authenticator), then scan the QR code below to link your account.
+            </p>
+        </div>
+
+        <!-- Step 1: QR Code -->
+        <div id="step1Section">
+            <h3 style="margin-bottom: 1rem; color: var(--dark);"><span style="background: var(--primary); color: white; border-radius: 50%; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.85rem; margin-right: 0.5rem;">1</span> Scan QR Code</h3>
+            <p style="color: #6b7280; margin-bottom: 1.5rem;">Open your authenticator app and scan this QR code:</p>
+            
+            <div style="text-align: center; margin: 1.5rem 0;" id="qrContainer">
+                <div style="width: 200px; height: 200px; background: #f3f4f6; border-radius: 8px; margin: 0 auto; display: flex; align-items: center; justify-content: center;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: #9ca3af;"></i>
+                </div>
+            </div>
+            
+            <div style="background: #f9fafb; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;" id="secretContainer" style="display:none;">
+                <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 0.5rem;">Or enter this key manually:</p>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <code id="secretKey" style="font-size: 1rem; letter-spacing: 2px; flex: 1;"></code>
+                    <button onclick="copySecret()" class="btn btn-primary" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;"><i class="fas fa-copy"></i></button>
+                </div>
+            </div>
+
+            <button onclick="goToStep2()" class="btn btn-primary" style="width: 100%;">
+                <i class="fas fa-arrow-right"></i> I've scanned the code — Next
+            </button>
+        </div>
+
+        <!-- Step 2: Verify -->
+        <div id="step2Section" style="display: none;">
+            <h3 style="margin-bottom: 1rem; color: var(--dark);"><span style="background: var(--primary); color: white; border-radius: 50%; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.85rem; margin-right: 0.5rem;">2</span> Verify Code</h3>
+            <p style="color: #6b7280; margin-bottom: 1.5rem;">Enter the 6-digit code from your authenticator app:</p>
+
+            <div class="form-group">
+                <input type="text" id="verifyCode" placeholder="000000" maxlength="6" 
+                       pattern="[0-9]{6}" inputmode="numeric"
+                       style="text-align: center; font-size: 2rem; letter-spacing: 10px; font-family: monospace; padding: 1rem;">
+            </div>
+
+            <div style="display: flex; gap: 1rem;">
+                <button onclick="goToStep1()" class="btn btn-primary" style="flex: 1;"><i class="fas fa-arrow-left"></i> Back</button>
+                <button onclick="verifyCode()" class="btn btn-success" style="flex: 2;"><i class="fas fa-check"></i> Verify & Enable</button>
+            </div>
+        </div>
+
+        <!-- Step 3: Backup codes -->
+        <div id="step3Section" style="display: none;">
+            <div style="text-align: center; margin-bottom: 1.5rem;">
+                <i class="fas fa-check-circle" style="font-size: 3rem; color: var(--success);"></i>
+                <h3 style="color: var(--success); margin-top: 0.5rem;">2FA Enabled Successfully!</h3>
+            </div>
+
+            <div style="background: #fef3c7; border: 2px solid #fbbf24; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">
+                <p style="color: #78350f; font-weight: 600; margin-bottom: 0.5rem;"><i class="fas fa-exclamation-triangle"></i> Save your backup codes!</p>
+                <p style="color: #92400e; font-size: 0.9rem; margin: 0;">These can only be shown once. Store them somewhere safe — you can use them if you lose access to your authenticator app.</p>
+            </div>
+
+            <div id="backupCodesGrid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; font-family: monospace; font-size: 1rem; margin-bottom: 1.5rem; background: #f9fafb; padding: 1rem; border-radius: 8px;"></div>
+
+            <div style="display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+                <button onclick="downloadCodes()" class="btn btn-primary"><i class="fas fa-download"></i> Download</button>
+                <button onclick="copyCodes()" class="btn btn-primary"><i class="fas fa-copy"></i> Copy All</button>
+            </div>
+
+            <button onclick="finishSetup()" class="btn btn-success" style="width: 100%;">
+                <i class="fas fa-check"></i> I've saved my codes — Continue
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+let secretKey = '';
+let backupCodes = [];
+
+// Load setup data on page load
+window.addEventListener('DOMContentLoaded', () => {
+    fetch('/api/2fa/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.success) {
+            secretKey = d.secret;
+            document.getElementById('secretKey').textContent = d.secret;
+            document.getElementById('secretContainer').style.display = 'block';
+            document.getElementById('qrContainer').innerHTML = `<img src="${d.qr_code}" alt="QR Code" style="max-width:220px;border-radius:8px;border:2px solid #e5e7eb;padding:0.75rem;">`;
+        }
+    });
+});
+
+function goToStep2() {
+    document.getElementById('step1Section').style.display = 'none';
+    document.getElementById('step2Section').style.display = 'block';
+    document.getElementById('verifyCode').focus();
+}
+
+function goToStep1() {
+    document.getElementById('step2Section').style.display = 'none';
+    document.getElementById('step1Section').style.display = 'block';
+}
+
+function copySecret() {
+    navigator.clipboard.writeText(secretKey);
+    showAlert('Secret copied!');
+}
+
+function verifyCode() {
+    const code = document.getElementById('verifyCode').value.trim();
+    if (code.length !== 6) { showAlert('Enter a 6-digit code', 'error'); return; }
+
+    fetch('/api/2fa/verify-setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.success) {
+            backupCodes = d.backup_codes;
+            document.getElementById('backupCodesGrid').innerHTML =
+                backupCodes.map(c => `<div style="padding:0.4rem 0.75rem;background:white;border-radius:4px;text-align:center;border:1px solid #e5e7eb;">${c}</div>`).join('');
+            document.getElementById('step2Section').style.display = 'none';
+            document.getElementById('step3Section').style.display = 'block';
+        } else {
+            showAlert(d.error || 'Invalid code', 'error');
+            document.getElementById('verifyCode').value = '';
+            document.getElementById('verifyCode').focus();
+        }
+    });
+}
+
+function downloadCodes() {
+    const blob = new Blob([backupCodes.join('\n')], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'showwise-backup-codes.txt';
+    a.click();
+}
+
+function copyCodes() {
+    navigator.clipboard.writeText(backupCodes.join('\n'));
+    showAlert('Backup codes copied!');
+}
+
+function finishSetup() {
+    fetch('/api/2fa/complete-forced-setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.success) {
+            window.location.href = d.redirect;
+        } else {
+            showAlert(d.error || 'Error completing setup', 'error');
+        }
+    });
+}
+</script>
+{% endblock %}

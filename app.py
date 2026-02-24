@@ -1,10 +1,12 @@
 #import
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_from_directory, send_file
+from typing import Optional, List, Dict
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_from_directory, send_file, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_mail import Mail, Message
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+from werkzeug.middleware.proxy_fix import ProxyFix
 from datetime import datetime, timedelta
 import os
 import json
@@ -17,12 +19,13 @@ import pytz
 import secrets
 import string
 import threading
+import queue
 import discord
 from discord.ext import commands
 import os
 import requests
 from dotenv import load_dotenv
-from flask import Response
+from flask import Response, stream_with_context
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import redirect, url_for, flash
@@ -31,7 +34,6 @@ import barcode
 from barcode.writer import ImageWriter
 from PIL import Image
 import tempfile
-from functools import lru_cache
 import base64
 import pyotp
 import qrcode
@@ -41,12 +43,31 @@ import json
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from google_auth_oauthlib.flow import Flow
+import atexit
+from apscheduler.schedulers.background import BackgroundScheduler
 
+# Import the backend integration
+from backend_integration import (
+    ShowWiseBackend, 
+    init_backend_client, 
+    get_backend_client,
+    log_route
+)
 
+# Import Rocket.Chat integration
+from rocketchat_client import init_rocketchat, get_rocketchat_client
+
+# Load environment variables from .env file
+load_dotenv()
 
 #setup
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-this')
+
+# ==================== PROXY FIX FOR CLOUDFLARE ====================
+# Configure Flask to trust X-Forwarded-Proto from reverse proxies (Cloudflare, nginx, etc.)
+# This is essential for OAuth2 to work with HTTPS when the server uses HTTP internally
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
 # Session configuration for "Remember Me" functionality
 # SESSION_DURATION can be set in .env file (e.g., "7d", "1w", "30d", "1h")
@@ -119,10 +140,139 @@ login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 mail = Mail(app)
 
+# ==================== BACKEND INITIALIZATION ====================
+
+# Initialize backend client
+backend = init_backend_client(app)
+
+# Initialize Rocket.Chat after backend
+rc_client = init_rocketchat()
+if rc_client.is_connected():
+    print(f"✓ Connected to Rocket.Chat at {rc_client.server_url}")
+else:
+    print(f"⚠️  Warning: Could not connect to Rocket.Chat. Check credentials and server URL.")
+
+if backend:
+    # Log application startup
+    backend.log_info('Application starting', 'system', {
+        'version': '1.0.0',
+        'environment': os.getenv('FLASK_ENV', 'production')
+    })
+    
+    # Load organization configuration
+    org_config = backend.get_organization()
+    if org_config:
+        app.config['ORG_NAME'] = org_config.get('name')
+        app.config['ORG_LOGO'] = org_config.get('logo')
+        app.config['PRIMARY_COLOR'] = org_config.get('primary_color')
+        print(f"✓ Loaded config for: {org_config.get('name')}")
+    else:
+        print("✗ Failed to load organization config")
+
+# ==================== UPTIME HEARTBEAT ====================
+
+def send_heartbeat():
+    """Send heartbeat every 5 minutes"""
+    backend = get_backend_client()
+    if backend:
+        try:
+            # Get application stats
+            with app.app_context():
+                user_count = db.session.query(User).count()
+                event_count = db.session.query(Event).count()
+                metadata = {
+                    'users': user_count,
+                    'events': event_count,
+                    'organization': os.getenv('ORGANIZATION_SLUG', 'Unknown')
+                }
+        except Exception as e:
+            print(f"Error collecting stats for heartbeat: {e}")
+            metadata = {}
+        
+        backend.send_heartbeat('online', metadata)
+
+# Schedule heartbeat
+if backend:
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(send_heartbeat, 'interval', minutes=5)
+    scheduler.start()
+    # Don't call immediately - let models load first
+    atexit.register(lambda: scheduler.shutdown())
+    print("✓ Uptime tracking enabled")
+
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs('backups', exist_ok=True)
 
 notification_tracker = {}
+
+# -------------------- Chat storage & SSE helpers (Rocket.Chat) --------------------
+
+# Note: Rocket.Chat handles persistence server-side
+# SSE subscribers for real-time updates
+_sse_subscribers = []
+
+def _broadcast_sse(message_obj):
+    """Broadcast message to all SSE subscribers"""
+    data = json.dumps(message_obj, default=str)
+    dead = []
+    for q in _sse_subscribers:
+        try:
+            q.put(data)
+        except Exception:
+            dead.append(q)
+    for d in dead:
+        try:
+            _sse_subscribers.remove(d)
+        except ValueError:
+            pass
+
+
+def _get_or_create_rc_user(username: str, email: str = None) -> Optional[str]:
+    """Get or create Rocket.Chat user"""
+    rc = get_rocketchat_client()
+    if not rc.is_connected():
+        return None
+    
+    return rc.get_or_create_user(username, email=email, name=username)
+
+
+def _send_rc_message(room_id: str, username: str, user_name: str, message: str, metadata: Dict = None) -> Optional[str]:
+    """Send message to Rocket.Chat room"""
+    rc = get_rocketchat_client()
+    if not rc.is_connected():
+        return None
+    
+    # Build message text with sender info
+    msg_text = f"{message}"
+    
+    # Send to Rocket.Chat
+    return rc.send_message(room_id, msg_text, metadata=metadata)
+
+
+def _get_rc_messages(room_id: str, count: int = 50, offset: int = 0) -> List[Dict]:
+    """Get messages from Rocket.Chat room"""
+    rc = get_rocketchat_client()
+    if not rc.is_connected():
+        return []
+    
+    return rc.get_messages(room_id, count=count, offset=offset)
+
+
+def _ensure_groups_store():
+    """Rocket.Chat groups are stored server-side - this is a no-op"""
+    pass
+
+
+def _load_groups():
+    """Load groups from Rocket.Chat"""
+    # In production, fetch from Rocket.Chat or database
+    # For now, return empty list - groups are created in Rocket.Chat
+    return []
+
+
+def _save_groups(groups):
+    """Save groups to Rocket.Chat - groups are stored server-side"""
+    pass
 
 # Organization Settings
 ORGANIZATION_SLUG = os.environ.get('ORGANIZATION_SLUG', '')
@@ -132,6 +282,21 @@ MAIN_SERVER_URL = os.environ.get('MAIN_SERVER_URL', 'https://sfx-crew.com')
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
 GOOGLE_REDIRECT_URI = os.environ.get('GOOGLE_REDIRECT_URI', 'http://localhost:5001/auth/google/callback')
+
+
+#helper functions
+import random
+import string as _string
+
+def generate_invite_code(length=16):
+    """Generate a human-readable invite code like: ABCD-1234-EFGH-5678"""
+    chars = _string.ascii_uppercase + _string.digits
+    # Remove ambiguous chars
+    chars = ''.join(c for c in chars if c not in 'O0I1L')
+    segments = [''.join(random.choices(chars, k=4)) for _ in range(4)]
+    return '-'.join(segments)
+
+
 
 
 # DATABASE MODELS
@@ -147,6 +312,7 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_cast = db.Column(db.Boolean, default=False)
     user_role = db.Column(db.String(20), default='crew')  # NEW: 'crew', 'staff', 'cast'
+    force_2fa_setup = db.Column(db.Boolean, default=False)
 
 
 class Equipment(db.Model):
@@ -423,6 +589,34 @@ class OAuthConnection(db.Model):
 
 
 
+# ============================================================
+# 1. NEW DATABASE MODELS — add these after the OAuthConnection model
+# ============================================================
+
+class InviteCode(db.Model):
+    """Single-use (or limited-use) invite codes for signup"""
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(32), unique=True, nullable=False)
+    role = db.Column(db.String(20), default='crew')  # 'crew', 'staff', 'cast'
+    created_by = db.Column(db.String(80), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    max_uses = db.Column(db.Integer, default=1)   # 0 = unlimited
+    use_count = db.Column(db.Integer, default=0)
+    is_active = db.Column(db.Boolean, default=True)
+    note = db.Column(db.String(200))
+    
+    # Many-to-many: which users were created with this code
+    used_by_users = db.relationship('User', secondary='invite_code_uses', backref='invite_code')
+
+# Association table for invite code uses
+invite_code_uses = db.Table(
+    'invite_code_uses',
+    db.Column('invite_code_id', db.Integer, db.ForeignKey('invite_code.id'), primary_key=True),
+    db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True)
+)
+
+
 # LOGIN & UTILITIES
 
 @login_manager.user_loader
@@ -433,7 +627,12 @@ def load_user(user_id):
 def inject_functions():
     def get_user_by_username(username):
         return User.query.filter_by(username=username).first()
-    return dict(get_user_by_username=get_user_by_username)
+    # Expose some convenient objects to templates
+    return dict(
+        get_user_by_username=get_user_by_username,
+        app=app,
+        ORG_SLUG=app.config.get('ORG_SLUG', os.environ.get('ORGANIZATION_SLUG', ''))
+    )
 
 def send_email(subject, recipient, body):
     if not app.config['MAIL_USERNAME']:
@@ -701,23 +900,16 @@ def crew_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-@lru_cache(maxsize=1)
 def get_organization():
-    """Fetch organization data from main server with caching"""
-    try:
-        response = requests.get(
-            f"{MAIN_SERVER_URL}/api/organizations/{ORGANIZATION_SLUG}", 
-            timeout=5
-        )
-        if response.status_code == 200:
-            data = response.json()
-            return data.get('organization', {})
-        else:
-            print(f"Error fetching organization: {response.status_code}")
-            return {}
-    except Exception as e:
-        print(f"Error connecting to main server: {e}")
-        return {}
+    """Fetch organization data from backend API (with caching)"""
+    backend = get_backend_client()
+    if backend:
+        org_config = backend.get_organization()
+        if org_config:
+            return org_config
+    
+    # Fallback to empty dict if backend unavailable
+    return {}
 
 # Fallback organization data if API fails
 DEFAULT_ORG = {
@@ -729,6 +921,44 @@ DEFAULT_ORG = {
     'logo': '',
     'website': 'https://sfx-crew.com'
 }
+
+# ==================== SECURITY LOGGING ====================
+
+def log_security_event(event_type, username=None, description=None, ip_address=None, metadata=None):
+    """
+    Log a security event for audit purposes
+    
+    Args:
+        event_type: Type of event (2FA_ENABLED, 2FA_DISABLED, 2FA_LOGIN_SUCCESS, 
+                   GOOGLE_LOGIN, GOOGLE_SIGNUP, GOOGLE_UNLINK, etc.)
+        username: Username associated with the event
+        description: Optional description of the event
+        ip_address: Optional IP address
+        metadata: Optional dict with additional info
+    """
+    backend = get_backend_client()
+    if backend:
+        if ip_address is None:
+            try:
+                ip_address = request.remote_addr
+            except:
+                ip_address = 'unknown'
+        
+        log_data = {
+            'event_type': event_type,
+            'username': username or (current_user.username if current_user.is_authenticated else 'anonymous'),
+            'description': description,
+            'ip_address': ip_address,
+            'metadata': metadata or {}
+        }
+        
+        backend.log_info(
+            f"Security Event: {event_type} - User: {log_data['username']}",
+            log_type='auth',
+            metadata=log_data
+        )
+        
+        print(f"🔐 Security Event Logged: {event_type} ({log_data['username']})")
 
 # ==================== TOTP FUNCTIONS ====================
 
@@ -758,6 +988,49 @@ def verify_backup_code(stored_hashes, provided_code):
         if check_password_hash(hashed, provided_code):
             return i  # Return index to remove it
     return None
+
+
+# ==================== KILL SWITCH CHECK ====================
+
+@app.before_request
+def check_service_status():
+    """Check kill switch before every request"""
+    # Skip for static files and chat API
+    if request.path.startswith('/static') or request.path.startswith('/api/chat'):
+        return
+    
+    backend = get_backend_client()
+    if backend:
+        enabled, reason = backend.check_kill_switch()
+        if enabled:
+            return render_template('suspended.html', reason=reason), 503
+
+
+# ==================== ERROR HANDLERS ====================
+
+@app.errorhandler(404)
+def not_found(e):
+    """Log 404 errors"""
+    backend = get_backend_client()
+    if backend:
+        backend.log_warning(
+            f'404 Not Found: {request.path}',
+            'system',
+            {'ip': request.remote_addr}
+        )
+    return render_template('404.html') if os.path.exists('templates/404.html') else 'Not Found', 404
+
+@app.errorhandler(500)
+def server_error(e):
+    """Log 500 errors"""
+    backend = get_backend_client()
+    if backend:
+        backend.log_error(
+            f'500 Server Error: {str(e)}',
+            'system',
+            {'ip': request.remote_addr, 'path': request.path}
+        )
+    return render_template('500.html') if os.path.exists('templates/500.html') else 'Server Error', 500
 
 
 # AUTH ROUTES
@@ -796,11 +1069,15 @@ def login():
                 # Redirect to 2FA verification page
                 return redirect(url_for('totp_verify_page'))
             
-            # No 2FA - proceed with normal login
+        # Check if admin has required this user to set up 2FA
+        if getattr(user, 'force_2fa_setup', False) and (not tfa or not tfa.enabled):
+            login_user(user, remember=remember)
+            session['force_2fa_setup'] = True
+            return redirect(url_for('forced_2fa_setup'))
+
             login_user(user, remember=remember)
             
             if remember:
-                from flask import session
                 session.permanent = True
                 print(f"✓ User {username} logged in with 'Remember Me' for {SESSION_DURATION}")
             else:
@@ -823,12 +1100,34 @@ def login():
                          now=datetime.now(),
                          google_oauth_enabled=bool(GOOGLE_CLIENT_ID))
 
+@app.route('/settings/force-2fa-setup')
+@login_required
+def forced_2fa_setup():
+    """Page shown when admin has required the user to set up 2FA"""
+    if not session.get('force_2fa_setup'):
+        return redirect(url_for('dashboard'))
+    return render_template('forced_2fa_setup.html')
+
+
+@app.route('/api/2fa/complete-forced-setup', methods=['POST'])
+@login_required
+def complete_forced_2fa():
+    """Called after user completes forced 2FA setup"""
+    tfa = TwoFactorAuth.query.filter_by(user_id=current_user.id).first()
+    if tfa and tfa.enabled:
+        # Clear the force flag
+        current_user.force_2fa_setup = False
+        session.pop('force_2fa_setup', None)
+        db.session.commit()
+        return jsonify({'success': True, 'redirect': url_for('dashboard')})
+    return jsonify({'error': '2FA not yet enabled'}), 400
+
+
 
 @app.route('/session-info')
 @login_required
 def session_info():
     """Show current session information (for debugging)"""
-    from flask import session
     
     info = {
         'username': current_user.username,
@@ -866,7 +1165,22 @@ def totp_verify_page():
 def totp_settings():
     """2FA settings page"""
     tfa = TwoFactorAuth.query.filter_by(user_id=current_user.id).first()
-    return render_template('crew/totp_settings.html', tfa=tfa)
+    return render_template('crew/totp_setting.html', tfa=tfa)
+
+
+@app.route('/settings/security')
+@login_required
+def security_settings():
+    """Combined security settings page for TOTP and OAuth"""
+    tfa = TwoFactorAuth.query.filter_by(user_id=current_user.id).first()
+    # Pass the first Google OAuth connection if present
+    google_conn = None
+    try:
+        google_conn = next((c for c in current_user.oauth_connections if c.provider == 'google'), None)
+    except Exception:
+        google_conn = None
+
+    return render_template('crew/security_setup.html', tfa=tfa, google_conn=google_conn)
 
 @app.route('/api/2fa/setup', methods=['POST'])
 @login_required
@@ -1045,10 +1359,10 @@ def disable_totp():
 
 @app.route('/auth/google')
 def google_login():
-    """Initiate Google OAuth flow"""
+    """Initiate Google OAuth flow (both login and linking)"""
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
         flash('Google OAuth is not configured')
-        return redirect(url_for('login'))
+        return redirect(url_for('login') if not current_user.is_authenticated else url_for('security_settings'))
     
     # Create flow
     flow = Flow.from_client_config(
@@ -1080,20 +1394,47 @@ def google_login():
     # Store state in session for verification
     session['oauth_state'] = state
     
+    print(f"🔐 Initiating Google OAuth flow (linking={current_user.is_authenticated})")
+    
     return redirect(authorization_url)
+
+@app.route('/auth/google/link')
+@login_required
+def google_link_initiate():
+    """Initiate Google linking for authenticated user"""
+    # Check if already linked
+    existing = OAuthConnection.query.filter_by(
+        user_id=current_user.id,
+        provider='google'
+    ).first()
+    
+    if existing:
+        flash('Google account already linked to your account. Unlink it first to link a different account.')
+        return redirect(url_for('security_settings'))
+    
+    # Redirect to normal Google login flow, but the callback will detect we're authenticated
+    return redirect(url_for('google_login'))
 
 @app.route('/auth/google/callback')
 def google_callback():
-    """Handle Google OAuth callback"""
-    # Verify state
+    """Handle Google OAuth callback — LOGIN & LINKING only (no auto-signup)"""
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        flash('Google OAuth is not configured')
+        return redirect(url_for('login'))
+
     state = session.get('oauth_state')
-    
     if not state or state != request.args.get('state'):
         flash('Invalid OAuth state')
         return redirect(url_for('login'))
-    
+
+    error = request.args.get('error')
+    if error:
+        flash(f'Google login failed: {request.args.get("error_description", error)}')
+        return redirect(url_for('login') if not current_user.is_authenticated else url_for('settings_page'))
+
+    is_linking = current_user.is_authenticated
+
     try:
-        # Create flow
         flow = Flow.from_client_config(
             {
                 "web": {
@@ -1104,79 +1445,86 @@ def google_callback():
                     "redirect_uris": [GOOGLE_REDIRECT_URI]
                 }
             },
-            scopes=[
-                'openid',
-                'https://www.googleapis.com/auth/userinfo.email',
-                'https://www.googleapis.com/auth/userinfo.profile'
-            ],
+            scopes=['openid',
+                    'https://www.googleapis.com/auth/userinfo.email',
+                    'https://www.googleapis.com/auth/userinfo.profile'],
             state=state
         )
-        
         flow.redirect_uri = GOOGLE_REDIRECT_URI
-        
-        # Exchange authorization code for tokens
         flow.fetch_token(authorization_response=request.url)
-        
-        # Get credentials
         credentials = flow.credentials
-        
-        # Verify ID token
+
+        if not credentials or not credentials.id_token:
+            flash('Google login failed: No credentials received')
+            return redirect(url_for('settings_page') if is_linking else url_for('login'))
+
         idinfo = id_token.verify_oauth2_token(
             credentials.id_token,
             google_requests.Request(),
             GOOGLE_CLIENT_ID
         )
-        
-        # Extract user info
+
         google_user_id = idinfo['sub']
         email = idinfo.get('email')
-        name = idinfo.get('name')
-        
-        # Check if OAuth connection exists
+
+        # ---- LINKING FLOW ----
+        if is_linking:
+            existing_oauth = OAuthConnection.query.filter_by(
+                provider='google', provider_user_id=google_user_id
+            ).first()
+            if existing_oauth:
+                if existing_oauth.user_id == current_user.id:
+                    flash('This Google account is already linked to your account')
+                else:
+                    flash('This Google account is already linked to another account')
+                return redirect(url_for('settings_page'))
+
+            oauth_conn = OAuthConnection(
+                user_id=current_user.id,
+                provider='google',
+                provider_user_id=google_user_id,
+                email=email,
+                access_token=credentials.token,
+                refresh_token=credentials.refresh_token,
+                token_expiry=credentials.expiry,
+                last_login=datetime.utcnow()
+            )
+            db.session.add(oauth_conn)
+            db.session.commit()
+            log_security_event('GOOGLE_LINK', username=current_user.username)
+            flash('✓ Google account linked successfully!')
+            return redirect(url_for('settings_page'))
+
+        # ---- LOGIN FLOW (existing users only) ----
         oauth_conn = OAuthConnection.query.filter_by(
-            provider='google',
-            provider_user_id=google_user_id
+            provider='google', provider_user_id=google_user_id
         ).first()
-        
+
         if oauth_conn:
-            # Existing user - login
+            # Known user — log them in
             user = oauth_conn.user
-            
-            # Update OAuth tokens
             oauth_conn.access_token = credentials.token
             oauth_conn.refresh_token = credentials.refresh_token
             oauth_conn.token_expiry = credentials.expiry
             oauth_conn.last_login = datetime.utcnow()
             db.session.commit()
-            
-            # Check if 2FA is enabled
+
             tfa = TwoFactorAuth.query.filter_by(user_id=user.id).first()
-            
             if tfa and tfa.enabled:
-                # Require 2FA
                 session['pending_2fa_user_id'] = user.id
                 session['pending_2fa_remember'] = False
                 return redirect(url_for('totp_verify_page'))
-            
-            # Login user
+
             login_user(user, remember=False)
-            
-            if 'log_security_event' in globals():
-                log_security_event('GOOGLE_LOGIN', username=user.username)
-            
+            log_security_event('GOOGLE_LOGIN', username=user.username)
             flash(f'Welcome back, {user.username}!')
-            
-            if user.is_cast:
-                return redirect(url_for('cast_events'))
-            else:
-                return redirect(url_for('dashboard'))
-        
+            return redirect(url_for('cast_events') if user.is_cast else url_for('dashboard'))
+
         else:
-            # New user - check if email exists
+            # Unknown Google ID — check if email matches an existing account
             existing_user = User.query.filter_by(email=email).first()
-            
             if existing_user:
-                # Link to existing account
+                # Auto-link to existing account and log in
                 oauth_conn = OAuthConnection(
                     user_id=existing_user.id,
                     provider='google',
@@ -1189,69 +1537,21 @@ def google_callback():
                 )
                 db.session.add(oauth_conn)
                 db.session.commit()
-                
                 login_user(existing_user, remember=False)
-                
-                flash('Google account linked successfully!')
-                
-                if existing_user.is_cast:
-                    return redirect(url_for('cast_events'))
-                else:
-                    return redirect(url_for('dashboard'))
-            
-            else:
-                # Create new user
-                # Generate username from email
-                username = email.split('@')[0]
-                
-                # Ensure username is unique
-                counter = 1
-                original_username = username
-                while User.query.filter_by(username=username).first():
-                    username = f"{original_username}{counter}"
-                    counter += 1
-                
-                # Create user (no password needed for OAuth-only users)
-                import secrets
-                random_password = secrets.token_urlsafe(32)
-                
-                new_user = User(
-                    username=username,
-                    email=email,
-                    password_hash=generate_password_hash(random_password),
-                    is_admin=False,
-                    is_cast=False
-                )
-                db.session.add(new_user)
-                db.session.flush()
-                
-                # Create OAuth connection
-                oauth_conn = OAuthConnection(
-                    user_id=new_user.id,
-                    provider='google',
-                    provider_user_id=google_user_id,
-                    email=email,
-                    access_token=credentials.token,
-                    refresh_token=credentials.refresh_token,
-                    token_expiry=credentials.expiry,
-                    last_login=datetime.utcnow()
-                )
-                db.session.add(oauth_conn)
-                db.session.commit()
-                
-                # Login user
-                login_user(new_user, remember=False)
-                
-                if 'log_security_event' in globals():
-                    log_security_event('GOOGLE_SIGNUP', username=new_user.username)
-                
-                flash(f'Account created successfully! Welcome, {new_user.username}!')
-                return redirect(url_for('dashboard'))
-    
+                log_security_event('GOOGLE_LOGIN', username=existing_user.username)
+                flash(f'Google account linked and signed in, {existing_user.username}!')
+                return redirect(url_for('cast_events') if existing_user.is_cast else url_for('dashboard'))
+
+            # Completely unknown — BLOCK signup via Google
+            flash('No ShowWise account found for that Google account. '
+                  'Please sign up with an invite code first, then link Google from your settings.')
+            return redirect(url_for('login'))
+
     except Exception as e:
-        print(f"Google OAuth error: {e}")
-        flash('Google login failed. Please try again.')
-        return redirect(url_for('login'))
+        import traceback
+        print(f"Google OAuth error: {e}\n{traceback.format_exc()}")
+        flash(f'Google login failed: {str(e)[:100]}')
+        return redirect(url_for('settings_page') if is_linking else url_for('login'))
 
 @app.route('/auth/google/unlink', methods=['POST'])
 @login_required
@@ -1281,6 +1581,109 @@ def google_unlink():
     return jsonify({'error': 'Google account not linked'}), 400
 
 
+@app.route('/signup', methods=['GET', 'POST'])
+def signup():
+    """Public signup page — requires a valid invite code"""
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+
+    org = get_organization() or DEFAULT_ORG
+    prefill_code = request.args.get('invite', '').upper()
+
+    if request.method == 'POST':
+        invite_code_str = request.form.get('invite_code', '').strip().upper()
+        username = request.form.get('username', '').strip()
+        email = request.form.get('email', '').strip() or None
+        password = request.form.get('password', '')
+        confirm_password = request.form.get('confirm_password', '')
+
+        # --- Validate invite code ---
+        invite = InviteCode.query.filter_by(code=invite_code_str, is_active=True).first()
+
+        if not invite:
+            flash('Invalid or expired invite code.', 'error')
+            return render_template('signup.html', organization=org, prefill_code=invite_code_str)
+
+        now = datetime.utcnow()
+        if invite.expires_at < now:
+            flash('This invite code has expired.', 'error')
+            return render_template('signup.html', organization=org, prefill_code=invite_code_str)
+
+        if invite.max_uses > 0 and invite.use_count >= invite.max_uses:
+            flash('This invite code has already been used the maximum number of times.', 'error')
+            return render_template('signup.html', organization=org, prefill_code=invite_code_str)
+
+        # --- Validate username ---
+        if len(username) < 3:
+            flash('Username must be at least 3 characters.', 'error')
+            return render_template('signup.html', organization=org, prefill_code=invite_code_str)
+
+        if User.query.filter_by(username=username).first():
+            flash('That username is already taken.', 'error')
+            return render_template('signup.html', organization=org, prefill_code=invite_code_str)
+
+        if email and User.query.filter_by(email=email).first():
+            flash('An account with that email already exists.', 'error')
+            return render_template('signup.html', organization=org, prefill_code=invite_code_str)
+
+        # --- Validate password ---
+        if len(password) < 6:
+            flash('Password must be at least 6 characters.', 'error')
+            return render_template('signup.html', organization=org, prefill_code=invite_code_str)
+
+        if password != confirm_password:
+            flash('Passwords do not match.', 'error')
+            return render_template('signup.html', organization=org, prefill_code=invite_code_str)
+
+        # --- Create user ---
+        user_role = invite.role
+        is_cast = user_role == 'cast'
+
+        new_user = User(
+            username=username,
+            email=email,
+            password_hash=generate_password_hash(password),
+            is_admin=False,
+            is_cast=is_cast,
+            user_role=user_role
+        )
+        db.session.add(new_user)
+        db.session.flush()  # get user.id
+
+        # Mark invite as used
+        invite.use_count += 1
+        if invite.max_uses > 0 and invite.use_count >= invite.max_uses:
+            invite.is_active = False
+        invite.used_by_users.append(new_user)
+
+        db.session.commit()
+
+        # Send welcome email
+        if email:
+            subject = f"Welcome to {org.get('name', 'ShowWise')}!"
+            body = f"""Hello {username},
+
+Your account has been created successfully!
+
+Username: {username}
+Role: {user_role.capitalize()}
+
+You can log in at: {request.url_root}login
+
+Welcome to the team!
+ShowWise"""
+            send_email(subject, email, body)
+
+        log_security_event('SIGNUP', username=username,
+                           description=f'Signed up via invite code {invite_code_str}')
+
+        login_user(new_user, remember=False)
+        flash(f'Welcome, {username}! Your account has been created.', 'success')
+        return redirect(url_for('cast_events') if is_cast else url_for('dashboard'))
+
+    return render_template('signup.html', organization=org, prefill_code=prefill_code)
+
+
 
 @app.route('/logout')
 @login_required
@@ -1294,6 +1697,29 @@ def logout():
 def dashboard():
     upcoming_events = Event.query.filter(Event.event_date >= datetime.now()).order_by(Event.event_date).limit(5).all()
     return render_template('/crew/dashboard.html', upcoming_events=upcoming_events)
+
+
+@app.route('/crew/inbox')
+@login_required
+@crew_required
+def inbox_page():
+    """Render the Telegram-style inbox page."""
+    return render_template('crew/inbox.html')
+
+
+@app.route('/crew/chat')
+@login_required
+@crew_required
+def chat_page():
+    """Redirect to Rocket.Chat in a new tab."""
+    rc = get_rocketchat_client()
+    rc_url = rc.server_url if rc.is_connected() else os.environ.get('ROCKETCHAT_URL', '')
+    
+    if not rc_url:
+        flash('Rocket.Chat is not configured')
+        return redirect(url_for('dashboard'))
+    
+    return render_template('crew/chat_redirect.html', rc_url=rc_url)
 
 
 # EQUIPMENT ROUTES
@@ -2253,9 +2679,10 @@ def admin_panel():
 
     raw_users = User.query.all()
 
-    # Serialize users for JSON and template rendering
-    users = [
-        {
+    users = []
+    for user in raw_users:
+        tfa = TwoFactorAuth.query.filter_by(user_id=user.id).first()
+        users.append({
             "id": user.id,
             "username": user.username,
             "email": user.email,
@@ -2263,10 +2690,10 @@ def admin_panel():
             "created_at": user.created_at.strftime('%b %d, %Y') if user.created_at else "N/A",
             "discord_username": user.discord_username,
             "is_admin": user.is_admin,
-            "user_role": user.user_role
-        }
-        for user in raw_users
-    ]
+            "user_role": user.user_role,
+            "tfa_enabled": bool(tfa and tfa.enabled),
+            "force_2fa": getattr(user, 'force_2fa_setup', False)
+        })
 
     return render_template('admin/admin.html', users=users)
 
@@ -2459,6 +2886,190 @@ def get_user(id):
         'is_admin': user.is_admin,
         'user_role': user.user_role
     })
+
+# ============================================================
+# 7. ADMIN INVITE CODE ROUTES — add to admin routes section
+# ============================================================
+
+@app.route('/admin/invites')
+@login_required
+def list_invites():
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    invites = InviteCode.query.order_by(InviteCode.created_at.desc()).all()
+    return jsonify([{
+        'id': inv.id,
+        'code': inv.code,
+        'role': inv.role,
+        'created_by': inv.created_by,
+        'created_at': inv.created_at.isoformat(),
+        'expires_at': inv.expires_at.isoformat(),
+        'max_uses': inv.max_uses,
+        'use_count': inv.use_count,
+        'is_active': inv.is_active,
+        'note': inv.note,
+        'used_by': [u.username for u in inv.used_by_users]
+    } for inv in invites])
+
+
+@app.route('/admin/invites/generate', methods=['POST'])
+@login_required
+def generate_invite():
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    data = request.json
+
+    # Parse expiry
+    try:
+        expires_at = datetime.fromisoformat(data['expires_at'])
+    except (KeyError, ValueError):
+        return jsonify({'error': 'Invalid expiry date'}), 400
+
+    if expires_at <= datetime.utcnow():
+        return jsonify({'error': 'Expiry must be in the future'}), 400
+
+    code = generate_invite_code()
+    # Ensure uniqueness
+    while InviteCode.query.filter_by(code=code).first():
+        code = generate_invite_code()
+
+    invite = InviteCode(
+        code=code,
+        role=data.get('role', 'crew'),
+        created_by=current_user.username,
+        expires_at=expires_at,
+        max_uses=int(data.get('max_uses', 1)),
+        note=data.get('note', '')
+    )
+    db.session.add(invite)
+    db.session.commit()
+
+    return jsonify({'success': True, 'code': code, 'id': invite.id})
+
+
+@app.route('/admin/invites/email', methods=['POST'])
+@login_required
+def email_invite():
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    data = request.json
+
+    recipient_email = data.get('email', '').strip()
+    recipient_name = data.get('name', '').strip() or 'there'
+
+    if not recipient_email:
+        return jsonify({'error': 'Email address required'}), 400
+
+    # Parse expiry
+    try:
+        expires_at = datetime.fromisoformat(data['expires_at'])
+    except (KeyError, ValueError):
+        return jsonify({'error': 'Invalid expiry date'}), 400
+
+    if expires_at <= datetime.utcnow():
+        return jsonify({'error': 'Expiry must be in the future'}), 400
+
+    # Generate single-use code
+    code = generate_invite_code()
+    while InviteCode.query.filter_by(code=code).first():
+        code = generate_invite_code()
+
+    invite = InviteCode(
+        code=code,
+        role=data.get('role', 'crew'),
+        created_by=current_user.username,
+        expires_at=expires_at,
+        max_uses=1,  # Email invites are always single-use
+        note=f'Email invite to {recipient_email}'
+    )
+    db.session.add(invite)
+    db.session.commit()
+
+    # Build signup URL
+    signup_url = f"{request.url_root}signup?invite={code}"
+    org = get_organization() or DEFAULT_ORG
+    org_name = org.get('name', 'ShowWise')
+
+    subject = f"You're invited to join {org_name} on ShowWise"
+    body = f"""Hi {recipient_name},
+
+You've been invited to join {org_name} on ShowWise — production crew management.
+
+Click the link below (or copy it into your browser) to create your account:
+
+{signup_url}
+
+Your invite code: {code}
+Role: {data.get('role', 'crew').capitalize()}
+Expires: {expires_at.strftime('%B %d, %Y at %I:%M %p')} UTC
+
+This is a single-use link. If you have any trouble, contact your administrator.
+
+See you on the crew,
+{org_name} Admin"""
+
+    sent = send_email(subject, recipient_email, body)
+    if not sent:
+        # Even if email fails, return the code
+        return jsonify({
+            'success': False,
+            'error': 'Email could not be sent (check MAIL settings). Code generated.',
+            'code': code
+        }), 500
+
+    return jsonify({'success': True, 'code': code})
+
+
+@app.route('/admin/invites/<int:invite_id>/revoke', methods=['POST'])
+@login_required
+def revoke_invite(invite_id):
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    invite = InviteCode.query.get_or_404(invite_id)
+    invite.is_active = False
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@app.route('/admin/invites/<int:invite_id>', methods=['DELETE'])
+@login_required
+def delete_invite(invite_id):
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    invite = InviteCode.query.get_or_404(invite_id)
+    db.session.delete(invite)
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+# ============================================================
+# 8. FORCE 2FA ROUTES — add to admin routes section
+# ============================================================
+
+@app.route('/admin/users/<int:user_id>/force-2fa', methods=['POST'])
+@login_required
+def admin_force_2fa(user_id):
+    """Flag a user to be required to set up 2FA on next login"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    user = User.query.get_or_404(user_id)
+    user.force_2fa_setup = True
+    db.session.commit()
+    log_security_event('ADMIN_FORCE_2FA', username=current_user.username,
+                       description=f'Forced 2FA setup for user {user.username}')
+    return jsonify({'success': True})
+
+
+@app.route('/admin/users/<int:user_id>/clear-force-2fa', methods=['POST'])
+@login_required
+def admin_clear_force_2fa(user_id):
+    """Clear the forced 2FA requirement for a user"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    user = User.query.get_or_404(user_id)
+    user.force_2fa_setup = False
+    db.session.commit()
+    return jsonify({'success': True})
 
 
 
@@ -3583,7 +4194,28 @@ def get_cast_users():
 
 # Add these routes to app.py
 
+
+# ==================== settings routes ====================
+@app.route('/settings')
+@login_required
+def settings_page():
+    """Consolidated settings page for all users"""
+    tfa = TwoFactorAuth.query.filter_by(user_id=current_user.id).first()
+    google_conn = None
+    try:
+        google_conn = next(
+            (c for c in current_user.oauth_connections if c.provider == 'google'), None
+        )
+    except Exception:
+        pass
+    return render_template('crew/settings.html', tfa=tfa, google_conn=google_conn)
+
+
+
+
 # ==================== CHANGE PASSWORD ====================
+
+
 @app.route('/change-password')
 @login_required
 def change_password_page():
@@ -4500,11 +5132,469 @@ def view_designer_plan(design_id):
     """Redirect to designer to view a saved design"""
     return redirect(url_for('stage_designer', design_id=design_id))
 
+
+# ==================== CHAT API ====================
+
+@app.route('/api/chat/send', methods=['POST'])
+def api_chat_send():
+    """Send chat message via Rocket.Chat
+    
+    Accepts JSON fields: org_slug, message, user_name, user_email, team, recipients (list), group_id
+    """
+    data = request.json or {}
+    org_slug = data.get('org_slug', os.getenv('ORG_SLUG', ''))
+    message = data.get('message')
+    user_name = data.get('user_name') or 'Anonymous'
+    user_email = data.get('user_email')
+    team = data.get('team')
+    recipients = data.get('recipients') or []
+    group_id = data.get('group_id')
+
+    if not message:
+        return jsonify({'success': False, 'error': 'Message required'}), 400
+
+    rc = get_rocketchat_client()
+    
+    if not rc.is_connected():
+        # Fallback: log to backend
+        backend = get_backend_client()
+        if backend:
+            try:
+                backend.send_chat_message(user_name, message, user_email)
+            except Exception as e:
+                print(f"Backend chat failed: {e}")
+        return jsonify({'success': True, 'message_id': None, 'note': 'Rocket.Chat offline, logged to backend'}), 500
+
+    room_id = None
+    
+    try:
+        # Ensure sender is a Rocket.Chat user
+        _get_or_create_rc_user(user_name, email=user_email)
+
+        if group_id:
+            # Group message - use group room (group_id is the RC group name)
+            room_id = rc.get_or_create_group(str(group_id), members=[user_name])
+        
+        elif recipients:
+            if 'support' in recipients:
+                # Support DM - send to support channel or admin group
+                room_id = rc.get_or_create_channel('support', topic='Support messages')
+                if room_id:
+                    # Add support staff if needed
+                    rc.add_user_to_channel(room_id, user_name)
+            
+            elif len(recipients) == 1:
+                # Direct message with one user
+                recipient = recipients[0]
+                _get_or_create_rc_user(recipient)
+                room_id = rc.get_or_create_direct_message(recipient)
+            
+            else:
+                # Group message with multiple recipients
+                room_name = f"group_{'-'.join(sorted(recipients)[:3])}"
+                room_id = rc.get_or_create_group(room_name, members=recipients + [user_name])
+        
+        elif team:
+            # Team channel message
+            team_name = team or 'general'
+            room_id = rc.get_or_create_channel(team_name, topic=f'{team_name} team channel')
+            if room_id:
+                rc.add_user_to_channel(room_id, user_name)
+        
+        else:
+            # Default: general team channel
+            room_id = rc.get_or_create_channel('general', topic='General team channel')
+            if room_id:
+                rc.add_user_to_channel(room_id, user_name)
+
+        # Send message
+        if room_id:
+            msg_ts = rc.send_message(room_id, message, metadata={
+                'sender': user_name,
+                'email': user_email,
+                'team': team,
+                'group_id': group_id,
+                'recipients': recipients
+            })
+            
+            # Broadcast to SSE subscribers (for real-time UI updates)
+            msg_obj = {
+                'id': msg_ts,
+                'timestamp': datetime.utcnow().isoformat(),
+                'from_name': user_name,
+                'message': message,
+                'team': team,
+                'recipients': recipients,
+                'group_id': group_id
+            }
+            try:
+                _broadcast_sse(msg_obj)
+            except Exception as e:
+                print(f"SSE broadcast error: {e}")
+            
+            # Log to backend
+            backend = get_backend_client()
+            if backend:
+                try:
+                    backend.send_chat_message(user_name, message, user_email)
+                except Exception:
+                    pass
+            
+            return jsonify({'success': True, 'message_id': msg_ts})
+        
+        else:
+            return jsonify({'success': False, 'error': 'Failed to create/get Rocket.Chat room'}), 500
+    
+    except Exception as e:
+        print(f"Chat send error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/chat/messages', methods=['GET'])
+def api_chat_get_messages():
+    """Get chat messages"""
+    backend = get_backend_client()
+    if backend:
+        messages = backend.get_chat_messages(limit=50)
+        return jsonify({'success': True, 'messages': messages})
+    
+    return jsonify({'success': False, 'messages': []}), 500
+
+
+@app.route('/api/chat/stream')
+def api_chat_stream():
+    """SSE stream endpoint for new chat messages (in-process subscribers only)"""
+    def gen(q):
+        # Initial keep-alive comment
+        yield ': connected\n\n'
+        try:
+            while True:
+                data = q.get()
+                yield f'data: {data}\n\n'
+        except GeneratorExit:
+            return
+
+    q = queue.Queue()
+    _sse_subscribers.append(q)
+
+    return Response(stream_with_context(gen(q)), mimetype='text/event-stream')
+
+
+@app.route('/api/rocketchat/info')
+@login_required
+def api_rocketchat_info():
+    """Get Rocket.Chat connection info for iframe embedding"""
+    rc = get_rocketchat_client()
+    
+    if not rc.is_connected():
+        return jsonify({
+            'success': False,
+            'error': 'Rocket.Chat is not available',
+            'connected': False
+        }), 503
+    
+    try:
+        # Ensure user exists in Rocket.Chat
+        rc_user_id = _get_or_create_rc_user(
+            current_user.username,
+            email=current_user.email
+        )
+        
+        if not rc_user_id:
+            return jsonify({
+                'success': False,
+                'error': 'Could not create Rocket.Chat user',
+                'connected': False
+            }), 500
+        
+        return jsonify({
+            'success': True,
+            'connected': True,
+            'url': rc.server_url,
+            'username': current_user.username,
+            'user_id': rc_user_id,
+            'iframe_url': f"{rc.server_url}/home"  # RC home page for logged-in users
+        })
+    except Exception as e:
+        print(f"Error getting Rocket.Chat info: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'connected': False
+        }), 500
+
+
+@app.route('/api/chat/stream')
+@login_required
+def api_chat_inbox(username):
+    """Return paginated messages for a user's inbox from Rocket.Chat"""
+    # Security: only allow querying your own inbox unless admin
+    if username != current_user.username and not current_user.is_admin:
+        return jsonify({'success': False, 'error': 'Forbidden'}), 403
+    
+    try:
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 50))
+    except ValueError:
+        page = 1
+        per_page = 50
+
+    rc = get_rocketchat_client()
+    
+    if not rc.is_connected():
+        # Fallback: return empty inbox
+        return jsonify({
+            'success': False, 
+            'error': 'Rocket.Chat offline',
+            'total': 0, 
+            'page': page, 
+            'per_page': per_page, 
+            'messages': []
+        })
+
+    try:
+        # Get user's Rocket.Chat rooms
+        rooms = rc.list_user_rooms(username)
+        all_messages = []
+
+        # Fetch messages from each room (limit per room to avoid too much data)
+        for room in rooms:
+            room_id = room.get('_id')
+            if room_id:
+                messages = rc.get_messages(room_id, count=per_page, offset=0)
+                for msg in messages:
+                    # Convert Rocket.Chat message format to our format
+                    converted = {
+                        'id': msg.get('_id', msg.get('ts')),
+                        'timestamp': msg.get('ts', datetime.utcnow().isoformat()),
+                        'from_name': msg.get('u', {}).get('username', 'Unknown'),
+                        'message': msg.get('msg', ''),
+                        'team': room.get('name', 'general'),
+                        'recipients': [],
+                        'group_id': None,
+                        'group_name': room.get('name'),
+                        'read_by': [username]  # Assume read in Rocket.Chat
+                    }
+                    all_messages.append(converted)
+        
+        # Sort by timestamp desc
+        all_messages.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+        
+        # Pagination
+        start = (page - 1) * per_page
+        end = start + per_page
+        paged = all_messages[start:end]
+
+        return jsonify({
+            'success': True, 
+            'total': len(all_messages), 
+            'page': page, 
+            'per_page': per_page, 
+            'messages': paged
+        })
+    
+    except Exception as e:
+        print(f"Error fetching inbox: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'total': 0,
+            'page': page,
+            'per_page': per_page,
+            'messages': []
+        }), 500
+
+
+@app.route('/api/chat/mark-read', methods=['POST'])
+@login_required
+def api_chat_mark_read():
+    """Mark message as read (Rocket.Chat handling)
+    
+    Note: Rocket.Chat handles read receipts automatically.
+    This endpoint is kept for compatibility with frontend expectations.
+    """
+    data = request.json or {}
+    msg_id = data.get('msg_id')
+    username = data.get('username') or current_user.username
+    
+    if not msg_id:
+        return jsonify({'success': False, 'error': 'msg_id required'}), 400
+
+    # In a full Rocket.Chat integration, you could:
+    # 1. Call Rocket.Chat read receipt API
+    # 2. Track in a database for analytics
+    # For now, just acknowledge
+    
+    return jsonify({'success': True, 'note': 'Rocket.Chat handles read receipts automatically'})
+
+
+@app.route('/api/chat/groups', methods=['POST'])
+@login_required
+def api_chat_create_group():
+    """Create a group chat in Rocket.Chat
+    
+    Body: name, members (list of usernames), created_by
+    """
+    data = request.json or {}
+    name = data.get('name')
+    members = data.get('members') or []
+    created_by = data.get('created_by') or current_user.username
+
+    if not name or not members:
+        return jsonify({'success': False, 'error': 'name and members required'}), 400
+
+    rc = get_rocketchat_client()
+    
+    if not rc.is_connected():
+        return jsonify({'success': False, 'error': 'Rocket.Chat offline'}), 500
+
+    try:
+        # Ensure all members are Rocket.Chat users
+        for member in members:
+            _get_or_create_rc_user(member)
+        
+        # Create group in Rocket.Chat
+        group_name = f"group_{name.replace(' ', '_').lower()}"
+        group_id = rc.get_or_create_group(group_name, members=members)
+        
+        if group_id:
+            return jsonify({
+                'success': True, 
+                'group': {
+                    'id': group_id,
+                    'name': name,
+                    'members': members,
+                    'created_by': created_by,
+                    'created_at': datetime.utcnow().isoformat()
+                }
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Failed to create group in Rocket.Chat'}), 500
+    
+    except Exception as e:
+        print(f"Error creating group: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/chat/groups/<username>', methods=['GET'])
+@login_required
+def api_chat_list_groups(username):
+    """List user's groups in Rocket.Chat
+    
+    Only allow listing your own groups unless admin
+    """
+    if username != current_user.username and not current_user.is_admin:
+        return jsonify({'success': False, 'error': 'Forbidden'}), 403
+
+    rc = get_rocketchat_client()
+    
+    if not rc.is_connected():
+        return jsonify({'success': True, 'groups': []})
+
+    try:
+        # In Rocket.Chat, users are members of groups automatically
+        # You could fetch the user's rooms and filter for type 'p' (private)
+        rooms = rc.list_user_rooms(username)
+        
+        groups = [
+            {
+                'id': r.get('_id'),
+                'name': r.get('name'),
+                'members': r.get('usernames', []),
+                'created_at': r.get('ts', datetime.utcnow().isoformat())
+            }
+            for r in rooms
+            if r.get('teamMain') is False  # Filter out main team channels
+        ]
+        
+        return jsonify({'success': True, 'groups': groups})
+    
+    except Exception as e:
+        print(f"Error listing groups: {e}")
+        return jsonify({'success': True, 'groups': []})
+
+
+@app.route('/api/users', methods=['GET'])
+@login_required
+def api_list_users():
+    """List all users for DM/group creation"""
+    users = User.query.filter(User.id != current_user.id).all()
+    user_list = [{'username': u.username, 'email': u.email} for u in users]
+    return jsonify({'success': True, 'users': user_list})
+
+
+@app.route('/api/chat/unread-count/<username>')
+@login_required
+def api_chat_unread_count(username):
+    """Get unread message count from Rocket.Chat
+    
+    Security: only allow checking your own unread count unless admin
+    """
+    if username != current_user.username and not current_user.is_admin:
+        return jsonify({'success': False, 'error': 'Forbidden'}), 403
+
+    rc = get_rocketchat_client()
+    
+    if not rc.is_connected():
+        return jsonify({'success': True, 'unread': 0})
+
+    try:
+        # Fetch user's rooms and sum unread counts
+        rooms = rc.list_user_rooms(username)
+        
+        unread_count = 0
+        for room in rooms:
+            # Rocket.Chat provides unread count
+            unread = room.get('unread', 0)
+            unread_count += unread
+        
+        return jsonify({'success': True, 'unread': unread_count})
+    
+    except Exception as e:
+        print(f"Error getting unread count: {e}")
+        return jsonify({'success': True, 'unread': 0})
+
+
+@app.route('/api/chat/mark-all-read', methods=['POST'])
+@login_required
+def api_chat_mark_all_read():
+    """Mark all messages as read in Rocket.Chat
+    
+    Security: only allow marking own messages unless admin
+    """
+    data = request.json or {}
+    username = data.get('username') or current_user.username
+    
+    if username != current_user.username and not current_user.is_admin:
+        return jsonify({'success': False, 'error': 'Forbidden'}), 403
+
+    rc = get_rocketchat_client()
+    
+    if not rc.is_connected():
+        return jsonify({'success': False, 'error': 'Rocket.Chat offline'}), 500
+
+    try:
+        # Fetch user's rooms
+        rooms = rc.list_user_rooms(username)
+        
+        # Mark all as read in each room (Rocket.Chat handles this automatically)
+        # This is a placeholder - in a full implementation, you'd call Rocket.Chat API
+        
+        return jsonify({'success': True, 'note': 'All messages marked as read (Rocket.Chat handles this automatically)'})
+    
+    except Exception as e:
+        print(f"Error marking all as read: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # RUN APP
 
 if __name__ == '__main__':
     init_db()
-    port = int(os.environ.get('PORT', 5001))
+    port = int(os.environ.get('PORT', 5002))
     
     # Start Flask app
     app.run(host='0.0.0.0', port=port, debug=False)

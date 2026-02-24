@@ -5,7 +5,7 @@
 {% block content %}
 <div class="card">
     <h2><i class="fas fa-cog"></i> Admin Panel</h2>
-    <p style="color: #666; margin-top: 0.5rem;">Manage users, database backups, and system settings.</p>
+    <p style="color: #666; margin-top: 0.5rem;">Manage users, invite codes, database backups, and system settings.</p>
 </div>
 
 <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); margin-bottom: 2rem;">
@@ -31,12 +31,13 @@
     </div>
 </div>
 
-<!-- CREW MEMBERS MANAGEMENT -->
-
+<!-- ==================== USER MANAGEMENT ==================== -->
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
         <h3><i class="fas fa-users"></i> User Management</h3>
-        <button onclick="showModal('addCrewModal')" class="btn btn-success"><i class="fas fa-plus"></i> Add User</button>
+        <div style="display: flex; gap: 0.75rem;">
+            <button onclick="showModal('addCrewModal')" class="btn btn-success"><i class="fas fa-plus"></i> Add User</button>
+        </div>
     </div>
     
     <table>
@@ -45,6 +46,7 @@
                 <th>Username</th>
                 <th>Email</th>
                 <th>Role</th>
+                <th>2FA</th>
                 <th>Discord</th>
                 <th>Created</th>
                 <th>Actions</th>
@@ -64,10 +66,20 @@
                     <span style="background: var(--primary); color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">Admin</span>
                     {% elif user.user_role == 'cast' %}
                     <span style="background: #fce7f3; color: #9f1239; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">Cast</span>
-                    {% elif user.user_role == "staff" %}
+                    {% elif user.user_role == 'staff' %}
                     <span style="background: #fef3c7; color: #78350f; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">Staff</span>
                     {% else %}
-                    <span style="background: #e5e7eb; color: var(--dark); padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">crew</span>
+                    <span style="background: #e5e7eb; color: var(--dark); padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">Crew</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if user.tfa_enabled %}
+                    <span style="color: var(--success); font-size: 0.85rem;"><i class="fas fa-shield-alt"></i> On</span>
+                    {% else %}
+                    <span style="color: #9ca3af; font-size: 0.85rem;"><i class="fas fa-shield-alt"></i> Off</span>
+                    {% endif %}
+                    {% if user.force_2fa %}
+                    <span style="background: #fef3c7; color: #78350f; padding: 0.15rem 0.5rem; border-radius: 10px; font-size: 0.75rem; margin-left: 0.25rem;">⚠ Required</span>
                     {% endif %}
                 </td>
                 <td>
@@ -80,12 +92,15 @@
                     {% endif %}
                 </td>
                 <td>{{ user.created_at }}</td>
-                <td>
-                    <button onclick="editUserModal({{ user.id }})" class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;"><i class="fas fa-edit"></i> Edit</button>
-                    {% if user.id != current_user.id %}
-                    <button onclick="deleteUser({{ user.id }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;"><i class="fas fa-trash"></i> Delete</button>
+                <td style="white-space: nowrap;">
+                    <button onclick="editUserModal({{ user.id }})" class="btn btn-primary" style="padding: 0.4rem 0.7rem; font-size: 0.8rem;"><i class="fas fa-edit"></i> Edit</button>
+                    {% if not user.force_2fa %}
+                    <button onclick="forceUser2FA({{ user.id }}, '{{ user.username }}')" class="btn" style="padding: 0.4rem 0.7rem; font-size: 0.8rem; background: #fef3c7; color: #78350f; border: 1px solid #fcd34d;" title="Require 2FA on next login"><i class="fas fa-shield-alt"></i> Force 2FA</button>
                     {% else %}
-                    <span style="color: #999; font-size: 0.85rem;">Current User</span>
+                    <button onclick="clearForce2FA({{ user.id }}, '{{ user.username }}')" class="btn" style="padding: 0.4rem 0.7rem; font-size: 0.8rem; background: #f3f4f6; color: #6b7280; border: 1px solid #d1d5db;" title="Clear forced 2FA requirement"><i class="fas fa-times"></i> Clear 2FA</button>
+                    {% endif %}
+                    {% if user.id != current_user.id %}
+                    <button onclick="deleteUser({{ user.id }})" class="btn btn-danger" style="padding: 0.4rem 0.7rem; font-size: 0.8rem;"><i class="fas fa-trash"></i></button>
                     {% endif %}
                 </td>
             </tr>
@@ -94,7 +109,86 @@
     </table>
 </div>
 
-<!-- Updated Add User Modal -->
+<!-- ==================== INVITE CODES ==================== -->
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h3><i class="fas fa-ticket-alt"></i> Invite Codes</h3>
+        <div style="display: flex; gap: 0.75rem;">
+            <button onclick="showModal('generateInviteModal')" class="btn btn-success"><i class="fas fa-plus"></i> Generate Invite</button>
+            <button onclick="showModal('emailInviteModal')" class="btn btn-primary"><i class="fas fa-envelope"></i> Email Invite</button>
+        </div>
+    </div>
+
+    <div style="overflow-x: auto;">
+        <table id="inviteTable">
+            <thead>
+                <tr>
+                    <th>Code</th>
+                    <th>Role</th>
+                    <th>Created By</th>
+                    <th>Expires</th>
+                    <th>Status</th>
+                    <th>Used By</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="inviteTableBody">
+                <tr><td colspan="7" style="text-align: center; color: #999; padding: 2rem;">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ==================== DATABASE MANAGEMENT ==================== -->
+<div class="card">
+    <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-database"></i> Database Management</h3>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+        <div>
+            <h4 style="margin-bottom: 1rem; color: var(--primary);">Backup</h4>
+            <button onclick="createBackup()" class="btn btn-success" style="width: 100%;"><i class="fas fa-download"></i> Create Backup</button>
+        </div>
+        <div>
+            <h4 style="margin-bottom: 1rem; color: var(--secondary);">Restore</h4>
+            <button onclick="showModal('restoreModal')" class="btn btn-primary" style="width: 100%;"><i class="fas fa-upload"></i> Restore Backup</button>
+        </div>
+    </div>
+    
+    <div style="background: #f8fafc; padding: 1.5rem; border-radius: 8px;">
+        <h4 style="margin-bottom: 1rem;"><i class="fas fa-history"></i> Recent Backups</h4>
+        <div id="backupsList"><p style="color: #999; text-align: center;">Loading backups...</p></div>
+    </div>
+</div>
+
+<!-- Import Equipment -->
+<div class="card">
+    <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-file-import"></i> Import Equipment</h3>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 2rem;">
+        <div>
+            <h4 style="margin-bottom: 1rem; color: var(--primary);">Import from CSV</h4>
+            <form id="csvForm" enctype="multipart/form-data">
+                <div class="form-group">
+                    <input type="file" id="csvFile" accept=".csv" required>
+                </div>
+                <button type="submit" class="btn btn-success" style="width: 100%;"><i class="fas fa-upload"></i> Import CSV</button>
+            </form>
+        </div>
+        <div>
+            <h4 style="margin-bottom: 1rem; color: var(--secondary);">Import from SheetDB</h4>
+            <form id="sheetdbForm">
+                <div class="form-group">
+                    <label>SheetDB ID *</label>
+                    <input type="text" id="sheetId" placeholder="e.g. abc123def456" required>
+                </div>
+                <button type="submit" class="btn btn-success" style="width: 100%;"><i class="fas fa-database"></i> Import from Sheet</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== MODALS ==================== -->
+
+<!-- Add User Modal -->
 <div id="addCrewModal" class="modal">
     <div class="modal-content">
         <span class="close" onclick="hideModal('addCrewModal')">&times;</span>
@@ -105,7 +199,7 @@
                 <input type="text" id="crewUsername" required>
             </div>
             <div class="form-group">
-                <label>Email (Optional - for notifications)</label>
+                <label>Email (Optional)</label>
                 <input type="email" id="crewEmail" placeholder="user@example.com">
             </div>
             <div class="form-group">
@@ -131,7 +225,6 @@
     </div>
 </div>
 
-<!-- Updated Edit User Modal -->
 <!-- Edit User Modal -->
 <div id="editUserModal" class="modal">
     <div class="modal-content">
@@ -139,17 +232,14 @@
         <h2 style="margin-bottom: 1.5rem;">Edit User</h2>
         <form id="editUserForm">
             <input type="hidden" id="editUserId">
-            
             <div class="form-group">
                 <label>Username</label>
                 <input type="text" id="editUsername" required>
             </div>
-            
             <div class="form-group">
                 <label>Email</label>
                 <input type="email" id="editEmail" placeholder="user@example.com">
             </div>
-            
             <div class="form-group">
                 <label>User Role *</label>
                 <select id="editUserRole" required>
@@ -158,37 +248,27 @@
                     <option value="cast">Cast</option>
                 </select>
             </div>
-            
             <div class="form-group">
                 <label style="display: flex; align-items: center; gap: 0.75rem;">
                     <input type="checkbox" id="editIsAdmin" style="width: auto;">
                     <span>Grant Admin Privileges</span>
                 </label>
             </div>
-            
             <div class="form-group">
-                <label>Password (Leave blank to keep current password)</label>
-                <input type="password" id="editPassword" placeholder="Enter new password (min 6 chars)">
+                <label>New Password (leave blank to keep current)</label>
+                <input type="password" id="editPassword" placeholder="Min 6 characters">
             </div>
-            
             <div style="background: #f0f4ff; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; border-left: 4px solid var(--primary);">
                 <h4 style="margin-bottom: 1rem; color: var(--primary);">Discord Integration</h4>
-                
                 <div class="form-group">
                     <label>Discord ID</label>
                     <input type="text" id="editDiscordId" placeholder="Leave blank to unlink">
                 </div>
-                
                 <div class="form-group">
                     <label>Discord Username</label>
                     <input type="text" id="editDiscordUsername" placeholder="e.g., username#1234">
                 </div>
-                
-                <p style="font-size: 0.85rem; color: #666; margin: 0;">
-                    💡 <strong>Tip:</strong> Leave both Discord fields blank to unlink the account.
-                </p>
             </div>
-            
             <div style="display: flex; gap: 1rem;">
                 <button type="submit" class="btn btn-success" style="flex: 1;"><i class="fas fa-save"></i> Save Changes</button>
                 <button type="button" onclick="hideModal('editUserModal')" class="btn btn-primary" style="flex: 1;">Cancel</button>
@@ -197,133 +277,84 @@
     </div>
 </div>
 
-<!-- CAST MEMBERS MANAGEMENT -->
-<div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-        <h3><i class="fas fa-theater-masks"></i> Cast Members Management</h3>
-        <button onclick="showModal('addCastModal')" class="btn btn-success"><i class="fas fa-plus"></i> Add Cast Member</button>
-    </div>
-    
-    <table>
-        <thead>
-            <tr>
-                <th>Username</th>
-                <th>Email</th>
-                <th>Productions</th>
-                <th>Created</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody id="castTableBody">
-            {% for user in users %}
-            {% if user.is_cast %}
-            <tr>
-                <td><strong>{{ user.username }}</strong></td>
-                <td>{{ user.email or '-' }}</td>
-                <td>
-                    <span style="background: #fce7f3; color: #9f1239; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">
-                        {{ user.cast_roles|length }} productions
-                    </span>
-                </td>
-                <td>{{ user.created_at }}</td>
-                <td>
-                    <button onclick="editUserModal({{ user.id }})" class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;"><i class="fas fa-edit"></i> Edit</button>
-                    {% if user.id != current_user.id %}
-                    <button onclick="deleteUser({{ user.id }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;"><i class="fas fa-trash"></i> Delete</button>
-                    {% else %}
-                    <span style="color: #999; font-size: 0.85rem;">Current User</span>
-                    {% endif %}
-                </td>
-            </tr>
-            {% endif %}
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-
-<!-- Database Management -->
-<div class="card">
-    <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-database"></i> Database Management</h3>
-    
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
-        <div>
-            <h4 style="margin-bottom: 1rem; color: var(--primary);">Backup</h4>
-            <p style="color: #666; margin-bottom: 1rem; font-size: 0.9rem;">Create a backup of your database</p>
-            <button onclick="createBackup()" class="btn btn-success" style="width: 100%;"><i class="fas fa-download"></i> Create Backup</button>
-        </div>
-        <div>
-            <h4 style="margin-bottom: 1rem; color: var(--secondary);">Restore</h4>
-            <p style="color: #666; margin-bottom: 1rem; font-size: 0.9rem;">Restore from a backup file</p>
-            <button onclick="showModal('restoreModal')" class="btn btn-primary" style="width: 100%;"><i class="fas fa-upload"></i> Restore Backup</button>
-        </div>
-    </div>
-    
-    <div style="background: #f8fafc; padding: 1.5rem; border-radius: 8px;">
-        <h4 style="margin-bottom: 1rem;"><i class="fas fa-history"></i> Recent Backups</h4>
-        <div id="backupsList" style="max-height: 300px; overflow-y: auto;">
-            <p style="color: #999; text-align: center;">Loading backups...</p>
-        </div>
-    </div>
-</div>
-
-<!-- Import Equipment -->
-<div class="card">
-    <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-file-import"></i> Import Equipment</h3>
-    
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 2rem;">
-        <!-- CSV Import -->
-        <div>
-            <h4 style="margin-bottom: 1rem; color: var(--primary);">Import from CSV</h4>
-            <p style="color: #666; margin-bottom: 1rem; font-size: 0.9rem;">Upload a CSV file with columns: barcode, name, category, location, notes</p>
-            <form id="csvForm" enctype="multipart/form-data">
-                <div class="form-group">
-                    <input type="file" id="csvFile" accept=".csv" required>
-                </div>
-                <button type="submit" class="btn btn-success" style="width: 100%;"><i class="fas fa-upload"></i> Import CSV</button>
-            </form>
-        </div>
-        
-        <!-- SheetDB Import -->
-        <div>
-            <h4 style="margin-bottom: 1rem; color: var(--secondary);">Import from SheetDB</h4>
-            <p style="color: #666; margin-bottom: 1rem; font-size: 0.9rem;">Connect to your Google Sheet via SheetDB</p>
-            <form id="sheetdbForm">
-                <div class="form-group">
-                    <label>SheetDB ID *</label>
-                    <input type="text" id="sheetId" placeholder="e.g., abc123def456" required>
-                </div>
-                <button type="submit" class="btn btn-success" style="width: 100%;"><i class="fas fa-database"></i> Import from Sheet</button>
-            </form>
-        </div>
-    </div>
-</div>
-
-
-
-<!-- Add Cast Member Modal -->
-<div id="addCastModal" class="modal">
+<!-- Generate Invite Modal -->
+<div id="generateInviteModal" class="modal">
     <div class="modal-content">
-        <span class="close" onclick="hideModal('addCastModal')">&times;</span>
-        <h2 style="margin-bottom: 1.5rem;">Add Cast Member</h2>
-        <form id="addCastForm">
+        <span class="close" onclick="hideModal('generateInviteModal')">&times;</span>
+        <h2 style="margin-bottom: 1.5rem;"><i class="fas fa-ticket-alt"></i> Generate Invite Code</h2>
+        <form id="generateInviteForm">
             <div class="form-group">
-                <label>Username *</label>
-                <input type="text" id="castUsername" required>
+                <label>Role for new user *</label>
+                <select id="inviteRole" required>
+                    <option value="crew">Crew</option>
+                    <option value="staff">Staff</option>
+                    <option value="cast">Cast</option>
+                </select>
             </div>
             <div class="form-group">
-                <label>Email (Optional)</label>
-                <input type="email" id="castEmail" placeholder="user@example.com">
+                <label>Expiry Date *</label>
+                <input type="datetime-local" id="inviteExpiry" required>
             </div>
             <div class="form-group">
-                <label>Password *</label>
-                <input type="password" id="castPassword" required>
+                <label>Max Uses</label>
+                <input type="number" id="inviteMaxUses" value="1" min="1" max="100">
+                <small style="color: #6b7280;">Number of times this code can be used</small>
             </div>
-            <button type="submit" class="btn btn-success" style="width: 100%;"><i class="fas fa-plus"></i> Create Cast Member</button>
+            <div class="form-group">
+                <label>Note (optional)</label>
+                <input type="text" id="inviteNote" placeholder="e.g. 'For new lighting crew'">
+            </div>
+            <button type="submit" class="btn btn-success" style="width: 100%;"><i class="fas fa-plus"></i> Generate Code</button>
+        </form>
+
+        <div id="generatedInvite" style="display: none; margin-top: 1.5rem; background: #ecfdf5; border: 2px solid var(--success); border-radius: 10px; padding: 1.25rem;">
+            <h4 style="color: var(--success); margin-bottom: 0.75rem;"><i class="fas fa-check-circle"></i> Invite Code Generated!</h4>
+            <div style="display: flex; align-items: center; gap: 0.75rem; background: white; padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid #d1fae5;">
+                <code id="generatedCode" style="font-size: 1.3rem; letter-spacing: 2px; flex: 1;"></code>
+                <button onclick="copyInviteCode()" class="btn btn-success" style="padding: 0.4rem 0.75rem; font-size: 0.85rem;"><i class="fas fa-copy"></i> Copy</button>
+            </div>
+            <p id="generatedLink" style="margin-top: 0.75rem; font-size: 0.85rem; color: #065f46;"></p>
+        </div>
+    </div>
+</div>
+
+<!-- Email Invite Modal -->
+<div id="emailInviteModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('emailInviteModal')">&times;</span>
+        <h2 style="margin-bottom: 1.5rem;"><i class="fas fa-envelope"></i> Send Email Invite</h2>
+        <form id="emailInviteForm">
+            <div class="form-group">
+                <label>Recipient Email *</label>
+                <input type="email" id="inviteEmail" required placeholder="person@example.com">
+            </div>
+            <div class="form-group">
+                <label>Recipient Name (optional)</label>
+                <input type="text" id="inviteName" placeholder="e.g. John Smith">
+            </div>
+            <div class="form-group">
+                <label>Role for new user *</label>
+                <select id="emailInviteRole" required>
+                    <option value="crew">Crew</option>
+                    <option value="staff">Staff</option>
+                    <option value="cast">Cast</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Expiry Date *</label>
+                <input type="datetime-local" id="emailInviteExpiry" required>
+            </div>
+            <div style="background: #f0f4ff; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; border-left: 4px solid var(--primary);">
+                <p style="font-size: 0.9rem; color: #1e40af; margin: 0;">
+                    <i class="fas fa-info-circle"></i> A single-use invite code will be generated and emailed directly to the recipient with a signup link.
+                </p>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%;" id="emailInviteBtn">
+                <i class="fas fa-paper-plane"></i> Send Invite Email
+            </button>
         </form>
     </div>
 </div>
-
-
 
 <!-- Restore Modal -->
 <div id="restoreModal" class="modal">
@@ -331,7 +362,7 @@
         <span class="close" onclick="hideModal('restoreModal')">&times;</span>
         <h2 style="margin-bottom: 1.5rem; color: var(--danger);">⚠️ Restore Database</h2>
         <p style="color: #666; margin-bottom: 1.5rem; background: #fef2f2; padding: 1rem; border-radius: 8px; border-left: 4px solid var(--danger);">
-            <strong>Warning:</strong> This will replace your current database with the backup. Current data will be lost!
+            <strong>Warning:</strong> This will replace your current database. Current data will be lost!
         </p>
         <form id="restoreForm" enctype="multipart/form-data">
             <div class="form-group">
@@ -353,22 +384,152 @@
 
 {% block scripts %}
 <script>
-
-
-// Load stats
+// Stats
 function loadStats() {
     const allUsers = {{ users|tojson }};
-    const crewCount = allUsers.filter(u => !u.is_cast).length;
-    const castCount = allUsers.filter(u => u.is_cast).length;
-    
-    document.getElementById('crewCount').textContent = crewCount;
-    document.getElementById('castCount').textContent = castCount;
+    document.getElementById('crewCount').textContent = allUsers.filter(u => !u.is_cast).length;
+    document.getElementById('castCount').textContent = allUsers.filter(u => u.is_cast).length;
 }
 
-// Add User Form Handler
+// ==================== INVITE CODES ====================
+function loadInvites() {
+    fetch('/admin/invites')
+    .then(r => r.json())
+    .then(invites => {
+        const tbody = document.getElementById('inviteTableBody');
+        if (!invites.length) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:2rem;">No invite codes yet</td></tr>';
+            return;
+        }
+        tbody.innerHTML = invites.map(inv => {
+            const expired = new Date(inv.expires_at) < new Date();
+            const exhausted = inv.max_uses > 0 && inv.use_count >= inv.max_uses;
+            const valid = !expired && !exhausted && inv.is_active;
+            const statusColor = valid ? 'var(--success)' : '#ef4444';
+            const statusText = !inv.is_active ? 'Revoked' : expired ? 'Expired' : exhausted ? 'Used up' : 'Active';
+            return `<tr>
+                <td><code style="font-size:0.9rem;letter-spacing:1px;">${inv.code}</code>
+                    <button onclick="navigator.clipboard.writeText('${inv.code}')" style="background:none;border:none;cursor:pointer;color:#6b7280;margin-left:4px;" title="Copy"><i class="fas fa-copy"></i></button>
+                </td>
+                <td><span style="background:#e5e7eb;padding:0.2rem 0.6rem;border-radius:10px;font-size:0.8rem;">${inv.role}</span></td>
+                <td>${inv.created_by}</td>
+                <td style="font-size:0.85rem;">${new Date(inv.expires_at).toLocaleString()}</td>
+                <td><span style="color:${statusColor};font-weight:600;">${statusText}</span>
+                    <span style="color:#6b7280;font-size:0.8rem;">(${inv.use_count}/${inv.max_uses === 0 ? '∞' : inv.max_uses})</span>
+                </td>
+                <td>${inv.used_by ? inv.used_by.join(', ') : '-'}</td>
+                <td>
+                    ${valid ? `<button onclick="revokeInvite(${inv.id})" class="btn btn-danger" style="padding:0.3rem 0.6rem;font-size:0.8rem;"><i class="fas fa-ban"></i> Revoke</button>` : ''}
+                    <button onclick="deleteInvite(${inv.id})" class="btn" style="padding:0.3rem 0.6rem;font-size:0.8rem;background:#f3f4f6;color:#374151;"><i class="fas fa-trash"></i></button>
+                </td>
+            </tr>`;
+        }).join('');
+    });
+}
+
+// Set default expiry to 7 days from now
+window.addEventListener('DOMContentLoaded', () => {
+    const d = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const iso = d.toISOString().slice(0, 16);
+    document.getElementById('inviteExpiry').value = iso;
+    document.getElementById('emailInviteExpiry').value = iso;
+    loadStats();
+    loadBackups();
+    loadInvites();
+});
+
+document.getElementById('generateInviteForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    fetch('/admin/invites/generate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            role: document.getElementById('inviteRole').value,
+            expires_at: document.getElementById('inviteExpiry').value,
+            max_uses: parseInt(document.getElementById('inviteMaxUses').value) || 1,
+            note: document.getElementById('inviteNote').value
+        })
+    }).then(r => r.json()).then(d => {
+        if (d.success) {
+            document.getElementById('generatedCode').textContent = d.code;
+            document.getElementById('generatedLink').textContent = 'Signup link: ' + window.location.origin + '/signup?invite=' + d.code;
+            document.getElementById('generatedInvite').style.display = 'block';
+            loadInvites();
+        } else showAlert(d.error || 'Error', 'error');
+    });
+});
+
+function copyInviteCode() {
+    const code = document.getElementById('generatedCode').textContent;
+    navigator.clipboard.writeText(code);
+    showAlert('Code copied!');
+}
+
+document.getElementById('emailInviteForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const btn = document.getElementById('emailInviteBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+    fetch('/admin/invites/email', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            email: document.getElementById('inviteEmail').value,
+            name: document.getElementById('inviteName').value,
+            role: document.getElementById('emailInviteRole').value,
+            expires_at: document.getElementById('emailInviteExpiry').value
+        })
+    }).then(r => r.json()).then(d => {
+        if (d.success) {
+            showAlert('Invite sent to ' + document.getElementById('inviteEmail').value, 'success');
+            hideModal('emailInviteModal');
+            loadInvites();
+        } else showAlert(d.error || 'Failed to send', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Invite Email';
+    });
+});
+
+function revokeInvite(id) {
+    if (!confirm('Revoke this invite code?')) return;
+    fetch(`/admin/invites/${id}/revoke`, { method: 'POST' })
+    .then(r => r.json()).then(d => {
+        if (d.success) { showAlert('Invite revoked', 'success'); loadInvites(); }
+        else showAlert(d.error, 'error');
+    });
+}
+
+function deleteInvite(id) {
+    if (!confirm('Delete this invite code?')) return;
+    fetch(`/admin/invites/${id}`, { method: 'DELETE' })
+    .then(r => r.json()).then(d => {
+        if (d.success) { showAlert('Invite deleted', 'success'); loadInvites(); }
+        else showAlert(d.error, 'error');
+    });
+}
+
+// ==================== FORCE 2FA ====================
+function forceUser2FA(userId, username) {
+    if (!confirm(`Require ${username} to set up 2FA on their next login?`)) return;
+    fetch(`/admin/users/${userId}/force-2fa`, { method: 'POST' })
+    .then(r => r.json()).then(d => {
+        if (d.success) { showAlert(`${username} will be required to set up 2FA on next login`, 'success'); setTimeout(() => location.reload(), 1200); }
+        else showAlert(d.error || 'Error', 'error');
+    });
+}
+
+function clearForce2FA(userId, username) {
+    if (!confirm(`Remove the 2FA requirement for ${username}?`)) return;
+    fetch(`/admin/users/${userId}/clear-force-2fa`, { method: 'POST' })
+    .then(r => r.json()).then(d => {
+        if (d.success) { showAlert(`2FA requirement cleared for ${username}`, 'success'); setTimeout(() => location.reload(), 1200); }
+        else showAlert(d.error || 'Error', 'error');
+    });
+}
+
+// ==================== USER CRUD ====================
 document.getElementById('addCrewForm').addEventListener('submit', function(e) {
     e.preventDefault();
-    
     const data = {
         username: document.getElementById('crewUsername').value,
         email: document.getElementById('crewEmail').value || null,
@@ -376,328 +537,118 @@ document.getElementById('addCrewForm').addEventListener('submit', function(e) {
         is_admin: document.getElementById('isAdmin').checked,
         user_role: document.getElementById('userRole').value
     };
-    
-    console.log('Adding user with data:', data); // Debug log
-    
-    fetch('/admin/users/add', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(r => r.json())
-    .then(result => {
-        if (result.success) {
-            showAlert('User created successfully!', 'success');
-            setTimeout(() => location.reload(), 1000);
-        } else {
-            showAlert(result.error, 'error');
-        }
-    })
-    .catch(err => {
-        console.error('Add user error:', err);
-        showAlert('Error creating user: ' + err.message, 'error');
+    fetch('/admin/users/add', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) })
+    .then(r => r.json()).then(result => {
+        if (result.success) { showAlert('User created!', 'success'); setTimeout(() => location.reload(), 1000); }
+        else showAlert(result.error, 'error');
     });
 });
 
-// Add Cast Member Form Handler
-document.getElementById('addCastForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const data = {
-        username: document.getElementById('castUsername').value,
-        email: document.getElementById('castEmail').value || null,
-        password: document.getElementById('castPassword').value,
-        user_role: 'cast',
-        is_cast: true
-    };
-    
-    console.log('Creating cast member with data:', data);
-    
-    fetch('/cast/create-account', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(r => r.json())
-    .then(result => {
-        if (result.success) {
-            showAlert('Cast member account created!', 'success');
-            setTimeout(() => location.reload(), 1000);
-        } else {
-            showAlert(result.error, 'error');
-        }
-    })
-    .catch(err => {
-        console.error('Create cast error:', err);
-        showAlert('Error: ' + err.message, 'error');
-    });
-});
-
-// Load backups list
-function loadBackups() {
-    fetch('/admin/backups')
-        .then(r => r.json())
-        .then(backups => {
-            let html = '';
-            if (backups.length === 0) {
-                html = '<p style="color: #999; text-align: center;">No backups yet</p>';
-            } else {
-                html = '<table style="font-size: 0.9rem;"><tbody>';
-                backups.forEach(backup => {
-                    const date = new Date(backup.date);
-                    const size = (backup.size / 1024 / 1024).toFixed(2);
-                    html += `
-                        <tr>
-                            <td>
-                                <strong>${backup.name}</strong><br>
-                                <small style="color: #999;">${size} MB • ${date.toLocaleString()}</small>
-                            </td>
-                            <td style="text-align: right; white-space: nowrap;">
-                                <a href="/admin/download-backup/${backup.name}" class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;"><i class="fas fa-download"></i></a>
-                            </td>
-                        </tr>
-                    `;
-                });
-                html += '</tbody></table>';
-            }
-            document.getElementById('backupsList').innerHTML = html;
-        })
-        .catch(err => {
-            console.error('Load backups error:', err);
-            document.getElementById('backupsList').innerHTML = '<p style="color: #ef4444;">Error loading backups</p>';
-        });
-}
-
-// Create backup
-function createBackup() {
-    const btn = event.target;
-    const originalText = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
-    
-    fetch('/admin/backup', {method: 'POST'})
-        .then(r => r.json())
-        .then(result => {
-            if (result.success) {
-                showAlert('Backup created successfully!', 'success');
-                loadBackups();
-            } else {
-                showAlert('Error creating backup', 'error');
-            }
-            btn.disabled = false;
-            btn.innerHTML = originalText;
-        })
-        .catch(err => {
-            console.error('Create backup error:', err);
-            showAlert('Error: ' + err.message, 'error');
-            btn.disabled = false;
-            btn.innerHTML = originalText;
-        });
-}
-
-// Edit user modal - Load user data
 function editUserModal(userId) {
-    console.log('=== LOADING USER FOR EDIT ===');
-    console.log('User ID:', userId);
-    
     fetch(`/admin/users/get/${userId}`)
-        .then(r => r.json())
-        .then(user => {
-            console.log('Received user data from server:', user);
-            
-            // Set all form fields
-            document.getElementById('editUserId').value = user.id;
-            document.getElementById('editUsername').value = user.username;
-            document.getElementById('editEmail').value = user.email || '';
-            
-            // Set user role dropdown
-            const roleDropdown = document.getElementById('editUserRole');
-            const roleToSet = user.user_role || 'crew';
-            roleDropdown.value = roleToSet;
-            console.log('Set role dropdown to:', roleToSet);
-            console.log('Role dropdown current value:', roleDropdown.value);
-            
-            // Set admin checkbox
-            document.getElementById('editIsAdmin').checked = user.is_admin || false;
-            console.log('Set is_admin to:', user.is_admin || false);
-            
-            // Set Discord fields
-            document.getElementById('editDiscordId').value = user.discord_id || '';
-            document.getElementById('editDiscordUsername').value = user.discord_username || '';
-            
-            // Clear password field
-            document.getElementById('editPassword').value = '';
-            
-            console.log('=== FINISHED LOADING USER ===');
-            
-            showModal('editUserModal');
-        })
-        .catch(err => {
-            console.error('Error loading user:', err);
-            showAlert('Failed to load user data: ' + err.message, 'error');
-        });
+    .then(r => r.json()).then(user => {
+        document.getElementById('editUserId').value = user.id;
+        document.getElementById('editUsername').value = user.username;
+        document.getElementById('editEmail').value = user.email || '';
+        document.getElementById('editUserRole').value = user.user_role || 'crew';
+        document.getElementById('editIsAdmin').checked = user.is_admin || false;
+        document.getElementById('editDiscordId').value = user.discord_id || '';
+        document.getElementById('editDiscordUsername').value = user.discord_username || '';
+        document.getElementById('editPassword').value = '';
+        showModal('editUserModal');
+    });
 }
 
-// Edit user form submission
 document.getElementById('editUserForm').addEventListener('submit', function(e) {
     e.preventDefault();
-    
-    console.log('=== SUBMITTING USER EDIT ===');
-    
     const userId = document.getElementById('editUserId').value;
-    const roleDropdown = document.getElementById('editUserRole');
-    const selectedRole = roleDropdown.value;
-    
-    console.log('User ID:', userId);
-    console.log('Role dropdown element:', roleDropdown);
-    console.log('Selected role:', selectedRole);
-    console.log('All dropdown options:', Array.from(roleDropdown.options).map(o => ({value: o.value, text: o.text, selected: o.selected})));
-    
     const data = {
         username: document.getElementById('editUsername').value,
         email: document.getElementById('editEmail').value || null,
         password: document.getElementById('editPassword').value || null,
-        user_role: selectedRole,
+        user_role: document.getElementById('editUserRole').value,
         is_admin: document.getElementById('editIsAdmin').checked,
         discord_id: document.getElementById('editDiscordId').value || null,
         discord_username: document.getElementById('editDiscordUsername').value || null
     };
-    
-    console.log('Data being sent to server:', data);
-    console.log('JSON payload:', JSON.stringify(data));
-    
-    fetch(`/admin/users/edit/${userId}`, {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(r => {
-        console.log('Response status:', r.status);
-        return r.json();
-    })
-    .then(result => {
-        console.log('Server response:', result);
-        console.log('=== END USER EDIT ===');
-        
-        if (result.success) {
-            showAlert('User updated successfully!', 'success');
-            setTimeout(() => location.reload(), 1000);
-        } else {
-            showAlert(result.error || 'Error updating user', 'error');
-        }
-    })
-    .catch(err => {
-        console.error('Update error:', err);
-        console.log('=== END USER EDIT (ERROR) ===');
-        showAlert('Error: ' + err.message, 'error');
+    fetch(`/admin/users/edit/${userId}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) })
+    .then(r => r.json()).then(result => {
+        if (result.success) { showAlert('User updated!', 'success'); setTimeout(() => location.reload(), 1000); }
+        else showAlert(result.error || 'Error', 'error');
     });
 });
+
+function deleteUser(id) {
+    if (!confirm('Delete this user? This cannot be undone.')) return;
+    fetch(`/admin/users/delete/${id}`, { method: 'DELETE' })
+    .then(r => r.json()).then(result => {
+        if (result.success) { showAlert('User deleted', 'success'); setTimeout(() => location.reload(), 1000); }
+        else showAlert(result.error, 'error');
+    });
+}
+
+// ==================== BACKUPS ====================
+function loadBackups() {
+    fetch('/admin/backups').then(r => r.json()).then(backups => {
+        let html = '';
+        if (!backups.length) { html = '<p style="color:#999;text-align:center;">No backups yet</p>'; }
+        else {
+            html = '<table style="font-size:0.9rem;"><tbody>';
+            backups.forEach(b => {
+                const date = new Date(b.date);
+                const size = (b.size / 1024 / 1024).toFixed(2);
+                html += `<tr><td><strong>${b.name}</strong><br><small style="color:#999;">${size} MB &bull; ${date.toLocaleString()}</small></td>
+                         <td style="text-align:right;"><a href="/admin/download-backup/${b.name}" class="btn btn-primary" style="padding:0.4rem 0.8rem;font-size:0.85rem;"><i class="fas fa-download"></i></a></td></tr>`;
+            });
+            html += '</tbody></table>';
+        }
+        document.getElementById('backupsList').innerHTML = html;
+    });
+}
+
+function createBackup() {
+    const btn = event.target;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+    fetch('/admin/backup', { method: 'POST' }).then(r => r.json()).then(result => {
+        if (result.success) { showAlert('Backup created!', 'success'); loadBackups(); }
+        else showAlert('Error creating backup', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-download"></i> Create Backup';
+    });
+}
 
 // CSV import
 document.getElementById('csvForm').addEventListener('submit', function(e) {
     e.preventDefault();
-    const formData = new FormData(this);
+    const formData = new FormData();
     formData.append('file', document.getElementById('csvFile').files[0]);
-    
-    fetch('/equipment/import-csv', {
-        method: 'POST',
-        body: formData
-    })
-    .then(r => r.json())
-    .then(result => {
-        if (result.success) {
-            showAlert(`Imported ${result.imported} items from CSV!`, 'success');
-            document.getElementById('csvFile').value = '';
-        } else {
-            showAlert(result.error, 'error');
-        }
-    })
-    .catch(err => {
-        console.error('CSV import error:', err);
-        showAlert('Error: ' + err.message, 'error');
+    fetch('/equipment/import-csv', { method: 'POST', body: formData })
+    .then(r => r.json()).then(result => {
+        if (result.success) showAlert(`Imported ${result.imported} items!`, 'success');
+        else showAlert(result.error, 'error');
     });
 });
 
-// SheetDB import
 document.getElementById('sheetdbForm').addEventListener('submit', function(e) {
     e.preventDefault();
-    const data = {
-        sheet_id: document.getElementById('sheetId').value
-    };
-    
-    fetch('/equipment/import-sheetdb', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(r => r.json())
-    .then(result => {
-        if (result.success) {
-            showAlert(`Imported ${result.imported} items from SheetDB!`, 'success');
-            document.getElementById('sheetId').value = '';
-        } else {
-            showAlert(result.error, 'error');
-        }
-    })
-    .catch(err => {
-        console.error('SheetDB import error:', err);
-        showAlert('Error: ' + err.message, 'error');
+    fetch('/equipment/import-sheetdb', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ sheet_id: document.getElementById('sheetId').value }) })
+    .then(r => r.json()).then(result => {
+        if (result.success) showAlert(`Imported ${result.imported} items!`, 'success');
+        else showAlert(result.error, 'error');
     });
 });
 
-// Restore database
 document.getElementById('restoreForm').addEventListener('submit', function(e) {
     e.preventDefault();
-    
-    if (!confirm('⚠️ WARNING: This will replace your entire database!\n\nAre you absolutely sure?')) {
-        return;
-    }
-    
+    if (!confirm('⚠️ WARNING: This will replace your entire database!\n\nAre you absolutely sure?')) return;
     const formData = new FormData();
     formData.append('file', document.getElementById('restoreFile').files[0]);
-    
-    fetch('/admin/restore', {
-        method: 'POST',
-        body: formData
-    })
-    .then(r => r.json())
-    .then(result => {
-        if (result.success) {
-            showAlert(result.message, 'success');
-            setTimeout(() => location.reload(), 1000);
-        } else {
-            showAlert(result.error, 'error');
-        }
-    })
-    .catch(err => {
-        console.error('Restore error:', err);
-        showAlert('Error: ' + err.message, 'error');
+    fetch('/admin/restore', { method: 'POST', body: formData })
+    .then(r => r.json()).then(result => {
+        if (result.success) { showAlert(result.message, 'success'); setTimeout(() => location.reload(), 1000); }
+        else showAlert(result.error, 'error');
     });
 });
-
-// Delete user
-function deleteUser(id) {
-    if (!confirm('Delete this user? This action cannot be undone.')) return;
-    
-    fetch(`/admin/users/delete/${id}`, {method: 'DELETE'})
-        .then(r => r.json())
-        .then(result => {
-            if (result.success) {
-                showAlert('User deleted successfully!', 'success');
-                setTimeout(() => location.reload(), 1000);
-            } else {
-                showAlert(result.error, 'error');
-            }
-        })
-        .catch(err => {
-            console.error('Delete user error:', err);
-            showAlert('Error: ' + err.message, 'error');
-        });
-}
-
-// Initialize
-loadStats();
-loadBackups();
-setInterval(loadBackups, 30000); // Refresh every 30 seconds
 </script>
-
 {% endblock %}

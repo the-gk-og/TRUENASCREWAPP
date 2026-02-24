@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}Chat - ShowWise{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title"><i class="fas fa-comments"></i> Team Chat</h1>
+  <p class="page-subtitle">Redirecting to Rocket.Chat...</p>
+</div>
+
+<style>
+  .redirect-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: calc(100vh - 250px);
+    gap: 2rem;
+  }
+
+  .redirect-spinner {
+    font-size: 3rem;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  .redirect-text {
+    text-align: center;
+    color: #6b7280;
+  }
+
+  .redirect-button {
+    margin-top: 2rem;
+    padding: 0.75rem 1.5rem;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: opacity 0.2s;
+  }
+
+  .redirect-button:hover {
+    opacity: 0.9;
+  }
+</style>
+
+<div class="redirect-container">
+  <div class="redirect-spinner">
+    <i class="fas fa-rocket"></i>
+  </div>
+  <div class="redirect-text">
+    <p>Opening Rocket.Chat in a new tab...</p>
+    <p style="font-size: 0.9rem; margin-top: 1rem; color: #9ca3af;">
+      If the page doesn't open, click the button below
+    </p>
+  </div>
+  <button class="redirect-button" onclick="openRocketChat()">
+    <i class="fas fa-external-link-alt"></i> Open Rocket.Chat
+  </button>
+</div>
+
+<script>
+const rcUrl = '{{ rc_url }}';
+
+function openRocketChat() {
+  window.open(rcUrl, '_blank');
+}
+
+// Auto-open on page load
+window.addEventListener('load', function() {
+  openRocketChat();
+  
+  // Optionally go back after a short delay
+  setTimeout(function() {
+    window.history.back();
+  }, 1000);
+});
+</script>
+
+{% endblock %}

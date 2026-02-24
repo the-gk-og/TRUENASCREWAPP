@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign Up - {{ organization.name }}</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <style>
+    :root {
+      --primary: {{ organization.primary_color or '#6366f1' }};
+      --primary-dark: {{ organization.primary_color or '#4f46e5' }};
+      --secondary: {{ organization.secondary_color or '#898989' }};
+      --dark: #1f2937;
+      --light: #f9fafb;
+      --border: #e5e7eb;
+      --success: #10b981;
+      --danger: #ef4444;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      color: var(--dark);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .bg-circle {
+      position: absolute;
+      width: 400px; height: 400px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 50%;
+      animation: float 20s infinite;
+    }
+    .bg-circle-1 { top: -80px; left: -60px; }
+    .bg-circle-2 { bottom: -100px; right: -60px; animation-delay: 3s; }
+    @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(20px)} }
+
+    .container {
+      background: white;
+      padding: 2.5rem;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      width: 100%;
+      max-width: 440px;
+      margin: 2rem;
+      position: relative;
+      z-index: 10;
+      animation: slideUp 0.4s ease;
+    }
+    @keyframes slideUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+
+    .header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    .header h1 { font-size: 1.6rem; color: var(--primary); margin-bottom: 0.25rem; }
+    .header p { color: #6b7280; font-size: 0.9rem; }
+
+    .invite-banner {
+      background: linear-gradient(135deg, #ede9fe 0%, #fce7f3 100%);
+      border: 2px solid var(--primary);
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .invite-banner i { color: var(--primary); font-size: 1.4rem; }
+    .invite-banner p { font-size: 0.88rem; color: #3730a3; margin: 0; }
+
+    label {
+      display: block;
+      margin-bottom: 0.4rem;
+      font-weight: 600;
+      color: #374151;
+      font-size: 0.9rem;
+    }
+
+    .form-group { margin-bottom: 1.25rem; }
+
+    input[type="text"],
+    input[type="email"],
+    input[type="password"] {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      font-family: inherit;
+    }
+    input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+    }
+    input.valid { border-color: var(--success); }
+    input.invalid { border-color: var(--danger); }
+
+    .input-hint { font-size: 0.8rem; margin-top: 0.3rem; color: #6b7280; }
+    .input-hint.success { color: var(--success); }
+    .input-hint.error { color: var(--danger); }
+
+    .btn {
+      width: 100%;
+      padding: 0.875rem;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+      text-decoration: none;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      color: white;
+      box-shadow: 0 4px 12px rgba(99,102,241,0.3);
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(99,102,241,0.4); }
+    .btn-primary:disabled { opacity: 0.7; transform: none; cursor: not-allowed; }
+
+    .alert {
+      padding: 0.85rem 1rem;
+      border-radius: 8px;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      font-size: 0.9rem;
+    }
+    .alert-error { background: #fef2f2; color: #7f1d1d; border-left: 4px solid var(--danger); }
+    .alert-success { background: #f0fdf4; color: #166534; border-left: 4px solid var(--success); }
+
+    .pw-strength { height: 4px; background: #e5e7eb; border-radius: 2px; margin-top: 0.4rem; overflow: hidden; }
+    .pw-strength-bar { height: 100%; width: 0; transition: all 0.3s; }
+
+    .footer {
+      text-align: center;
+      margin-top: 1.5rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid #e5e7eb;
+      font-size: 0.88rem;
+      color: #6b7280;
+    }
+    .footer a { color: var(--primary); text-decoration: none; font-weight: 600; }
+    .footer a:hover { text-decoration: underline; }
+
+    @media (max-width: 480px) {
+      .container { padding: 1.75rem; margin: 1rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-circle bg-circle-1"></div>
+  <div class="bg-circle bg-circle-2"></div>
+
+  <div class="container">
+    <div class="header">
+      {% if organization.logo %}
+      <img src="{{ organization.logo }}" alt="{{ organization.name }}" style="max-height: 60px; margin-bottom: 1rem;">
+      {% endif %}
+      <h1><i class="fas fa-user-plus"></i> Create Account</h1>
+      <p>{{ organization.name }} &mdash; ShowWise</p>
+    </div>
+
+    <div class="invite-banner">
+      <i class="fas fa-ticket-alt"></i>
+      <p><strong>Invite required.</strong> You need a valid invite code from an administrator to sign up.</p>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=True) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ 'error' if category == 'error' else 'success' }}">
+            <i class="fas fa-{{ 'exclamation-circle' if category == 'error' else 'check-circle' }}"></i>
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <form id="signupForm" method="POST">
+      <div class="form-group">
+        <label><i class="fas fa-ticket-alt"></i> Invite Code *</label>
+        <input type="text" name="invite_code" id="inviteCode" required
+               placeholder="e.g. ABCD-1234-EFGH"
+               value="{{ prefill_code or '' }}"
+               autocomplete="off"
+               {% if prefill_code %}style="text-transform: uppercase;"{% endif %}>
+        <div class="input-hint" id="codeHint"></div>
+      </div>
+
+      <div class="form-group">
+        <label><i class="fas fa-user"></i> Username *</label>
+        <input type="text" name="username" id="username" required
+               placeholder="Choose a username" autocomplete="username" minlength="3" maxlength="40">
+        <div class="input-hint" id="usernameHint"></div>
+      </div>
+
+      <div class="form-group">
+        <label><i class="fas fa-envelope"></i> Email</label>
+        <input type="email" name="email" id="email" placeholder="your@email.com" autocomplete="email">
+        <div class="input-hint">Optional — used for notifications</div>
+      </div>
+
+      <div class="form-group">
+        <label><i class="fas fa-lock"></i> Password *</label>
+        <input type="password" name="password" id="password" required placeholder="Min 6 characters" autocomplete="new-password" minlength="6">
+        <div class="pw-strength"><div class="pw-strength-bar" id="pwBar"></div></div>
+        <div class="input-hint" id="pwHint"></div>
+      </div>
+
+      <div class="form-group">
+        <label><i class="fas fa-check-double"></i> Confirm Password *</label>
+        <input type="password" name="confirm_password" id="confirmPw" required placeholder="Re-enter password" autocomplete="new-password">
+        <div class="input-hint" id="pwMatchHint"></div>
+      </div>
+
+      <button type="submit" class="btn btn-primary" id="submitBtn">
+        <i class="fas fa-user-plus"></i> Create Account
+      </button>
+    </form>
+
+    <div class="footer">
+      Already have an account? <a href="{{ url_for('login') }}">Log in</a>
+    </div>
+  </div>
+
+  <script>
+    // Password strength
+    document.getElementById('password').addEventListener('input', function() {
+      const pw = this.value;
+      let s = 0;
+      if (pw.length >= 6) s += 25;
+      if (pw.length >= 10) s += 25;
+      if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) s += 25;
+      if (/[0-9]/.test(pw)) s += 15;
+      if (/[^a-zA-Z0-9]/.test(pw)) s += 10;
+      const colors = ['#ef4444','#f59e0b','#10b981','#059669'];
+      const labels = ['Weak','Fair','Good','Strong'];
+      const i = s < 25 ? 0 : s < 50 ? 1 : s < 75 ? 2 : 3;
+      const bar = document.getElementById('pwBar');
+      bar.style.width = s + '%';
+      bar.style.background = colors[i];
+      const hint = document.getElementById('pwHint');
+      hint.textContent = pw.length ? labels[i] + ' password' : '';
+      hint.style.color = colors[i];
+    });
+
+    // Confirm password match
+    document.getElementById('confirmPw').addEventListener('input', function() {
+      const hint = document.getElementById('pwMatchHint');
+      if (!this.value) { hint.textContent = ''; return; }
+      const match = document.getElementById('password').value === this.value;
+      hint.textContent = match ? '✓ Passwords match' : '✗ Passwords do not match';
+      hint.className = 'input-hint ' + (match ? 'success' : 'error');
+    });
+
+    // Uppercase invite code
+    document.getElementById('inviteCode').addEventListener('input', function() {
+      this.value = this.value.toUpperCase();
+    });
+
+    // Form submit
+    document.getElementById('signupForm').addEventListener('submit', function(e) {
+      const pw = document.getElementById('password').value;
+      const cf = document.getElementById('confirmPw').value;
+      if (pw !== cf) {
+        e.preventDefault();
+        document.getElementById('pwMatchHint').textContent = '✗ Passwords do not match';
+        document.getElementById('pwMatchHint').className = 'input-hint error';
+        return;
+      }
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Account...';
+    });
+  </script>
+</body>
+</html>
