@@ -523,9 +523,10 @@
     
     <div class="nav-section">
         <div class="nav-section-title">Settings</div>
-        <a href="{{ url_for('settings_page') }}">Settings</a>
-            <i class="fas fa-lock"></i>
-            <span>2FA Security</span>
+        <a href="{{ url_for('settings_page') }}" class="nav-item {% if request.endpoint == 'settings_page' %}active{% endif %}">
+            <i class="fas fa-cog"></i>
+            <span>Settings</span>
+        </a>
         </a>
         {% if current_user.is_admin %}
         <a href="{{ url_for('cast_list') }}" class="nav-item {% if request.endpoint == 'cast_list' %}active{% endif %}">

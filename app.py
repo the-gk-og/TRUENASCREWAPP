@@ -1069,12 +1069,13 @@ def login():
                 # Redirect to 2FA verification page
                 return redirect(url_for('totp_verify_page'))
             
-        # Check if admin has required this user to set up 2FA
-        if getattr(user, 'force_2fa_setup', False) and (not tfa or not tfa.enabled):
-            login_user(user, remember=remember)
-            session['force_2fa_setup'] = True
-            return redirect(url_for('forced_2fa_setup'))
+            # Check if admin has required this user to set up 2FA
+            if getattr(user, 'force_2fa_setup', False) and (not tfa or not tfa.enabled):
+                login_user(user, remember=remember)
+                session['force_2fa_setup'] = True
+                return redirect(url_for('forced_2fa_setup'))
 
+            # Normal login - password is correct and no 2FA block
             login_user(user, remember=remember)
             
             if remember:
