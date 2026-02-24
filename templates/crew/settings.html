@@ -127,6 +127,29 @@
             <i class="fas fa-check-circle" style="color: #10b981;"></i>
             Your account is protected with 2FA.
         </div>
+
+        <!-- ==================== SKIP 2FA FOR OAUTH TOGGLE ==================== -->
+        <div style="background: #f9fafb; border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; margin-bottom: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+                <div>
+                    <h4 style="margin: 0 0 0.25rem; color: var(--dark); font-size: 0.95rem;">
+                        <i class="fab fa-google" style="color: #4285f4; margin-right: 0.4rem;"></i>
+                        Skip 2FA when signing in with Google
+                    </h4>
+                    <p style="margin: 0; color: #6b7280; font-size: 0.85rem;">
+                        When enabled, signing in with your linked Google account will bypass the TOTP prompt. Google's own security protects the login.
+                    </p>
+                </div>
+                <label class="toggle-switch" title="Toggle 2FA bypass for Google OAuth">
+                    <input type="checkbox" id="skip2faOauthToggle"
+                           {% if current_user.skip_2fa_for_oauth %}checked{% endif %}
+                           onchange="toggleSkip2faOauth(this.checked)">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <p id="skip2faOauthStatus" style="margin: 0.75rem 0 0; font-size: 0.82rem; color: #6b7280;"></p>
+        </div>
+
         <button onclick="showDisable2FA()" class="btn btn-danger">
             <i class="fas fa-times-circle"></i> Disable 2FA
         </button>
@@ -322,6 +345,38 @@
 .tab-panel { display: none; }
 .tab-panel.active { display: block; animation: fadeIn 0.2s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Toggle switch */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 52px;
+    height: 28px;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+    position: absolute;
+    inset: 0;
+    background: #d1d5db;
+    border-radius: 28px;
+    transition: 0.3s;
+}
+.toggle-slider::before {
+    content: '';
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    left: 3px;
+    bottom: 3px;
+    background: white;
+    border-radius: 50%;
+    transition: 0.3s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.toggle-switch input:checked + .toggle-slider { background: var(--success); }
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(24px); }
 </style>
 
 {% endblock %}
@@ -334,11 +389,9 @@ function switchTab(name) {
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     document.getElementById('tab-' + name).classList.add('active');
     document.getElementById('panel-' + name).classList.add('active');
-    // store in URL hash
     history.replaceState(null, '', '#' + name);
 }
 
-// Load tab from hash
 window.addEventListener('DOMContentLoaded', () => {
     const hash = location.hash.replace('#', '');
     if (hash && document.getElementById('tab-' + hash)) switchTab(hash);
@@ -395,6 +448,40 @@ document.getElementById('changePasswordForm').addEventListener('submit', functio
         btn.innerHTML = '<i class="fas fa-check"></i> Change Password';
     });
 });
+
+// ==================== SKIP 2FA FOR OAUTH TOGGLE ====================
+function toggleSkip2faOauth(enabled) {
+    const statusEl = document.getElementById('skip2faOauthStatus');
+    if (statusEl) {
+        statusEl.textContent = 'Saving...';
+        statusEl.style.color = '#6b7280';
+    }
+    fetch('/api/settings/skip-2fa-oauth', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ enabled })
+    }).then(r => r.json()).then(d => {
+        if (d.success) {
+            showAlert(enabled
+                ? 'Google sign-in will now skip the 2FA prompt.'
+                : '2FA will be required even when signing in with Google.',
+            'success');
+            if (statusEl) {
+                statusEl.textContent = enabled
+                    ? '✓ Google sign-in bypasses 2FA prompt.'
+                    : '2FA prompt is required for all login methods.';
+                statusEl.style.color = enabled ? 'var(--success)' : '#6b7280';
+            }
+        } else {
+            showAlert(d.error || 'Failed to update setting', 'error');
+            // Revert toggle
+            document.getElementById('skip2faOauthToggle').checked = !enabled;
+        }
+    }).catch(() => {
+        showAlert('Network error', 'error');
+        document.getElementById('skip2faOauthToggle').checked = !enabled;
+    });
+}
 
 // 2FA setup
 let currentSecret = '', backupCodesData = [];

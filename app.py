@@ -313,6 +313,7 @@ class User(UserMixin, db.Model):
     is_cast = db.Column(db.Boolean, default=False)
     user_role = db.Column(db.String(20), default='crew')  # NEW: 'crew', 'staff', 'cast'
     force_2fa_setup = db.Column(db.Boolean, default=False)
+    skip_2fa_for_oauth = db.Column(db.Boolean, default=False)
 
 
 class Equipment(db.Model):
@@ -1511,7 +1512,8 @@ def google_callback():
             db.session.commit()
 
             tfa = TwoFactorAuth.query.filter_by(user_id=user.id).first()
-            if tfa and tfa.enabled:
+            skip_2fa = getattr(user, 'skip_2fa_for_oauth', False)
+            if tfa and tfa.enabled and not skip_2fa:
                 session['pending_2fa_user_id'] = user.id
                 session['pending_2fa_remember'] = False
                 return redirect(url_for('totp_verify_page'))
@@ -1580,6 +1582,19 @@ def google_unlink():
         return jsonify({'success': True, 'message': 'Google account unlinked'})
     
     return jsonify({'error': 'Google account not linked'}), 400
+
+@app.route('/api/settings/skip-2fa-oauth', methods=['POST'])
+@login_required
+def toggle_skip_2fa_oauth():
+    data = request.json
+    enabled = data.get('enabled', False)
+    current_user.skip_2fa_for_oauth = bool(enabled)
+    db.session.commit()
+    log_security_event(
+        '2FA_OAUTH_BYPASS_' + ('ENABLED' if enabled else 'DISABLED'),
+        username=current_user.username
+    )
+    return jsonify({'success': True, 'skip_2fa_for_oauth': current_user.skip_2fa_for_oauth})
 
 
 @app.route('/signup', methods=['GET', 'POST'])
