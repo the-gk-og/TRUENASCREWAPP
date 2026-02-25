@@ -144,17 +144,75 @@
         }
         
         .user-avatar {
-            width: 36px;
-            height: 36px;
+            width: 40px;
+            height: 40px;
+            min-width: 40px;
+            min-height: 40px;
             border-radius: 50%;
             background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
-            font-weight: 600;
-            font-size: 0.9rem;
+            font-weight: 700;
+            font-size: 1rem;
+            overflow: hidden;
+            border: 2px solid white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            flex-shrink: 0;
         }
+        
+        .user-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        
+        /* Profile avatar class for consistency */
+        .profile-avatar {
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+        
+        .profile-avatar-sm {
+            width: 32px;
+            height: 32px;
+            min-width: 32px;
+            min-height: 32px;
+            font-size: 0.85rem;
+            font-weight: 700;
+        }
+        
+        .profile-avatar-md {
+            width: 48px;
+            height: 48px;
+            min-width: 48px;
+            min-height: 48px;
+            font-size: 1rem;
+            font-weight: 700;
+        }
+        
+        .profile-avatar-lg {
+            width: 80px;
+            height: 80px;
+            min-width: 80px;
+            min-height: 80px;
+            font-size: 2rem;
+            font-weight: 700;
+        }
+        
+        .profile-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        
         
         /* Main Content */
         .main-content {
@@ -568,9 +626,13 @@
         </button>
         
         <div class="topbar-user">
-            <div class="user-avatar">
-                {{ current_user.username[0].upper() }}
+            {% if current_user.profile_picture %}
+            <div class="user-avatar" id="topbarAvatar">
+                <img src="/profile/picture/{{ current_user.username }}" alt="{{ current_user.username }}" onerror="document.getElementById('topbarAvatar').innerHTML='{{ current_user.username[0].upper() }}'">
             </div>
+            {% else %}
+            <div class="user-avatar">{{ current_user.username[0].upper() }}</div>
+            {% endif %}
             <span style="font-weight: 600;">{{ current_user.username }}</span>
         </div>
     </header>

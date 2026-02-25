@@ -1,5 +1,5 @@
 # Ignore all contents inside uploads/ (files and subfolders)
-#uploads/**
+uploads/**
 
 # But keep the uploads/ folder itself
 !uploads/

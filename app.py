@@ -201,6 +201,10 @@ if backend:
     print("✓ Uptime tracking enabled")
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'users'), exist_ok=True)
+os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'stageplans'), exist_ok=True)
+os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'picklists'), exist_ok=True)
+os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'documents'), exist_ok=True)
 os.makedirs('backups', exist_ok=True)
 
 notification_tracker = {}
@@ -314,6 +318,9 @@ class User(UserMixin, db.Model):
     user_role = db.Column(db.String(20), default='crew')  # NEW: 'crew', 'staff', 'cast'
     force_2fa_setup = db.Column(db.Boolean, default=False)
     skip_2fa_for_oauth = db.Column(db.Boolean, default=False)
+    profile_picture = db.Column(db.String(300), nullable=True)
+    password_reset_token = db.Column(db.String(100), nullable=True)
+    password_reset_expiry = db.Column(db.DateTime, nullable=True)
 
 
 class Equipment(db.Model):
@@ -373,6 +380,13 @@ class Event(db.Model):
     pick_list_items = db.relationship('PickListItem', backref='event', lazy=True, cascade='all, delete-orphan')
     stage_plans = db.relationship('StagePlan', backref='event', lazy=True, cascade='all, delete-orphan')
     cast_description = db.Column(db.Text)
+    # Recurrence fields
+    recurrence_pattern = db.Column(db.String(50), nullable=True)  # 'daily', 'weekly', 'biweekly', 'monthly', 'yearly'
+    recurrence_interval = db.Column(db.Integer, default=1)  # e.g., every X days/weeks/months
+    recurrence_end_date = db.Column(db.DateTime, nullable=True)  # When recurrence stops
+    recurrence_count = db.Column(db.Integer, nullable=True)  # Number of occurrences if not end_date
+    is_recurring_instance = db.Column(db.Boolean, default=False)  # True if this is an instance of a recurring event
+    recurring_event_id = db.Column(db.Integer, nullable=True)  # ID of the parent recurring event
 
 
 
@@ -587,6 +601,47 @@ class OAuthConnection(db.Model):
     __table_args__ = (
         db.UniqueConstraint('provider', 'provider_user_id', name='unique_provider_user'),
     )
+
+
+class UserUnavailability(db.Model):
+    """Track when crew members are unavailable"""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    start_date = db.Column(db.DateTime, nullable=False)
+    end_date = db.Column(db.DateTime, nullable=False)
+    is_all_day = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Recurrence fields
+    recurrence_pattern = db.Column(db.String(50), nullable=True)  # 'daily', 'weekly', 'monthly', 'yearly'
+    recurrence_interval = db.Column(db.Integer, default=1)
+    recurrence_end_date = db.Column(db.DateTime, nullable=True)
+    recurrence_count = db.Column(db.Integer, nullable=True)
+    
+    user = db.relationship('User', backref='unavailabilities')
+
+class RecurringUnavailability(db.Model):
+    """Templates for recurring unavailabilities (e.g., every Sunday)"""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    # Time fields for recurring pattern
+    start_time = db.Column(db.String(5), nullable=False)  # HH:MM format
+    end_time = db.Column(db.String(5), nullable=False)  # HH:MM format
+    # Recurrence pattern
+    pattern_type = db.Column(db.String(20), nullable=False)  # 'daily', 'weekly', 'monthly'
+    days_of_week = db.Column(db.String(50), nullable=True)  # JSON array: [0,1,2,3,4,5,6] for Sun-Sat
+    day_of_month = db.Column(db.Integer, nullable=True)  # For monthly pattern (1-31)
+    start_date = db.Column(db.DateTime, nullable=False)
+    end_date = db.Column(db.DateTime, nullable=True)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    user = db.relationship('User', backref='recurring_unavailabilities')
 
 
 
@@ -1711,8 +1766,51 @@ def logout():
 @login_required
 @crew_required
 def dashboard():
-    upcoming_events = Event.query.filter(Event.event_date >= datetime.now()).order_by(Event.event_date).limit(5).all()
-    return render_template('/crew/dashboard.html', upcoming_events=upcoming_events)
+    # Get upcoming events
+    upcoming_events = Event.query.filter(Event.event_date >= datetime.now()).order_by(Event.event_date).limit(10).all()
+    
+    # Find events where current user is assigned as crew
+    my_upcoming_events = []
+    for event in upcoming_events:
+        crew_assignments = CrewAssignment.query.filter_by(event_id=event.id).all()
+        for assignment in crew_assignments:
+            if assignment.crew_member == current_user.username or str(assignment.crew_member).lower() == str(current_user.username).lower():
+                my_upcoming_events.append(event)
+                break
+    
+    # Get my pending tasks (todos)
+    pending_tasks = TodoItem.query.filter_by(user_id=current_user.id, is_completed=False).order_by(TodoItem.due_date).all()
+    pending_tasks_count = len(pending_tasks)
+    
+    # Events this week
+    today = datetime.now()
+    week_end = today + timedelta(days=7)
+    events_this_week = Event.query.filter(
+        Event.event_date >= today,
+        Event.event_date <= week_end
+    ).count()
+    
+    # Check for events user is assigned to this week
+    my_events_this_week = 0
+    for event in Event.query.filter(Event.event_date >= today, Event.event_date <= week_end).all():
+        crew_assignments = CrewAssignment.query.filter_by(event_id=event.id).all()
+        for assignment in crew_assignments:
+            if assignment.crew_member == current_user.username or str(assignment.crew_member).lower() == str(current_user.username).lower():
+                my_events_this_week += 1
+                break
+    
+    # Get next event for display
+    next_event = my_upcoming_events[0] if my_upcoming_events else None
+    
+    return render_template('/crew/dashboard.html', 
+                         upcoming_events=upcoming_events,
+                         my_upcoming_events=my_upcoming_events,
+                         pending_tasks_count=pending_tasks_count,
+                         pending_tasks=pending_tasks,
+                         my_events_this_week=my_events_this_week,
+                         events_this_week=events_this_week,
+                         next_event=next_event,
+                         now=today)
 
 
 @app.route('/crew/inbox')
@@ -2133,7 +2231,9 @@ def delete_stageplan(id):
 def calendar():
     events = Event.query.order_by(Event.event_date).all()
     now = datetime.now()
-    return render_template('/crew/calendar.html', events=events, now=now)
+    # Get all crew users for the schedule view
+    crew_users = User.query.filter_by(user_role='crew').order_by(User.username).all()
+    return render_template('/crew/calendar.html', events=events, now=now, crew_users=crew_users)
 
 
 @app.route('/calendar/ics')
@@ -5605,6 +5705,756 @@ def api_chat_mark_all_read():
         print(f"Error marking all as read: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+
+# ==================== PROFILE PICTURE & ACCOUNT MANAGEMENT ====================
+
+@app.route('/profile/picture/upload', methods=['POST'])
+@login_required
+def upload_profile_picture():
+    """Upload profile picture for current user"""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+    
+    # Check file extension
+    allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+    if not ('.' in file.filename and file.filename.rsplit('.', 1)[1].lower() in allowed_extensions):
+        return jsonify({'error': 'Invalid file type. Allowed: png, jpg, jpeg, gif, webp'}), 400
+    
+    try:
+        # Create filename with timestamp to avoid conflicts
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        ext = file.filename.rsplit('.', 1)[1].lower()
+        filename = f"{current_user.username}_{timestamp}.{ext}"
+        
+        # Save to users subdirectory
+        users_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'users')
+        os.makedirs(users_folder, exist_ok=True)
+        
+        filepath = os.path.join(users_folder, filename)
+        file.save(filepath)
+        
+        # Delete old profile picture if exists
+        if current_user.profile_picture:
+            old_path = os.path.join(users_folder, current_user.profile_picture.split('/')[-1])
+            if os.path.exists(old_path):
+                try:
+                    os.remove(old_path)
+                except:
+                    pass
+        
+        # Update user profile_picture field
+        current_user.profile_picture = f"users/{filename}"
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'filename': filename,
+            'url': f"/profile/picture/{current_user.username}"
+        })
+    
+    except Exception as e:
+        print(f"Profile picture upload error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/profile/picture/<username>')
+@login_required
+def view_profile_picture(username):
+    """View profile picture for user"""
+    user = User.query.filter_by(username=username).first()
+    
+    if not user or not user.profile_picture:
+        # Return placeholder/default image
+        return send_from_directory(app.config['UPLOAD_FOLDER'], 'default-avatar.png') if os.path.exists(os.path.join(app.config['UPLOAD_FOLDER'], 'default-avatar.png')) else '', 404
+    
+    try:
+        return send_from_directory(app.config['UPLOAD_FOLDER'], user.profile_picture)
+    except:
+        return '', 404
+
+@app.route('/profile/picture/delete', methods=['POST'])
+@login_required
+def delete_profile_picture():
+    """Delete profile picture"""
+    if current_user.profile_picture:
+        users_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'users')
+        old_path = os.path.join(users_folder, current_user.profile_picture.split('/')[-1])
+        if os.path.exists(old_path):
+            try:
+                os.remove(old_path)
+            except:
+                pass
+        
+        current_user.profile_picture = None
+        db.session.commit()
+    
+    return jsonify({'success': True})
+
+# ==================== ACCOUNT INFO UPDATE ====================
+
+@app.route('/settings/update-account', methods=['POST'])
+@login_required
+def update_account_info():
+    """Update username, email, and other account information"""
+    data = request.json
+    
+    # Validate username if changing
+    if data.get('username') and data['username'] != current_user.username:
+        if User.query.filter_by(username=data['username']).first():
+            return jsonify({'error': 'Username already taken'}), 400
+        
+        if len(data['username']) < 3:
+            return jsonify({'error': 'Username must be at least 3 characters'}), 400
+        
+        current_user.username = data['username']
+    
+    # Validate email if changing
+    if data.get('email') is not None:
+        new_email = data['email'].strip() if data['email'] else None
+        
+        if new_email and new_email != current_user.email:
+            if User.query.filter_by(email=new_email).first():
+                return jsonify({'error': 'Email already in use'}), 400
+        
+        current_user.email = new_email
+    
+    # Update other fields if provided
+    if 'discord_id' in data:
+        current_user.discord_id = data.get('discord_id').strip() if data.get('discord_id') else None
+    
+    if 'discord_username' in data:
+        current_user.discord_username = data.get('discord_username').strip() if data.get('discord_username') else None
+    
+    try:
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'message': 'Account information updated',
+            'username': current_user.username,
+            'email': current_user.email
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+# ==================== FORGOT PASSWORD & PASSWORD RESET ====================
+
+@app.route('/password/forgot', methods=['GET', 'POST'])
+def forgot_password():
+    """Password reset request page and handler"""
+    if request.method == 'GET':
+        org = get_organization() or DEFAULT_ORG
+        return render_template('forgot_password.html', organization=org)
+    
+    # POST request - send reset email
+    data = request.json
+    username_or_email = data.get('username_or_email', '').strip()
+    
+    if not username_or_email:
+        return jsonify({'error': 'Username or email required'}), 400
+    
+    # Find user by username or email
+    user = User.query.filter(
+        (User.username == username_or_email) | (User.email == username_or_email)
+    ).first()
+    
+    if not user:
+        # Don't reveal if user exists - security best practice
+        return jsonify({'success': True, 'message': 'If that account exists, an email has been sent with reset instructions'}), 200
+    
+    if not user.email:
+        return jsonify({'error': 'This account has no email address associated'}), 400
+    
+    try:
+        # Generate reset token (valid for 24 hours)
+        reset_token = secrets.token_urlsafe(32)
+        user.password_reset_token = reset_token
+        user.password_reset_expiry = datetime.utcnow() + timedelta(hours=24)
+        db.session.commit()
+        
+        # Build reset URL
+        reset_url = f"{MAIN_SERVER_URL}/password/reset/{reset_token}"
+        org = get_organization() or DEFAULT_ORG
+        
+        # Send reset email
+        subject = f"Password Reset Request - {org.get('name', 'ShowWise')}"
+        body = f"""Hello {user.username},
+
+You've requested to reset your password. Click the link below (or copy it into your browser):
+
+{reset_url}
+
+This link will expire in 24 hours.
+
+If you did not request this, please ignore this email and your password will remain unchanged.
+
+ShowWise Team
+{org.get('name', 'ShowWise')}"""
+        
+        sent = send_email(subject, user.email, body)
+        
+        if sent:
+            log_security_event('PASSWORD_RESET_REQUESTED', username=user.username)
+            return jsonify({'success': True, 'message': 'Password reset email sent'}), 200
+        else:
+            return jsonify({'error': 'Could not send email (check email configuration)'}), 500
+    
+    except Exception as e:
+        print(f"Password forgot error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/password/reset/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    """Password reset page and handler"""
+    if request.method == 'GET':
+        # Verify token exists and is valid
+        user = User.query.filter_by(password_reset_token=token).first()
+        
+        if not user or not user.password_reset_expiry or user.password_reset_expiry < datetime.utcnow():
+            flash('Password reset link is invalid or has expired', 'error')
+            return redirect(url_for('login'))
+        
+        org = get_organization() or DEFAULT_ORG
+        return render_template('reset_password.html', token=token, organization=org)
+    
+    # POST request - reset the password
+    data = request.json
+    new_password = data.get('new_password', '').strip()
+    confirm_password = data.get('confirm_password', '').strip()
+    
+    # Verify token
+    user = User.query.filter_by(password_reset_token=token).first()
+    
+    if not user:
+        return jsonify({'error': 'Invalid reset token'}), 400
+    
+    if not user.password_reset_expiry or user.password_reset_expiry < datetime.utcnow():
+        # Clear expired token
+        user.password_reset_token = None
+        user.password_reset_expiry = None
+        db.session.commit()
+        return jsonify({'error': 'Reset link has expired'}), 400
+    
+    # Validate new password
+    if len(new_password) < 6:
+        return jsonify({'error': 'Password must be at least 6 characters'}), 400
+    
+    if new_password != confirm_password:
+        return jsonify({'error': 'Passwords do not match'}), 400
+    
+    try:
+        # Update password
+        user.password_hash = generate_password_hash(new_password)
+        user.password_reset_token = None
+        user.password_reset_expiry = None
+        db.session.commit()
+        
+        # Log security event
+        log_security_event('PASSWORD_RESET_COMPLETED', username=user.username)
+        
+        # Send confirmation email
+        if user.email:
+            subject = "Your Password Has Been Reset - ShowWise"
+            body = f"""Hello {user.username},
+
+Your password has been successfully reset.
+
+If you did not make this change, please contact your administrator immediately.
+
+ShowWise Team"""
+            send_email(subject, user.email, body)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Password reset successfully',
+            'redirect': url_for('login')
+        }), 200
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"Password reset error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# ==================== EVENT JOIN FROM CALENDAR ====================
+
+@app.route('/crew/join-event', methods=['POST'])
+@login_required
+@crew_required
+def join_event_from_calendar():
+    """Allow crew member to join (self-assign) to an event from calendar"""
+    data = request.json
+    event_id = data.get('event_id')
+    
+    if not event_id:
+        return jsonify({'error': 'Event ID required'}), 400
+    
+    event = Event.query.get_or_404(event_id)
+    
+    # Check if already assigned
+    existing = CrewAssignment.query.filter_by(
+        event_id=event_id,
+        crew_member=current_user.username
+    ).first()
+    
+    if existing:
+        return jsonify({'error': 'You are already assigned to this event'}), 400
+    
+    try:
+        # Create assignment
+        assignment = CrewAssignment(
+            event_id=event_id,
+            crew_member=current_user.username,
+            role='Crew Member',
+            assigned_via='self'
+        )
+        db.session.add(assignment)
+        db.session.commit()
+        
+        # Send confirmation email if available
+        if current_user.email:
+            subject = f"🎭 You've joined: {event.title}"
+            body = f"""Hello {current_user.username},
+
+You successfully joined the production event!
+
+📋 Event Details:
+  • Event: {event.title}
+  • Date & Time: {event.event_date.strftime('%B %d, %Y at %I:%M %p')}
+  • Location: {event.location or 'TBD'}
+
+You can now view:
+  • Pick lists for items to gather
+  • Stage plans and technical info
+  • Other crew members on this event
+  • Event schedules and updates
+
+See you there!
+ShowWise Team"""
+            send_email(subject, current_user.email, body)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Successfully joined event',
+            'assignment_id': assignment.id
+        }), 200
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"Join event error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/crew/leave-event', methods=['POST'])
+@login_required
+@crew_required
+def leave_event():
+    """Allow crew member to leave an event"""
+    data = request.json
+    assignment_id = data.get('assignment_id')
+    
+    if not assignment_id:
+        return jsonify({'error': 'Assignment ID required'}), 400
+    
+    assignment = CrewAssignment.query.get_or_404(assignment_id)
+    
+    # Security: only allow user to leave their own assignment or admin to remove them
+    if assignment.crew_member != current_user.username and not current_user.is_admin:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        event = Event.query.get(assignment.event_id)
+        db.session.delete(assignment)
+        db.session.commit()
+        
+        if event:
+            return jsonify({'success': True, 'message': f'You left {event.title}'}), 200
+        else:
+            return jsonify({'success': True, 'message': 'Assignment removed'}), 200
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+# ==================== RECURRING EVENTS ====================
+
+@app.route('/events/create-recurring', methods=['POST'])
+@login_required
+@crew_required  
+def create_recurring_event():
+    """Create a recurring event"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    data = request.json
+    
+    try:
+        start_date = datetime.fromisoformat(data['event_date'])
+        end_date_input = datetime.fromisoformat(data['event_end_date']) if data.get('event_end_date') else start_date + timedelta(hours=3)
+        
+        # Create the primary recurring event
+        event = Event(
+            title=data['title'],
+            description=data.get('description', ''),
+            event_date=start_date,
+            event_end_date=end_date_input,
+            location=data.get('location', ''),
+            created_by=current_user.username,
+            recurrence_pattern=data.get('recurrence_pattern'),
+            recurrence_interval=data.get('recurrence_interval', 1),
+            recurrence_end_date=datetime.fromisoformat(data['recurrence_end_date']) if data.get('recurrence_end_date') else None,
+            recurrence_count=data.get('recurrence_count')
+        )
+        db.session.add(event)
+        db.session.commit()
+        
+        # Generate recurring instances
+        generate_recurring_event_instances(event)
+        
+        send_discord_event_announcement(event)
+        return jsonify({'success': True, 'id': event.id, 'message': 'Recurring event created'})
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+def generate_recurring_event_instances(parent_event):
+    """Generate individual event instances for a recurring event"""
+    if not parent_event.recurrence_pattern:
+        return
+    
+    instances = []
+    current = parent_event.event_date
+    count = 0
+    
+    while True:
+        count += 1
+        
+        # Check end conditions
+        if parent_event.recurrence_count and count > parent_event.recurrence_count:
+            break
+        if parent_event.recurrence_end_date and current > parent_event.recurrence_end_date:
+            break
+        
+        # Skip the first one (already created as parent)
+        if count > 1:
+            duration = (parent_event.event_end_date - parent_event.event_date) if parent_event.event_end_date else timedelta(hours=3)
+            
+            instance = Event(
+                title=parent_event.title,
+                description=parent_event.description,
+                event_date=current,
+                event_end_date=current + duration,
+                location=parent_event.location,
+                created_by=parent_event.created_by,
+                is_recurring_instance=True,
+                recurring_event_id=parent_event.id
+            )
+            db.session.add(instance)
+            instances.append(instance)
+        
+        # Calculate next occurrence
+        if parent_event.recurrence_pattern == 'daily':
+            current += timedelta(days=parent_event.recurrence_interval)
+        elif parent_event.recurrence_pattern == 'weekly':
+            current += timedelta(weeks=parent_event.recurrence_interval)
+        elif parent_event.recurrence_pattern == 'biweekly':
+            current += timedelta(weeks=2 * parent_event.recurrence_interval)
+        elif parent_event.recurrence_pattern == 'monthly':
+            try:
+                if current.month == 12:
+                    current = current.replace(year=current.year + 1, month=1)
+                else:
+                    current = current.replace(month=current.month + parent_event.recurrence_interval)
+            except ValueError:
+                # Handle day overflow (e.g., Jan 31 -> Feb 31 doesn't exist)
+                current = current.replace(day=28) + timedelta(days=4)
+                current = current - timedelta(days=current.day)
+        elif parent_event.recurrence_pattern == 'yearly':
+            current = current.replace(year=current.year + parent_event.recurrence_interval)
+        
+        if count > 1000:  # Safety limit
+            break
+    
+    db.session.commit()
+
+# ==================== UNAVAILABILITY MANAGEMENT ====================
+
+@app.route('/unavailability/add', methods=['POST'])
+@login_required
+def add_unavailability():
+    """Add an unavailability period for the current user"""
+    data = request.json
+    
+    try:
+        start_date = datetime.fromisoformat(data['start_date'])
+        end_date = datetime.fromisoformat(data['end_date'])
+        
+        unavailability = UserUnavailability(
+            user_id=current_user.id,
+            title=data.get('title', 'Unavailable'),
+            description=data.get('description', ''),
+            start_date=start_date,
+            end_date=end_date,
+            is_all_day=data.get('is_all_day', False),
+            recurrence_pattern=data.get('recurrence_pattern'),
+            recurrence_interval=data.get('recurrence_interval', 1),
+            recurrence_end_date=datetime.fromisoformat(data['recurrence_end_date']) if data.get('recurrence_end_date') else None,
+            recurrence_count=data.get('recurrence_count')
+        )
+        db.session.add(unavailability)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'id': unavailability.id})
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/unavailability/delete/<int:id>', methods=['DELETE'])
+@login_required
+def delete_unavailability(id):
+    """Delete an unavailability for the current user"""
+    unavailability = UserUnavailability.query.get_or_404(id)
+    
+    # Security: only user or admin can delete
+    if unavailability.user_id != current_user.id and not current_user.is_admin:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        db.session.delete(unavailability)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/unavailability/list', methods=['GET'])
+@login_required
+def list_unavailabilities():
+    """Get all unavailabilities for the current user"""
+    user_id = request.args.get('user_id', current_user.id)
+    
+    # If requesting another user's unavailabilities, must be admin
+    if user_id != current_user.id and not current_user.is_admin:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        unavailabilities = UserUnavailability.query.filter_by(user_id=user_id).all()
+        
+        result = []
+        for u in unavailabilities:
+            result.append({
+                'id': u.id,
+                'title': u.title,
+                'description': u.description,
+                'start_date': u.start_date.isoformat(),
+                'end_date': u.end_date.isoformat(),
+                'is_all_day': u.is_all_day,
+                'recurrence_pattern': u.recurrence_pattern,
+                'recurrence_interval': u.recurrence_interval,
+                'recurrence_end_date': u.recurrence_end_date.isoformat() if u.recurrence_end_date else None,
+                'recurrence_count': u.recurrence_count
+            })
+        
+        return jsonify({'success': True, 'unavailabilities': result})
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/recurring-unavailability/add', methods=['POST'])
+@login_required
+def add_recurring_unavailability():
+    """Add a recurring unavailability template (e.g., every Sunday)"""
+    data = request.json
+    
+    try:
+        start_date = datetime.fromisoformat(data['start_date'])
+        
+        recurring_unavail = RecurringUnavailability(
+            user_id=current_user.id,
+            title=data.get('title', 'Recurring Unavailability'),
+            description=data.get('description', ''),
+            start_time=data['start_time'],  # HH:MM
+            end_time=data['end_time'],  # HH:MM
+            pattern_type=data['pattern_type'],  # 'daily', 'weekly', 'monthly'
+            days_of_week=data.get('days_of_week'),  # JSON string for weekly
+            day_of_month=data.get('day_of_month'),  # for monthly
+            start_date=start_date,
+            end_date=datetime.fromisoformat(data['end_date']) if data.get('end_date') else None,
+            is_active=data.get('is_active', True)
+        )
+        db.session.add(recurring_unavail)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'id': recurring_unavail.id})
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/recurring-unavailability/list', methods=['GET'])
+@login_required
+def list_recurring_unavailabilities():
+    """Get all recurring unavailability templates for the current user"""
+    user_id = request.args.get('user_id', current_user.id)
+    
+    if user_id != current_user.id and not current_user.is_admin:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        recurring = RecurringUnavailability.query.filter_by(user_id=user_id).all()
+        
+        result = []
+        for r in recurring:
+            result.append({
+                'id': r.id,
+                'title': r.title,
+                'description': r.description,
+                'start_time': r.start_time,
+                'end_time': r.end_time,
+                'pattern_type': r.pattern_type,
+                'days_of_week': r.days_of_week,
+                'day_of_month': r.day_of_month,
+                'start_date': r.start_date.isoformat(),
+                'end_date': r.end_date.isoformat() if r.end_date else None,
+                'is_active': r.is_active
+            })
+        
+        return jsonify({'success': True, 'recurring': result})
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/recurring-unavailability/delete/<int:id>', methods=['DELETE'])
+@login_required
+def delete_recurring_unavailability(id):
+    """Delete a recurring unavailability template"""
+    recurring = RecurringUnavailability.query.get_or_404(id)
+    
+    if recurring.user_id != current_user.id and not current_user.is_admin:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        db.session.delete(recurring)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/api/unavailabilities-week', methods=['GET'])
+@login_required
+def api_unavailabilities_week():
+    """Get unavailabilities for a week for the schedule view"""
+    start_str = request.args.get('start')
+    end_str = request.args.get('end')
+    
+    if not start_str or not end_str:
+        return jsonify({'error': 'start and end dates required'}), 400
+    
+    try:
+        start_date = datetime.fromisoformat(start_str)
+        end_date = datetime.fromisoformat(end_str)
+    except Exception as e:
+        return jsonify({'error': f'Invalid date format: {str(e)}'}), 400
+    
+    # Get all crew members
+    crew_users = User.query.filter_by(user_role='crew').all()
+    unavailabilities = []
+    
+    for user in crew_users:
+        # Get single unavailabilities for this date range
+        user_unavail = UserUnavailability.query.filter(
+            UserUnavailability.user_id == user.id,
+            UserUnavailability.start_date <= end_date,
+            UserUnavailability.end_date >= start_date
+        ).all()
+        
+        for unavail in user_unavail:
+            unavailabilities.append({
+                'id': unavail.id,
+                'username': user.username,
+                'title': unavail.title,
+                'start': unavail.start_date.isoformat(),
+                'end': unavail.end_date.isoformat(),
+                'description': unavail.description,
+                'is_all_day': unavail.is_all_day,
+                'type': 'unavailability'
+            })
+        
+        # Get recurring unavailabilities for this date range
+        recurring = RecurringUnavailability.query.filter(
+            RecurringUnavailability.user_id == user.id,
+            RecurringUnavailability.is_active == True,
+            RecurringUnavailability.start_date <= end_date,
+            (RecurringUnavailability.end_date >= start_date) | (RecurringUnavailability.end_date == None)
+        ).all()
+        
+        for rec in recurring:
+            # Generate instances for the week
+            current = start_date
+            while current < end_date:
+                should_include = False
+                
+                if rec.pattern_type == 'daily':
+                    should_include = True
+                elif rec.pattern_type == 'weekly':
+                    days = list(map(int, rec.days_of_week.split(','))) if rec.days_of_week else []
+                    # Convert Python weekday (0=Monday) to form format (0=Sunday)
+                    form_day = (current.weekday() + 1) % 7
+                    should_include = form_day in days
+                elif rec.pattern_type == 'monthly':
+                    should_include = current.day == rec.day_of_month
+                
+                if should_include and current.date() >= rec.start_date.date():
+                    if rec.end_date is None or current.date() <= rec.end_date.date():
+                        # Parse time
+                        start_h, start_m = map(int, rec.start_time.split(':'))
+                        end_h, end_m = map(int, rec.end_time.split(':'))
+                        
+                        unavail_start = current.replace(hour=start_h, minute=start_m, second=0)
+                        unavail_end = current.replace(hour=end_h, minute=end_m, second=0)
+                        
+                        unavailabilities.append({
+                            'id': f'rec-{rec.id}-{current.date()}',
+                            'username': user.username,
+                            'title': rec.title,
+                            'start': unavail_start.isoformat(),
+                            'end': unavail_end.isoformat(),
+                            'description': rec.description,
+                            'is_all_day': False,
+                            'type': 'recurring_unavailability'
+                        })
+                
+                current += timedelta(days=1)
+    
+    return jsonify({'success': True, 'unavailabilities': unavailabilities})
+
+# ==================== IMPORT SECRET & EXPORT REQUIREMENTS ====================
+
+@app.route('/admin/import-secret', methods=['POST'])
+@login_required
+def import_secret():
+    """Admin: Import data from backup/migration reference"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    
+    file = request.files['file']
+    
+    try:
+        if file.filename.endswith('.json'):
+            data = json.loads(file.read().decode('utf-8'))
+            # Process data as needed
+            return jsonify({'success': True, 'records': len(data)})
+        else:
+            return jsonify({'error': 'Only JSON files supported'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 # RUN APP
 

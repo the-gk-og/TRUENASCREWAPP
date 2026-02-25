@@ -280,20 +280,31 @@
         {% for assignment in event.crew_assignments %}
         <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; border-left: 4px solid var(--primary);">
             <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
-                <div style="flex: 1; min-width: 200px;">
-                    <h4 style="margin: 0 0 0.25rem 0;">{{ assignment.crew_member }}</h4>
-                    <p style="margin: 0.25rem 0; color: #666; font-size: 0.9rem;">{{ assignment.role or 'Crew Member' }}</p>
+                <div style="display: flex; align-items: center; gap: 1rem; flex: 1; min-width: 200px;">
                     {% set user = get_user_by_username(assignment.crew_member) %}
-                    {% if user and user.email %}
-                    <p style="margin: 0.25rem 0; color: #999; font-size: 0.8rem;"><i class="fas fa-envelope"></i> {{ user.email }}</p>
-                    <span style="background: #d1fae5; color: #065f46; padding: 0.25rem 0.5rem; border-radius: 20px; font-size: 0.75rem; display: inline-block; margin-top: 0.25rem;">
-                        <i class="fas fa-check-circle"></i> Notified
-                    </span>
+                    {% if user and user.profile_picture %}
+                    <div id="avatar-{{ loop.index0 }}" style="width: 48px; height: 48px; min-width: 48px; min-height: 48px; border-radius: 50%; border: 2px solid var(--primary); overflow: hidden;">
+                        <img src="/profile/picture/{{ assignment.crew_member }}" alt="{{ assignment.crew_member }}" style="width: 100%; height: 100%; object-fit: cover;" onerror="document.getElementById('avatar-{{ loop.index0 }}').innerHTML='<div style=\\\"width:100%;height:100%;background:linear-gradient(135deg,var(--primary),var(--secondary));color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;\\\">{{ assignment.crew_member[0].upper() }}</div>'">
+                    </div>
                     {% else %}
-                    <span style="background: #fee2e2; color: #991b1b; padding: 0.25rem 0.5rem; border-radius: 20px; font-size: 0.75rem; display: inline-block; margin-top: 0.25rem;">
-                        <i class="fas fa-exclamation-circle"></i> No Email
-                    </span>
+                    <div style="width: 48px; height: 48px; min-width: 48px; min-height: 48px; border-radius: 50%; background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1rem;">
+                        {{ assignment.crew_member[0].upper() }}
+                    </div>
                     {% endif %}
+                    <div>
+                        <h4 style="margin: 0 0 0.25rem 0;">{{ assignment.crew_member }}</h4>
+                        <p style="margin: 0.25rem 0; color: #666; font-size: 0.9rem;">{{ assignment.role or 'Crew Member' }}</p>
+                        {% if user and user.email %}
+                        <p style="margin: 0.25rem 0; color: #999; font-size: 0.8rem;"><i class="fas fa-envelope"></i> {{ user.email }}</p>
+                        <span style="background: #d1fae5; color: #065f46; padding: 0.25rem 0.5rem; border-radius: 20px; font-size: 0.75rem; display: inline-block; margin-top: 0.25rem;">
+                            <i class="fas fa-check-circle"></i> Notified
+                        </span>
+                        {% else %}
+                        <span style="background: #fee2e2; color: #991b1b; padding: 0.25rem 0.5rem; border-radius: 20px; font-size: 0.75rem; display: inline-block; margin-top: 0.25rem;">
+                            <i class="fas fa-exclamation-circle"></i> No Email
+                        </span>
+                        {% endif %}
+                    </div>
                 </div>
                 <button onclick="removeCrew({{ assignment.id }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; white-space: nowrap;">
                     <i class="fas fa-trash"></i>
