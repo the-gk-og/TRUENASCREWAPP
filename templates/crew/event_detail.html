@@ -318,6 +318,67 @@
     {% endif %}
 </div>
 
+<!-- SHIFTS SECTION -->
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+        <h3>📅 Shifts ({{ shifts_data|length }})</h3>
+        {% if current_user.is_admin %}
+        <a href="{{ url_for('shift_management') }}" class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.9rem; text-decoration: none;">
+            <i class="fas fa-plus"></i> Manage Shifts
+        </a>
+        {% endif %}
+    </div>
+    
+    {% if shifts_data %}
+    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+        {% for shift in shifts_data %}
+        <div style="background: #f0f9ff; padding: 1rem; border-radius: 8px; border-left: 4px solid #0284c7;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 200px;">
+                    <h4 style="margin: 0 0 0.5rem 0;">{{ shift.role }}</h4>
+                    <p style="margin: 0.25rem 0; color: #666; font-size: 0.9rem;">
+                        <i class="fas fa-calendar"></i> {{ shift.shift_date.split('T')[0] }}
+                        {% if shift.shift_end_date %}
+                        – {{ shift.shift_end_date.split('T')[0] }}
+                        {% endif %}
+                    </p>
+                    {% if shift.location %}
+                    <p style="margin: 0.25rem 0; color: #666; font-size: 0.9rem;">
+                        <i class="fas fa-map-marker-alt"></i> {{ shift.location }}
+                    </p>
+                    {% endif %}
+                    <div style="margin-top: 0.75rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+                        <span style="background: #e0e7ff; color: #3730a3; padding: 0.4rem 0.8rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600;">
+                            <i class="fas fa-users"></i> {{ shift.assigned_count }}/{{ shift.positions_needed }} Assigned
+                        </span>
+                        {% if shift.is_open %}
+                        <span style="background: #dcfce7; color: #166534; padding: 0.4rem 0.8rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600;">
+                            <i class="fas fa-unlock"></i> Open to Claim
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% if shift.assignments %}
+            <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #cbd5e1;">
+                <p style="margin: 0 0 0.5rem 0; font-size: 0.85rem; color: #666;"><strong>Assignment Status:</strong></p>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                    {% for assignment in shift.assignments %}
+                    <span style="background: {% if assignment.status == 'confirmed' %}#d1fae5{% elif assignment.status == 'accepted' %}#bfdbfe{% else %}#feca57{% endif %}; color: {% if assignment.status == 'confirmed' %}#065f46{% elif assignment.status == 'accepted' %}#1e40af{% else %}#7c2d12{% endif %}; padding: 0.25rem 0.6rem; border-radius: 12px; font-size: 0.8rem;">
+                        {{ assignment.username }} - <strong>{{ assignment.status }}</strong>
+                    </span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p style="color: #666; text-align: center; padding: 1rem;">No shifts created for this event yet.</p>
+    {% endif %}
+</div>
+
 
 
 <!-- QUICK LINKS -->

@@ -644,6 +644,71 @@ class RecurringUnavailability(db.Model):
     user = db.relationship('User', backref='recurring_unavailabilities')
 
 
+class Shift(db.Model):
+    """Shifts linked to events with assignment and claiming system"""
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    shift_date = db.Column(db.DateTime, nullable=False)  # Shift start time
+    shift_end_date = db.Column(db.DateTime, nullable=False)  # Shift end time
+    location = db.Column(db.String(200))  # Could be different from event location
+    positions_needed = db.Column(db.Integer, default=1)  # How many people needed
+    role = db.Column(db.String(100))  # Role type (e.g., "Lighting", "Sound", "Stage")
+    is_open = db.Column(db.Boolean, default=True)  # Can crew members claim this?
+    created_by = db.Column(db.String(80), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    event = db.relationship('Event', backref=db.backref('shifts', cascade='all, delete-orphan'))
+    assignments = db.relationship('ShiftAssignment', backref='shift', lazy=True, cascade='all, delete-orphan')
+
+
+class ShiftAssignment(db.Model):
+    """Individual assignment or claim of a shift by a crew member"""
+    id = db.Column(db.Integer, primary_key=True)
+    shift_id = db.Column(db.Integer, db.ForeignKey('shift.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    assigned_by = db.Column(db.String(80))  # Admin username or 'self' if claimed
+    status = db.Column(db.String(20), default='pending')  # pending, accepted, rejected, confirmed
+    notes = db.Column(db.Text)
+    assigned_at = db.Column(db.DateTime, default=datetime.utcnow)
+    responded_at = db.Column(db.DateTime, nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    user = db.relationship('User', backref='shift_assignments')
+
+
+class ShiftNote(db.Model):
+    """Notes attached to a shift for crew members to reference"""
+    id = db.Column(db.Integer, primary_key=True)
+    shift_id = db.Column(db.Integer, db.ForeignKey('shift.id'), nullable=False)
+    created_by = db.Column(db.String(80), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    shift = db.relationship('Shift', backref='notes')
+
+
+class ShiftTask(db.Model):
+    """Tasks or checklist items for a shift"""
+    id = db.Column(db.Integer, primary_key=True)
+    shift_id = db.Column(db.Integer, db.ForeignKey('shift.id'), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    is_complete = db.Column(db.Boolean, default=False)
+    assigned_to = db.Column(db.String(80))  # Username of crew member responsible, null = everyone
+    created_by = db.Column(db.String(80), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    shift = db.relationship('Shift', backref='tasks')
+
 
 # ============================================================
 # 1. NEW DATABASE MODELS — add these after the OAuthConnection model
@@ -2233,7 +2298,25 @@ def calendar():
     now = datetime.now()
     # Get all crew users for the schedule view
     crew_users = User.query.filter_by(user_role='crew').order_by(User.username).all()
-    return render_template('/crew/calendar.html', events=events, now=now, crew_users=crew_users)
+    
+    # Get all shifts with their assignment data
+    shifts = Shift.query.all()
+    shifts_data = []
+    for shift in shifts:
+        assignments = ShiftAssignment.query.filter_by(shift_id=shift.id).all()
+        assigned_count = sum(1 for a in assignments if a.status in ['accepted', 'confirmed'])
+        shifts_data.append({
+            'id': shift.id,
+            'event_id': shift.event_id,
+            'shift_date': shift.shift_date.isoformat(),
+            'title': shift.title,
+            'role': shift.role,
+            'positions_needed': shift.positions_needed,
+            'assigned_count': assigned_count,
+            'is_open': shift.is_open
+        })
+    
+    return render_template('/crew/calendar.html', events=events, now=now, crew_users=crew_users, shifts_data=shifts_data)
 
 
 @app.route('/calendar/ics')
@@ -2406,7 +2489,35 @@ def event_detail(id):
     event = Event.query.get_or_404(id)
     all_users = User.query.all()
     schedules = EventSchedule.query.filter_by(event_id=id).order_by(EventSchedule.scheduled_time).all()
-    return render_template('/crew/event_detail.html', event=event, all_users=all_users, schedules=schedules)
+    
+    # Get shifts for this event
+    shifts = Shift.query.filter_by(event_id=id).all()
+    shifts_data = []
+    for shift in shifts:
+        assignments = ShiftAssignment.query.filter_by(shift_id=shift.id).all()
+        assigned_count = sum(1 for a in assignments if a.status in ['accepted', 'confirmed'])
+        shifts_data.append({
+            'id': shift.id,
+            'title': shift.title,
+            'role': shift.role,
+            'shift_date': shift.shift_date.isoformat(),
+            'shift_end_date': shift.shift_end_date.isoformat() if shift.shift_end_date else None,
+            'positions_needed': shift.positions_needed,
+            'location': shift.location,
+            'assigned_count': assigned_count,
+            'is_open': shift.is_open,
+            'assignments': [
+                {
+                    'id': a.id,
+                    'user_id': a.user_id,
+                    'status': a.status,
+                    'username': User.query.get(a.user_id).username if User.query.get(a.user_id) else 'Unknown'
+                }
+                for a in assignments
+            ]
+        })
+    
+    return render_template('/crew/event_detail.html', event=event, all_users=all_users, schedules=schedules, shifts_data=shifts_data)
 
 @app.route('/events/<int:id>', methods=['DELETE'])
 @login_required
@@ -2494,6 +2605,557 @@ def delete_event_schedule(schedule_id):
         db.session.rollback()
         print(f"Schedule delete error: {e}")
         return jsonify({'error': str(e)}), 400
+
+# ============================================================
+# SHIFT MANAGEMENT ROUTES
+# ============================================================
+
+@app.route('/shifts/management')
+@login_required
+def shift_management():
+    """Admin shift management page"""
+    if not current_user.is_admin:
+        flash('Admin access required', 'error')
+        return redirect(url_for('calendar'))
+    
+    events = Event.query.order_by(Event.event_date).all()
+    shifts = Shift.query.join(Event).order_by(Event.event_date, Shift.shift_date).all()
+    users = User.query.filter_by(user_role='crew').all()
+    
+    return render_template('/admin/shift_management.html', events=events, shifts=shifts, users=users)
+
+@app.route('/api/shifts', methods=['GET'])
+@login_required
+def get_shifts():
+    """Get all shifts for an event or user"""
+    event_id = request.args.get('event_id', type=int)
+    user_view = request.args.get('user_view', 'false').lower() == 'true'
+    
+    if event_id:
+        shifts = Shift.query.filter_by(event_id=event_id).all()
+    else:
+        shifts = Shift.query.all()
+    
+    result = []
+    for shift in shifts:
+        shift_data = {
+            'id': shift.id,
+            'event_id': shift.event_id,
+            'title': shift.title,
+            'description': shift.description,
+            'shift_date': shift.shift_date.isoformat(),
+            'shift_end_date': shift.shift_end_date.isoformat(),
+            'location': shift.location,
+            'positions_needed': shift.positions_needed,
+            'role': shift.role,
+            'is_open': shift.is_open,
+            'event_title': shift.event.title if shift.event else '',
+            'created_by': shift.created_by,
+            'assignments_count': len(shift.assignments),
+            'assignments': []
+        }
+        
+        for assignment in shift.assignments:
+            shift_data['assignments'].append({
+                'id': assignment.id,
+                'user_id': assignment.user_id,
+                'username': assignment.user.username,
+                'status': assignment.status,
+                'assigned_by': assignment.assigned_by,
+                'assigned_at': assignment.assigned_at.isoformat(),
+                'responded_at': assignment.responded_at.isoformat() if assignment.responded_at else None,
+                'notes': assignment.notes
+            })
+        
+        result.append(shift_data)
+    
+    return jsonify(result)
+
+@app.route('/shifts/add', methods=['POST'])
+@login_required
+def add_shift():
+    """Add a new shift to an event"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    data = request.json
+    
+    try:
+        shift_date = datetime.fromisoformat(data['shift_date'])
+        shift_end_date = datetime.fromisoformat(data['shift_end_date'])
+        
+        shift = Shift(
+            event_id=data['event_id'],
+            title=data.get('title', ''),
+            description=data.get('description', ''),
+            shift_date=shift_date,
+            shift_end_date=shift_end_date,
+            location=data.get('location', ''),
+            positions_needed=int(data.get('positions_needed', 1)),
+            role=data.get('role', ''),
+            is_open=data.get('is_open', True),
+            created_by=current_user.username
+        )
+        
+        db.session.add(shift)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'id': shift.id})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/shifts/<int:shift_id>/edit', methods=['PUT'])
+@login_required
+def edit_shift(shift_id):
+    """Edit a shift"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    shift = Shift.query.get_or_404(shift_id)
+    data = request.json
+    
+    try:
+        shift.title = data.get('title', shift.title)
+        shift.description = data.get('description', shift.description)
+        shift.shift_date = datetime.fromisoformat(data['shift_date'])
+        shift.shift_end_date = datetime.fromisoformat(data['shift_end_date'])
+        shift.location = data.get('location', shift.location)
+        shift.positions_needed = int(data.get('positions_needed', shift.positions_needed))
+        shift.role = data.get('role', shift.role)
+        shift.is_open = data.get('is_open', shift.is_open)
+        shift.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/shifts/<int:shift_id>', methods=['DELETE'])
+@login_required
+def delete_shift(shift_id):
+    """Delete a shift"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    shift = Shift.query.get_or_404(shift_id)
+    
+    try:
+        db.session.delete(shift)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/shifts/<int:shift_id>/assign', methods=['POST'])
+@login_required
+def assign_shift(shift_id):
+    """Assign a user to a shift (admin only)"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    shift = Shift.query.get_or_404(shift_id)
+    data = request.json
+    
+    try:
+        user_id = data['user_id']
+        user = User.query.get_or_404(user_id)
+        
+        # Check if already assigned
+        existing = ShiftAssignment.query.filter_by(shift_id=shift_id, user_id=user_id).first()
+        if existing:
+            return jsonify({'error': 'User already assigned to this shift'}), 409
+        
+        assignment = ShiftAssignment(
+            shift_id=shift_id,
+            user_id=user_id,
+            assigned_by=current_user.username,
+            status='pending',
+            notes=data.get('notes', '')
+        )
+        
+        db.session.add(assignment)
+        db.session.commit()
+        
+        # Send notification email
+        if user.email:
+            event = shift.event
+            subject = f"🎬 Shift Assignment: {shift.title} - {event.title}"
+            body = f"""Hello {user.username},
+
+You have been assigned to a shift for {event.title}!
+
+📋 Shift Details:
+  • Shift: {shift.title}
+  • Date & Time: {shift.shift_date.strftime('%B %d, %Y at %I:%M %p')} - {shift.shift_end_date.strftime('%I:%M %p')}
+  • Role: {shift.role or 'General Crew'}
+  • Location: {shift.location or event.location or 'TBD'}
+  • Positions Needed: {shift.positions_needed}
+
+📝 Description: {shift.description or 'No description'}
+
+Please log in to ShowWise to accept or reject this assignment.
+
+Best regards,
+Production Crew System"""
+            send_email(subject, user.email, body)
+        
+        return jsonify({'success': True, 'id': assignment.id})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/shifts/<int:shift_id>/claim', methods=['POST'])
+@login_required
+def claim_shift(shift_id):
+    """Crew member claims an open shift"""
+    shift = Shift.query.get_or_404(shift_id)
+    
+    if not shift.is_open:
+        return jsonify({'error': 'This shift is no longer open for claims'}), 400
+    
+    try:
+        # Check if already assigned/claimed
+        existing = ShiftAssignment.query.filter_by(shift_id=shift_id, user_id=current_user.id).first()
+        if existing:
+            return jsonify({'error': 'You already claimed this shift'}), 409
+        
+        # Check if shift is already full
+        confirmed_count = ShiftAssignment.query.filter_by(shift_id=shift_id, status='confirmed').count()
+        if confirmed_count >= shift.positions_needed:
+            return jsonify({'error': 'This shift is already full'}), 400
+        
+        assignment = ShiftAssignment(
+            shift_id=shift_id,
+            user_id=current_user.id,
+            assigned_by='self',
+            status='confirmed',  # Self-claimed shifts are auto-confirmed
+            notes='Self-claimed'
+        )
+        
+        db.session.add(assignment)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'id': assignment.id})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/shifts/assignment/<int:assignment_id>/respond', methods=['POST'])
+@login_required
+def respond_to_shift(assignment_id):
+    """User accepts or rejects a shift assignment"""
+    assignment = ShiftAssignment.query.get_or_404(assignment_id)
+    
+    # Check permissions
+    if assignment.user_id != current_user.id and not current_user.is_admin:
+        return jsonify({'error': 'Permission denied'}), 403
+    
+    data = request.json
+    status = data.get('status', '').lower()
+    
+    if status not in ['accepted', 'rejected', 'confirmed']:
+        return jsonify({'error': 'Invalid status'}), 400
+    
+    try:
+        assignment.status = status
+        assignment.responded_at = datetime.utcnow()
+        assignment.notes = data.get('notes', assignment.notes)
+        
+        db.session.commit()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/shifts/assignment/<int:assignment_id>', methods=['DELETE'])
+@login_required
+def delete_shift_assignment(assignment_id):
+    """Remove a user from a shift"""
+    assignment = ShiftAssignment.query.get_or_404(assignment_id)
+    
+    # Check permissions
+    if assignment.user_id != current_user.id and not current_user.is_admin:
+        return jsonify({'error': 'Permission denied'}), 403
+    
+    try:
+        db.session.delete(assignment)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+# SHIFT NOTES ROUTES
+@app.route('/shifts/<int:shift_id>/notes', methods=['POST'])
+@login_required
+def add_shift_note(shift_id):
+    """Add a note to a shift"""
+    shift = Shift.query.get_or_404(shift_id)
+    data = request.json
+    
+    try:
+        note = ShiftNote(
+            shift_id=shift_id,
+            created_by=current_user.username,
+            content=data.get('content', '')
+        )
+        db.session.add(note)
+        db.session.commit()
+        return jsonify({'success': True, 'note_id': note.id})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/shifts/<int:shift_id>/notes', methods=['GET'])
+@login_required
+def get_shift_notes(shift_id):
+    """Get all notes for a shift"""
+    shift = Shift.query.get_or_404(shift_id)
+    notes = ShiftNote.query.filter_by(shift_id=shift_id).order_by(ShiftNote.created_at.desc()).all()
+    
+    return jsonify({
+        'success': True,
+        'notes': [
+            {
+                'id': note.id,
+                'content': note.content,
+                'created_by': note.created_by,
+                'created_at': note.created_at.isoformat()
+            }
+            for note in notes
+        ]
+    })
+
+@app.route('/shifts/notes/<int:note_id>', methods=['DELETE'])
+@login_required
+def delete_shift_note(note_id):
+    """Delete a shift note"""
+    note = ShiftNote.query.get_or_404(note_id)
+    
+    # Check permissions
+    if note.created_by != current_user.username and not current_user.is_admin:
+        return jsonify({'error': 'Permission denied'}), 403
+    
+    try:
+        db.session.delete(note)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+# SHIFT TASKS ROUTES
+@app.route('/shifts/<int:shift_id>/tasks', methods=['POST'])
+@login_required
+def add_shift_task(shift_id):
+    """Add a task to a shift"""
+    shift = Shift.query.get_or_404(shift_id)
+    data = request.json
+    
+    try:
+        task = ShiftTask(
+            shift_id=shift_id,
+            title=data.get('title', ''),
+            description=data.get('description', ''),
+            assigned_to=data.get('assigned_to'),
+            created_by=current_user.username
+        )
+        db.session.add(task)
+        db.session.commit()
+        return jsonify({'success': True, 'task_id': task.id})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/shifts/<int:shift_id>/tasks', methods=['GET'])
+@login_required
+def get_shift_tasks(shift_id):
+    """Get all tasks for a shift"""
+    shift = Shift.query.get_or_404(shift_id)
+    tasks = ShiftTask.query.filter_by(shift_id=shift_id).order_by(ShiftTask.created_at).all()
+    
+    return jsonify({
+        'success': True,
+        'tasks': [
+            {
+                'id': task.id,
+                'title': task.title,
+                'description': task.description,
+                'is_complete': task.is_complete,
+                'assigned_to': task.assigned_to,
+                'created_by': task.created_by,
+                'created_at': task.created_at.isoformat()
+            }
+            for task in tasks
+        ]
+    })
+
+@app.route('/shifts/tasks/<int:task_id>', methods=['PUT'])
+@login_required
+def update_shift_task(task_id):
+    """Update a shift task (mark complete/incomplete)"""
+    task = ShiftTask.query.get_or_404(task_id)
+    data = request.json
+    
+    try:
+        if 'is_complete' in data:
+            task.is_complete = data.get('is_complete', False)
+        if 'title' in data:
+            task.title = data.get('title')
+        if 'description' in data:
+            task.description = data.get('description')
+        
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/shifts/tasks/<int:task_id>', methods=['DELETE'])
+@login_required
+def delete_shift_task(task_id):
+    """Delete a shift task"""
+    task = ShiftTask.query.get_or_404(task_id)
+    
+    # Check permissions
+    if task.created_by != current_user.username and not current_user.is_admin:
+        return jsonify({'error': 'Permission denied'}), 403
+    
+    try:
+        db.session.delete(task)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+# SHIFT REJECTION ROUTE
+@app.route('/shifts/<int:shift_id>/reject', methods=['POST'])
+@login_required
+@crew_required
+def reject_shift(shift_id):
+    """Reject/unclaim an accepted shift"""
+    shift = Shift.query.get_or_404(shift_id)
+    
+    # Find the current user's assignment for this shift
+    assignment = ShiftAssignment.query.filter_by(shift_id=shift_id, user_id=current_user.id).first()
+    
+    if not assignment:
+        return jsonify({'error': 'Assignment not found'}), 404
+    
+    # Can only reject if in accepted or pending status
+    if assignment.status not in ['accepted', 'pending', 'confirmed']:
+        return jsonify({'error': f'Cannot reject a {assignment.status} shift'}), 400
+    
+    try:
+        assignment.status = 'rejected'
+        assignment.responded_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/my-schedule')
+@login_required
+@crew_required
+def my_schedule():
+    """Personal view of crew member's shifts and events"""
+    # Get user's shift assignments
+    shift_assignments = ShiftAssignment.query.filter_by(user_id=current_user.id).all()
+    
+    # Convert to JSON-serializable dictionaries
+    assignments = []
+    for assignment in shift_assignments:
+        shift = assignment.shift
+        event = shift.event if shift else None
+        assignments.append({
+            'id': assignment.id,
+            'user_id': assignment.user_id,
+            'shift_id': shift.id if shift else None,
+            'status': assignment.status,
+            'assigned_by': assignment.assigned_by,
+            'assigned_at': assignment.assigned_at.isoformat() if assignment.assigned_at else None,
+            'responded_at': assignment.responded_at.isoformat() if assignment.responded_at else None,
+            'notes': assignment.notes,
+            'shift': {
+                'id': shift.id,
+                'title': shift.title,
+                'description': shift.description,
+                'shift_date': shift.shift_date.isoformat(),
+                'shift_end_date': shift.shift_end_date.isoformat(),
+                'location': shift.location,
+                'role': shift.role,
+                'positions_needed': shift.positions_needed,
+                'event_id': shift.event_id,
+                'event': {
+                    'id': event.id,
+                    'title': event.title,
+                    'event_date': event.event_date.isoformat(),
+                    'event_end_date': event.event_end_date.isoformat() if event.event_end_date else None
+                } if event else None
+            } if shift else None
+        })
+    
+    # Get events the user is assigned to
+    crew_assignments_objs = CrewAssignment.query.filter_by(crew_member=current_user.username).all()
+    
+    crew_assignments = []
+    for assignment in crew_assignments_objs:
+        event = assignment.event
+        crew = event.crew_assignments if event else []
+        crew_assignments.append({
+            'id': assignment.id,
+            'crew_member': assignment.crew_member,
+            'role': assignment.role,
+            'assigned_at': assignment.assigned_at.isoformat(),
+            'event_id': event.id if event else None,
+            'event': {
+                'id': event.id,
+                'title': event.title,
+                'description': event.description,
+                'event_date': event.event_date.isoformat(),
+                'event_end_date': event.event_end_date.isoformat() if event.event_end_date else None,
+                'location': event.location,
+                'crew_assignments': [
+                    {'crew_member': c.crew_member, 'role': c.role}
+                    for c in crew
+                ]
+            } if event else None
+        })
+    
+    # Get open shifts to claim
+    open_shifts_objs = Shift.query.filter_by(is_open=True).join(Event).order_by(Event.event_date).all()
+    
+    open_shifts = []
+    for shift in open_shifts_objs:
+        event = shift.event
+        open_shifts.append({
+            'id': shift.id,
+            'title': shift.title,
+            'description': shift.description,
+            'shift_date': shift.shift_date.isoformat(),
+            'shift_end_date': shift.shift_end_date.isoformat(),
+            'location': shift.location,
+            'role': shift.role,
+            'positions_needed': shift.positions_needed,
+            'assignments_count': len(shift.assignments),
+            'event_id': event.id,
+            'event_title': event.title if event else None
+        })
+    
+    now = datetime.now()
+    
+    return render_template('/crew/my_schedule.html', 
+                         assignments=assignments, 
+                         crew_assignments=crew_assignments,
+                         open_shifts=open_shifts,
+                         now=now)
     
 # CREW ROUTES
 

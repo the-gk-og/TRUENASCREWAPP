@@ -731,6 +731,9 @@ const EVENTS_RAW = [
     {% endfor %}
 ];
 
+// Shifts data from backend
+const SHIFTS_DATA = {{ shifts_data | tojson }};
+
 {% set all_users = [] %}
 {% for event in events %}
     {% for a in event.crew_assignments %}
@@ -794,6 +797,17 @@ function eventsOnDay(day) {
         const d = new Date(day); d.setHours(0,0,0,0);
         return d >= s && d < end;
     });
+}
+
+// Get shifts for an event
+function shiftsForEvent(eventId) {
+    return SHIFTS_DATA.filter(s => s.event_id === eventId);
+}
+
+// Get shifts for an event on a specific day
+function shiftsForEventOnDay(eventId, day) {
+    const dayStr = day.toISOString().split('T')[0];
+    return SHIFTS_DATA.filter(s => s.event_id === eventId && s.shift_date.startsWith(dayStr));
 }
 
 // ============================================================
@@ -876,13 +890,52 @@ function renderMonth() {
         const dayEvents = eventsOnDay(date);
         let evPills = '';
         const maxShow = 3;
-        dayEvents.slice(0, maxShow).forEach(e => {
-            evPills += `<div class="month-event-pill ${eventColors[e.id]}" onclick="showEventQuick(${e.id})" title="${e.title}">
-                ${fmtTime(e.start) ? fmtTime(e.start)+' · ' : ''}${e.title}
-            </div>`;
+        
+        // Show shifts instead of just event titles
+        let shiftsShown = 0;
+        const shiftsToShow = [];
+        
+        dayEvents.forEach(e => {
+            const eventShifts = shiftsForEventOnDay(e.id, date);
+            if (eventShifts.length > 0) {
+                eventShifts.forEach(shift => {
+                    if (shiftsShown < maxShow) {
+                        shiftsToShow.push({shift, event: e});
+                        shiftsShown++;
+                    }
+                });
+            } else {
+                // No shifts, show event as before
+                if (shiftsShown < maxShow) {
+                    shiftsToShow.push({event: e, shift: null});
+                    shiftsShown++;
+                }
+            }
         });
-        if (dayEvents.length > maxShow) {
-            evPills += `<div class="month-more" onclick="showDayEvents(${date.getTime()})">+${dayEvents.length - maxShow} more</div>`;
+        
+        shiftsToShow.forEach(item => {
+            const {shift, event} = item;
+            if (shift) {
+                // Show shift info
+                evPills += `<div class="month-event-pill ${eventColors[event.id]}" onclick="showEventQuick(${event.id})" title="${shift.role}: ${shift.assigned_count}/${shift.positions_needed} assigned">
+                    <strong>${shift.role}</strong> ${shift.assigned_count}/${shift.positions_needed}
+                </div>`;
+            } else {
+                // Show event
+                evPills += `<div class="month-event-pill ${eventColors[event.id]}" onclick="showEventQuick(${event.id})" title="${event.title}">
+                    ${fmtTime(event.start) ? fmtTime(event.start)+' · ' : ''}${event.title}
+                </div>`;
+            }
+        });
+        
+        // Count of more shifts/events
+        let totalMore = dayEvents.length - shiftsToShow.filter(x => !x.shift).length;
+        dayEvents.forEach(e => {
+            totalMore += shiftsForEventOnDay(e.id, date).length;
+        });
+        
+        if (totalMore > shiftsShown) {
+            evPills += `<div class="month-more" onclick="showDayEvents(${date.getTime()})">+${totalMore - shiftsShown} more</div>`;
         }
         cells += `<div class="month-cell${isToday?' today':''}">
             <div class="month-cell-num">${isToday ? `<span>${d}</span>` : d}</div>
@@ -925,7 +978,7 @@ function renderScheduler() {
     headHtml += '</tr>';
 
     // ---- OPEN SPOTS ROW ----
-    headHtml += '<tr class="open-spots-row"><th style="background:#f8fafc; border-bottom:2px solid var(--border); padding:0.5rem 0.75rem; text-align:left; font-size:0.78rem; color:#6b7280; font-weight:600; position:sticky; left:0; z-index:12;">Open Spots</th>';
+    headHtml += '<tr class="open-spots-row"><th style="background:#f8fafc; border-bottom:2px solid var(--border); padding:0.5rem 0.75rem; text-align:left; font-size:0.78rem; color:#6b7280; font-weight:600; position:sticky; left:0; z-index:12;">Shifts / Crew</th>';
     days.forEach(d => {
         const isTod = sameDay(d, today);
         const dayEvs = eventsOnDay(d);
@@ -934,8 +987,18 @@ function renderScheduler() {
             content = '–';
         } else {
             dayEvs.forEach(ev => {
-                const assignedCount = ev.crew.length;
-                content += `<span class="open-spot-badge" onclick="showEventQuick(${ev.id})" title="${ev.title}">${ev.title.substring(0,12)}${ev.title.length>12?'…':''} (${assignedCount})</span><br>`;
+                // Show shifts first, then crew
+                const eventShifts = shiftsForEventOnDay(ev.id, d);
+                if (eventShifts.length > 0) {
+                    eventShifts.forEach(shift => {
+                        content += `<span class="open-spot-badge${shift.assigned_count >= shift.positions_needed ? ' full' : ''}" onclick="showEventQuick(${ev.id})" title="${shift.role}: ${shift.assigned_count}/${shift.positions_needed}">
+                            ${shift.role.substring(0,10)} ${shift.assigned_count}/${shift.positions_needed}
+                        </span><br>`;
+                    });
+                } else {
+                    const assignedCount = ev.crew.length;
+                    content += `<span class="open-spot-badge" onclick="showEventQuick(${ev.id})" title="${ev.title}">${ev.title.substring(0,12)}${ev.title.length>12?'…':''} (${assignedCount})</span><br>`;
+                }
             });
         }
         headHtml += `<th style="${isTod?'background:#faf9ff;':''}border-bottom:2px solid var(--border);border-right:1px solid #f0f0f0;padding:0.4rem;text-align:center;vertical-align:top;font-size:0.75rem;font-weight:400;">
@@ -1018,6 +1081,28 @@ function showEventQuick(eventId) {
         `<button onclick="joinEvent(${ev.id})" class="btn btn-success" style="margin-right:0.75rem;"><i class="fas fa-user-plus"></i> Join Event</button>` 
         : '';
     
+    // Get shifts for this event
+    const eventShifts = shiftsForEvent(ev.id);
+    let shiftsHtml = '';
+    if (eventShifts.length > 0) {
+        shiftsHtml = `
+            <div style="margin-bottom:1rem;">
+                <strong style="font-size:0.85rem;">Shifts Needed</strong><br>
+                <div style="margin-top:0.5rem;">
+                    ${eventShifts.map(shift => `
+                        <div style="background:#f3f4f6;padding:0.5rem 0.75rem;border-radius:6px;margin-bottom:0.4rem;border-left:3px solid var(--primary);">
+                            <div style="font-weight:600;font-size:0.9rem;">${shift.role}</div>
+                            <div style="font-size:0.8rem;color:#6b7280;">
+                                ${shift.assigned_count} / ${shift.positions_needed} assigned
+                                ${shift.is_open ? '<span style="color:#059669;font-weight:600;"> (Open)</span>' : ''}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+    
     document.getElementById('eventQuickContent').innerHTML = `
         <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
             <div style="width:12px;height:40px;border-radius:6px;background:currentColor;" class="${eventColors[ev.id]}"></div>
@@ -1028,6 +1113,7 @@ function showEventQuick(eventId) {
         </div>
         ${ev.location ? `<p style="margin-bottom:0.5rem;"><i class="fas fa-map-marker-alt" style="color:var(--primary);width:16px;"></i> ${ev.location}</p>` : ''}
         ${ev.description ? `<p style="margin-bottom:0.75rem;color:#374151;font-size:0.9rem;">${ev.description}</p>` : ''}
+        ${shiftsHtml}
         <div style="margin-bottom:1rem;">
             <strong style="font-size:0.85rem;">Crew Assigned (${ev.crew.length})</strong><br>
             <div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.5rem;">

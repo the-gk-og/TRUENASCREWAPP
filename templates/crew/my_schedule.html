@@ -1,0 +1,885 @@
+{% extends "base.html" %}
+
+{% block title %}My Schedule - ShowWise{% endblock %}
+
+{% block content %}
+<style>
+    .schedule-container {
+        max-width: 900px;
+        margin: 0 auto;
+    }
+
+    .schedule-header {
+        background: white;
+        padding: 2rem;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        border: 1px solid var(--border);
+    }
+
+    .schedule-header h1 {
+        margin: 0 0 0.5rem 0;
+        color: var(--dark);
+    }
+
+    .schedule-header p {
+        color: #6b7280;
+        margin: 0;
+        font-size: 0.95rem;
+    }
+
+    .view-tabs {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 1rem;
+        border-bottom: 2px solid var(--border);
+        padding-bottom: 1rem;
+    }
+
+    .view-tab {
+        padding: 0.6rem 1.2rem;
+        border: none;
+        background: none;
+        border-bottom: 3px solid transparent;
+        cursor: pointer;
+        font-weight: 600;
+        color: #6b7280;
+        transition: all 0.2s;
+    }
+
+    .view-tab.active {
+        color: var(--primary);
+        border-bottom-color: var(--primary);
+    }
+
+    /* Date Section */
+    .date-section {
+        margin-bottom: 2.5rem;
+    }
+
+    .date-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+        padding: 0 1rem;
+    }
+
+    .date-badge {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        width: 90px;
+        height: 90px;
+        background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+        color: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    .date-badge .day-num {
+        font-size: 2.5rem;
+        font-weight: 800;
+        line-height: 1;
+    }
+
+    .date-badge .day-name {
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin-top: 0.3rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .date-badge .day-month {
+        font-size: 0.75rem;
+        opacity: 0.9;
+        margin-top: 0.2rem;
+    }
+
+    .date-info {
+        flex: 1;
+    }
+
+    .date-info h3 {
+        margin: 0 0 0.25rem 0;
+        font-size: 1.3rem;
+        color: var(--dark);
+    }
+
+    .date-info p {
+        margin: 0;
+        color: #6b7280;
+        font-size: 0.9rem;
+    }
+
+    .event-card {
+        background: white;
+        border-left: 4px solid var(--primary);
+        border-radius: 8px;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+        transition: all 0.2s;
+    }
+
+    .event-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        transform: translateY(-2px);
+    }
+
+    .event-card.shift {
+        border-left-color: #10b981;
+    }
+
+    .event-card.pending {
+        border-left-color: #f59e0b;
+        opacity: 0.95;
+    }
+
+    .event-card.open {
+        border-left-color: #3b82f6;
+        background: #f0f9ff;
+    }
+
+    .event-card.rejected {
+        border-left-color: #ef4444;
+        opacity: 0.7;
+    }
+
+    .event-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        margin-bottom: 0.75rem;
+    }
+
+    .event-title {
+        margin: 0;
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--dark);
+    }
+
+    .event-time {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+        font-size: 1rem;
+        color: var(--primary);
+    }
+
+    .event-meta {
+        display: flex;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+        margin: 0.75rem 0;
+        font-size: 0.9rem;
+        color: #6b7280;
+    }
+
+    .event-meta-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .event-meta-item strong {
+        color: var(--dark);
+    }
+
+    .event-description {
+        color: #6b7280;
+        font-size: 0.9rem;
+        margin: 0.75rem 0;
+        line-height: 1.5;
+    }
+
+    .event-badges {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin: 0.75rem 0;
+    }
+
+    .badge {
+        display: inline-block;
+        padding: 0.3rem 0.7rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .badge-confirmed {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .badge-pending {
+        background: #fef3c7;
+        color: #78350f;
+    }
+
+    .badge-claimed {
+        background: #dbeafe;
+        color: #1e40af;
+    }
+
+    .badge-role {
+        background: #f3e8ff;
+        color: #6b21a8;
+    }
+
+    .badge-crew-count {
+        background: #ecfdf5;
+        color: #065f46;
+    }
+
+    .event-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 1rem;
+    }
+
+    .event-actions button {
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        border: none;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+
+    .btn-accept {
+        background: var(--success);
+        color: white;
+    }
+
+    .btn-accept:hover {
+        background: #10b981;
+    }
+
+    .btn-reject {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .btn-reject:hover {
+        background: #fecccc;
+    }
+
+    .btn-claim {
+        background: var(--primary);
+        color: white;
+    }
+
+    .btn-claim:hover {
+        background: #1e40af;
+    }
+
+    .btn-secondary {
+        background: #f3f4f6;
+        color: var(--dark);
+    }
+
+    .btn-secondary:hover {
+        background: #e5e7eb;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 3rem 2rem;
+        color: #9ca3af;
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+    .section-title {
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: var(--dark);
+        margin: 2rem 0 1.5rem 0;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid var(--border);
+    }
+
+    .filter-controls {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+    }
+
+    .filter-btn {
+        padding: 0.5rem 1rem;
+        border: 1px solid var(--border);
+        background: white;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+
+    .filter-btn.active {
+        background: var(--primary);
+        color: white;
+        border-color: var(--primary);
+    }
+
+    @media (max-width: 768px) {
+        .date-header {
+            flex-wrap: wrap;
+            padding: 0;
+        }
+
+        .date-badge {
+            width: 80px;
+            height: 80px;
+        }
+
+        .date-badge .day-num {
+            font-size: 2rem;
+        }
+
+        .event-meta {
+            gap: 1rem;
+            font-size: 0.85rem;
+        }
+
+        .view-tabs {
+            flex-wrap: wrap;
+        }
+
+        .view-tab {
+            padding: 0.5rem 1rem;
+            font-size: 0.9rem;
+        }
+
+        .event-header {
+            flex-direction: column;
+        }
+
+        .event-time {
+            margin-top: 0.5rem;
+        }
+    }
+</style>
+
+<div class="schedule-container">
+    <!-- Header -->
+    <div class="schedule-header">
+        <h1><i class="fas fa-calendar-alt"></i> My Schedule</h1>
+        <p>View your upcoming shifts and event assignments</p>
+        
+        <div class="view-tabs">
+            <button class="view-tab active" onclick="switchView('list')">
+                <i class="fas fa-list"></i> List View
+            </button>
+            <button class="view-tab" onclick="switchView('open')">
+                <i class="fas fa-briefcase"></i> Open Shifts ({{ open_shifts|length }})
+            </button>
+        </div>
+    </div>
+
+    <!-- List View -->
+    <div id="listView">
+        <div id="scheduleContent"></div>
+    </div>
+
+    <!-- Open Shifts View -->
+    <div id="openView" style="display: none;">
+        {% if open_shifts %}
+        <div class="filter-controls" id="openShiftFilters">
+            <button class="filter-btn active" onclick="filterOpenShifts('')">All</button>
+        </div>
+        
+        <div id="openShiftsContainer"></div>
+        {% else %}
+        <div class="empty-state">
+            <i class="fas fa-calendar-check"></i>
+            <p>No open shifts available to claim at the moment</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+const ASSIGNMENTS = {{ assignments|tojson }};
+const CREW_ASSIGNMENTS = {{ crew_assignments|tojson }};
+const OPEN_SHIFTS = {{ open_shifts|tojson }};
+const NOW = new Date('{{ now.isoformat() }}');
+
+// Organize assignments by date
+const assignmentsByDate = {};
+const openShiftsByDate = {};
+
+function processAssignments() {
+    // Group assignments by shift date
+    ASSIGNMENTS.forEach(assignment => {
+        if (assignment.shift && assignment.shift.shift_date) {
+            const date = new Date(assignment.shift.shift_date);
+            const dateKey = date.toISOString().split('T')[0];
+            
+            if (!assignmentsByDate[dateKey]) {
+                assignmentsByDate[dateKey] = [];
+            }
+            
+            assignmentsByDate[dateKey].push({
+                type: 'shift',
+                id: assignment.id,
+                title: assignment.shift.title,
+                time: date,
+                endTime: new Date(assignment.shift.shift_end_date),
+                role: assignment.shift.role,
+                location: assignment.shift.location,
+                description: assignment.shift.description,
+                status: assignment.status,
+                crewCount: assignment.shift.assignments_count,
+                positionsNeeded: assignment.shift.positions_needed,
+                eventTitle: assignment.shift.event ? assignment.shift.event.title : '',
+                shiftId: assignment.shift.id,
+                eventId: assignment.shift.event_id
+            });
+        }
+    });
+    
+    // Group crew assignments by event date
+    CREW_ASSIGNMENTS.forEach(assignment => {
+        if (assignment.event && assignment.event.event_date) {
+            const date = new Date(assignment.event.event_date);
+            const dateKey = date.toISOString().split('T')[0];
+            
+            if (!assignmentsByDate[dateKey]) {
+                assignmentsByDate[dateKey] = [];
+            }
+            
+            assignmentsByDate[dateKey].push({
+                type: 'event',
+                id: assignment.id,
+                title: assignment.event.title,
+                time: date,
+                endTime: assignment.event.event_end_date ? new Date(assignment.event.event_end_date) : null,
+                role: assignment.role,
+                location: assignment.event.location,
+                description: assignment.event.description,
+                crewCount: assignment.event.crew_assignments.length,
+                createdBy: assignment.event.created_by,
+                eventId: assignment.event.id
+            });
+        }
+    });
+    
+    // Group open shifts by date (deduplicated by shift ID)
+    const seenShiftIds = new Set();
+    OPEN_SHIFTS.forEach(shift => {
+        const date = new Date(shift.shift_date);
+        const dateKey = date.toISOString().split('T')[0];
+        
+        // Skip if we've already seen this shift ID (avoid duplicates)
+        if (seenShiftIds.has(shift.id)) {
+            return;
+        }
+        
+        if (!openShiftsByDate[dateKey]) {
+            openShiftsByDate[dateKey] = [];
+        }
+        
+        // Check if user already has this shift
+        const alreadyClaimed = ASSIGNMENTS.some(a => a.shift && a.shift.id === shift.id);
+        
+        if (!alreadyClaimed) {
+            seenShiftIds.add(shift.id);
+            openShiftsByDate[dateKey].push({
+                ...shift,
+                date: date
+            });
+        }
+    });
+}
+
+function switchView(view) {
+    document.getElementById('listView').style.display = view === 'list' ? 'block' : 'none';
+    document.getElementById('openView').style.display = view === 'open' ? 'block' : 'none';
+    
+    document.querySelectorAll('.view-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.textContent.includes(view === 'list' ? 'List' : 'Open'));
+    });
+    
+    if (view === 'list') {
+        renderSchedule();
+    } else {
+        renderOpenShifts();
+    }
+}
+
+function renderSchedule() {
+    processAssignments();
+    
+    const dates = Object.keys(assignmentsByDate).sort();
+    
+    if (dates.length === 0) {
+        document.getElementById('scheduleContent').innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-calendar-times"></i>
+                <p>No assignments yet. Check out open shifts!</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    
+    dates.forEach(dateKey => {
+        const items = assignmentsByDate[dateKey];
+        const date = items[0].time;
+        
+        const dayOfWeek = date.toLocaleDateString('en-US', {weekday: 'short'});
+        const monthDay = date.toLocaleDateString('en-US', {month: 'short', day: 'numeric'});
+        const year = date.getFullYear();
+        
+        html += `
+            <div class="date-section">
+                <div class="date-header">
+                    <div class="date-badge">
+                        <div class="day-num">${date.getDate()}</div>
+                        <div class="day-name">${dayOfWeek}</div>
+                        <div class="day-month">${date.toLocaleDateString('en-US', {month: 'short'})}</div>
+                    </div>
+                    <div class="date-info">
+                        <h3>${monthDay}, ${year}</h3>
+                        <p>${items.length} ${items.length === 1 ? 'item' : 'items'} scheduled</p>
+                    </div>
+                </div>
+        `;
+        
+        // Sort items by time
+        items.sort((a, b) => a.time - b.time);
+        
+        items.forEach(item => {
+            const timeStr = item.time.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'});
+            const endTimeStr = item.endTime ? item.endTime.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'}) : '';
+            
+            let cardHtml = `
+                <div class="event-card ${item.type === 'shift' ? 'shift' : ''} ${item.status ? 'pending' : ''}">
+                    <div class="event-header">
+                        <h4 class="event-title">${escapeHtml(item.title)}</h4>
+                        <div class="event-time">
+                            <i class="fas fa-clock"></i>
+                            ${timeStr}${endTimeStr ? ' - ' + endTimeStr : ''}
+                        </div>
+                    </div>
+                    
+                    <div class="event-meta">
+                        ${item.location ? `
+                            <div class="event-meta-item">
+                                <i class="fas fa-map-marker-alt"></i>
+                                <strong>${escapeHtml(item.location)}</strong>
+                            </div>
+                        ` : ''}
+                        
+                        <div class="event-meta-item">
+                            <i class="fas fa-users"></i>
+                            <strong>${item.crewCount || 0}${item.positionsNeeded ? ' / ' + item.positionsNeeded : ''} crew</strong>
+                        </div>
+                        
+                        ${item.eventTitle ? `
+                            <div class="event-meta-item">
+                                <i class="fas fa-video"></i>
+                                <strong>${escapeHtml(item.eventTitle)}</strong>
+                            </div>
+                        ` : ''}
+                    </div>
+                    
+                    <div class="event-badges">
+                        ${item.role ? `<span class="badge badge-role">${escapeHtml(item.role)}</span>` : ''}
+                        ${item.status ? `<span class="badge badge-${item.status}">${item.status}</span>` : ''}
+            `;
+            
+            if (item.description) {
+                cardHtml += `<div class="event-description">${escapeHtml(item.description)}</div>`;
+            }
+            
+            if (item.type === 'shift') {
+                if (item.status === 'pending') {
+                    cardHtml += `
+                        <div class="event-actions">
+                            <button class="btn-accept" onclick="respondToShift(${item.id}, 'accepted')">
+                                <i class="fas fa-check"></i> Accept
+                            </button>
+                            <button class="btn-reject" onclick="respondToShift(${item.id}, 'rejected')">
+                                <i class="fas fa-times"></i> Reject
+                            </button>
+                        </div>
+                    `;
+                } else if (item.status === 'accepted' || item.status === 'confirmed') {
+                    cardHtml += `
+                        <div class="event-actions">
+                            <span class="badge" style="background: #d1fae5; color: #065f46; padding: 0.5rem 1rem;">
+                                <i class="fas fa-check-circle"></i> ${item.status === 'confirmed' ? 'Confirmed' : 'Accepted'}
+                            </span>
+                            <button class="btn-secondary" onclick="rejectShift(${item.shiftId})">
+                                <i class="fas fa-times"></i> Reject
+                            </button>
+                        </div>
+                    `;
+                } else if (item.status === 'rejected') {
+                    cardHtml += `
+                        <div class="event-actions">
+                            <span class="badge" style="background: #fee2e2; color: #991b1b; padding: 0.5rem 1rem;">
+                                <i class="fas fa-times-circle"></i> Rejected
+                            </span>
+                        </div>
+                    `;
+                }
+            }
+            
+            cardHtml += `
+                    </div>
+                </div>
+            `;
+            
+            html += cardHtml;
+        });
+        
+        html += '</div>';
+    });
+    
+    document.getElementById('scheduleContent').innerHTML = html;
+}
+
+function renderOpenShifts(filterEventId) {
+    const dates = Object.keys(openShiftsByDate).sort();
+    let html = '';
+    
+    if (dates.length === 0) {
+        html = `
+            <div class="empty-state">
+                <i class="fas fa-briefcase"></i>
+                <p>No open shifts available right now</p>
+            </div>
+        `;
+    } else {
+        dates.forEach(dateKey => {
+            let shifts = openShiftsByDate[dateKey];
+            
+            // Filter by event if specified
+            if (filterEventId) {
+                shifts = shifts.filter(s => s.event_id == filterEventId);
+            }
+            
+            if (shifts.length === 0) return; // Skip this date if no shifts match filter
+            
+            const date = new Date(dateKey);
+            
+            const dayOfWeek = date.toLocaleDateString('en-US', {weekday: 'short'});
+            const monthDay = date.toLocaleDateString('en-US', {month: 'short', day: 'numeric'});
+            const year = date.getFullYear();
+            
+            html += `
+                <div class="date-section">
+                    <div class="date-header">
+                        <div class="date-badge">
+                            <div class="day-num">${date.getDate()}</div>
+                            <div class="day-name">${dayOfWeek}</div>
+                            <div class="day-month">${date.toLocaleDateString('en-US', {month: 'short'})}</div>
+                        </div>
+                        <div class="date-info">
+                            <h3>${monthDay}, ${year}</h3>
+                            <p>${shifts.length} ${shifts.length === 1 ? 'shift' : 'shifts'} available</p>
+                        </div>
+                    </div>
+            `;
+            
+            shifts.sort((a, b) => a.date - b.date);
+            
+            shifts.forEach(shift => {
+                const timeStr = shift.date.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'});
+                const endTimeStr = new Date(shift.shift_end_date).toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'});
+                
+                const assignedCount = shift.assignments_count || 0;
+                const spotsLeft = (shift.positions_needed || 1) - assignedCount;
+                const isFull = spotsLeft <= 0;
+                
+                html += `
+                    <div class="event-card open">
+                        <div class="event-header">
+                            <h4 class="event-title">${escapeHtml(shift.title)}</h4>
+                            <div class="event-time">
+                                <i class="fas fa-clock"></i>
+                                ${timeStr} - ${endTimeStr}
+                            </div>
+                        </div>
+                        
+                        <div class="event-meta">
+                            ${shift.location ? `
+                                <div class="event-meta-item">
+                                    <i class="fas fa-map-marker-alt"></i>
+                                    <strong>${escapeHtml(shift.location)}</strong>
+                                </div>
+                            ` : ''}
+                            
+                            <div class="event-meta-item">
+                                <i class="fas fa-users"></i>
+                                <strong>${assignedCount}/${shift.positions_needed || 1} spots filled</strong>
+                            </div>
+                            
+                            ${shift.event_title ? `
+                                <div class="event-meta-item">
+                                    <i class="fas fa-video"></i>
+                                    <strong>${escapeHtml(shift.event_title)}</strong>
+                                </div>
+                            ` : ''}
+                        </div>
+                        
+                        <div class="event-badges">
+                            ${shift.role ? `<span class="badge badge-role">${escapeHtml(shift.role)}</span>` : ''}
+                            ${isFull ? `<span class="badge" style="background: #fee2e2; color: #991b1b;">Full</span>` : `<span class="badge badge-crew-count">${spotsLeft} spot${spotsLeft !== 1 ? 's' : ''} left</span>`}
+                        </div>
+                        
+                        ${shift.description ? `<div class="event-description">${escapeHtml(shift.description)}</div>` : ''}
+                        
+                        <div class="event-actions">
+                            ${!isFull ? `
+                                <button class="btn-claim" onclick="claimShift(${shift.id})">
+                                    <i class="fas fa-check"></i> Claim Shift
+                                </button>
+                            ` : `
+                                <button class="btn-secondary" disabled>All Spots Filled</button>
+                            `}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+        });
+    }
+    
+    document.getElementById('openShiftsContainer').innerHTML = html;
+}
+
+function filterOpenShifts(filterEventId) {
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    if (event.target && event.target.classList) {
+        event.target.classList.add('active');
+    }
+    
+    // Re-render with filter
+    renderOpenShifts(filterEventId || undefined);
+}
+
+async function claimShift(shiftId) {
+    if (!confirm('Claim this shift?')) return;
+    
+    try {
+        const response = await fetch(`/shifts/${shiftId}/claim`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (response.ok) {
+            alert('Shift claimed successfully!');
+            location.reload();
+        } else {
+            const error = await response.json();
+            alert('Error: ' + (error.error || 'Failed to claim shift'));
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error claiming shift');
+    }
+}
+
+async function respondToShift(assignmentId, status) {
+    try {
+        const response = await fetch(`/shifts/assignment/${assignmentId}/respond`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: status })
+        });
+        
+        if (response.ok) {
+            alert(`Shift ${status}!`);
+            location.reload();
+        } else {
+            alert('Failed to update shift response');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error updating shift response');
+    }
+}
+
+async function rejectShift(shiftId) {
+    if (!confirm('Are you sure you want to reject this shift?')) return;
+    
+    try {
+        const response = await fetch(`/shifts/${shiftId}/reject`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (response.ok) {
+            alert('Shift rejected successfully!');
+            location.reload();
+        } else {
+            const error = await response.json();
+            alert('Error: ' + (error.error || 'Failed to reject shift'));
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error rejecting shift');
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    // Build open shifts filter buttons
+    if (OPEN_SHIFTS.length > 0) {
+        const filterContainer = document.getElementById('openShiftFilters');
+        const uniqueEvents = {};
+        
+        // Extract unique events from open shifts
+        OPEN_SHIFTS.forEach(shift => {
+            if (shift.event_id && !uniqueEvents[shift.event_id]) {
+                uniqueEvents[shift.event_id] = shift.event_title;
+            }
+        });
+        
+        // Create buttons for each event
+        Object.entries(uniqueEvents).forEach(([eventId, eventTitle]) => {
+            const btn = document.createElement('button');
+            btn.className = 'filter-btn';
+            btn.textContent = eventTitle;
+            btn.onclick = function() {
+                document.querySelectorAll('#openShiftFilters .filter-btn').forEach(b => {
+                    b.classList.remove('active');
+                });
+                btn.classList.add('active');
+                renderOpenShifts(eventId);
+            };
+            filterContainer.appendChild(btn);
+        });
+    }
+    
+    processAssignments();
+    renderSchedule();
+});
+</script>
+{% endblock %}

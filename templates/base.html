@@ -545,6 +545,10 @@
             <i class="fas fa-calendar"></i>
             <span>Calendar</span>
         </a>
+        <a href="{{ url_for('my_schedule') }}" class="nav-item {% if request.endpoint == 'my_schedule' %}active{% endif %}">
+            <i class="fas fa-calendar-alt"></i>
+            <span>My Schedule</span>
+        </a>
         <!--<a href="{{ url_for('chat_page') }}" class="nav-item {% if request.endpoint == 'chat_page' %}active{% endif %}">
             <i class="fas fa-comments"></i>
             <span> Chat</span>
@@ -562,6 +566,10 @@
             <i class="fas fa-barcode"></i>
             <span>Barcode Generator</span>
          </a>
+        <a href="{{ url_for('shift_management') }}" class="nav-item {% if request.endpoint == 'shift_management' %}active{% endif %}">
+            <i class="fas fa-tasks"></i>
+            <span>Shift Management</span>
+        </a>
        {% endif %}
         <a href="{{ url_for('hired_equipment_list') }}" class="nav-item {% if request.endpoint == 'hired_equipment_list' %}active{% endif %}">
             <i class="fas fa-handshake"></i>

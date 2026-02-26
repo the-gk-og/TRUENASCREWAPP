@@ -1,0 +1,813 @@
+{% extends "base.html" %}
+
+{% block title %}Shift Management - ShowWise{% endblock %}
+
+{% block content %}
+<style>
+    .shift-container {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 2rem;
+    }
+
+    .header-section {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .header-section h1 {
+        margin: 0;
+    }
+
+    .btn-group {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .shift-card {
+        background: white;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+    }
+
+    .shift-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        margin-bottom: 1rem;
+        gap: 1rem;
+    }
+
+    .shift-title {
+        margin: 0;
+        color: var(--dark);
+    }
+
+    .shift-meta {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+        font-size: 0.9rem;
+        color: #6b7280;
+        margin-bottom: 1rem;
+    }
+
+    .shift-meta-item {
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+    }
+
+    .shift-badge {
+        display: inline-block;
+        padding: 0.3rem 0.7rem;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    .badge-role {
+        background: #e0f2fe;
+        color: #0c4a6e;
+    }
+
+    .badge-open {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .badge-full {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .shift-positions {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+    }
+
+    .assignments-list {
+        background: #f9fafb;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-top: 1rem;
+    }
+
+    .assignment-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem;
+        background: white;
+        border-radius: 6px;
+        margin-bottom: 0.5rem;
+        border-left: 4px solid var(--primary);
+    }
+
+    .assignment-item.pending {
+        border-left-color: #f59e0b;
+    }
+
+    .assignment-item.rejected {
+        border-left-color: #ef4444;
+        opacity: 0.6;
+    }
+
+    .assignment-user {
+        font-weight: 600;
+        color: var(--dark);
+    }
+
+    .assignment-status {
+        display: inline-block;
+        padding: 0.25rem 0.6rem;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-right: 0.5rem;
+    }
+
+    .status-pending {
+        background: #fef3c7;
+        color: #78350f;
+    }
+
+    .status-accepted {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .status-confirmed {
+        background: #dbeafe;
+        color: #1e40af;
+    }
+
+    .status-rejected {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .shift-actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 3rem 2rem;
+        color: #9ca3af;
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+    .modal-form {
+        display: grid;
+        gap: 1rem;
+    }
+
+    .form-group {
+        display: grid;
+        gap: 0.5rem;
+    }
+
+    .form-group label {
+        font-weight: 600;
+        color: var(--dark);
+        font-size: 0.9rem;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+        padding: 0.6rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-size: 0.9rem;
+    }
+
+    .form-group textarea {
+        resize: vertical;
+        min-height: 100px;
+    }
+
+    .filter-controls {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 2rem;
+        flex-wrap: wrap;
+    }
+
+    .filter-select {
+        padding: 0.6rem 1rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: white;
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .stat-card {
+        background: white;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1.5rem;
+        text-align: center;
+    }
+
+    .stat-number {
+        font-size: 2rem;
+        font-weight: bold;
+        color: var(--primary);
+    }
+
+    .stat-label {
+        color: #6b7280;
+        font-size: 0.9rem;
+        margin-top: 0.5rem;
+    }
+
+    @media (max-width: 768px) {
+        .shift-header {
+            flex-direction: column;
+        }
+
+        .shift-meta {
+            font-size: 0.85rem;
+        }
+
+        .shift-actions {
+            flex-direction: column;
+        }
+
+        .filter-controls {
+            flex-direction: column;
+        }
+
+        .filter-select {
+            width: 100%;
+        }
+    }
+</style>
+
+<div class="shift-container">
+    <!-- Header -->
+    <div class="header-section">
+        <div>
+            <h1><i class="fas fa-tasks"></i> Shift Management</h1>
+            <p style="color: #6b7280; margin: 0.5rem 0 0 0;">Manage production shifts and crew assignments</p>
+        </div>
+        <div class="btn-group">
+            <button onclick="showModal('addShiftModal')" class="btn btn-success"><i class="fas fa-plus"></i> New Shift</button>
+            <button onclick="refreshShifts()" class="btn btn-primary"><i class="fas fa-sync"></i> Refresh</button>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid" id="statsGrid">
+        <div class="stat-card">
+            <div class="stat-number" id="totalShifts">0</div>
+            <div class="stat-label">Total Shifts</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number" id="openShifts">0</div>
+            <div class="stat-label">Open for Claims</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number" id="pendingAssignments">0</div>
+            <div class="stat-label">Pending Responses</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number" id="confirmedAssignments">0</div>
+            <div class="stat-label">Confirmed Assignments</div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-controls">
+        <select class="filter-select" id="eventFilter" onchange="filterShifts()">
+            <option value="">All Events</option>
+            {% for event in events %}
+            <option value="{{ event.id }}">{{ event.title }} ({{ event.event_date.strftime('%b %d') }})</option>
+            {% endfor %}
+        </select>
+        <select class="filter-select" id="statusFilter" onchange="filterShifts()">
+            <option value="">All Statuses</option>
+            <option value="open">Open</option>
+            <option value="full">Full</option>
+        </select>
+    </div>
+
+    <!-- Shifts List -->
+    <div id="shiftsContainer"></div>
+</div>
+
+<!-- Add Shift Modal -->
+<div id="addShiftModal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-header">
+            <h2>Create New Shift</h2>
+            <button type="button" class="close" onclick="hideModal('addShiftModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form class="modal-form" id="addShiftForm">
+                <div class="form-group">
+                    <label>Event *</label>
+                    <select id="eventSelect" required onchange="updateShiftDefaults()">
+                        <option value="">Select an event</option>
+                        {% for event in events %}
+                        <option value="{{ event.id }}" data-title="{{ event.title }}" data-location="{{ event.location }}" data-date="{{ event.event_date.isoformat() }}">
+                            {{ event.title }} - {{ event.event_date.strftime('%b %d, %Y') }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Shift Title *</label>
+                    <input type="text" id="shiftTitle" placeholder="e.g., Lighting Setup" required>
+                </div>
+                <div class="form-group">
+                    <label>Role</label>
+                    <input type="text" id="shiftRole" placeholder="e.g., Lighting Technician">
+                </div>
+                <div class="form-group">
+                    <label>Start Date & Time *</label>
+                    <input type="datetime-local" id="shiftStartTime" required>
+                </div>
+                <div class="form-group">
+                    <label>End Date & Time *</label>
+                    <input type="datetime-local" id="shiftEndTime" required>
+                </div>
+                <div class="form-group">
+                    <label>Location</label>
+                    <input type="text" id="shiftLocation" placeholder="e.g., Main Stage">
+                </div>
+                <div class="form-group">
+                    <label>Positions Needed *</label>
+                    <input type="number" id="positionsNeeded" min="1" value="1" required>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="shiftDescription" placeholder="Additional details..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="isOpen" checked> Open for crew to claim
+                    </label>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn" onclick="hideModal('addShiftModal')">Cancel</button>
+            <button type="button" class="btn btn-success" onclick="createShift()"><i class="fas fa-check"></i> Create Shift</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Shift Modal -->
+<div id="editShiftModal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-header">
+            <h2>Edit Shift</h2>
+            <button type="button" class="close" onclick="hideModal('editShiftModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form class="modal-form" id="editShiftForm">
+                <div class="form-group">
+                    <label>Shift Title *</label>
+                    <input type="text" id="editShiftTitle" required>
+                </div>
+                <div class="form-group">
+                    <label>Role</label>
+                    <input type="text" id="editShiftRole">
+                </div>
+                <div class="form-group">
+                    <label>Start Date & Time *</label>
+                    <input type="datetime-local" id="editShiftStartTime" required>
+                </div>
+                <div class="form-group">
+                    <label>End Date & Time *</label>
+                    <input type="datetime-local" id="editShiftEndTime" required>
+                </div>
+                <div class="form-group">
+                    <label>Location</label>
+                    <input type="text" id="editShiftLocation">
+                </div>
+                <div class="form-group">
+                    <label>Positions Needed *</label>
+                    <input type="number" id="editPositionsNeeded" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="editShiftDescription"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="editIsOpen"> Open for crew to claim
+                    </label>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn" onclick="hideModal('editShiftModal')">Cancel</button>
+            <button type="button" class="btn btn-danger" onclick="deleteCurrentShift()" style="margin-right: auto;"><i class="fas fa-trash"></i> Delete</button>
+            <button type="button" class="btn btn-success" onclick="updateShift()"><i class="fas fa-check"></i> Save Changes</button>
+        </div>
+    </div>
+</div>
+
+<!-- Assign Crew Modal -->
+<div id="assignCrewModal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+            <h2>Assign Crew to Shift</h2>
+            <button type="button" class="close" onclick="hideModal('assignCrewModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form class="modal-form" id="assignCrewForm">
+                <div class="form-group">
+                    <label>Select Crew Member *</label>
+                    <select id="userSelect" required>
+                        <option value="">Choose a crew member...</option>
+                        {% for user in users %}
+                        <option value="{{ user.id }}">{{ user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="assignmentNotes" placeholder="Optional assignment notes..."></textarea>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn" onclick="hideModal('assignCrewModal')">Cancel</button>
+            <button type="button" class="btn btn-success" onclick="assignCrewMember()"><i class="fas fa-check"></i> Assign</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentShiftId = null;
+let shiftsData = [];
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    refreshShifts();
+});
+
+function updateShiftDefaults() {
+    const eventSelect = document.getElementById('eventSelect');
+    const option = eventSelect.options[eventSelect.selectedIndex];
+    
+    if (option.value) {
+        const eventDate = new Date(option.getAttribute('data-date'));
+        const eventLocation = option.getAttribute('data-location');
+        
+        // Set start time to event time
+        document.getElementById('shiftStartTime').value = formatDateTimeLocal(eventDate);
+        
+        // Set end time to 1 hour after start
+        const endTime = new Date(eventDate);
+        endTime.setHours(endTime.getHours() + 1);
+        document.getElementById('shiftEndTime').value = formatDateTimeLocal(endTime);
+        
+        // Set location to event location
+        if (eventLocation) {
+            document.getElementById('shiftLocation').value = eventLocation;
+        }
+    }
+}
+
+function formatDateTimeLocal(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function showModal(modalId) {
+    document.getElementById(modalId).style.display = 'block';
+}
+
+function hideModal(modalId) {
+    document.getElementById(modalId).style.display = 'none';
+}
+
+async function refreshShifts() {
+    try {
+        const response = await fetch('/api/shifts');
+        shiftsData = await response.json();
+        renderShifts();
+        updateStats();
+    } catch (error) {
+        console.error('Error fetching shifts:', error);
+        alert('Failed to load shifts');
+    }
+}
+
+function filterShifts() {
+    renderShifts();
+}
+
+function renderShifts() {
+    const eventFilterValue = document.getElementById('eventFilter').value;
+    const statusFilterValue = document.getElementById('statusFilter').value;
+    
+    let filtered = shiftsData;
+    
+    if (eventFilterValue) {
+        filtered = filtered.filter(s => s.event_id == eventFilterValue);
+    }
+    
+    if (statusFilterValue === 'open') {
+        filtered = filtered.filter(s => s.is_open);
+    } else if (statusFilterValue === 'full') {
+        filtered = filtered.filter(s => s.assignments_count >= s.positions_needed);
+    }
+    
+    const container = document.getElementById('shiftsContainer');
+    
+    if (filtered.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-calendar-times"></i>
+                <p>No shifts found</p>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = filtered.map(shift => `
+        <div class="shift-card">
+            <div class="shift-header">
+                <div>
+                    <h3 class="shift-title">${escapeHtml(shift.title)}</h3>
+                    <div class="shift-meta">
+                        <div class="shift-meta-item">
+                            <i class="fas fa-calendar"></i>
+                            ${new Date(shift.shift_date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}
+                        </div>
+                        <div class="shift-meta-item">
+                            <i class="fas fa-clock"></i>
+                            ${new Date(shift.shift_date).toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'})} - ${new Date(shift.shift_end_date).toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'})}
+                        </div>
+                        <div class="shift-meta-item">
+                            <i class="fas fa-map-marker-alt"></i>
+                            ${escapeHtml(shift.location || shift.event_title || 'TBD')}
+                        </div>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    ${shift.role ? `<span class="shift-badge badge-role">${escapeHtml(shift.role)}</span>` : ''}
+                    ${shift.is_open ? '<span class="shift-badge badge-open">Open to Claim</span>' : ''}
+                    ${shift.assignments_count >= shift.positions_needed ? '<span class="shift-badge badge-full">Full</span>' : ''}
+                </div>
+            </div>
+            
+            <div class="shift-positions">
+                <i class="fas fa-users"></i>
+                <span>${shift.assignments_count}/${shift.positions_needed} assigned</span>
+            </div>
+            
+            ${shift.description ? `<p style="color: #6b7280; font-size: 0.9rem; margin: 0.5rem 0 0 0;">${escapeHtml(shift.description)}</p>` : ''}
+            
+            <div class="assignments-list">
+                <strong style="color: var(--dark); font-size: 0.9rem;">Assignments (${shift.assignments.length})</strong>
+                ${shift.assignments.length > 0 ? shift.assignments.map(a => `
+                    <div class="assignment-item ${a.status}">
+                        <div>
+                            <div class="assignment-user">${escapeHtml(a.username)}</div>
+                            <div style="font-size: 0.8rem; color: #6b7280;">Assigned by ${escapeHtml(a.assigned_by)} • ${new Date(a.assigned_at).toLocaleDateString()}</div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <span class="assignment-status status-${a.status}">${a.status}</span>
+                            <button onclick="removeAssignment(${a.id})" class="btn" style="padding: 0.3rem 0.6rem; font-size: 0.8rem; background: #fee2e2; color: #991b1b; border: none;">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                `).join('') : `
+                    <div style="padding: 1rem; text-align: center; color: #9ca3af; font-size: 0.9rem;">
+                        No assignments yet
+                    </div>
+                `}
+            </div>
+            
+            <div class="shift-actions" style="margin-top: 1rem;">
+                <button onclick="openAssignModal(${shift.id})" class="btn btn-primary"><i class="fas fa-user-plus"></i> Assign Crew</button>
+                <button onclick="openEditModal(${shift.id})" class="btn btn-primary"><i class="fas fa-edit"></i> Edit</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function updateStats() {
+    const totalShifts = shiftsData.length;
+    const openShifts = shiftsData.filter(s => s.is_open).length;
+    const pendingAssignments = shiftsData.reduce((sum, s) => sum + s.assignments.filter(a => a.status === 'pending').length, 0);
+    const confirmedAssignments = shiftsData.reduce((sum, s) => sum + s.assignments.filter(a => a.status === 'confirmed').length, 0);
+    
+    document.getElementById('totalShifts').textContent = totalShifts;
+    document.getElementById('openShifts').textContent = openShifts;
+    document.getElementById('pendingAssignments').textContent = pendingAssignments;
+    document.getElementById('confirmedAssignments').textContent = confirmedAssignments;
+}
+
+function openAssignModal(shiftId) {
+    currentShiftId = shiftId;
+    showModal('assignCrewModal');
+}
+
+async function assignCrewMember() {
+    const userId = document.getElementById('userSelect').value;
+    const notes = document.getElementById('assignmentNotes').value;
+    
+    if (!userId) {
+        alert('Please select a crew member');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/shifts/${currentShiftId}/assign`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId, notes: notes })
+        });
+        
+        if (response.ok) {
+            hideModal('assignCrewModal');
+            document.getElementById('userSelect').value = '';
+            document.getElementById('assignmentNotes').value = '';
+            refreshShifts();
+            alert('Crew member assigned successfully!');
+        } else {
+            const error = await response.json();
+            alert('Error: ' + (error.error || 'Failed to assign crew'));
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error assigning crew member');
+    }
+}
+
+async function removeAssignment(assignmentId) {
+    if (!confirm('Remove this assignment?')) return;
+    
+    try {
+        const response = await fetch(`/shifts/assignment/${assignmentId}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            refreshShifts();
+            alert('Assignment removed');
+        } else {
+            alert('Failed to remove assignment');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error removing assignment');
+    }
+}
+
+async function createShift() {
+    const eventId = document.getElementById('eventSelect').value;
+    if (!eventId) {
+        alert('Please select an event');
+        return;
+    }
+    
+    const data = {
+        event_id: parseInt(eventId),
+        title: document.getElementById('shiftTitle').value,
+        role: document.getElementById('shiftRole').value,
+        shift_date: document.getElementById('shiftStartTime').value.replace('T', ' '),
+        shift_end_date: document.getElementById('shiftEndTime').value.replace('T', ' '),
+        location: document.getElementById('shiftLocation').value,
+        positions_needed: parseInt(document.getElementById('positionsNeeded').value),
+        description: document.getElementById('shiftDescription').value,
+        is_open: document.getElementById('isOpen').checked
+    };
+    
+    try {
+        const response = await fetch('/shifts/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        if (response.ok) {
+            hideModal('addShiftModal');
+            document.getElementById('addShiftForm').reset();
+            refreshShifts();
+            alert('Shift created successfully!');
+        } else {
+            const error = await response.json();
+            alert('Error: ' + (error.error || 'Failed to create shift'));
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error creating shift');
+    }
+}
+
+function openEditModal(shiftId) {
+    const shift = shiftsData.find(s => s.id === shiftId);
+    if (!shift) return;
+    
+    currentShiftId = shiftId;
+    document.getElementById('editShiftTitle').value = shift.title;
+    document.getElementById('editShiftRole').value = shift.role || '';
+    document.getElementById('editShiftStartTime').value = new Date(shift.shift_date).toISOString().slice(0, 16);
+    document.getElementById('editShiftEndTime').value = new Date(shift.shift_end_date).toISOString().slice(0, 16);
+    document.getElementById('editShiftLocation').value = shift.location || '';
+    document.getElementById('editPositionsNeeded').value = shift.positions_needed;
+    document.getElementById('editShiftDescription').value = shift.description || '';
+    document.getElementById('editIsOpen').checked = shift.is_open;
+    
+    showModal('editShiftModal');
+}
+
+async function updateShift() {
+    const data = {
+        title: document.getElementById('editShiftTitle').value,
+        role: document.getElementById('editShiftRole').value,
+        shift_date: document.getElementById('editShiftStartTime').value.replace('T', ' '),
+        shift_end_date: document.getElementById('editShiftEndTime').value.replace('T', ' '),
+        location: document.getElementById('editShiftLocation').value,
+        positions_needed: parseInt(document.getElementById('editPositionsNeeded').value),
+        description: document.getElementById('editShiftDescription').value,
+        is_open: document.getElementById('editIsOpen').checked
+    };
+    
+    try {
+        const response = await fetch(`/shifts/${currentShiftId}/edit`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        if (response.ok) {
+            hideModal('editShiftModal');
+            refreshShifts();
+            alert('Shift updated successfully!');
+        } else {
+            const error = await response.json();
+            alert('Error: ' + (error.error || 'Failed to update shift'));
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error updating shift');
+    }
+}
+
+async function deleteCurrentShift() {
+    if (!confirm('Delete this shift? This cannot be undone.')) return;
+    
+    try {
+        const response = await fetch(`/shifts/${currentShiftId}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            hideModal('editShiftModal');
+            refreshShifts();
+            alert('Shift deleted');
+        } else {
+            alert('Failed to delete shift');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error deleting shift');
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}
