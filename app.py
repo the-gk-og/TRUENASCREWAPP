@@ -934,11 +934,6 @@ def build_invite_email_html(recipient_name, signup_url, code, role_label,
                 </tr>
               </table>
 
-              <p style="margin:0 0 32px;font-size:13px;color:#9ca3af;text-align:center;line-height:1.6;">
-                Your invite code is already in the link — just click and you're in.
-                <br>No copy-pasting required.
-              </p>
-
               <!-- Divider -->
               <hr style="border:none;border-top:1px solid #f0f0f0;margin:0 0 28px;">
 
@@ -1306,7 +1301,7 @@ DEFAULT_ORG = {
     'primary_color': '#6366f1',
     'secondary_color': '#ec4899',
     'logo': '',
-    'website': 'https://sfx-crew.com'
+    'website': os.environ.get('MAIN_SERVER_URL', 'https://sfx-crew.com')
 }
 
 # ==================== SECURITY LOGGING ====================
@@ -1426,7 +1421,7 @@ def server_error(e):
 def index():
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
-    return redirect('http://sfx-crew.com')
+    return redirect(MAIN_SERVER_URL)
 
 
 @app.route('/login', methods=['GET', 'POST'])

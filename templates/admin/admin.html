@@ -822,7 +822,7 @@ document.getElementById('emailInviteForm').addEventListener('submit', function(e
             name: document.getElementById('inviteName').value,
             role: document.getElementById('emailInviteRole').value,
             expires_at: document.getElementById('emailInviteExpiry').value,
-            base_url: window.location.origin
+            base_url: SIGNUP_BASE_URL || window.location.origin
         })
     }).then(r => r.json()).then(d => {
         if (d.success) {
@@ -893,7 +893,7 @@ document.getElementById('batchEmailForm').addEventListener('submit', function(e)
                 name: person.name,
                 role: role,
                 expires_at: expiresAt,
-                base_url: window.location.origin
+                base_url: SIGNUP_BASE_URL || window.location.origin
             })
         }).then(r => r.json()).then(d => {
             if (d.success) { sent++; results.push({ email: person.email, ok: true }); }
