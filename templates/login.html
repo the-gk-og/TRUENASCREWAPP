@@ -8,11 +8,10 @@
   <style>
     :root {
       --primary: {{ organization.primary_color or '#6366f1' }};
-      --primary-dark: {{ organization.primary_color or '#4f46e5' }};
       --secondary: {{ organization.secondary_color or '#898989' }};
       --dark: #1f2937;
-      --light: #f9fafb;
-      --border: #e5e7eb;
+      --success: #10b981;
+      --danger: #ef4444;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -25,371 +24,278 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      position: relative;
-      overflow: hidden;
+      padding: 2rem 1rem;
     }
 
-    .background-animation {
-      position: absolute;
-      width: 400px;
-      height: 400px;
-      background: rgba(255, 255, 255, 0.1);
+    .bg-circle {
+      position: fixed;
+      width: 400px; height: 400px;
+      background: rgba(255,255,255,0.08);
       border-radius: 50%;
       animation: float 20s infinite;
+      pointer-events: none;
       z-index: 0;
     }
+    .bg-circle-1 { top: -80px; left: -60px; }
+    .bg-circle-2 { bottom: -100px; right: -60px; animation-delay: 3s; }
+    @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(20px)} }
 
-    .bg-circle-1 {
-      top: -50px;
-      left: -50px;
-      animation-delay: 0s;
-    }
-
-    .bg-circle-2 {
-      bottom: -100px;
-      right: -50px;
-      animation-delay: 2s;
-    }
-
-    @keyframes float {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(20px); }
-    }
-
-    .login-container {
+    .container {
       background: white;
-      padding: 3rem;
+      padding: 2.5rem;
       border-radius: 16px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
       width: 100%;
       max-width: 420px;
-      margin: 2rem;
       position: relative;
       z-index: 10;
-      animation: slideUp 0.5s ease;
+      animation: slideUp 0.4s ease;
     }
+    @keyframes slideUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
 
-    @keyframes slideUp {
-      from { opacity: 0; transform: translateY(30px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    .org-header {
+    .header {
       text-align: center;
-      margin-bottom: 2rem;
+      margin-bottom: 1.75rem;
     }
-
-    .org-logo {
-      max-width: 180px;
+    .header img {
       max-height: 80px;
-      height: auto;
-      margin-bottom: 1rem;
+      margin-bottom: 1.25rem;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
     }
-
-    .org-name {
-      font-size: 2rem;
-      font-weight: 700;
-      color: var(--primary);
-      margin-bottom: 0.5rem;
-    }
-
-    .org-tagline {
-      color: #666;
-      font-size: 0.95rem;
-      margin-bottom: 0;
-    }
-
-    .login-title {
-      text-align: center;
-      font-size: 1.5rem;
-      margin-bottom: 0.5rem;
-      color: var(--dark);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
-    }
-
-    .login-subtitle {
-      text-align: center;
-      color: #666;
-      margin-bottom: 2rem;
-      font-size: 0.9rem;
-    }
-
-    .form-group {
-      margin-bottom: 1.5rem;
-    }
+    .header h1 { font-size: 1.6rem; color: var(--primary); margin-bottom: 0.25rem; }
+    .header p { color: #6b7280; font-size: 0.9rem; }
 
     label {
       display: block;
-      margin-bottom: 0.5rem;
+      margin-bottom: 0.35rem;
       font-weight: 600;
-      color: #333;
+      color: #374151;
+      font-size: 0.88rem;
     }
+
+    .form-group { margin-bottom: 1.1rem; }
 
     input[type="text"],
     input[type="password"] {
       width: 100%;
-      padding: 0.875rem 1rem;
-      border: 2px solid #e0e0e0;
+      padding: 0.7rem 0.9rem;
+      border: 2px solid #e5e7eb;
       border-radius: 8px;
-      font-size: 1rem;
-      transition: all 0.3s ease;
+      font-size: 0.95rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      font-family: inherit;
     }
-
-    input[type="text"]:focus,
-    input[type="password"]:focus {
+    input:focus {
       outline: none;
       border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
     }
 
-    .remember-me {
+    .alert {
+      padding: 0.8rem 1rem;
+      border-radius: 8px;
+      margin-bottom: 1.1rem;
       display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      margin-bottom: 1.5rem;
+      align-items: flex-start;
+      gap: 0.6rem;
+      font-size: 0.88rem;
     }
-
-    .remember-me input[type="checkbox"] {
-      width: 18px;
-      height: 18px;
-      cursor: pointer;
-      accent-color: var(--primary);
-    }
-
-    .remember-me label {
-      margin: 0;
-      font-weight: 500;
-      cursor: pointer;
-      user-select: none;
-    }
+    .alert-error   { background: #fef2f2; color: #7f1d1d; border-left: 4px solid var(--danger); }
+    .alert-success { background: #f0fdf4; color: #166534; border-left: 4px solid var(--success); }
 
     .btn {
       width: 100%;
-      padding: 1rem;
-      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-      color: white;
+      padding: 0.875rem;
       border: none;
       border-radius: 8px;
       font-size: 1rem;
       font-weight: 600;
       cursor: pointer;
-      transition: all 0.3s ease;
-      box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
-      text-decoration: none;
+      transition: all 0.2s;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 0.75rem;
+      gap: 0.6rem;
+      text-decoration: none;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      color: white;
+      box-shadow: 0 4px 12px rgba(99,102,241,0.3);
+    }
+    .btn-primary:hover  { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(99,102,241,0.4); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-primary:disabled { opacity: 0.7; transform: none; cursor: not-allowed; }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--primary);
+      border: 2px solid var(--primary);
+      box-shadow: none;
+    }
+    .btn-outline:hover {
+      background: var(--primary);
+      color: white;
+      box-shadow: 0 4px 12px rgba(99,102,241,0.3);
     }
 
-    .btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
-    }
-
-    .btn-google {
+    .btn-oauth {
       background: white;
       color: #333;
-      border: 2px solid #e0e0e0;
+      border: 2px solid #e5e7eb;
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      margin-top: 1rem;
     }
-
-    .btn-google:hover {
+    .btn-oauth:hover {
       background: #f9fafb;
-      border-color: #d0d0d0;
+      border-color: #d1d5db;
       box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }
 
     .divider {
-      position: relative;
-      text-align: center;
-      margin: 2rem 0;
-    }
-
-    .divider span {
-      background: white;
-      padding: 0 1rem;
-      position: relative;
-      z-index: 1;
-      color: #999;
-      font-size: 0.9rem;
-    }
-
-    .divider::before {
-      content: '';
-      position: absolute;
-      top: 50%;
-      left: 0;
-      right: 0;
-      height: 1px;
-      background: #e5e7eb;
-      z-index: 0;
-    }
-
-    .alert {
-      padding: 1rem;
-      border-radius: 8px;
-      margin-bottom: 1.5rem;
-      border-left: 4px solid #ef4444;
-      background: #fef2f2;
-      color: #7f1d1d;
       display: flex;
       align-items: center;
       gap: 0.75rem;
+      margin: 1.25rem 0;
+      color: #d1d5db;
+      font-size: 0.82rem;
+    }
+    .divider::before,
+    .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: #e5e7eb;
+    }
+
+    .forgot-link {
+      display: block;
+      text-align: right;
+      margin-top: 0.35rem;
+      font-size: 0.82rem;
+      color: var(--primary);
+      text-decoration: none;
+    }
+    .forgot-link:hover { text-decoration: underline; }
+
+    .remember-me {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1.1rem;
+    }
+    .remember-me input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+      accent-color: var(--primary);
+    }
+    .remember-me label {
+      margin: 0;
+      font-weight: 500;
+      cursor: pointer;
+      user-select: none;
+      font-size: 0.88rem;
+      color: #374151;
     }
 
     .footer {
       text-align: center;
-      margin-top: 2rem;
-      padding-top: 1.5rem;
+      margin-top: 1.5rem;
+      padding-top: 1.25rem;
       border-top: 1px solid #e5e7eb;
     }
 
     .footer-links {
       display: flex;
-      gap: 1.5rem;
+      gap: 1.25rem;
       justify-content: center;
-      margin-bottom: 1rem;
+      margin-bottom: 0.75rem;
       flex-wrap: wrap;
     }
 
     .footer-links a {
       color: #6b7280;
       text-decoration: none;
-      transition: color 0.3s;
-      font-size: 0.9rem;
+      font-size: 0.85rem;
+      transition: color 0.2s;
     }
-
     .footer-links a:hover {
       color: var(--primary);
     }
 
-    .footer-text {
-      color: #9ca3af;
-      font-size: 0.85rem;
-    }
-
     .powered-by {
-      margin-top: 0.5rem;
       color: #9ca3af;
-      font-size: 0.8rem;
-    }
-
-    .security-badge {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
-      margin-top: 1.5rem;
-      padding: 0.75rem;
-      background: #ecfdf5;
-      border-radius: 8px;
-      color: #065f46;
-      font-size: 0.85rem;
-    }
-
-    @media (max-width: 768px) {
-      .login-container {
-        padding: 2rem;
-        margin: 1rem;
-      }
-
-      .org-name {
-        font-size: 1.5rem;
-      }
-
-      .login-title {
-        font-size: 1.25rem;
-      }
+      font-size: 0.75rem;
+      margin-top: 1rem;
     }
 
     @media (max-width: 480px) {
-      .login-container {
-        padding: 1.5rem;
-      }
-
-      .org-logo {
-        max-width: 140px;
-      }
-
-      .org-name {
-        font-size: 1.25rem;
-      }
-
-      .footer-links {
-        gap: 1rem;
-        font-size: 0.85rem;
-      }
+      body { padding: 1rem 0.75rem; align-items: flex-start; }
+      .container { padding: 1.75rem 1.5rem; }
+      .header h1 { font-size: 1.35rem; }
     }
   </style>
 </head>
 <body>
-  <div class="background-animation bg-circle-1"></div>
-  <div class="background-animation bg-circle-2"></div>
+  <div class="bg-circle bg-circle-1"></div>
+  <div class="bg-circle bg-circle-2"></div>
 
-  <div class="login-container">
-    <div class="org-header">
+  <div class="container">
+    <div class="header">
       {% if organization.logo %}
-      <img src="{{ organization.logo }}" alt="{{ organization.name }}" class="org-logo" />
+      <img src="{{ organization.logo }}" alt="{{ organization.name }}">
       {% endif %}
-      {% if organization.tagline %}
-      <p class="org-tagline">{{ organization.tagline }}</p>
-      {% endif %}
+      <h1> Login </h1>
+      <p>{{ organization.name }} &mdash; ShowWise</p>
     </div>
 
-    <h2 class="login-title">
-      <i class="fas fa-sign-in-alt"></i> Login - {{ organization.name }}
-    </h2>
-    <p class="login-subtitle">Access your ShowWise dashboard</p>
-
-    {% with messages = get_flashed_messages() %}
+    {% with messages = get_flashed_messages(with_categories=True) %}
       {% if messages %}
-        {% for message in messages %}
-          <div class="alert"><i class="fas fa-exclamation-circle"></i> {{ message }}</div>
+        {% for category, message in messages %}
+          <div class="alert alert-{{ 'error' if category == 'error' else 'success' }}">
+            <i class="fas fa-{{ 'exclamation-circle' if category == 'error' else 'check-circle' }}"></i>
+            {{ message }}
+          </div>
         {% endfor %}
       {% endif %}
     {% endwith %}
 
-    <!-- Standard Login Form -->
-    <form method="POST">
+    <form id="loginForm" method="POST" action="{{ url_for('login') }}">
+      {{ form.hidden_tag() if form is defined }}
+
       <div class="form-group">
-        <label for="username"><i class="fas fa-user"></i> Username</label>
-        <input type="text" id="username" name="username" required autofocus placeholder="Enter your username" />
+        <label><i class="fas fa-user"></i> Username</label>
+        <input type="text" name="username" id="username" required
+               placeholder="Your username"
+               autocomplete="username"
+               autofocus>
       </div>
-      
+
       <div class="form-group">
-        <label for="password"><i class="fas fa-lock"></i> Password</label>
-        <input type="password" id="password" name="password" required placeholder="Enter your password" />
+        <label><i class="fas fa-lock"></i> Password</label>
+        <input type="password" name="password" id="password" required
+               placeholder="Your password"
+               autocomplete="current-password">
+        <a href="{{ url_for('forgot_password') }}" class="forgot-link">Forgot password?</a>
       </div>
-      
+
       <div class="remember-me">
-        <input type="checkbox" id="remember" name="remember" checked />
-        <label for="remember">Remember me for {{ SESSION_DURATION }}</label>
+        <input type="checkbox" id="remember" name="remember" checked>
+        <label for="remember">Remember me</label>
       </div>
-      
-      <button type="submit" class="btn">
-        <i class="fas fa-sign-in-alt"></i> Login to {{ organization.name }}
+
+      <button type="submit" class="btn btn-primary" id="loginBtn">
+        <i class="fas fa-sign-in-alt"></i> Log In
       </button>
-      
-      <div style="text-align: center; margin-top: 1.5rem;">
-        <a href="{{ url_for('forgot_password') }}" style="color: #6b7280; text-decoration: none; font-size: 0.9rem; transition: color 0.3s;">
-          <i class="fas fa-key"></i> Forgot your password?
-        </a>
-      </div>
     </form>
 
-    <!-- Google OAuth (if enabled) -->
     {% if google_oauth_enabled %}
-    <div class="divider">
-      <span>OR</span>
-    </div>
+    <div class="divider">or</div>
 
-    <a href="{{ url_for('google_login') }}" class="btn btn-google">
-      <svg width="20" height="20" viewBox="0 0 24 24">
+    <a href="{{ url_for('google_login') }}" class="btn btn-oauth">
+      <svg width="18" height="18" viewBox="0 0 24 24">
         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
         <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
         <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
@@ -399,11 +305,11 @@
     </a>
     {% endif %}
 
-    <!-- Security Badge -->
-    <div class="security-badge">
-      <i class="fas fa-shield-alt"></i>
-      <span>Secured with HTTPS, 2FA, and OAuth</span>
-    </div>
+    <div class="divider">or</div>
+
+    <a href="{{ url_for('signup') }}" class="btn btn-outline">
+      <i class="fas fa-user-plus"></i> Create an Account
+    </a>
 
     <div class="footer">
       <div class="footer-links">
@@ -413,15 +319,17 @@
         <a href="https://sfx-crew.com/contact" target="_blank">
           <i class="fas fa-envelope"></i> Contact
         </a>
-        {% if organization.website %}
-        <a href="{{ organization.website }}" target="_blank">
-          <i class="fas fa-info-circle"></i> Organization Website
-        </a>
-        {% endif %}
       </div>
-      <p class="footer-text">&copy; {{ now.strftime('%Y') }} ShowWise. All rights reserved.</p>
-      <p class="powered-by">Powered by <strong>ShowWise</strong></p>
+      <div class="powered-by">Powered by <strong>ShowWise</strong></div>
     </div>
   </div>
+
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', function() {
+      const btn = document.getElementById('loginBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
+    });
+  </script>
 </body>
 </html>
