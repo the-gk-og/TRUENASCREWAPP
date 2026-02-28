@@ -1,50 +1,20 @@
 #import
 from typing import Optional, List, Dict
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_from_directory, send_file, session
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
-from flask_mail import Mail, Message
-from werkzeug.security import generate_password_hash, check_password_hash
-from werkzeug.utils import secure_filename
-from werkzeug.middleware.proxy_fix import ProxyFix
-from datetime import datetime, timedelta
-import os
-import json
-import shutil
-import csv
-import io
-import requests
-from datetime import datetime, timedelta
-import pytz
-import secrets
-import string
-import threading
-import queue
-import discord
-from discord.ext import commands
-import os
-import requests
-from dotenv import load_dotenv
-from flask import Response, stream_with_context
 from datetime import datetime, timedelta
 from functools import wraps
-from flask import redirect, url_for, flash
-from flask_login import current_user
-import barcode
-from barcode.writer import ImageWriter
-from PIL import Image
-import tempfile
-import base64
-import pyotp
-import qrcode
+from dotenv import load_dotenv
+
 import io
-import base64
-import json
-from google.oauth2 import id_token
-from google.auth.transport import requests as google_requests
-from google_auth_oauthlib.flow import Flow
-import atexit
-from apscheduler.schedulers.background import BackgroundScheduler
+from io import BytesIO
+
+import discord
+from discord.ext import commands
+
+import string
+import string as _string
+
+# Import Rocket.Chat integration
+from rocketchat_client import init_rocketchat, get_rocketchat_client
 
 # Import the backend integration
 from backend_integration import (
@@ -54,8 +24,75 @@ from backend_integration import (
     log_route
 )
 
-# Import Rocket.Chat integration
-from rocketchat_client import init_rocketchat, get_rocketchat_client
+#Flask
+from flask import (
+    Flask, 
+    Response, 
+    render_template, 
+    request, 
+    redirect, 
+    url_for, 
+    flash, 
+    jsonify, 
+    send_from_directory, 
+    send_file, 
+    session, 
+    stream_with_context
+)
+
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask_mail import Mail, Message
+
+#Werkzeug
+from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
+from werkzeug.middleware.proxy_fix import ProxyFix
+
+#Google
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+from google_auth_oauthlib.flow import Flow
+
+#Reportlab
+from reportlab.platypus import (
+    SimpleDocTemplate, 
+    Table, 
+    TableStyle, 
+    Paragraph, 
+    Spacer,
+    PageBreak, 
+    Image,  
+    HRFlowable
+)
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch, mm
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+
+from PIL import Image
+from apscheduler.schedulers.background import BackgroundScheduler
+
+from barcode.writer import ImageWriter
+
+import os
+import re
+import csv
+import json
+import pytz
+import pyotp
+import queue
+import qrcode
+import random
+import base64
+import shutil
+import atexit
+import secrets
+import barcode
+import requests
+import tempfile
+import threading
 
 # Load environment variables from .env file
 load_dotenv()
@@ -287,11 +324,6 @@ GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
 GOOGLE_REDIRECT_URI = os.environ.get('GOOGLE_REDIRECT_URI', 'http://localhost:5001/auth/google/callback')
 
-
-#helper functions
-import random
-import string as _string
-
 def generate_invite_code(length=16):
     """Generate a human-readable invite code like: ABCD-1234-EFGH-5678"""
     chars = _string.ascii_uppercase + _string.digits
@@ -299,9 +331,6 @@ def generate_invite_code(length=16):
     chars = ''.join(c for c in chars if c not in 'O0I1L')
     segments = [''.join(random.choices(chars, k=4)) for _ in range(4)]
     return '-'.join(segments)
-
-
-
 
 # DATABASE MODELS
 
@@ -845,6 +874,7 @@ def schedule_event_notifications(event):
                 return
             
             # Create the appropriate embed based on notification type
+            mention_text = ""
             if notification_type == '1_week_before':
                 embed = {
                     "title": f"📅 Event in 1 Week: {event.title}",
@@ -980,7 +1010,6 @@ def schedule_event_notifications(event):
         print(f"⏱️  Scheduled 'event today' notification for event {event.id} in {delay_event_day/3600:.1f} hours")
         timer = threading.Timer(delay_event_day, send_timed_notification, args=[event.id, 'event_today'])
    
-
 def generate_secure_password(length=32):
     """Generate a cryptographically secure random password"""
     # Use a mix of uppercase, lowercase, digits, and special characters
@@ -989,7 +1018,6 @@ def generate_secure_password(length=32):
     safe_chars = ''.join(c for c in characters if c not in 'l1LO0|`~')
     password = ''.join(secrets.choice(safe_chars) for _ in range(length))
     return password
-
 
 def send_discord_message(event):
     if not DISCORD_WEBHOOK_URL:
@@ -2021,8 +2049,6 @@ def import_sheetdb():
     except Exception as e:
         return jsonify({'error': f'Import failed: {str(e)}'}), 400
     
-
-
 # Add this route to app.py after the equipment routes
 
 @app.route('/equipment/barcodes')
@@ -2170,7 +2196,6 @@ def generate_barcodes():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
-
     
 # PICKLIST ROUTES
 
@@ -3952,21 +3977,6 @@ def init_db():
 # PDF EXPORT ROUTE
 # Replace the /events/<int:event_id>/export-pdf route in app.py with this FIXED version
 
-from reportlab.lib.pagesizes import letter, A4
-from reportlab.platypus import (
-    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer,
-    PageBreak, Image, KeepTogether, HRFlowable
-)
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch, mm
-from reportlab.lib import colors
-from reportlab.pdfgen import canvas
-from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
-from io import BytesIO
-import os
-import re
-from datetime import datetime
-
 @app.route('/events/<int:event_id>/export-pdf')
 @login_required
 @crew_required
@@ -4645,13 +4655,6 @@ def delete_cast(id):
     db.session.commit()
     return jsonify({'success': True})
 
-
-
-
-
-        
-    
-
 # Add these routes to your app.py
 
 # ==================== CAST DASHBOARD ====================
@@ -5050,9 +5053,6 @@ ShowWise Team"""
     return jsonify({'success': True, 'message': 'Password changed successfully'})
 
 # ==================== HIRED EQUIPMENT ROUTES ====================
-
-from datetime import datetime, timedelta
-
 
 @app.route('/hired-equipment')
 @login_required
