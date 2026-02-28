@@ -111,11 +111,12 @@
 
 <!-- ==================== INVITE CODES ==================== -->
 <div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.75rem;">
         <h3><i class="fas fa-ticket-alt"></i> Invite Codes</h3>
-        <div style="display: flex; gap: 0.75rem;">
+        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
             <button onclick="showModal('generateInviteModal')" class="btn btn-success"><i class="fas fa-plus"></i> Generate Invite</button>
             <button onclick="showModal('emailInviteModal')" class="btn btn-primary"><i class="fas fa-envelope"></i> Email Invite</button>
+            <button onclick="showModal('batchEmailModal')" class="btn" style="background: #7c3aed; color: white;"><i class="fas fa-mail-bulk"></i> Batch Email</button>
         </div>
     </div>
 
@@ -309,11 +310,32 @@
 
         <div id="generatedInvite" style="display: none; margin-top: 1.5rem; background: #ecfdf5; border: 2px solid var(--success); border-radius: 10px; padding: 1.25rem;">
             <h4 style="color: var(--success); margin-bottom: 0.75rem;"><i class="fas fa-check-circle"></i> Invite Code Generated!</h4>
-            <div style="display: flex; align-items: center; gap: 0.75rem; background: white; padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid #d1fae5;">
+            <div style="display: flex; align-items: center; gap: 0.75rem; background: white; padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid #d1fae5; margin-bottom: 0.75rem;">
                 <code id="generatedCode" style="font-size: 1.3rem; letter-spacing: 2px; flex: 1;"></code>
-                <button onclick="copyInviteCode()" class="btn btn-success" style="padding: 0.4rem 0.75rem; font-size: 0.85rem;"><i class="fas fa-copy"></i> Copy</button>
+                <button onclick="copyInviteCode()" class="btn btn-success" style="padding: 0.4rem 0.75rem; font-size: 0.85rem; width: auto;"><i class="fas fa-copy"></i> Copy</button>
             </div>
-            <p id="generatedLink" style="margin-top: 0.75rem; font-size: 0.85rem; color: #065f46;"></p>
+            <p id="generatedLink" style="margin-bottom: 1rem; font-size: 0.82rem; color: #065f46; word-break: break-all;"></p>
+            <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                <button onclick="showQRCode()" class="btn" style="flex: 1; background: #1e40af; color: white; width: auto; font-size: 0.9rem; padding: 0.6rem;"><i class="fas fa-qrcode"></i> View QR Code</button>
+                <button onclick="downloadPoster()" class="btn" style="flex: 1; background: #7c3aed; color: white; width: auto; font-size: 0.9rem; padding: 0.6rem;"><i class="fas fa-file-pdf"></i> Download Poster</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- QR Code Modal -->
+<div id="qrModal" class="modal">
+    <div class="modal-content" style="max-width: 420px; text-align: center;">
+        <span class="close" onclick="hideModal('qrModal')">&times;</span>
+        <h2 style="margin-bottom: 0.5rem;"><i class="fas fa-qrcode"></i> Invite QR Code</h2>
+        <p style="color: #6b7280; margin-bottom: 1.5rem; font-size: 0.9rem;">Scan to open the signup page with code pre-filled</p>
+        <div id="qrCodeContainer" style="display: flex; justify-content: center; margin-bottom: 1.25rem;">
+            <div id="qrCodeImage" style="padding: 1rem; background: white; border: 2px solid #e5e7eb; border-radius: 12px; display: inline-block;"></div>
+        </div>
+        <code id="qrCodeText" style="display: block; font-size: 1.1rem; letter-spacing: 2px; color: var(--primary); margin-bottom: 1.25rem; font-weight: bold;"></code>
+        <div style="display: flex; gap: 0.75rem;">
+            <button onclick="downloadQR()" class="btn btn-success" style="flex: 1;"><i class="fas fa-download"></i> Download QR</button>
+            <button onclick="downloadPoster()" class="btn" style="flex: 1; background: #7c3aed; color: white;"><i class="fas fa-file-pdf"></i> Download Poster</button>
         </div>
     </div>
 </div>
@@ -346,13 +368,52 @@
             </div>
             <div style="background: #f0f4ff; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; border-left: 4px solid var(--primary);">
                 <p style="font-size: 0.9rem; color: #1e40af; margin: 0;">
-                    <i class="fas fa-info-circle"></i> A single-use invite code will be generated and emailed directly to the recipient with a signup link.
+                    <i class="fas fa-info-circle"></i> A personalised invite link is generated and emailed directly — no code typing needed.
                 </p>
             </div>
             <button type="submit" class="btn btn-primary" style="width: 100%;" id="emailInviteBtn">
                 <i class="fas fa-paper-plane"></i> Send Invite Email
             </button>
         </form>
+    </div>
+</div>
+
+<!-- Batch Email Modal -->
+<div id="batchEmailModal" class="modal">
+    <div class="modal-content" style="max-width: 560px;">
+        <span class="close" onclick="hideModal('batchEmailModal')">&times;</span>
+        <h2 style="margin-bottom: 0.5rem;"><i class="fas fa-mail-bulk"></i> Batch Email Invites</h2>
+        <p style="color: #6b7280; margin-bottom: 1.5rem; font-size: 0.9rem;">Send individual invite links to multiple people at once. Each person gets their own unique link.</p>
+        <form id="batchEmailForm">
+            <div class="form-group">
+                <label>Email Addresses * <span style="font-weight: 400; color: #6b7280;">(one per line, or comma-separated)</span></label>
+                <textarea id="batchEmails" rows="6" placeholder="john@example.com&#10;jane@example.com, Sarah Smith &lt;sarah@example.com&gt;&#10;crew@theatre.org" style="width: 100%; padding: 0.75rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.9rem; font-family: inherit; resize: vertical;"></textarea>
+                <small style="color: #6b7280;">Tip: You can use "Name &lt;email@example.com&gt;" format to include names</small>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div class="form-group">
+                    <label>Role *</label>
+                    <select id="batchRole" required>
+                        <option value="crew">Crew</option>
+                        <option value="staff">Staff</option>
+                        <option value="cast">Cast</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Expiry Date *</label>
+                    <input type="datetime-local" id="batchExpiry" required>
+                </div>
+            </div>
+            <div style="background: #fef3c7; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; border-left: 4px solid #f59e0b;">
+                <p style="font-size: 0.88rem; color: #78350f; margin: 0;">
+                    <i class="fas fa-info-circle"></i> Each recipient gets a unique single-use link. Links open the signup page with the code pre-filled — no copy-pasting required.
+                </p>
+            </div>
+            <button type="submit" class="btn" id="batchEmailBtn" style="width: 100%; background: #7c3aed; color: white;">
+                <i class="fas fa-paper-plane"></i> Send Batch Invites
+            </button>
+        </form>
+        <div id="batchResults" style="display: none; margin-top: 1.5rem;"></div>
     </div>
 </div>
 
@@ -380,11 +441,26 @@
     </div>
 </div>
 
+<!-- Hidden PDF poster canvas -->
+<canvas id="posterCanvas" style="display: none;"></canvas>
+
 {% endblock %}
 
 {% block scripts %}
+<!-- QR Code library -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
 <script>
-// Stats
+// ==================== STATE ====================
+let currentInviteCode = '';
+let currentSignupUrl = '';
+let currentInviteExpiry = null;
+let qrCodeInstance = null;
+
+// Signup base URL — set from .env via template variable (falls back to window.location.origin)
+const SIGNUP_BASE_URL = '{{ config.get("SIGNUP_BASE_URL", "") }}';
+
+// ==================== STATS ====================
 function loadStats() {
     const allUsers = {{ users|tojson }};
     document.getElementById('crewCount').textContent = allUsers.filter(u => !u.is_cast).length;
@@ -407,9 +483,13 @@ function loadInvites() {
             const valid = !expired && !exhausted && inv.is_active;
             const statusColor = valid ? 'var(--success)' : '#ef4444';
             const statusText = !inv.is_active ? 'Revoked' : expired ? 'Expired' : exhausted ? 'Used up' : 'Active';
+            const base = SIGNUP_BASE_URL || window.location.origin;
+            const signupUrl = base + '/signup?invite=' + inv.code;
+            const expiresAtEsc = inv.expires_at.replace(/'/g, "\\'");
             return `<tr>
-                <td><code style="font-size:0.9rem;letter-spacing:1px;">${inv.code}</code>
-                    <button onclick="navigator.clipboard.writeText('${inv.code}')" style="background:none;border:none;cursor:pointer;color:#6b7280;margin-left:4px;" title="Copy"><i class="fas fa-copy"></i></button>
+                <td>
+                    <code style="font-size:0.9rem;letter-spacing:1px;">${inv.code}</code>
+                    <button onclick="navigator.clipboard.writeText('${inv.code}')" style="background:none;border:none;cursor:pointer;color:#6b7280;margin-left:4px;" title="Copy code"><i class="fas fa-copy"></i></button>
                 </td>
                 <td><span style="background:#e5e7eb;padding:0.2rem 0.6rem;border-radius:10px;font-size:0.8rem;">${inv.role}</span></td>
                 <td>${inv.created_by}</td>
@@ -418,21 +498,281 @@ function loadInvites() {
                     <span style="color:#6b7280;font-size:0.8rem;">(${inv.use_count}/${inv.max_uses === 0 ? '∞' : inv.max_uses})</span>
                 </td>
                 <td>${inv.used_by ? inv.used_by.join(', ') : '-'}</td>
-                <td>
-                    ${valid ? `<button onclick="revokeInvite(${inv.id})" class="btn btn-danger" style="padding:0.3rem 0.6rem;font-size:0.8rem;"><i class="fas fa-ban"></i> Revoke</button>` : ''}
-                    <button onclick="deleteInvite(${inv.id})" class="btn" style="padding:0.3rem 0.6rem;font-size:0.8rem;background:#f3f4f6;color:#374151;"><i class="fas fa-trash"></i></button>
+                <td style="white-space:nowrap;">
+                    ${valid ? `
+                    <button onclick="openQRForExisting('${inv.code}', '${signupUrl}', '${expiresAtEsc}')" class="btn" style="padding:0.3rem 0.6rem;font-size:0.8rem;background:#1e40af;color:white;width:auto;margin-bottom:0.25rem;" title="QR Code"><i class="fas fa-qrcode"></i></button>
+                    <button onclick="downloadPosterForCode('${inv.code}', '${signupUrl}', '${expiresAtEsc}')" class="btn" style="padding:0.3rem 0.6rem;font-size:0.8rem;background:#7c3aed;color:white;width:auto;margin-bottom:0.25rem;" title="PDF Poster"><i class="fas fa-file-pdf"></i></button>
+                    <button onclick="revokeInvite(${inv.id})" class="btn btn-danger" style="padding:0.3rem 0.6rem;font-size:0.8rem;width:auto;"><i class="fas fa-ban"></i></button>
+                    ` : ''}
+                    <button onclick="deleteInvite(${inv.id})" class="btn" style="padding:0.3rem 0.6rem;font-size:0.8rem;background:#f3f4f6;color:#374151;width:auto;"><i class="fas fa-trash"></i></button>
                 </td>
             </tr>`;
         }).join('');
     });
 }
 
-// Set default expiry to 7 days from now
+// ==================== QR CODE ====================
+function generateQRCode(url, containerId) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+    if (qrCodeInstance) {
+        qrCodeInstance = null;
+    }
+    qrCodeInstance = new QRCode(container, {
+        text: url,
+        width: 220,
+        height: 220,
+        colorDark: '#1f2937',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+    });
+}
+
+function showQRCode() {
+    if (!currentInviteCode) return;
+    document.getElementById('qrCodeText').textContent = currentInviteCode;
+    generateQRCode(currentSignupUrl, 'qrCodeImage');
+    showModal('qrModal');
+}
+
+function openQRForExisting(code, url, expiresAt) {
+    currentInviteCode = code;
+    currentSignupUrl = url;
+    currentInviteExpiry = expiresAt || null;
+    document.getElementById('qrCodeText').textContent = code;
+    generateQRCode(url, 'qrCodeImage');
+    showModal('qrModal');
+}
+
+function downloadQR() {
+    setTimeout(() => {
+        const canvas = document.querySelector('#qrCodeImage canvas');
+        if (!canvas) { showAlert('QR code not ready yet', 'error'); return; }
+        const link = document.createElement('a');
+        link.download = `showwise-invite-${currentInviteCode}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    }, 200);
+}
+
+// ==================== PDF POSTER ====================
+function downloadPoster() {
+    if (!currentInviteCode) return;
+    downloadPosterForCode(currentInviteCode, currentSignupUrl, currentInviteExpiry);
+}
+
+function downloadPosterForCode(code, signupUrl, expiresAt) {
+    currentInviteCode = code;
+    currentSignupUrl = signupUrl;
+    currentInviteExpiry = expiresAt || null;
+
+    const tempDiv = document.createElement('div');
+    tempDiv.style.cssText = 'position:absolute;left:-9999px;top:-9999px;';
+    document.body.appendChild(tempDiv);
+
+    // High-res QR for crisp output
+    new QRCode(tempDiv, {
+        text: signupUrl,
+        width: 600,
+        height: 600,
+        colorDark: '#1f2937',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+    });
+
+    setTimeout(() => {
+        const qrCanvas = tempDiv.querySelector('canvas');
+        buildPosterPDF(code, signupUrl, qrCanvas, expiresAt);
+        document.body.removeChild(tempDiv);
+    }, 500);
+}
+
+function buildPosterPDF(code, signupUrl, qrCanvas, expiresAt) {
+    const canvas = document.getElementById('posterCanvas');
+    // A4 at 300dpi = 2480 × 3508px
+    const W = 2480, H = 3508;
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    // Scale factor relative to the original 794px layout
+    const S = W / 794;
+    const sc = n => n * S;
+
+    // --- Background gradient ---
+    const grad = ctx.createLinearGradient(0, 0, W, H);
+    grad.addColorStop(0, '#6366f1');
+    grad.addColorStop(1, '#a855f7');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // --- White card — tight 20px bezel ---
+    const cardX = sc(20), cardY = sc(20), cardW = W - sc(40), cardH = H - sc(40);
+    ctx.fillStyle = '#ffffff';
+    roundRect(ctx, cardX, cardY, cardW, cardH, sc(24));
+    ctx.fill();
+
+    // --- "Join ShowWise" heading ---
+    ctx.fillStyle = '#1f2937';
+    ctx.textAlign = 'center';
+    ctx.font = `bold ${sc(58)}px system-ui, Arial, sans-serif`;
+    ctx.fillText('Join ShowWise', W / 2, cardY + sc(100));
+
+    // --- Subheading ---
+    ctx.font = `${sc(26)}px system-ui, Arial, sans-serif`;
+    ctx.fillStyle = '#6b7280';
+    ctx.fillText('Scan the QR code or use the invite code below', W / 2, cardY + sc(148));
+
+    // --- Divider ---
+    ctx.strokeStyle = '#e5e7eb';
+    ctx.lineWidth = sc(2);
+    ctx.beginPath();
+    ctx.moveTo(cardX + sc(60), cardY + sc(170));
+    ctx.lineTo(cardX + cardW - sc(60), cardY + sc(170));
+    ctx.stroke();
+
+    // --- QR Code ---
+    if (qrCanvas) {
+        const qrSize = sc(280);
+        const qrX = (W - qrSize) / 2;
+        const qrY = cardY + sc(195);
+
+        // QR background
+        ctx.fillStyle = '#f9fafb';
+        roundRect(ctx, qrX - sc(20), qrY - sc(20), qrSize + sc(40), qrSize + sc(40), sc(16));
+        ctx.fill();
+        ctx.strokeStyle = '#e5e7eb';
+        ctx.lineWidth = sc(2);
+        roundRect(ctx, qrX - sc(20), qrY - sc(20), qrSize + sc(40), qrSize + sc(40), sc(16));
+        ctx.stroke();
+
+        ctx.drawImage(qrCanvas, qrX, qrY, qrSize, qrSize);
+    }
+
+    // --- "Scan to join" label ---
+    ctx.font = `bold ${sc(22)}px system-ui, Arial, sans-serif`;
+    ctx.fillStyle = '#6366f1';
+    ctx.textAlign = 'center';
+    ctx.fillText('📱 Scan to join', W / 2, cardY + sc(195) + sc(280) + sc(55));
+
+    // --- URL below QR ---
+    ctx.font = `${sc(16)}px monospace`;
+    ctx.fillStyle = '#9ca3af';
+    ctx.textAlign = 'center';
+    const signupBase = (typeof SIGNUP_BASE_URL !== 'undefined' && SIGNUP_BASE_URL)
+        ? SIGNUP_BASE_URL : window.location.origin;
+    const shortUrl = signupUrl.replace('https://', '').replace('http://', '');
+    ctx.fillText(shortUrl, W / 2, cardY + sc(195) + sc(280) + sc(85));
+
+    // --- "Can't scan?" dashed divider ---
+    const midY = cardY + sc(195) + sc(280) + sc(120);
+    ctx.strokeStyle = '#e5e7eb';
+    ctx.lineWidth = sc(1.5);
+    ctx.setLineDash([sc(6), sc(4)]);
+    ctx.beginPath();
+    ctx.moveTo(cardX + sc(60), midY);
+    ctx.lineTo(cardX + cardW - sc(60), midY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.font = `${sc(18)}px system-ui, Arial, sans-serif`;
+    ctx.fillStyle = '#9ca3af';
+    ctx.fillText("Can't scan? Enter the code manually", W / 2, midY + sc(30));
+
+    // --- Invite Code Box ---
+    const codeBoxY = midY + sc(50);
+    const codeBoxH = sc(90);
+    const codeBoxX = cardX + sc(60);
+    const codeBoxW = cardW - sc(120);
+
+    const codeGrad = ctx.createLinearGradient(codeBoxX, 0, codeBoxX + codeBoxW, 0);
+    codeGrad.addColorStop(0, '#ede9fe');
+    codeGrad.addColorStop(1, '#fce7f3');
+    ctx.fillStyle = codeGrad;
+    roundRect(ctx, codeBoxX, codeBoxY, codeBoxW, codeBoxH, sc(12));
+    ctx.fill();
+
+    ctx.strokeStyle = '#a855f7';
+    ctx.lineWidth = sc(2);
+    roundRect(ctx, codeBoxX, codeBoxY, codeBoxW, codeBoxH, sc(12));
+    ctx.stroke();
+
+    ctx.font = `bold ${sc(46)}px monospace`;
+    ctx.fillStyle = '#4c1d95';
+    ctx.textAlign = 'center';
+    ctx.fillText(code, W / 2, codeBoxY + sc(57));
+
+    ctx.font = `${sc(15)}px system-ui, Arial, sans-serif`;
+    ctx.fillStyle = '#7c3aed';
+    ctx.fillText('INVITE CODE — Use at signup', W / 2, codeBoxY + sc(79));
+
+    // --- Expiry fine print ---
+    if (expiresAt) {
+        const expDate = new Date(expiresAt);
+        const expStr = expDate.toLocaleDateString('en-AU', {
+            day: 'numeric', month: 'long', year: 'numeric',
+            hour: '2-digit', minute: '2-digit'
+        });
+        ctx.font = `${sc(13)}px system-ui, Arial, sans-serif`;
+        ctx.fillStyle = '#d1d5db';
+        ctx.textAlign = 'center';
+        ctx.fillText(`This invite expires ${expStr}`, W / 2, codeBoxY + codeBoxH + sc(28));
+    }
+
+    // --- Footer ---
+    const footerY = cardY + cardH - sc(30);
+    ctx.font = `${sc(15)}px system-ui, Arial, sans-serif`;
+    ctx.fillStyle = '#9ca3af';
+    ctx.textAlign = 'center';
+    ctx.fillText('ShowWise — Production Crew Management', W / 2, footerY);
+
+    // --- Download ---
+    canvas.toBlob(blob => {
+        const link = document.createElement('a');
+        link.download = `showwise-invite-poster-${code}.png`;
+        link.href = URL.createObjectURL(blob);
+        link.click();
+    }, 'image/png');
+
+    showAlert('Poster downloaded!', 'success');
+}
+
+// Canvas helpers
+function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+}
+
+function roundRectTop(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h);
+    ctx.lineTo(x, y + h);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+}
+
+// ==================== INVITE GENERATION ====================
 window.addEventListener('DOMContentLoaded', () => {
     const d = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     const iso = d.toISOString().slice(0, 16);
     document.getElementById('inviteExpiry').value = iso;
     document.getElementById('emailInviteExpiry').value = iso;
+    document.getElementById('batchExpiry').value = iso;
     loadStats();
     loadBackups();
     loadInvites();
@@ -451,8 +791,12 @@ document.getElementById('generateInviteForm').addEventListener('submit', functio
         })
     }).then(r => r.json()).then(d => {
         if (d.success) {
+            currentInviteCode = d.code;
+            currentInviteExpiry = document.getElementById('inviteExpiry').value;
+            const base = SIGNUP_BASE_URL || window.location.origin;
+            currentSignupUrl = base + '/signup?invite=' + d.code;
             document.getElementById('generatedCode').textContent = d.code;
-            document.getElementById('generatedLink').textContent = 'Signup link: ' + window.location.origin + '/signup?invite=' + d.code;
+            document.getElementById('generatedLink').textContent = 'Signup link: ' + currentSignupUrl;
             document.getElementById('generatedInvite').style.display = 'block';
             loadInvites();
         } else showAlert(d.error || 'Error', 'error');
@@ -460,11 +804,11 @@ document.getElementById('generateInviteForm').addEventListener('submit', functio
 });
 
 function copyInviteCode() {
-    const code = document.getElementById('generatedCode').textContent;
-    navigator.clipboard.writeText(code);
-    showAlert('Code copied!');
+    navigator.clipboard.writeText(currentInviteCode);
+    showAlert('Code copied!', 'success');
 }
 
+// ==================== EMAIL INVITE (single) ====================
 document.getElementById('emailInviteForm').addEventListener('submit', function(e) {
     e.preventDefault();
     const btn = document.getElementById('emailInviteBtn');
@@ -477,7 +821,8 @@ document.getElementById('emailInviteForm').addEventListener('submit', function(e
             email: document.getElementById('inviteEmail').value,
             name: document.getElementById('inviteName').value,
             role: document.getElementById('emailInviteRole').value,
-            expires_at: document.getElementById('emailInviteExpiry').value
+            expires_at: document.getElementById('emailInviteExpiry').value,
+            base_url: SIGNUP_BASE_URL || window.location.origin
         })
     }).then(r => r.json()).then(d => {
         if (d.success) {
@@ -490,6 +835,81 @@ document.getElementById('emailInviteForm').addEventListener('submit', function(e
     });
 });
 
+// ==================== BATCH EMAIL INVITES ====================
+document.getElementById('batchEmailForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const raw = document.getElementById('batchEmails').value.trim();
+    if (!raw) { showAlert('Please enter at least one email address', 'error'); return; }
+
+    // Parse emails — support newlines, commas, and "Name <email>" format
+    const lines = raw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+    const parsed = lines.map(line => {
+        const match = line.match(/^(.+?)\s*<([^>]+)>$/);
+        if (match) return { name: match[1].trim(), email: match[2].trim() };
+        return { name: '', email: line };
+    }).filter(e => e.email.includes('@'));
+
+    if (!parsed.length) { showAlert('No valid email addresses found', 'error'); return; }
+
+    const btn = document.getElementById('batchEmailBtn');
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Sending 0 / ${parsed.length}...`;
+
+    let sent = 0, failed = 0;
+    const results = [];
+    const expiresAt = document.getElementById('batchExpiry').value;
+    const role = document.getElementById('batchRole').value;
+
+    const sendNext = (index) => {
+        if (index >= parsed.length) {
+            // Done
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Batch Invites';
+            const resultsDiv = document.getElementById('batchResults');
+            resultsDiv.style.display = 'block';
+            resultsDiv.innerHTML = `
+                <div style="background: #ecfdf5; border: 1px solid #6ee7b7; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                    <strong style="color: #065f46;">✓ Done — ${sent} sent, ${failed} failed</strong>
+                </div>
+                ${results.map(r => `
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0.75rem;border-radius:6px;margin-bottom:0.3rem;background:${r.ok ? '#f0fdf4' : '#fef2f2'};">
+                        <span style="font-size:0.85rem;">${r.email}</span>
+                        <span style="font-size:0.8rem;color:${r.ok ? '#065f46' : '#7f1d1d'};">${r.ok ? '✓ Sent' : '✗ ' + r.error}</span>
+                    </div>
+                `).join('')}
+            `;
+            loadInvites();
+            return;
+        }
+
+        const person = parsed[index];
+        btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Sending ${index + 1} / ${parsed.length}...`;
+
+        fetch('/admin/invites/email', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                email: person.email,
+                name: person.name,
+                role: role,
+                expires_at: expiresAt,
+                base_url: SIGNUP_BASE_URL || window.location.origin
+            })
+        }).then(r => r.json()).then(d => {
+            if (d.success) { sent++; results.push({ email: person.email, ok: true }); }
+            else { failed++; results.push({ email: person.email, ok: false, error: d.error || 'Failed' }); }
+            sendNext(index + 1);
+        }).catch(err => {
+            failed++;
+            results.push({ email: person.email, ok: false, error: 'Network error' });
+            sendNext(index + 1);
+        });
+    };
+
+    sendNext(0);
+});
+
+// ==================== REVOKE / DELETE INVITE ====================
 function revokeInvite(id) {
     if (!confirm('Revoke this invite code?')) return;
     fetch(`/admin/invites/${id}/revoke`, { method: 'POST' })
@@ -598,7 +1018,7 @@ function loadBackups() {
                 const date = new Date(b.date);
                 const size = (b.size / 1024 / 1024).toFixed(2);
                 html += `<tr><td><strong>${b.name}</strong><br><small style="color:#999;">${size} MB &bull; ${date.toLocaleString()}</small></td>
-                         <td style="text-align:right;"><a href="/admin/download-backup/${b.name}" class="btn btn-primary" style="padding:0.4rem 0.8rem;font-size:0.85rem;"><i class="fas fa-download"></i></a></td></tr>`;
+                         <td style="text-align:right;"><a href="/admin/download-backup/${b.name}" class="btn btn-primary" style="padding:0.4rem 0.8rem;font-size:0.85rem;width:auto;"><i class="fas fa-download"></i></a></td></tr>`;
             });
             html += '</tbody></table>';
         }
