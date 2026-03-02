@@ -511,12 +511,10 @@
             <div style="font-size: 0.8rem; color: #6b7280; margin-top: 0.5rem;">of {{ events_this_week }} total</div>
         </div>
         <div class="stat-card green">
-            <div class="stat-icon">💬</div>
-            <div class="stat-value">0</div>
-            <div class="stat-label">New Messages</div>
-            <div style="font-size: 0.8rem; color: #6b7280; margin-top: 0.5rem;">
-                <a href="{{ url_for('inbox_page') }}" style="color: var(--primary); text-decoration: none;">View inbox →</a>
-            </div>
+            <div class="stat-icon">✅</div>
+            <div class="stat-value">{{ my_events_this_week }}</div>
+            <div class="stat-label">Events Attended</div>
+            <div style="font-size: 0.8rem; color: #6b7280; margin-top: 0.5rem;">this week</div>
         </div>
     </div>
 
@@ -545,10 +543,6 @@
             <a href="{{ url_for('stageplans') }}" class="quick-action-btn">
                 <div class="quick-action-icon">🎨</div>
                 <div>Stage Plans</div>
-            </a>
-            <a href="{{ url_for('chat_page') }}" class="quick-action-btn">
-                <div class="quick-action-icon">💬</div>
-                <div>Chat</div>
             </a>
         </div>
     </div>
