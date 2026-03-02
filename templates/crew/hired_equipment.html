@@ -57,14 +57,14 @@
     <div id="hiredList" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem;">
         {% for hired in active_hired|sort(attribute='return_date') %}
         {% set days_until_return = (hired.return_date - now).days %}
-        <div class="hired-card" data-id="{{ hired.id }}" style="background: white; border: 2px solid {% if days_until_return < 0 %}var(--danger){% elif days_until_return <= 7 %}var(--warning){% else %}var(--border){% endif %}; border-left: 4px solid {% if days_until_return < 0 %}var(--danger){% elif days_until_return <= 7 %}var(--warning){% else %}var(--primary){% endif %}; padding: 1.25rem; border-radius: 8px;">
+        <div class="hired-card" data-id="{{ hired.id }}" style="background: var(--bg-card); border: 2px solid {% if days_until_return < 0 %}var(--danger){% elif days_until_return <= 7 %}var(--warning){% else %}var(--border){% endif %}; border-left: 4px solid {% if days_until_return < 0 %}var(--danger){% elif days_until_return <= 7 %}var(--warning){% else %}var(--primary){% endif %}; padding: 1.25rem; border-radius: 8px;">
             <div style="display: flex; align-items: start; gap: 0.75rem; margin-bottom: 1rem;">
                 <input type="checkbox" class="bulk-checkbox" style="width: 20px; height: 20px; display: none; cursor: pointer; flex-shrink: 0; margin-top: 0.25rem;">
                 <div style="flex: 1; min-width: 0;">
                     <h4 style="margin: 0 0 0.5rem 0; color: var(--dark); word-break: break-word;">{{ hired.name }}</h4>
                     
                     {% if hired.supplier %}
-                    <p style="margin: 0.25rem 0; color: #6b7280; font-size: 0.85rem;">
+                    <p style="margin: 0.25rem 0; color: var(--text-secondary); font-size: 0.85rem;">
                         <i class="fas fa-building"></i> {{ hired.supplier }}
                     </p>
                     {% endif %}
