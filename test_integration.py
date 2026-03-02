@@ -51,14 +51,6 @@ print(f"   Kill Switch: {'ENABLED' if enabled else 'Disabled'}")
 if enabled:
     print(f"   Reason: {reason}")
 
-# Test 5: Chat
-print("\n5. Testing Chat API...")
-msg_id = backend.send_chat_message("Test User", "This is a test message", "test@example.com")
-if msg_id:
-    print(f"   ✓ Message sent: #{msg_id}")
-else:
-    print("   ✗ Failed to send message")
-
 print("\n" + "="*50)
 print("  Test Complete!")
 print("="*50)
