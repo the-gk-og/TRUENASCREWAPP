@@ -268,27 +268,7 @@ SIGNUP_BASE_URL = os.environ.get('SIGNUP_BASE_URL', os.environ.get('MAIN_SERVER_
 app.config['SIGNUP_BASE_URL'] = SIGNUP_BASE_URL
 
 
-# -------------------- Chat storage & SSE helpers (Rocket.Chat) --------------------
-
-# Note: Rocket.Chat handles persistence server-side
-# SSE subscribers for real-time updates
-_sse_subscribers = []
-
-def _broadcast_sse(message_obj):
-    """Broadcast message to all SSE subscribers"""
-    data = json.dumps(message_obj, default=str)
-    dead = []
-    for q in _sse_subscribers:
-        try:
-            q.put(data)
-        except Exception:
-            dead.append(q)
-    for d in dead:
-        try:
-            _sse_subscribers.remove(d)
-        except ValueError:
-            pass
-
+# -------------------- Rocket.Chat helpers --------------------
 
 def _get_or_create_rc_user(username: str, email: str = None) -> Optional[str]:
     """Get or create Rocket.Chat user"""
@@ -297,45 +277,6 @@ def _get_or_create_rc_user(username: str, email: str = None) -> Optional[str]:
         return None
     
     return rc.get_or_create_user(username, email=email, name=username)
-
-
-def _send_rc_message(room_id: str, username: str, user_name: str, message: str, metadata: Dict = None) -> Optional[str]:
-    """Send message to Rocket.Chat room"""
-    rc = get_rocketchat_client()
-    if not rc.is_connected():
-        return None
-    
-    # Build message text with sender info
-    msg_text = f"{message}"
-    
-    # Send to Rocket.Chat
-    return rc.send_message(room_id, msg_text, metadata=metadata)
-
-
-def _get_rc_messages(room_id: str, count: int = 50, offset: int = 0) -> List[Dict]:
-    """Get messages from Rocket.Chat room"""
-    rc = get_rocketchat_client()
-    if not rc.is_connected():
-        return []
-    
-    return rc.get_messages(room_id, count=count, offset=offset)
-
-
-def _ensure_groups_store():
-    """Rocket.Chat groups are stored server-side - this is a no-op"""
-    pass
-
-
-def _load_groups():
-    """Load groups from Rocket.Chat"""
-    # In production, fetch from Rocket.Chat or database
-    # For now, return empty list - groups are created in Rocket.Chat
-    return []
-
-
-def _save_groups(groups):
-    """Save groups to Rocket.Chat - groups are stored server-side"""
-    pass
 
 # Organization Settings
 ORGANIZATION_SLUG = os.environ.get('ORGANIZATION_SLUG', '')
