@@ -44,8 +44,8 @@
             <h3 class="card-title"><i class="fas fa-key"></i> Change Password</h3>
         </div>
 
-        <div style="background: #f0f4ff; padding: 1rem; border-radius: 8px; border-left: 4px solid var(--primary); margin-bottom: 1.5rem;">
-            <p style="margin: 0; color: #1e40af; font-size: 0.95rem;">
+        <div style="background: var(--bg-nav-active); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--primary); margin-bottom: 1.5rem;">
+            <p style="margin: 0; color: var(--text-primary); font-size: 0.95rem;">
                 <i class="fas fa-info-circle"></i> <strong>Password Requirements:</strong>
                 Minimum 6 characters, must be different from your current password.
             </p>
@@ -63,7 +63,7 @@
                     <div style="height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden;">
                         <div id="passwordStrength" style="height: 100%; width: 0%; transition: all 0.3s ease;"></div>
                     </div>
-                    <small id="strengthText" style="color: #6b7280; display: block; margin-top: 0.25rem;"></small>
+                    <small id="strengthText" style="color: var(--text-secondary); display: block; margin-top: 0.25rem;"></small>
                 </div>
             </div>
             <div class="form-group">
@@ -103,7 +103,7 @@
                             accept="image/png,image/jpeg,image/gif,image/webp"
                             style="padding: 0.5rem; border: 2px dashed var(--border); border-radius: 8px; width: 100%; cursor: pointer;"
                         >
-                        <small style="color: #6b7280; display: block; margin-top: 0.5rem;">PNG, JPG, GIF, or WebP max 16MB</small>
+                        <small style="color: var(--text-secondary); display: block; margin-top: 0.5rem;">PNG, JPG, GIF, or WebP max 16MB</small>
                     </div>
                     
                     <div style="display: flex; gap: 1rem;">
@@ -152,8 +152,8 @@
         </div>
         
         <form id="accountInfoForm" style="display: none; margin-top: 1.5rem;">
-            <div style="background: #f0f4ff; padding: 1rem; border-radius: 8px; border-left: 4px solid var(--primary); margin-bottom: 1.5rem;">
-                <p style="margin: 0; color: #1e40af; font-size: 0.95rem;">
+            <div style="background: var(--bg-nav-active); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--primary); margin-bottom: 1.5rem;">
+                <p style="margin: 0; color: var(--text-primary); font-size: 0.95rem;">
                     <i class="fas fa-info-circle"></i> <strong>Note:</strong> Leave fields blank to keep current values.
                 </p>
             </div>
@@ -161,13 +161,13 @@
             <div class="form-group">
                 <label for="editUsername"><i class="fas fa-user"></i> Username</label>
                 <input type="text" id="editUsername" placeholder="Enter new username (min 3 chars, leave blank to keep)" minlength="3">
-                <small style="color: #6b7280;">Minimum 3 characters</small>
+                <small style="color: var(--text-secondary);">Minimum 3 characters</small>
             </div>
             
             <div class="form-group">
                 <label for="editEmail"><i class="fas fa-envelope"></i> Email Address</label>
                 <input type="email" id="editEmail" placeholder="Enter email (leave blank to remove)">
-                <small style="color: #6b7280;">Used for notifications and password reset</small>
+                <small style="color: var(--text-secondary);">Used for notifications and password reset</small>
             </div>
             
             <div id="accountInfoMessage" style="margin-bottom: 1rem; display: none; padding: 0.75rem; border-radius: 8px;" class="message"></div>
@@ -578,7 +578,7 @@
 .toggle-slider::before {
     content: ''; position: absolute;
     width: 22px; height: 22px; left: 3px; bottom: 3px;
-    background: white; border-radius: 50%; transition: 0.3s;
+    background: var(--bg-body); border-radius: 50%; transition: 0.3s;
     box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 .toggle-switch input:checked + .toggle-slider { background: var(--success); }
@@ -630,6 +630,14 @@
     gap: 0.75rem;
     margin-bottom: 1.5rem;
 }
+
+/* Responsive: single column on smaller screens */
+@media (max-width: 600px) {
+    .cb-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 .cb-card {
     display: flex; align-items: center; gap: 1rem;
     padding: 0.9rem 1rem;

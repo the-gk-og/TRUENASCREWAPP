@@ -5,7 +5,7 @@
 {% block content %}
 <div class="card">
     <h2><i class="fas fa-cog"></i> Admin Panel</h2>
-    <p style="color: #666; margin-top: 0.5rem;">Manage users, invite codes, database backups, and system settings.</p>
+    <p style="color: var(--text-secondary); margin-top: 0.5rem;">Manage users, invite codes, database backups, and system settings.</p>
 </div>
 
 <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); margin-bottom: 2rem;">
@@ -76,7 +76,7 @@
                     {% if user.tfa_enabled %}
                     <span style="color: var(--success); font-size: 0.85rem;"><i class="fas fa-shield-alt"></i> On</span>
                     {% else %}
-                    <span style="color: #9ca3af; font-size: 0.85rem;"><i class="fas fa-shield-alt"></i> Off</span>
+                    <span style="color: var(--text-secondary); font-size: 0.85rem;"><i class="fas fa-shield-alt"></i> Off</span>
                     {% endif %}
                     {% if user.force_2fa %}
                     <span style="background: #fef3c7; color: #78350f; padding: 0.15rem 0.5rem; border-radius: 10px; font-size: 0.75rem; margin-left: 0.25rem;">⚠ Required</span>
@@ -88,7 +88,7 @@
                         <i class="fab fa-discord"></i> {{ user.discord_username }}
                     </span>
                     {% else %}
-                    <span style="color: #999;">Not linked</span>
+                    <span style="color: var(--text-secondary);">Not linked</span>
                     {% endif %}
                 </td>
                 <td>{{ user.created_at }}</td>
@@ -134,7 +134,7 @@
                 </tr>
             </thead>
             <tbody id="inviteTableBody">
-                <tr><td colspan="7" style="text-align: center; color: #999; padding: 2rem;">Loading...</td></tr>
+                <tr><td colspan="7" style="text-align: center; color: var(--text-secondary); padding: 2rem;">Loading...</td></tr>
             </tbody>
         </table>
     </div>
@@ -157,7 +157,7 @@
     
     <div style="background: #f8fafc; padding: 1.5rem; border-radius: 8px;">
         <h4 style="margin-bottom: 1rem;"><i class="fas fa-history"></i> Recent Backups</h4>
-        <div id="backupsList"><p style="color: #999; text-align: center;">Loading backups...</p></div>
+        <div id="backupsList"><p style="color: var(--text-secondary); text-align: center;">Loading backups...</p></div>
     </div>
 </div>
 
@@ -299,7 +299,7 @@
             <div class="form-group">
                 <label>Max Uses</label>
                 <input type="number" id="inviteMaxUses" value="1" min="1" max="100">
-                <small style="color: #6b7280;">Number of times this code can be used</small>
+                <small style="color: var(--text-secondary);">Number of times this code can be used</small>
             </div>
             <div class="form-group">
                 <label>Note (optional)</label>
@@ -310,11 +310,11 @@
 
         <div id="generatedInvite" style="display: none; margin-top: 1.5rem; background: #ecfdf5; border: 2px solid var(--success); border-radius: 10px; padding: 1.25rem;">
             <h4 style="color: var(--success); margin-bottom: 0.75rem;"><i class="fas fa-check-circle"></i> Invite Code Generated!</h4>
-            <div style="display: flex; align-items: center; gap: 0.75rem; background: white; padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid #d1fae5; margin-bottom: 0.75rem;">
+            <div style="display: flex; align-items: center; gap: 0.75rem; background: var(--bg-card); padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 0.75rem;">
                 <code id="generatedCode" style="font-size: 1.3rem; letter-spacing: 2px; flex: 1;"></code>
                 <button onclick="copyInviteCode()" class="btn btn-success" style="padding: 0.4rem 0.75rem; font-size: 0.85rem; width: auto;"><i class="fas fa-copy"></i> Copy</button>
             </div>
-            <p id="generatedLink" style="margin-bottom: 1rem; font-size: 0.82rem; color: #065f46; word-break: break-all;"></p>
+            <p id="generatedLink" style="margin-bottom: 1rem; font-size: 0.82rem; color: var(--text-secondary); word-break: break-all;"></p>
             <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
                 <button onclick="showQRCode()" class="btn" style="flex: 1; background: #1e40af; color: white; width: auto; font-size: 0.9rem; padding: 0.6rem;"><i class="fas fa-qrcode"></i> View QR Code</button>
                 <button onclick="downloadPoster()" class="btn" style="flex: 1; background: #7c3aed; color: white; width: auto; font-size: 0.9rem; padding: 0.6rem;"><i class="fas fa-file-pdf"></i> Download Poster</button>
@@ -328,9 +328,9 @@
     <div class="modal-content" style="max-width: 420px; text-align: center;">
         <span class="close" onclick="hideModal('qrModal')">&times;</span>
         <h2 style="margin-bottom: 0.5rem;"><i class="fas fa-qrcode"></i> Invite QR Code</h2>
-        <p style="color: #6b7280; margin-bottom: 1.5rem; font-size: 0.9rem;">Scan to open the signup page with code pre-filled</p>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem; font-size: 0.9rem;">Scan to open the signup page with code pre-filled</p>
         <div id="qrCodeContainer" style="display: flex; justify-content: center; margin-bottom: 1.25rem;">
-            <div id="qrCodeImage" style="padding: 1rem; background: white; border: 2px solid #e5e7eb; border-radius: 12px; display: inline-block;"></div>
+            <div id="qrCodeImage" style="padding: 1rem; background: var(--bg-card); border: 2px solid var(--border); border-radius: 12px; display: inline-block;"></div>
         </div>
         <code id="qrCodeText" style="display: block; font-size: 1.1rem; letter-spacing: 2px; color: var(--primary); margin-bottom: 1.25rem; font-weight: bold;"></code>
         <div style="display: flex; gap: 0.75rem;">
@@ -422,7 +422,7 @@
     <div class="modal-content">
         <span class="close" onclick="hideModal('restoreModal')">&times;</span>
         <h2 style="margin-bottom: 1.5rem; color: var(--danger);">⚠️ Restore Database</h2>
-        <p style="color: #666; margin-bottom: 1.5rem; background: #fef2f2; padding: 1rem; border-radius: 8px; border-left: 4px solid var(--danger);">
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem; background: var(--bg-nav-hover); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--danger);">
             <strong>Warning:</strong> This will replace your current database. Current data will be lost!
         </p>
         <form id="restoreForm" enctype="multipart/form-data">
@@ -474,7 +474,7 @@ function loadInvites() {
     .then(invites => {
         const tbody = document.getElementById('inviteTableBody');
         if (!invites.length) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:2rem;">No invite codes yet</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-secondary);padding:2rem;">No invite codes yet</td></tr>';
             return;
         }
         tbody.innerHTML = invites.map(inv => {
@@ -489,13 +489,13 @@ function loadInvites() {
             return `<tr>
                 <td>
                     <code style="font-size:0.9rem;letter-spacing:1px;">${inv.code}</code>
-                    <button onclick="navigator.clipboard.writeText('${inv.code}')" style="background:none;border:none;cursor:pointer;color:#6b7280;margin-left:4px;" title="Copy code"><i class="fas fa-copy"></i></button>
+                    <button onclick="navigator.clipboard.writeText('${inv.code}')" style="background:none;border:none;cursor:pointer;color:var(--text-secondary);margin-left:4px;" title="Copy code"><i class="fas fa-copy"></i></button>
                 </td>
-                <td><span style="background:#e5e7eb;padding:0.2rem 0.6rem;border-radius:10px;font-size:0.8rem;">${inv.role}</span></td>
+                <td><span style="background:var(--bg-nav-hover);padding:0.2rem 0.6rem;border-radius:10px;font-size:0.8rem;">${inv.role}</span></td>
                 <td>${inv.created_by}</td>
                 <td style="font-size:0.85rem;">${new Date(inv.expires_at).toLocaleString()}</td>
                 <td><span style="color:${statusColor};font-weight:600;">${statusText}</span>
-                    <span style="color:#6b7280;font-size:0.8rem;">(${inv.use_count}/${inv.max_uses === 0 ? '∞' : inv.max_uses})</span>
+                    <span style="color:var(--text-secondary);font-size:0.8rem;">(${inv.use_count}/${inv.max_uses === 0 ? '∞' : inv.max_uses})</span>
                 </td>
                 <td>${inv.used_by ? inv.used_by.join(', ') : '-'}</td>
                 <td style="white-space:nowrap;">
@@ -504,7 +504,7 @@ function loadInvites() {
                     <button onclick="downloadPosterForCode('${inv.code}', '${signupUrl}', '${expiresAtEsc}')" class="btn" style="padding:0.3rem 0.6rem;font-size:0.8rem;background:#7c3aed;color:white;width:auto;margin-bottom:0.25rem;" title="PDF Poster"><i class="fas fa-file-pdf"></i></button>
                     <button onclick="revokeInvite(${inv.id})" class="btn btn-danger" style="padding:0.3rem 0.6rem;font-size:0.8rem;width:auto;"><i class="fas fa-ban"></i></button>
                     ` : ''}
-                    <button onclick="deleteInvite(${inv.id})" class="btn" style="padding:0.3rem 0.6rem;font-size:0.8rem;background:#f3f4f6;color:#374151;width:auto;"><i class="fas fa-trash"></i></button>
+                    <button onclick="deleteInvite(${inv.id})" class="btn" style="padding:0.3rem 0.6rem;font-size:0.8rem;background:var(--bg-nav-hover);color:var(--text-secondary);width:auto;"><i class="fas fa-trash"></i></button>
                 </td>
             </tr>`;
         }).join('');
@@ -868,13 +868,13 @@ document.getElementById('batchEmailForm').addEventListener('submit', function(e)
             const resultsDiv = document.getElementById('batchResults');
             resultsDiv.style.display = 'block';
             resultsDiv.innerHTML = `
-                <div style="background: #ecfdf5; border: 1px solid #6ee7b7; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
-                    <strong style="color: #065f46;">✓ Done — ${sent} sent, ${failed} failed</strong>
+                <div style="background: var(--bg-nav-active); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                    <strong style="color: var(--success);">✓ Done — ${sent} sent, ${failed} failed</strong>
                 </div>
                 ${results.map(r => `
-                    <div style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0.75rem;border-radius:6px;margin-bottom:0.3rem;background:${r.ok ? '#f0fdf4' : '#fef2f2'};">
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0.75rem;border-radius:6px;margin-bottom:0.3rem;background:${r.ok ? 'var(--bg-nav-hover)' : 'var(--bg-body)};">
                         <span style="font-size:0.85rem;">${r.email}</span>
-                        <span style="font-size:0.8rem;color:${r.ok ? '#065f46' : '#7f1d1d'};">${r.ok ? '✓ Sent' : '✗ ' + r.error}</span>
+                        <span style="font-size:0.8rem;color:${r.ok ? 'var(--success)' : 'var(--danger)'};">\${r.ok ? '✓ Sent' : '✗ ' + r.error}</span>
                     </div>
                 `).join('')}
             `;
@@ -1011,13 +1011,13 @@ function deleteUser(id) {
 function loadBackups() {
     fetch('/admin/backups').then(r => r.json()).then(backups => {
         let html = '';
-        if (!backups.length) { html = '<p style="color:#999;text-align:center;">No backups yet</p>'; }
+        if (!backups.length) { html = '<p style="color:var(--text-secondary);text-align:center;">No backups yet</p>'; }
         else {
             html = '<table style="font-size:0.9rem;"><tbody>';
             backups.forEach(b => {
                 const date = new Date(b.date);
                 const size = (b.size / 1024 / 1024).toFixed(2);
-                html += `<tr><td><strong>${b.name}</strong><br><small style="color:#999;">${size} MB &bull; ${date.toLocaleString()}</small></td>
+                html += `<tr><td><strong>${b.name}</strong><br><small style="color:var(--text-secondary);">${size} MB &bull; ${date.toLocaleString()}</small></td>
                          <td style="text-align:right;"><a href="/admin/download-backup/${b.name}" class="btn btn-primary" style="padding:0.4rem 0.8rem;font-size:0.85rem;width:auto;"><i class="fas fa-download"></i></a></td></tr>`;
             });
             html += '</tbody></table>';

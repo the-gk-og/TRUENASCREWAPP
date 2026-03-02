@@ -134,10 +134,10 @@
     {% if equipment_usage %}
     <div style="display: grid; gap: 1rem;">
         {% for category, usage in equipment_usage %}
-        <div style="background: #f9fafb; padding: 1rem; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+        <div style="background: var(--bg-nav-hover); padding: 1rem; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
             <div>
                 <strong style="color: var(--dark);">{{ category or 'Uncategorized' }}</strong>
-                <p style="color: #6b7280; font-size: 0.85rem; margin-top: 0.25rem;">Used {{ usage }} times</p>
+                <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 0.25rem;">Used {{ usage }} times</p>
             </div>
             <div style="width: 50px; height: 50px; border-radius: 50%; background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 1.1rem;">
                 {{ usage }}
@@ -146,7 +146,7 @@
         {% endfor %}
     </div>
     {% else %}
-    <p style="text-align: center; padding: 2rem; color: #6b7280;">No equipment usage data yet</p>
+    <p style="text-align: center; padding: 2rem; color: var(--text-secondary);">No equipment usage data yet</p>
     {% endif %}
 </div>
 
@@ -155,15 +155,15 @@
     <div class="card">
         <h4 style="margin-bottom: 1rem; color: var(--dark);"><i class="fas fa-clock"></i> Recent Activity</h4>
         <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: #f9fafb; border-radius: 6px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: var(--bg-nav-hover); border-radius: 6px;">
                 <span><i class="fas fa-user-plus" style="color: var(--success);"></i> New Users</span>
                 <strong style="color: var(--success);">{{ recent_users }}</strong>
             </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: #f9fafb; border-radius: 6px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: var(--bg-nav-hover); border-radius: 6px;">
                 <span><i class="fas fa-box" style="color: var(--primary);"></i> New Equipment</span>
                 <strong style="color: var(--primary);">{{ recent_equipment }}</strong>
             </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: #f9fafb; border-radius: 6px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: var(--bg-nav-hover); border-radius: 6px;">
                 <span><i class="fas fa-calendar-plus" style="color: var(--secondary);"></i> New Events</span>
                 <strong style="color: var(--secondary);">{{ recent_events }}</strong>
             </div>
