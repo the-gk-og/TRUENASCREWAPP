@@ -111,7 +111,7 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 # Default is 1 week if not specified
 SESSION_DURATION = os.environ.get('SESSION_DURATION', '1w')
 
-def parse_duration(duration_str):
+def parse_duration(duration_str: str):
     """
     Parse duration string into timedelta
     Supports: 1d (1 day), 1w (1 week), 1h (1 hour), 30m (30 minutes)
@@ -245,11 +245,6 @@ os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'documents'), exist_ok=Tru
 os.makedirs('backups', exist_ok=True)
 
 notification_tracker = {}
-
-#Signup env read
-SIGNUP_BASE_URL = os.environ.get('SIGNUP_BASE_URL', os.environ.get('MAIN_SERVER_URL', ''))
-app.config['SIGNUP_BASE_URL'] = SIGNUP_BASE_URL
-
 
 # -------------------- Chat storage & SSE helpers (Rocket.Chat) --------------------
 
@@ -802,234 +797,6 @@ def send_email(subject, recipient, body):
         return False
     return None
 
-def send_html_email(subject, recipient, html_body, text_body=None):
-    """Send a rich HTML email with plain-text fallback."""
-    if not app.config.get('MAIL_USERNAME'):
-        return False
-    try:
-        msg = Message(subject, recipients=[recipient])
-        msg.html = html_body
-        if text_body:
-            msg.body = text_body
-        mail.send(msg)
-        return True
-    except Exception as e:
-        print(f"Failed to send HTML email: {e}")
-        return False
-
-
-def build_invite_email_html(recipient_name, signup_url, code, role_label,
-                             expires_at_str, org_name, primary_color='#6366f1'):
-    """Build a beautiful HTML invite email."""
-    exp_str = ''
-    if expires_at_str:
-        try:
-            dt = datetime.fromisoformat(expires_at_str) if isinstance(expires_at_str, str) else expires_at_str
-            exp_str = dt.strftime('%B %d, %Y at %I:%M %p UTC')
-        except Exception:
-            exp_str = str(expires_at_str)
-
-    short_url = signup_url.replace('https://', '').replace('http://', '').split('?')[0]
-    signup_url_base = signup_url.split('?')[0]
-
-    feature_rows = ''.join(f"""
-                <tr>
-                  <td style="padding:6px 0;">
-                    <table cellpadding="0" cellspacing="0">
-                      <tr>
-                        <td style="width:28px;vertical-align:top;font-size:16px;">{icon}</td>
-                        <td style="font-size:14px;color:#4b5563;line-height:1.5;">{text}</td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>""" for icon, text in [
-        ('📅', 'Event schedules and call times'),
-        ('👥', 'Crew assignments and rosters'),
-        ('📦', 'Equipment pick lists and stage plans'),
-        ('💬', 'Team chat and announcements'),
-        ('✅', 'Your personal task list'),
-    ])
-
-    expiry_row = f"""
-              <p style="margin:0 0 6px;font-size:12px;color:#9ca3af;">
-                ⏰ &nbsp;This invite expires <strong>{exp_str}</strong>
-              </p>""" if exp_str else ''
-
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>You're invited to join {org_name}</title>
-</head>
-<body style="margin:0;padding:0;background:#f3f4f6;font-family:'Segoe UI',Arial,sans-serif;">
-
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:40px 0;">
-    <tr>
-      <td align="center">
-
-        <!-- Card -->
-        <table width="600" cellpadding="0" cellspacing="0"
-               style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;
-                      overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-
-          <!-- Header gradient -->
-          <tr>
-            <td style="background:linear-gradient(135deg,{primary_color} 0%,#a855f7 100%);
-                       padding:44px 48px 40px;text-align:center;">
-              <p style="margin:0 0 10px;font-size:12px;letter-spacing:3px;text-transform:uppercase;
-                         color:rgba(255,255,255,0.7);font-weight:600;">
-                Production Crew Management
-              </p>
-              <h1 style="margin:0;font-size:40px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">
-                ShowWise
-              </h1>
-              <div style="width:50px;height:3px;background:rgba(255,255,255,0.4);
-                          border-radius:2px;margin:14px auto 16px;"></div>
-              <p style="margin:0;font-size:20px;color:rgba(255,255,255,0.95);font-weight:500;">
-                You've been invited! 🎉
-              </p>
-            </td>
-          </tr>
-
-          <!-- Body -->
-          <tr>
-            <td style="padding:40px 48px 32px;">
-
-              <p style="margin:0 0 18px;font-size:17px;color:#1f2937;line-height:1.6;">
-                Hi <strong>{recipient_name}</strong>,
-              </p>
-              <p style="margin:0 0 28px;font-size:16px;color:#4b5563;line-height:1.75;">
-                You've been personally invited to join <strong>{org_name}</strong> on
-                <strong>ShowWise</strong> — the platform that keeps production crews organised,
-                informed, and on cue.
-              </p>
-
-              <!-- Role badge -->
-              <table cellpadding="0" cellspacing="0" style="margin:0 0 36px;">
-                <tr>
-                  <td style="background:linear-gradient(135deg,#ede9fe 0%,#fce7f3 100%);
-                              border:1px solid #c4b5fd;border-radius:10px;padding:14px 22px;">
-                    <p style="margin:0;font-size:15px;color:#5b21b6;font-weight:600;">
-                      🎭 &nbsp;Your role:&nbsp;
-                      <span style="color:{primary_color};font-size:17px;">{role_label}</span>
-                    </p>
-                  </td>
-                </tr>
-              </table>
-
-              <!-- CTA -->
-              <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
-                <tr>
-                  <td align="center">
-                    <a href="{signup_url}"
-                       style="display:inline-block;padding:18px 52px;
-                              background:linear-gradient(135deg,{primary_color} 0%,#a855f7 100%);
-                              color:#ffffff;text-decoration:none;border-radius:12px;
-                              font-size:19px;font-weight:700;letter-spacing:0.2px;
-                              box-shadow:0 6px 20px rgba(99,102,241,0.4);">
-                      ✨ &nbsp;Create My Account
-                    </a>
-                  </td>
-                </tr>
-              </table>
-
-              <!-- Divider -->
-              <hr style="border:none;border-top:1px solid #f0f0f0;margin:0 0 28px;">
-
-              <!-- What you'll get -->
-              <p style="margin:0 0 16px;font-size:15px;font-weight:700;color:#111827;">
-                Once you're in, you'll have access to:
-              </p>
-              <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 36px;">
-                {feature_rows}
-              </table>
-
-              <!-- Divider -->
-              <hr style="border:none;border-top:1px solid #f0f0f0;margin:0 0 28px;">
-
-              <!-- Manual fallback -->
-              <p style="margin:0 0 10px;font-size:14px;color:#6b7280;line-height:1.6;">
-                If the button doesn't work, visit
-                <a href="{signup_url_base}" style="color:{primary_color};
-                   text-decoration:none;font-weight:600;">{short_url}</a>
-                and enter this code manually:
-              </p>
-
-              <!-- Code box -->
-              <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 8px;">
-                <tr>
-                  <td style="background:linear-gradient(135deg,#ede9fe 0%,#fce7f3 100%);
-                              border:2px solid #c4b5fd;border-radius:14px;
-                              padding:22px;text-align:center;">
-                    <p style="margin:0 0 6px;font-family:'Courier New',monospace;
-                               font-size:30px;font-weight:700;color:#3b0764;letter-spacing:4px;">
-                      {code}
-                    </p>
-                    <p style="margin:0;font-size:11px;color:#7c3aed;
-                               text-transform:uppercase;letter-spacing:1.5px;">
-                      Invite Code — single use
-                    </p>
-                  </td>
-                </tr>
-              </table>
-
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td style="background:#f9fafb;border-top:1px solid #f0f0f0;
-                       padding:22px 48px;text-align:center;">
-              {expiry_row}
-              <p style="margin:0 0 4px;font-size:12px;color:#d1d5db;">
-                This is a single-use invite — please don't forward it to others.
-              </p>
-              <p style="margin:0;font-size:12px;color:#d1d5db;">
-                &copy; {org_name} &middot; Powered by ShowWise
-              </p>
-            </td>
-          </tr>
-
-        </table>
-      </td>
-    </tr>
-  </table>
-
-</body>
-</html>"""
-
-
-def build_invite_email_text(recipient_name, signup_url, code, role_label,
-                             expires_at_str, org_name):
-    """Plain-text fallback for the invite email."""
-    exp_line = ''
-    if expires_at_str:
-        try:
-            dt = datetime.fromisoformat(expires_at_str) if isinstance(expires_at_str, str) else expires_at_str
-            exp_line = f"\nExpires:    {dt.strftime('%B %d, %Y at %I:%M %p UTC')}"
-        except Exception:
-            exp_line = f"\nExpires:    {expires_at_str}"
-
-    return f"""Hi {recipient_name},
-
-You've been invited to join {org_name} on ShowWise!
-Role: {role_label}
-
-──────────────────────────────────────────
-  CLICK TO JOIN (invite code pre-filled):
-  {signup_url}
-──────────────────────────────────────────
-{exp_line}
-
-Can't click? Visit {signup_url.split('?')[0]} and enter:
-  {code}
-
-This is a single-use invite — please don't share it.
-
-See you on the crew,
-{org_name} · Powered by ShowWise"""
-
 def send_discord_event_announcement(event):
     """Send event announcement to Discord immediately when created"""
     if not DISCORD_WEBHOOK_URL:
@@ -1301,7 +1068,7 @@ DEFAULT_ORG = {
     'primary_color': '#6366f1',
     'secondary_color': '#ec4899',
     'logo': '',
-    'website': os.environ.get('MAIN_SERVER_URL', 'https://sfx-crew.com')
+    'website': 'https://sfx-crew.com'
 }
 
 # ==================== SECURITY LOGGING ====================
@@ -1421,7 +1188,7 @@ def server_error(e):
 def index():
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
-    return redirect(MAIN_SERVER_URL)
+    return redirect('http://sfx-crew.com')
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -3991,22 +3758,21 @@ def email_invite():
     data = request.json
 
     recipient_email = data.get('email', '').strip()
-    recipient_name  = data.get('name', '').strip() or 'there'
+    recipient_name = data.get('name', '').strip() or 'there'
 
     if not recipient_email:
         return jsonify({'error': 'Email address required'}), 400
 
     # Parse expiry
-    expires_at_str = data.get('expires_at', '')
     try:
-        expires_at = datetime.fromisoformat(expires_at_str)
-    except (ValueError, TypeError):
+        expires_at = datetime.fromisoformat(data['expires_at'])
+    except (KeyError, ValueError):
         return jsonify({'error': 'Invalid expiry date'}), 400
 
     if expires_at <= datetime.utcnow():
         return jsonify({'error': 'Expiry must be in the future'}), 400
 
-    # Generate unique single-use code
+    # Generate single-use code
     code = generate_invite_code()
     while InviteCode.query.filter_by(code=code).first():
         code = generate_invite_code()
@@ -4016,42 +3782,45 @@ def email_invite():
         role=data.get('role', 'crew'),
         created_by=current_user.username,
         expires_at=expires_at,
-        max_uses=1,
+        max_uses=1,  # Email invites are always single-use
         note=f'Email invite to {recipient_email}'
     )
     db.session.add(invite)
     db.session.commit()
 
-    # Build URL — prefer client base_url (handles reverse proxies), then env SIGNUP_BASE_URL
-    base_url   = (data.get('base_url') or SIGNUP_BASE_URL or request.url_root).rstrip('/')
-    signup_url = f"{base_url}/signup?invite={code}"
+    # Build signup URL
+    signup_url = f"{request.url_root}signup?invite={code}"
+    org = get_organization() or DEFAULT_ORG
+    org_name = org.get('name', 'ShowWise')
 
-    org           = get_organization() or DEFAULT_ORG
-    org_name      = org.get('name', 'ShowWise')
-    primary_color = org.get('primary_color', '#6366f1')
-    role_label    = data.get('role', 'crew').capitalize()
+    subject = f"You're invited to join {org_name} on ShowWise"
+    body = f"""Hi {recipient_name},
 
-    subject   = f"You're invited to join {org_name} on ShowWise"
-    html_body = build_invite_email_html(
-        recipient_name, signup_url, code, role_label,
-        expires_at_str, org_name, primary_color
-    )
-    text_body = build_invite_email_text(
-        recipient_name, signup_url, code, role_label,
-        expires_at_str, org_name
-    )
+You've been invited to join {org_name} on ShowWise — production crew management.
 
-    sent = send_html_email(subject, recipient_email, html_body, text_body)
+Click the link below (or copy it into your browser) to create your account:
+
+{signup_url}
+
+Your invite code: {code}
+Role: {data.get('role', 'crew').capitalize()}
+Expires: {expires_at.strftime('%B %d, %Y at %I:%M %p')} UTC
+
+This is a single-use link. If you have any trouble, contact your administrator.
+
+See you on the crew,
+{org_name} Admin"""
+
+    sent = send_email(subject, recipient_email, body)
     if not sent:
+        # Even if email fails, return the code
         return jsonify({
             'success': False,
-            'error': 'Email could not be sent (check MAIL settings). Code was generated.',
+            'error': 'Email could not be sent (check MAIL settings). Code generated.',
             'code': code
         }), 500
 
     return jsonify({'success': True, 'code': code})
-
-
 
 
 @app.route('/admin/invites/<int:invite_id>/revoke', methods=['POST'])
