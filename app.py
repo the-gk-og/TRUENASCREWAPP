@@ -6005,7 +6005,7 @@ def forgot_password():
         user.password_reset_expiry = datetime.utcnow() + timedelta(hours=24)
         db.session.commit()
 
-        reset_url = f"{MAIN_SERVER_URL}/password/reset/{reset_token}"
+        reset_url = f"{SIGNUP_BASE_URL}/password/reset/{reset_token}"
         org       = get_organization() or DEFAULT_ORG
 
         # ── Send password reset email ───────────────────────────────────
