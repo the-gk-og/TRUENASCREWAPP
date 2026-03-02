@@ -36,7 +36,7 @@
         </div>
     </div>
     
-    <div style="background: #f0f9ff; padding: 1.5rem; border-radius: 8px; border-left: 4px solid var(--primary);">
+    <div style="background: var(--bg-nav-active); padding: 1.5rem; border-radius: 8px; border-left: 4px solid var(--primary);">
         <h4 style="margin: 0 0 0.5rem 0; color: var(--primary);"><i class="fas fa-info-circle"></i> How to Use</h4>
         <ol style="margin: 0; padding-left: 1.5rem; line-height: 1.8;">
             <li>Select equipment items using the checkboxes below</li>
@@ -53,7 +53,7 @@
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
         <div>
             <h3 style="margin: 0;"><i class="fas fa-check-square"></i> Select Equipment</h3>
-            <p style="margin: 0.5rem 0 0 0; color: #666; font-size: 0.9rem;">
+            <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary); font-size: 0.9rem;">
                 <span id="selectedCount" style="font-weight: 600; color: var(--primary);">0</span> items selected
             </p>
         </div>
@@ -78,7 +78,7 @@
     <!-- Equipment Grid -->
     <div id="equipmentGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
         {% for item in equipment %}
-        <div class="equipment-card" data-id="{{ item.id }}" data-category="{{ item.category or '' }}" style="background: white; border: 2px solid var(--border); border-radius: 8px; padding: 1rem; cursor: pointer; transition: all 0.2s ease;">
+        <div class="equipment-card" data-id="{{ item.id }}" data-category="{{ item.category or '' }}" style="background: var(--bg-card); border: 2px solid var(--border); border-radius: 8px; padding: 1rem; cursor: pointer; transition: all 0.2s ease;">
             <div style="display: flex; align-items: start; gap: 0.75rem;">
                 <input type="checkbox" class="barcode-checkbox" data-id="{{ item.id }}" onclick="event.stopPropagation(); updateCount();" style="width: 24px; height: 24px; cursor: pointer; flex-shrink: 0; margin-top: 0.25rem;">
                 
@@ -86,18 +86,18 @@
                     <h4 style="margin: 0 0 0.5rem 0; color: var(--dark); word-break: break-word;">{{ item.name }}</h4>
                     
                     <div style="display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem;">
-                        <span style="color: #6b7280;">
+                        <span style="color: var(--text-secondary);">
                             <i class="fas fa-barcode"></i> <code>{{ item.barcode }}</code>
                         </span>
                         
                         {% if item.category %}
-                        <span style="color: #6b7280;">
+                        <span style="color: var(--text-secondary);">
                             <i class="fas fa-tag"></i> {{ item.category }}
                         </span>
                         {% endif %}
                         
                         {% if item.location %}
-                        <span style="color: #6b7280;">
+                        <span style="color: var(--text-secondary);">
                             <i class="fas fa-map-marker-alt"></i> {{ item.location }}
                         </span>
                         {% endif %}
@@ -113,7 +113,7 @@
     </div>
     
     {% if not equipment %}
-    <div style="text-align: center; padding: 3rem; color: #666;">
+    <div style="text-align: center; padding: 3rem; color: var(--text-secondary);">
         <p style="font-size: 3rem; margin-bottom: 1rem;">📦</p>
         <p>No equipment found. Add equipment first to generate barcodes.</p>
         <a href="{{ url_for('equipment_list') }}" class="btn btn-primary" style="margin-top: 1rem;">Go to Equipment</a>
@@ -125,21 +125,21 @@
 <div class="card" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-left: 4px solid var(--warning);">
     <h3 style="margin-bottom: 1rem; color: #78350f;"><i class="fas fa-eye"></i> What You'll Get</h3>
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-        <div style="background: white; padding: 1rem; border-radius: 6px;">
+        <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px;">
             <p style="margin: 0; font-weight: 600; color: var(--dark);">📄 A4 PDF Document</p>
-            <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: #666;">Ready to print on standard paper</p>
+            <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">Ready to print on standard paper</p>
         </div>
-        <div style="background: white; padding: 1rem; border-radius: 6px;">
+        <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px;">
             <p style="margin: 0; font-weight: 600; color: var(--dark);">📊 Code 128 Barcodes</p>
-            <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: #666;">Industry standard format</p>
+            <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">Industry standard format</p>
         </div>
-        <div style="background: white; padding: 1rem; border-radius: 6px;">
+        <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px;">
             <p style="margin: 0; font-weight: 600; color: var(--dark);">🏷️ Equipment Names</p>
-            <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: #666;">Clear labels above each barcode</p>
+            <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">Clear labels above each barcode</p>
         </div>
-        <div style="background: white; padding: 1rem; border-radius: 6px;">
+        <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px;">
             <p style="margin: 0; font-weight: 600; color: var(--dark);">🔢 Barcode Numbers</p>
-            <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: #666;">For manual reference</p>
+            <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">For manual reference</p>
         </div>
     </div>
 </div>
