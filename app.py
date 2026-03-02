@@ -1153,8 +1153,8 @@ def verify_backup_code(stored_hashes, provided_code):
 @app.before_request
 def check_service_status():
     """Check kill switch before every request"""
-    # Skip for static files and chat API
-    if request.path.startswith('/static') or request.path.startswith('/api/chat'):
+    # Skip for static files
+    if request.path.startswith('/static'):
         return
     
     backend = get_backend_client()
@@ -1910,29 +1910,6 @@ def dashboard():
                          events_this_week=events_this_week,
                          next_event=next_event,
                          now=today)
-
-
-@app.route('/crew/inbox')
-@login_required
-@crew_required
-def inbox_page():
-    """Render the Telegram-style inbox page."""
-    return render_template('crew/inbox.html')
-
-
-@app.route('/crew/chat')
-@login_required
-@crew_required
-def chat_page():
-    """Redirect to Rocket.Chat in a new tab."""
-    rc = get_rocketchat_client()
-    rc_url = rc.server_url if rc.is_connected() else os.environ.get('ROCKETCHAT_URL', '')
-    
-    if not rc_url:
-        flash('Rocket.Chat is not configured')
-        return redirect(url_for('dashboard'))
-    
-    return render_template('crew/chat_redirect.html', rc_url=rc_url)
 
 
 # EQUIPMENT ROUTES
@@ -5842,152 +5819,7 @@ def view_designer_plan(design_id):
     return redirect(url_for('stage_designer', design_id=design_id))
 
 
-# ==================== CHAT API ====================
 
-@app.route('/api/chat/send', methods=['POST'])
-def api_chat_send():
-    """Send chat message via Rocket.Chat
-    
-    Accepts JSON fields: org_slug, message, user_name, user_email, team, recipients (list), group_id
-    """
-    data = request.json or {}
-    org_slug = data.get('org_slug', os.getenv('ORG_SLUG', ''))
-    message = data.get('message')
-    user_name = data.get('user_name') or 'Anonymous'
-    user_email = data.get('user_email')
-    team = data.get('team')
-    recipients = data.get('recipients') or []
-    group_id = data.get('group_id')
-
-    if not message:
-        return jsonify({'success': False, 'error': 'Message required'}), 400
-
-    rc = get_rocketchat_client()
-    
-    if not rc.is_connected():
-        # Fallback: log to backend
-        backend = get_backend_client()
-        if backend:
-            try:
-                backend.send_chat_message(user_name, message, user_email)
-            except Exception as e:
-                print(f"Backend chat failed: {e}")
-        return jsonify({'success': True, 'message_id': None, 'note': 'Rocket.Chat offline, logged to backend'}), 500
-
-    room_id = None
-    
-    try:
-        # Ensure sender is a Rocket.Chat user
-        _get_or_create_rc_user(user_name, email=user_email)
-
-        if group_id:
-            # Group message - use group room (group_id is the RC group name)
-            room_id = rc.get_or_create_group(str(group_id), members=[user_name])
-        
-        elif recipients:
-            if 'support' in recipients:
-                # Support DM - send to support channel or admin group
-                room_id = rc.get_or_create_channel('support', topic='Support messages')
-                if room_id:
-                    # Add support staff if needed
-                    rc.add_user_to_channel(room_id, user_name)
-            
-            elif len(recipients) == 1:
-                # Direct message with one user
-                recipient = recipients[0]
-                _get_or_create_rc_user(recipient)
-                room_id = rc.get_or_create_direct_message(recipient)
-            
-            else:
-                # Group message with multiple recipients
-                room_name = f"group_{'-'.join(sorted(recipients)[:3])}"
-                room_id = rc.get_or_create_group(room_name, members=recipients + [user_name])
-        
-        elif team:
-            # Team channel message
-            team_name = team or 'general'
-            room_id = rc.get_or_create_channel(team_name, topic=f'{team_name} team channel')
-            if room_id:
-                rc.add_user_to_channel(room_id, user_name)
-        
-        else:
-            # Default: general team channel
-            room_id = rc.get_or_create_channel('general', topic='General team channel')
-            if room_id:
-                rc.add_user_to_channel(room_id, user_name)
-
-        # Send message
-        if room_id:
-            msg_ts = rc.send_message(room_id, message, metadata={
-                'sender': user_name,
-                'email': user_email,
-                'team': team,
-                'group_id': group_id,
-                'recipients': recipients
-            })
-            
-            # Broadcast to SSE subscribers (for real-time UI updates)
-            msg_obj = {
-                'id': msg_ts,
-                'timestamp': datetime.utcnow().isoformat(),
-                'from_name': user_name,
-                'message': message,
-                'team': team,
-                'recipients': recipients,
-                'group_id': group_id
-            }
-            try:
-                _broadcast_sse(msg_obj)
-            except Exception as e:
-                print(f"SSE broadcast error: {e}")
-            
-            # Log to backend
-            backend = get_backend_client()
-            if backend:
-                try:
-                    backend.send_chat_message(user_name, message, user_email)
-                except Exception:
-                    pass
-            
-            return jsonify({'success': True, 'message_id': msg_ts})
-        
-        else:
-            return jsonify({'success': False, 'error': 'Failed to create/get Rocket.Chat room'}), 500
-    
-    except Exception as e:
-        print(f"Chat send error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/api/chat/messages', methods=['GET'])
-def api_chat_get_messages():
-    """Get chat messages"""
-    backend = get_backend_client()
-    if backend:
-        messages = backend.get_chat_messages(limit=50)
-        return jsonify({'success': True, 'messages': messages})
-    
-    return jsonify({'success': False, 'messages': []}), 500
-
-
-@app.route('/api/chat/stream')
-def api_chat_stream():
-    """SSE stream endpoint for new chat messages (in-process subscribers only)"""
-    def gen(q):
-        # Initial keep-alive comment
-        yield ': connected\n\n'
-        try:
-            while True:
-                data = q.get()
-                yield f'data: {data}\n\n'
-        except GeneratorExit:
-            return
-
-    q = queue.Queue()
-    _sse_subscribers.append(q)
-
-    return Response(stream_with_context(gen(q)), mimetype='text/event-stream')
 
 
 @app.route('/api/rocketchat/info')
@@ -6034,196 +5866,16 @@ def api_rocketchat_info():
         }), 500
 
 
-@app.route('/api/chat/stream')
-@login_required
-def api_chat_inbox(username):
-    """Return paginated messages for a user's inbox from Rocket.Chat"""
-    # Security: only allow querying your own inbox unless admin
-    if username != current_user.username and not current_user.is_admin:
-        return jsonify({'success': False, 'error': 'Forbidden'}), 403
-    
-    try:
-        page = int(request.args.get('page', 1))
-        per_page = int(request.args.get('per_page', 50))
-    except ValueError:
-        page = 1
-        per_page = 50
-
-    rc = get_rocketchat_client()
-    
-    if not rc.is_connected():
-        # Fallback: return empty inbox
-        return jsonify({
-            'success': False, 
-            'error': 'Rocket.Chat offline',
-            'total': 0, 
-            'page': page, 
-            'per_page': per_page, 
-            'messages': []
-        })
-
-    try:
-        # Get user's Rocket.Chat rooms
-        rooms = rc.list_user_rooms(username)
-        all_messages = []
-
-        # Fetch messages from each room (limit per room to avoid too much data)
-        for room in rooms:
-            room_id = room.get('_id')
-            if room_id:
-                messages = rc.get_messages(room_id, count=per_page, offset=0)
-                for msg in messages:
-                    # Convert Rocket.Chat message format to our format
-                    converted = {
-                        'id': msg.get('_id', msg.get('ts')),
-                        'timestamp': msg.get('ts', datetime.utcnow().isoformat()),
-                        'from_name': msg.get('u', {}).get('username', 'Unknown'),
-                        'message': msg.get('msg', ''),
-                        'team': room.get('name', 'general'),
-                        'recipients': [],
-                        'group_id': None,
-                        'group_name': room.get('name'),
-                        'read_by': [username]  # Assume read in Rocket.Chat
-                    }
-                    all_messages.append(converted)
-        
-        # Sort by timestamp desc
-        all_messages.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
-        
-        # Pagination
-        start = (page - 1) * per_page
-        end = start + per_page
-        paged = all_messages[start:end]
-
-        return jsonify({
-            'success': True, 
-            'total': len(all_messages), 
-            'page': page, 
-            'per_page': per_page, 
-            'messages': paged
-        })
-    
-    except Exception as e:
-        print(f"Error fetching inbox: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'total': 0,
-            'page': page,
-            'per_page': per_page,
-            'messages': []
-        }), 500
 
 
-@app.route('/api/chat/mark-read', methods=['POST'])
-@login_required
-def api_chat_mark_read():
-    """Mark message as read (Rocket.Chat handling)
-    
-    Note: Rocket.Chat handles read receipts automatically.
-    This endpoint is kept for compatibility with frontend expectations.
-    """
-    data = request.json or {}
-    msg_id = data.get('msg_id')
-    username = data.get('username') or current_user.username
-    
-    if not msg_id:
-        return jsonify({'success': False, 'error': 'msg_id required'}), 400
-
-    # In a full Rocket.Chat integration, you could:
-    # 1. Call Rocket.Chat read receipt API
-    # 2. Track in a database for analytics
-    # For now, just acknowledge
-    
-    return jsonify({'success': True, 'note': 'Rocket.Chat handles read receipts automatically'})
 
 
-@app.route('/api/chat/groups', methods=['POST'])
-@login_required
-def api_chat_create_group():
-    """Create a group chat in Rocket.Chat
-    
-    Body: name, members (list of usernames), created_by
-    """
-    data = request.json or {}
-    name = data.get('name')
-    members = data.get('members') or []
-    created_by = data.get('created_by') or current_user.username
-
-    if not name or not members:
-        return jsonify({'success': False, 'error': 'name and members required'}), 400
-
-    rc = get_rocketchat_client()
-    
-    if not rc.is_connected():
-        return jsonify({'success': False, 'error': 'Rocket.Chat offline'}), 500
-
-    try:
-        # Ensure all members are Rocket.Chat users
-        for member in members:
-            _get_or_create_rc_user(member)
-        
-        # Create group in Rocket.Chat
-        group_name = f"group_{name.replace(' ', '_').lower()}"
-        group_id = rc.get_or_create_group(group_name, members=members)
-        
-        if group_id:
-            return jsonify({
-                'success': True, 
-                'group': {
-                    'id': group_id,
-                    'name': name,
-                    'members': members,
-                    'created_by': created_by,
-                    'created_at': datetime.utcnow().isoformat()
-                }
-            })
-        else:
-            return jsonify({'success': False, 'error': 'Failed to create group in Rocket.Chat'}), 500
-    
-    except Exception as e:
-        print(f"Error creating group: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@app.route('/api/chat/groups/<username>', methods=['GET'])
-@login_required
-def api_chat_list_groups(username):
-    """List user's groups in Rocket.Chat
-    
-    Only allow listing your own groups unless admin
-    """
-    if username != current_user.username and not current_user.is_admin:
-        return jsonify({'success': False, 'error': 'Forbidden'}), 403
 
-    rc = get_rocketchat_client()
-    
-    if not rc.is_connected():
-        return jsonify({'success': True, 'groups': []})
 
-    try:
-        # In Rocket.Chat, users are members of groups automatically
-        # You could fetch the user's rooms and filter for type 'p' (private)
-        rooms = rc.list_user_rooms(username)
-        
-        groups = [
-            {
-                'id': r.get('_id'),
-                'name': r.get('name'),
-                'members': r.get('usernames', []),
-                'created_at': r.get('ts', datetime.utcnow().isoformat())
-            }
-            for r in rooms
-            if r.get('teamMain') is False  # Filter out main team channels
-        ]
-        
-        return jsonify({'success': True, 'groups': groups})
-    
-    except Exception as e:
-        print(f"Error listing groups: {e}")
-        return jsonify({'success': True, 'groups': []})
+
+
 
 
 @app.route('/api/users', methods=['GET'])
@@ -6235,68 +5887,10 @@ def api_list_users():
     return jsonify({'success': True, 'users': user_list})
 
 
-@app.route('/api/chat/unread-count/<username>')
-@login_required
-def api_chat_unread_count(username):
-    """Get unread message count from Rocket.Chat
-    
-    Security: only allow checking your own unread count unless admin
-    """
-    if username != current_user.username and not current_user.is_admin:
-        return jsonify({'success': False, 'error': 'Forbidden'}), 403
-
-    rc = get_rocketchat_client()
-    
-    if not rc.is_connected():
-        return jsonify({'success': True, 'unread': 0})
-
-    try:
-        # Fetch user's rooms and sum unread counts
-        rooms = rc.list_user_rooms(username)
-        
-        unread_count = 0
-        for room in rooms:
-            # Rocket.Chat provides unread count
-            unread = room.get('unread', 0)
-            unread_count += unread
-        
-        return jsonify({'success': True, 'unread': unread_count})
-    
-    except Exception as e:
-        print(f"Error getting unread count: {e}")
-        return jsonify({'success': True, 'unread': 0})
 
 
-@app.route('/api/chat/mark-all-read', methods=['POST'])
-@login_required
-def api_chat_mark_all_read():
-    """Mark all messages as read in Rocket.Chat
-    
-    Security: only allow marking own messages unless admin
-    """
-    data = request.json or {}
-    username = data.get('username') or current_user.username
-    
-    if username != current_user.username and not current_user.is_admin:
-        return jsonify({'success': False, 'error': 'Forbidden'}), 403
 
-    rc = get_rocketchat_client()
-    
-    if not rc.is_connected():
-        return jsonify({'success': False, 'error': 'Rocket.Chat offline'}), 500
 
-    try:
-        # Fetch user's rooms
-        rooms = rc.list_user_rooms(username)
-        
-        # Mark all as read in each room (Rocket.Chat handles this automatically)
-        # This is a placeholder - in a full implementation, you'd call Rocket.Chat API
-        
-        return jsonify({'success': True, 'note': 'All messages marked as read (Rocket.Chat handles this automatically)'})
-    
-    except Exception as e:
-        print(f"Error marking all as read: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 # ==================== PROFILE PICTURE & ACCOUNT MANAGEMENT ====================
