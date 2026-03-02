@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shift Assignment: {{ shift_title }}</title>
+</head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:'Segoe UI',Arial,sans-serif;">
+
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0"
+               style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;
+                      overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#3b82f6 0%,#6366f1 100%);
+                       padding:40px 48px 36px;text-align:center;">
+              <p style="margin:0 0 8px;font-size:12px;letter-spacing:3px;text-transform:uppercase;
+                         color:rgba(255,255,255,0.7);font-weight:600;">ShowWise</p>
+              <h1 style="margin:0;font-size:28px;font-weight:800;color:#ffffff;">
+                🎬 Shift Assignment
+              </h1>
+              <p style="margin:12px 0 0;font-size:17px;color:rgba(255,255,255,0.9);">
+                You've been assigned to a shift
+              </p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:40px 48px 32px;">
+
+              <p style="margin:0 0 24px;font-size:16px;color:#374151;line-height:1.6;">
+                Hi <strong>{{ username }}</strong>,
+              </p>
+
+              <!-- Shift details card -->
+              <table width="100%" cellpadding="0" cellspacing="0"
+                     style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;
+                            margin:0 0 28px;overflow:hidden;">
+                <tr>
+                  <td style="background:#3b82f6;padding:14px 20px;">
+                    <p style="margin:0;font-size:16px;font-weight:700;color:#ffffff;">
+                      {{ shift_title }}
+                    </p>
+                    <p style="margin:4px 0 0;font-size:13px;color:rgba(255,255,255,0.8);">
+                      {{ event_title }}
+                    </p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:20px;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="padding:6px 0;width:140px;font-size:13px;color:#6b7280;font-weight:600;
+                                   text-transform:uppercase;letter-spacing:0.5px;">📅 Date & Time</td>
+                        <td style="padding:6px 0;font-size:14px;color:#1f2937;font-weight:500;">
+                          {{ shift_date }} – {{ shift_end_time }}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:6px 0;font-size:13px;color:#6b7280;font-weight:600;
+                                   text-transform:uppercase;letter-spacing:0.5px;">🏷️ Role</td>
+                        <td style="padding:6px 0;font-size:14px;color:#1f2937;font-weight:600;">
+                          {{ role }}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:6px 0;font-size:13px;color:#6b7280;font-weight:600;
+                                   text-transform:uppercase;letter-spacing:0.5px;">📍 Location</td>
+                        <td style="padding:6px 0;font-size:14px;color:#1f2937;">{{ location }}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding:6px 0;font-size:13px;color:#6b7280;font-weight:600;
+                                   text-transform:uppercase;letter-spacing:0.5px;">👥 Positions</td>
+                        <td style="padding:6px 0;font-size:14px;color:#1f2937;">{{ positions_needed }}</td>
+                      </tr>
+                      {% if description %}
+                      <tr>
+                        <td style="padding:6px 0;font-size:13px;color:#6b7280;font-weight:600;
+                                   text-transform:uppercase;letter-spacing:0.5px;">📝 Notes</td>
+                        <td style="padding:6px 0;font-size:14px;color:#4b5563;line-height:1.5;">
+                          {{ description }}
+                        </td>
+                      </tr>
+                      {% endif %}
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0 0 6px;font-size:14px;color:#6b7280;line-height:1.6;">
+                Please log in to <strong>ShowWise</strong> to accept or reject this shift assignment.
+              </p>
+
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background:#f9fafb;border-top:1px solid #f0f0f0;padding:22px 48px;text-align:center;">
+              <p style="margin:0;font-size:12px;color:#d1d5db;">
+                &copy; {{ org_name }} &middot; Powered by ShowWise
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>

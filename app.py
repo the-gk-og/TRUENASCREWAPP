@@ -44,6 +44,21 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_mail import Mail, Message
 
+from email_service import (
+    init_email_service,
+    send_email,
+    send_html_email,
+    send_invite_email,
+    send_crew_assignment_email,
+    send_shift_assignment_email,
+    send_cast_assignment_email,
+    send_cast_welcome_email,
+    send_password_reset_email,
+    send_password_changed_email,
+    send_event_reminder_email,
+    send_welcome_email,
+)
+
 #Werkzeug
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -176,6 +191,8 @@ db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 mail = Mail(app)
+init_email_service(app, mail) 
+
 
 # ==================== BACKEND INITIALIZATION ====================
 
@@ -788,247 +805,6 @@ def inject_functions():
         app=app,
         ORG_SLUG=app.config.get('ORG_SLUG', os.environ.get('ORGANIZATION_SLUG', ''))
     )
-
-def send_email(subject, recipient, body):
-    if not app.config['MAIL_USERNAME']:
-        return False
-    try:
-        msg = Message(subject, recipients=[recipient])
-        msg.body = body
-        mail.send(msg)
-        return True
-    except Exception as e:
-        print(f"Failed to send email: {e}")
-        return False
-    return None
-
-def send_html_email(subject, recipient, html_body, text_body=None):
-    """Send a rich HTML email with plain-text fallback."""
-    if not app.config.get('MAIL_USERNAME'):
-        return False
-    try:
-        msg = Message(subject, recipients=[recipient])
-        msg.html = html_body
-        if text_body:
-            msg.body = text_body
-        mail.send(msg)
-        return True
-    except Exception as e:
-        print(f"Failed to send HTML email: {e}")
-        return False
-
-
-def build_invite_email_html(recipient_name, signup_url, code, role_label,
-                             expires_at_str, org_name, primary_color='#6366f1'):
-    """Build a beautiful HTML invite email."""
-    exp_str = ''
-    if expires_at_str:
-        try:
-            dt = datetime.fromisoformat(expires_at_str) if isinstance(expires_at_str, str) else expires_at_str
-            exp_str = dt.strftime('%B %d, %Y at %I:%M %p UTC')
-        except Exception:
-            exp_str = str(expires_at_str)
-
-    short_url = signup_url.replace('https://', '').replace('http://', '').split('?')[0]
-    signup_url_base = signup_url.split('?')[0]
-
-    feature_rows = ''.join(f"""
-                <tr>
-                  <td style="padding:6px 0;">
-                    <table cellpadding="0" cellspacing="0">
-                      <tr>
-                        <td style="width:28px;vertical-align:top;font-size:16px;">{icon}</td>
-                        <td style="font-size:14px;color:#4b5563;line-height:1.5;">{text}</td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>""" for icon, text in [
-        ('📅', 'Event schedules and call times'),
-        ('👥', 'Crew assignments and rosters'),
-        ('📦', 'Equipment pick lists and stage plans'),
-        ('💬', 'Team chat and announcements'),
-        ('✅', 'Your personal task list'),
-    ])
-
-    expiry_row = f"""
-              <p style="margin:0 0 6px;font-size:12px;color:#9ca3af;">
-                ⏰ &nbsp;This invite expires <strong>{exp_str}</strong>
-              </p>""" if exp_str else ''
-
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>You're invited to join {org_name}</title>
-</head>
-<body style="margin:0;padding:0;background:#f3f4f6;font-family:'Segoe UI',Arial,sans-serif;">
-
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:40px 0;">
-    <tr>
-      <td align="center">
-
-        <!-- Card -->
-        <table width="600" cellpadding="0" cellspacing="0"
-               style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;
-                      overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-
-          <!-- Header gradient -->
-          <tr>
-            <td style="background:linear-gradient(135deg,{primary_color} 0%,#a855f7 100%);
-                       padding:44px 48px 40px;text-align:center;">
-              <p style="margin:0 0 10px;font-size:12px;letter-spacing:3px;text-transform:uppercase;
-                         color:rgba(255,255,255,0.7);font-weight:600;">
-                Production Crew Management
-              </p>
-              <h1 style="margin:0;font-size:40px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">
-                ShowWise
-              </h1>
-              <div style="width:50px;height:3px;background:rgba(255,255,255,0.4);
-                          border-radius:2px;margin:14px auto 16px;"></div>
-              <p style="margin:0;font-size:20px;color:rgba(255,255,255,0.95);font-weight:500;">
-                You've been invited! 🎉
-              </p>
-            </td>
-          </tr>
-
-          <!-- Body -->
-          <tr>
-            <td style="padding:40px 48px 32px;">
-
-              <p style="margin:0 0 18px;font-size:17px;color:#1f2937;line-height:1.6;">
-                Hi <strong>{recipient_name}</strong>,
-              </p>
-              <p style="margin:0 0 28px;font-size:16px;color:#4b5563;line-height:1.75;">
-                You've been personally invited to join <strong>{org_name}</strong> on
-                <strong>ShowWise</strong> — the platform that keeps production crews organised,
-                informed, and on cue.
-              </p>
-
-              <!-- Role badge -->
-              <table cellpadding="0" cellspacing="0" style="margin:0 0 36px;">
-                <tr>
-                  <td style="background:linear-gradient(135deg,#ede9fe 0%,#fce7f3 100%);
-                              border:1px solid #c4b5fd;border-radius:10px;padding:14px 22px;">
-                    <p style="margin:0;font-size:15px;color:#5b21b6;font-weight:600;">
-                      🎭 &nbsp;Your role:&nbsp;
-                      <span style="color:{primary_color};font-size:17px;">{role_label}</span>
-                    </p>
-                  </td>
-                </tr>
-              </table>
-
-              <!-- CTA -->
-              <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
-                <tr>
-                  <td align="center">
-                    <a href="{signup_url}"
-                       style="display:inline-block;padding:18px 52px;
-                              background:linear-gradient(135deg,{primary_color} 0%,#a855f7 100%);
-                              color:#ffffff;text-decoration:none;border-radius:12px;
-                              font-size:19px;font-weight:700;letter-spacing:0.2px;
-                              box-shadow:0 6px 20px rgba(99,102,241,0.4);">
-                      ✨ &nbsp;Create My Account
-                    </a>
-                  </td>
-                </tr>
-              </table>
-
-              <!-- Divider -->
-              <hr style="border:none;border-top:1px solid #f0f0f0;margin:0 0 28px;">
-
-              <!-- What you'll get -->
-              <p style="margin:0 0 16px;font-size:15px;font-weight:700;color:#111827;">
-                Once you're in, you'll have access to:
-              </p>
-              <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 36px;">
-                {feature_rows}
-              </table>
-
-              <!-- Divider -->
-              <hr style="border:none;border-top:1px solid #f0f0f0;margin:0 0 28px;">
-
-              <!-- Manual fallback -->
-              <p style="margin:0 0 10px;font-size:14px;color:#6b7280;line-height:1.6;">
-                If the button doesn't work, visit
-                <a href="{signup_url_base}" style="color:{primary_color};
-                   text-decoration:none;font-weight:600;">{short_url}</a>
-                and enter this code manually:
-              </p>
-
-              <!-- Code box -->
-              <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 8px;">
-                <tr>
-                  <td style="background:linear-gradient(135deg,#ede9fe 0%,#fce7f3 100%);
-                              border:2px solid #c4b5fd;border-radius:14px;
-                              padding:22px;text-align:center;">
-                    <p style="margin:0 0 6px;font-family:'Courier New',monospace;
-                               font-size:30px;font-weight:700;color:#3b0764;letter-spacing:4px;">
-                      {code}
-                    </p>
-                    <p style="margin:0;font-size:11px;color:#7c3aed;
-                               text-transform:uppercase;letter-spacing:1.5px;">
-                      Invite Code — single use
-                    </p>
-                  </td>
-                </tr>
-              </table>
-
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td style="background:#f9fafb;border-top:1px solid #f0f0f0;
-                       padding:22px 48px;text-align:center;">
-              {expiry_row}
-              <p style="margin:0 0 4px;font-size:12px;color:#d1d5db;">
-                This is a single-use invite — please don't forward it to others.
-              </p>
-              <p style="margin:0;font-size:12px;color:#d1d5db;">
-                &copy; {org_name} &middot; Powered by ShowWise
-              </p>
-            </td>
-          </tr>
-
-        </table>
-      </td>
-    </tr>
-  </table>
-
-</body>
-</html>"""
-
-
-def build_invite_email_text(recipient_name, signup_url, code, role_label,
-                             expires_at_str, org_name):
-    """Plain-text fallback for the invite email."""
-    exp_line = ''
-    if expires_at_str:
-        try:
-            dt = datetime.fromisoformat(expires_at_str) if isinstance(expires_at_str, str) else expires_at_str
-            exp_line = f"\nExpires:    {dt.strftime('%B %d, %Y at %I:%M %p UTC')}"
-        except Exception:
-            exp_line = f"\nExpires:    {expires_at_str}"
-
-    return f"""Hi {recipient_name},
-
-You've been invited to join {org_name} on ShowWise!
-Role: {role_label}
-
-──────────────────────────────────────────
-  CLICK TO JOIN (invite code pre-filled):
-  {signup_url}
-──────────────────────────────────────────
-{exp_line}
-
-Can't click? Visit {signup_url.split('?')[0]} and enter:
-  {code}
-
-This is a single-use invite — please don't share it.
-
-See you on the crew,
-{org_name} · Powered by ShowWise"""
 
 def send_discord_event_announcement(event):
     """Send event announcement to Discord immediately when created"""
@@ -1989,9 +1765,9 @@ def signup():
 
     if request.method == 'POST':
         invite_code_str = request.form.get('invite_code', '').strip().upper()
-        username = request.form.get('username', '').strip()
-        email = request.form.get('email', '').strip() or None
-        password = request.form.get('password', '')
+        username        = request.form.get('username', '').strip()
+        email           = request.form.get('email', '').strip() or None
+        password        = request.form.get('password', '')
         confirm_password = request.form.get('confirm_password', '')
 
         # --- Validate invite code ---
@@ -2034,7 +1810,7 @@ def signup():
 
         # --- Create user ---
         user_role = invite.role
-        is_cast = user_role == 'cast'
+        is_cast   = user_role == 'cast'
 
         new_user = User(
             username=username,
@@ -2055,30 +1831,27 @@ def signup():
 
         db.session.commit()
 
-        # Send welcome email
+        # ── Send welcome email ──────────────────────────────────────────────
         if email:
-            subject = f"Welcome to {org.get('name', 'ShowWise')}!"
-            body = f"""Hello {username},
+            send_welcome_email(
+                recipient_email=email,
+                username=username,
+                user_role=user_role,
+                login_url=request.url_root.rstrip('/') + '/login',
+                org=org,
+            )
 
-Your account has been created successfully!
-
-Username: {username}
-Role: {user_role.capitalize()}
-
-You can log in at: {request.url_root}login
-
-Welcome to the team!
-ShowWise"""
-            send_email(subject, email, body)
-
-        log_security_event('SIGNUP', username=username,
-                           description=f'Signed up via invite code {invite_code_str}')
+        log_security_event(
+            'SIGNUP', username=username,
+            description=f'Signed up via invite code {invite_code_str}'
+        )
 
         login_user(new_user, remember=False)
         flash(f'Welcome, {username}! Your account has been created.', 'success')
         return redirect(url_for('cast_events') if is_cast else url_for('dashboard'))
 
     return render_template('signup.html', organization=org, prefill_code=prefill_code)
+
 
 
 
@@ -3014,19 +2787,21 @@ def assign_shift(shift_id):
     """Assign a user to a shift (admin only)"""
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
-    
+
     shift = Shift.query.get_or_404(shift_id)
-    data = request.json
-    
+    data  = request.json
+
     try:
         user_id = data['user_id']
-        user = User.query.get_or_404(user_id)
-        
+        user    = User.query.get_or_404(user_id)
+
         # Check if already assigned
-        existing = ShiftAssignment.query.filter_by(shift_id=shift_id, user_id=user_id).first()
+        existing = ShiftAssignment.query.filter_by(
+            shift_id=shift_id, user_id=user_id
+        ).first()
         if existing:
             return jsonify({'error': 'User already assigned to this shift'}), 409
-        
+
         assignment = ShiftAssignment(
             shift_id=shift_id,
             user_id=user_id,
@@ -3034,37 +2809,31 @@ def assign_shift(shift_id):
             status='pending',
             notes=data.get('notes', '')
         )
-        
         db.session.add(assignment)
         db.session.commit()
-        
-        # Send notification email
+
+        # ── Send shift assignment notification ──────────────────────────
         if user.email:
             event = shift.event
-            subject = f"🎬 Shift Assignment: {shift.title} - {event.title}"
-            body = f"""Hello {user.username},
+            send_shift_assignment_email(
+                recipient_email=user.email,
+                username=user.username,
+                event_title=event.title if event else 'Unknown Event',
+                shift_title=shift.title,
+                shift_date=shift.shift_date.strftime('%B %d, %Y at %I:%M %p'),
+                shift_end_time=shift.shift_end_date.strftime('%I:%M %p'),
+                role=shift.role or 'General Crew',
+                location=shift.location or (event.location if event else '') or 'TBD',
+                positions_needed=shift.positions_needed,
+                description=shift.description or '',
+            )
 
-You have been assigned to a shift for {event.title}!
-
-📋 Shift Details:
-  • Shift: {shift.title}
-  • Date & Time: {shift.shift_date.strftime('%B %d, %Y at %I:%M %p')} - {shift.shift_end_date.strftime('%I:%M %p')}
-  • Role: {shift.role or 'General Crew'}
-  • Location: {shift.location or event.location or 'TBD'}
-  • Positions Needed: {shift.positions_needed}
-
-📝 Description: {shift.description or 'No description'}
-
-Please log in to ShowWise to accept or reject this assignment.
-
-Best regards,
-Production Crew System"""
-            send_email(subject, user.email, body)
-        
         return jsonify({'success': True, 'id': assignment.id})
+
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 400
+
 
 @app.route('/shifts/<int:shift_id>/claim', methods=['POST'])
 @login_required
@@ -3421,41 +3190,33 @@ def my_schedule():
 @login_required
 @crew_required
 def assign_crew():
-    data = request.json
-    assignment = CrewAssignment(event_id=data['event_id'], crew_member=data['crew_member'], role=data.get('role', ''), assigned_via='webapp')
+    data       = request.json
+    assignment = CrewAssignment(
+        event_id=data['event_id'],
+        crew_member=data['crew_member'],
+        role=data.get('role', ''),
+        assigned_via='webapp'
+    )
     db.session.add(assignment)
     db.session.commit()
-    
-    # Send email notification if user has email
-    user = User.query.filter_by(username=data['crew_member']).first()
+
+    # ── Send crew assignment notification ───────────────────────────────
+    user  = User.query.filter_by(username=data['crew_member']).first()
     event = Event.query.get(data['event_id'])
+
     if user and user.email and event:
-        subject = f"🎭 You're assigned to: {event.title}"
-        body = f"""Hello {user.username},
+        send_crew_assignment_email(
+            recipient_email=user.email,
+            username=user.username,
+            event_title=event.title,
+            event_date=event.event_date.strftime('%B %d, %Y at %I:%M %p'),
+            event_location=event.location or 'TBD',
+            role=data.get('role', 'Crew Member'),
+            event_description=event.description or '',
+        )
 
-You have been assigned to an upcoming production event!
-
-📋 Event Details:
-  • Event: {event.title}
-  • Date & Time: {event.event_date.strftime('%B %d, %Y at %I:%M %p')}
-  • Location: {event.location or 'TBD'}
-  • Your Role: {data.get('role', 'Crew Member')}
-
-📝 Description: {event.description or 'No description'}
-
-Please log in to the Production Crew Management System to view:
-  • Pick lists for items to gather
-  • Stage plans for setup
-  • Other crew members assigned to this event
-  • Event details and updates
-
-Let me know if you have any questions!
-
-Best regards,
-Production Crew System"""
-        send_email(subject, user.email, body)
-    
     return jsonify({'success': True, 'id': assignment.id})
+
 
 @app.route('/crew/remove/<int:id>', methods=['DELETE'])
 @login_required
@@ -3470,31 +3231,27 @@ def remove_crew(id):
 @login_required
 @crew_required
 def resend_notification():
-    data = request.json
+    data       = request.json
     assignment = CrewAssignment.query.get(data.get('assignment_id'))
-    event = Event.query.get(data.get('event_id'))
-    
+    event      = Event.query.get(data.get('event_id'))
+
     if not assignment or not event:
         return jsonify({'error': 'Not found'}), 404
-    
+
     user = User.query.filter_by(username=assignment.crew_member).first()
     if user and user.email:
-        subject = f"Reminder: {event.title}"
-        body = f"""Hello {user.username},
-
-This is a reminder that you're assigned to:
-
-📋 Event: {event.title}
-📅 Date & Time: {event.event_date.strftime('%B %d, %Y at %I:%M %p')}
-📍 Location: {event.location or 'TBD'}
-👤 Your Role: {assignment.role or 'Crew Member'}
-
-See you there!
-
-ShowWise System"""
-        send_email(subject, user.email, body)
+        # ── Send event reminder email ───────────────────────────────────
+        send_event_reminder_email(
+            recipient_email=user.email,
+            username=user.username,
+            event_title=event.title,
+            event_date=event.event_date.strftime('%B %d, %Y at %I:%M %p'),
+            event_location=event.location or 'TBD',
+            role=assignment.role or 'Crew Member',
+            reminder_type='tomorrow',   # manual resend treated as a "tomorrow" reminder
+        )
         return jsonify({'success': True})
-    
+
     return jsonify({'error': 'User has no email'}), 400
 
 # DISCORD ROUTES
@@ -4022,26 +3779,24 @@ def email_invite():
     db.session.add(invite)
     db.session.commit()
 
-    # Build URL — prefer client base_url (handles reverse proxies), then env SIGNUP_BASE_URL
+    # Build signup URL (handles reverse proxies)
     base_url   = (data.get('base_url') or SIGNUP_BASE_URL or request.url_root).rstrip('/')
     signup_url = f"{base_url}/signup?invite={code}"
+    role_label = data.get('role', 'crew').capitalize()
 
-    org           = get_organization() or DEFAULT_ORG
-    org_name      = org.get('name', 'ShowWise')
-    primary_color = org.get('primary_color', '#6366f1')
-    role_label    = data.get('role', 'crew').capitalize()
+    org = get_organization() or DEFAULT_ORG
 
-    subject   = f"You're invited to join {org_name} on ShowWise"
-    html_body = build_invite_email_html(
-        recipient_name, signup_url, code, role_label,
-        expires_at_str, org_name, primary_color
+    # ── Send invite email ───────────────────────────────────────────────
+    sent = send_invite_email(
+        recipient_email=recipient_email,
+        recipient_name=recipient_name,
+        signup_url=signup_url,
+        invite_code=code,
+        role_label=role_label,
+        expires_at=expires_at,
+        org=org,
     )
-    text_body = build_invite_email_text(
-        recipient_name, signup_url, code, role_label,
-        expires_at_str, org_name
-    )
 
-    sent = send_html_email(subject, recipient_email, html_body, text_body)
     if not sent:
         return jsonify({
             'success': False,
@@ -4114,25 +3869,20 @@ def assign_all_crew():
     """Assign all crew members to an event"""
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
-    
-    data = request.json
+
+    data     = request.json
     event_id = data.get('event_id')
-    
-    event = Event.query.get_or_404(event_id)
-    
-    # Get all users who are crew (not cast, not staff-only)
-    crew_users = User.query.filter(
-        User.user_role.in_(['crew', 'crew_admin'])
-    ).all()
-    
+    event    = Event.query.get_or_404(event_id)
+
+    crew_users  = User.query.filter(User.user_role.in_(['crew', 'crew_admin'])).all()
     added_count = 0
+
     for user in crew_users:
-        # Check if already assigned
         existing = CrewAssignment.query.filter_by(
-            event_id=event_id, 
+            event_id=event_id,
             crew_member=user.username
         ).first()
-        
+
         if not existing:
             assignment = CrewAssignment(
                 event_id=event_id,
@@ -4142,26 +3892,18 @@ def assign_all_crew():
             )
             db.session.add(assignment)
             added_count += 1
-            
-            # Send email notification
+
+            # ── Send crew assignment notification ───────────────────────
             if user.email:
-                subject = f"🎭 You're assigned to: {event.title}"
-                body = f"""Hello {user.username},
+                send_crew_assignment_email(
+                    recipient_email=user.email,
+                    username=user.username,
+                    event_title=event.title,
+                    event_date=event.event_date.strftime('%B %d, %Y at %I:%M %p'),
+                    event_location=event.location or 'TBD',
+                    role='Crew Member',
+                )
 
-You have been assigned to an upcoming production event!
-
-📋 Event Details:
-  • Event: {event.title}
-  • Date & Time: {event.event_date.strftime('%B %d, %Y at %I:%M %p')}
-  • Location: {event.location or 'TBD'}
-  • Your Role: Crew Member
-
-Please log in to ShowWise to view full event details.
-
-Best regards,
-ShowWise System"""
-                send_email(subject, user.email, body)
-    
     db.session.commit()
     return jsonify({'success': True, 'added': added_count})
 
@@ -4954,17 +4696,15 @@ def create_cast_account():
     """Create a new cast member account (admin only)"""
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
-    
-    data = request.json
+
+    data     = request.json
     username = data.get('username')
     password = data.get('password')
-    email = data.get('email')
-    
-    # Check if username already exists
+    email    = data.get('email')
+
     if User.query.filter_by(username=username).first():
         return jsonify({'error': 'Username already exists'}), 400
-    
-    # Create user with cast access
+
     user = User(
         username=username,
         password_hash=generate_password_hash(password),
@@ -4974,34 +4714,15 @@ def create_cast_account():
     )
     db.session.add(user)
     db.session.commit()
-    
-    # Send welcome email if email provided
+
+    # ── Send cast welcome / credentials email ───────────────────────────
     if email:
-        subject = "🎭 Welcome to ShowWise Cast Portal"
-        body = f"""Hello {username},
+        send_cast_welcome_email(
+            recipient_email=email,
+            username=username,
+            password=password,
+        )
 
-Welcome to the ShowWise Cast Portal!
-
-Your account has been created by your production team.
-
-Login Credentials:
-  • Username: {username}
-  • Password: {password}
-
-IMPORTANT: Please change your password after your first login.
-
-You can now access:
-  • Your production schedules
-  • Cast-specific notes and information
-  • Call times and rehearsal information
-  • Communication with the production team
-
-Login at: {request.url_root}login
-
-Break a leg!
-ShowWise Production Team"""
-        send_email(subject, email, body)
-    
     return jsonify({'success': True, 'user_id': user.id, 'username': username})
 
 # ==================== ADMIN: UPDATE CAST/EVENT LINKING ====================
@@ -5011,24 +4732,23 @@ def add_cast():
     """Add a cast member to an event (admin only)"""
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
-    
+
     data = request.json
-    
+
     # Get the user by username or user_id
     user = None
     if data.get('user_id'):
         user = User.query.get(data['user_id'])
     elif data.get('actor_name'):
         user = User.query.filter_by(username=data['actor_name']).first()
-    
+
     if not user:
         return jsonify({'error': 'User not found'}), 404
-    
+
     # Ensure user has cast access
     if not user.is_cast:
         user.is_cast = True
-    
-    # Create cast member record
+
     cast = CastMember(
         actor_name=user.username,
         character_name=data['character_name'],
@@ -5041,31 +4761,21 @@ def add_cast():
     )
     db.session.add(cast)
     db.session.commit()
-    
-    # Send notification if event specified
+
+    # ── Send cast assignment notification ───────────────────────────────
     if cast.event_id and user.email:
         event = Event.query.get(cast.event_id)
-        subject = f"🎭 You've been cast in: {event.title}"
-        body = f"""Hello {user.username},
+        if event:
+            send_cast_assignment_email(
+                recipient_email=user.email,
+                username=user.username,
+                event_title=event.title,
+                event_date=event.event_date.strftime('%B %d, %Y at %I:%M %p'),
+                event_location=event.location or 'TBD',
+                character_name=cast.character_name,
+                role_type=cast.role_type,
+            )
 
-You have been cast in an upcoming production!
-
-📋 Production Details:
-  • Event: {event.title}
-  • Character: {cast.character_name}
-  • Role: {cast.role_type}
-  • Date: {event.event_date.strftime('%B %d, %Y at %I:%M %p')}
-  • Location: {event.location or 'TBD'}
-
-Login to ShowWise Cast Portal to view:
-  • Cast-specific schedules and call times
-  • Production notes
-  • Your character information
-
-Break a leg!
-ShowWise Production Team"""
-        send_email(subject, user.email, body)
-    
     return jsonify({'success': True, 'id': cast.id})
 
 # ==================== ADMIN: CAST SCHEDULE MANAGEMENT ====================
@@ -5234,53 +4944,43 @@ def change_password_page():
     """Password change page for all users"""
     return render_template('/crew/change_password.html')
 
+
+
 @app.route('/change-password', methods=['POST'])
 @login_required
 def change_password():
     """Handle password change request"""
-    data = request.json
+    data             = request.json
     current_password = data.get('current_password')
-    new_password = data.get('new_password')
+    new_password     = data.get('new_password')
     confirm_password = data.get('confirm_password')
-    
-    # Validation
+
     if not current_password or not new_password or not confirm_password:
         return jsonify({'error': 'All fields are required'}), 400
-    
-    # Check current password
+
     if not check_password_hash(current_user.password_hash, current_password):
         return jsonify({'error': 'Current password is incorrect'}), 400
-    
-    # Check new password length
+
     if len(new_password) < 6:
         return jsonify({'error': 'New password must be at least 6 characters'}), 400
-    
-    # Check passwords match
+
     if new_password != confirm_password:
         return jsonify({'error': 'New passwords do not match'}), 400
-    
-    # Check new password is different
+
     if current_password == new_password:
         return jsonify({'error': 'New password must be different from current password'}), 400
-    
-    # Update password
+
     current_user.password_hash = generate_password_hash(new_password)
     db.session.commit()
-    
-    # Send confirmation email if email exists
+
+    # ── Send password changed confirmation ──────────────────────────────
     if current_user.email:
-        subject = "Password Changed - ShowWise"
-        body = f"""Hello {current_user.username},
+        send_password_changed_email(
+            recipient_email=current_user.email,
+            username=current_user.username,
+            changed_at=datetime.now().strftime('%B %d, %Y at %I:%M %p'),
+        )
 
-Your ShowWise password has been successfully changed.
-
-If you did not make this change, please contact your administrator immediately.
-
-Changed at: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}
-
-ShowWise Team"""
-        send_email(subject, current_user.email, body)
-    
     return jsonify({'success': True, 'message': 'Password changed successfully'})
 
 # ==================== HIRED EQUIPMENT ROUTES ====================
@@ -6741,135 +6441,121 @@ def forgot_password():
     if request.method == 'GET':
         org = get_organization() or DEFAULT_ORG
         return render_template('forgot_password.html', organization=org)
-    
-    # POST request - send reset email
-    data = request.json
-    username_or_email = data.get('username_or_email', '').strip()
-    
+
+    # POST — send reset email
+    data                 = request.json
+    username_or_email    = data.get('username_or_email', '').strip()
+
     if not username_or_email:
         return jsonify({'error': 'Username or email required'}), 400
-    
-    # Find user by username or email
+
     user = User.query.filter(
         (User.username == username_or_email) | (User.email == username_or_email)
     ).first()
-    
+
     if not user:
-        # Don't reveal if user exists - security best practice
-        return jsonify({'success': True, 'message': 'If that account exists, an email has been sent with reset instructions'}), 200
-    
+        # Don't reveal whether the account exists
+        return jsonify({
+            'success': True,
+            'message': 'If that account exists, an email has been sent with reset instructions'
+        }), 200
+
     if not user.email:
         return jsonify({'error': 'This account has no email address associated'}), 400
-    
+
     try:
-        # Generate reset token (valid for 24 hours)
-        reset_token = secrets.token_urlsafe(32)
-        user.password_reset_token = reset_token
+        # Generate reset token (valid 24 h)
+        reset_token              = secrets.token_urlsafe(32)
+        user.password_reset_token  = reset_token
         user.password_reset_expiry = datetime.utcnow() + timedelta(hours=24)
         db.session.commit()
-        
-        # Build reset URL
+
         reset_url = f"{MAIN_SERVER_URL}/password/reset/{reset_token}"
-        org = get_organization() or DEFAULT_ORG
-        
-        # Send reset email
-        subject = f"Password Reset Request - {org.get('name', 'ShowWise')}"
-        body = f"""Hello {user.username},
+        org       = get_organization() or DEFAULT_ORG
 
-You've requested to reset your password. Click the link below (or copy it into your browser):
+        # ── Send password reset email ───────────────────────────────────
+        sent = send_password_reset_email(
+            recipient_email=user.email,
+            username=user.username,
+            reset_url=reset_url,
+            org=org,
+        )
 
-{reset_url}
-
-This link will expire in 24 hours.
-
-If you did not request this, please ignore this email and your password will remain unchanged.
-
-ShowWise Team
-{org.get('name', 'ShowWise')}"""
-        
-        sent = send_email(subject, user.email, body)
-        
         if sent:
             log_security_event('PASSWORD_RESET_REQUESTED', username=user.username)
             return jsonify({'success': True, 'message': 'Password reset email sent'}), 200
         else:
-            return jsonify({'error': 'Could not send email (check email configuration)'}), 500
-    
+            return jsonify({
+                'error': 'Could not send email (check email configuration)'
+            }), 500
+
     except Exception as e:
         print(f"Password forgot error: {e}")
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/password/reset/<token>', methods=['GET', 'POST'])
 def reset_password(token):
     """Password reset page and handler"""
     if request.method == 'GET':
-        # Verify token exists and is valid
         user = User.query.filter_by(password_reset_token=token).first()
-        
-        if not user or not user.password_reset_expiry or user.password_reset_expiry < datetime.utcnow():
+        if not user or not user.password_reset_expiry \
+                or user.password_reset_expiry < datetime.utcnow():
             flash('Password reset link is invalid or has expired', 'error')
             return redirect(url_for('login'))
-        
+
         org = get_organization() or DEFAULT_ORG
         return render_template('reset_password.html', token=token, organization=org)
-    
-    # POST request - reset the password
-    data = request.json
-    new_password = data.get('new_password', '').strip()
+
+    # POST — apply the new password
+    data             = request.json
+    new_password     = data.get('new_password', '').strip()
     confirm_password = data.get('confirm_password', '').strip()
-    
-    # Verify token
+
     user = User.query.filter_by(password_reset_token=token).first()
-    
+
     if not user:
         return jsonify({'error': 'Invalid reset token'}), 400
-    
+
     if not user.password_reset_expiry or user.password_reset_expiry < datetime.utcnow():
-        # Clear expired token
-        user.password_reset_token = None
+        user.password_reset_token  = None
         user.password_reset_expiry = None
         db.session.commit()
         return jsonify({'error': 'Reset link has expired'}), 400
-    
-    # Validate new password
+
     if len(new_password) < 6:
         return jsonify({'error': 'Password must be at least 6 characters'}), 400
-    
+
     if new_password != confirm_password:
         return jsonify({'error': 'Passwords do not match'}), 400
-    
+
     try:
-        # Update password
-        user.password_hash = generate_password_hash(new_password)
-        user.password_reset_token = None
+        user.password_hash         = generate_password_hash(new_password)
+        user.password_reset_token  = None
         user.password_reset_expiry = None
         db.session.commit()
-        
-        # Log security event
+
         log_security_event('PASSWORD_RESET_COMPLETED', username=user.username)
-        
-        # Send confirmation email
+
+        # ── Send password changed confirmation ──────────────────────────
         if user.email:
-            subject = "Your Password Has Been Reset - ShowWise"
-            body = f"""Hello {user.username},
+            send_password_changed_email(
+                recipient_email=user.email,
+                username=user.username,
+                changed_at=datetime.now().strftime('%B %d, %Y at %I:%M %p'),
+            )
 
-Your password has been successfully reset.
-
-If you did not make this change, please contact your administrator immediately.
-
-ShowWise Team"""
-            send_email(subject, user.email, body)
-        
         return jsonify({
             'success': True,
             'message': 'Password reset successfully',
             'redirect': url_for('login')
         }), 200
-    
+
     except Exception as e:
         db.session.rollback()
         print(f"Password reset error: {e}")
         return jsonify({'error': str(e)}), 500
+
 
 # ==================== EVENT JOIN FROM CALENDAR ====================
 
