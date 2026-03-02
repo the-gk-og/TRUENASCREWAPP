@@ -265,7 +265,7 @@ function verifySetup() {
             // Display backup codes
             const codesDiv = document.getElementById('backupCodes');
             codesDiv.innerHTML = data.backup_codes.map(code => 
-                `<div style="padding: 0.5rem; background: white; border-radius: 4px;">${code}</div>`
+                `<div style="padding: 0.5rem; background: var(--bg-card); border-radius: 4px;">${code}</div>`
             ).join('');
             
             // Show final step

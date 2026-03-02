@@ -135,7 +135,7 @@ function verifyCode() {
         if (d.success) {
             backupCodes = d.backup_codes;
             document.getElementById('backupCodesGrid').innerHTML =
-                backupCodes.map(c => `<div style="padding:0.4rem 0.75rem;background:white;border-radius:4px;text-align:center;border:1px solid #e5e7eb;">${c}</div>`).join('');
+                backupCodes.map(c => `<div style="padding:0.4rem 0.75rem;background:var(--bg-card);border-radius:4px;text-align:center;border:1px solid var(--border);">${c}</div>`).join('');
             document.getElementById('step2Section').style.display = 'none';
             document.getElementById('step3Section').style.display = 'block';
         } else {
