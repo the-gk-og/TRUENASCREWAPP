@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,6 +14,9 @@
             box-sizing: border-box; 
         }
         
+        /* ============================================================
+           LIGHT MODE VARIABLES (default)
+        ============================================================ */
         :root {
             --primary: #6366f1;
             --primary-dark: #4f46e5;
@@ -21,33 +24,289 @@
             --success: #10b981;
             --danger: #ef4444;
             --warning: #f59e0b;
+
+            /* Semantic surface tokens */
+            --bg-body:        #f9fafb;
+            --bg-sidebar:     #ffffff;
+            --bg-topbar:      #ffffff;
+            --bg-card:        #ffffff;
+            --bg-input:       #ffffff;
+            --bg-table-head:  #f9fafb;
+            --bg-table-hover: #fafbfc;
+            --bg-nav-active:  #ede9fe;
+            --bg-nav-hover:   #f3f4f6;
+            --bg-modal:       #ffffff;
+            --bg-code:        #f3f4f6;
+
+            --text-primary:   #1f2937;
+            --text-secondary: #6b7280;
+            --text-muted:     #9ca3af;
+            --text-inverse:   #ffffff;
+            --text-nav-active:#6366f1;
+
+            --border:         #e5e7eb;
+            --border-focus:   #6366f1;
+            --border-input:   #e5e7eb;
+
+            --shadow-sm:      0 1px 3px rgba(0,0,0,0.1);
+            --shadow-md:      0 4px 12px rgba(0,0,0,0.1);
+            --shadow-lg:      0 20px 60px rgba(0,0,0,0.3);
+            --shadow-sidebar: 2px 0 10px rgba(0,0,0,0.05);
+
+            --overlay-bg:     rgba(0,0,0,0.5);
+
             --dark: #1f2937;
             --light: #f9fafb;
-            --border: #e5e7eb;
             --sidebar-width: 260px;
             --topbar-height: 60px;
+
+            /* Transition for smooth theme switch */
+            --theme-transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        /* ============================================================
+           DARK MODE VARIABLES
+        ============================================================ */
+        [data-theme="dark"] {
+            --bg-body:        #0f1117;
+            --bg-sidebar:     #1a1d27;
+            --bg-topbar:      #1a1d27;
+            --bg-card:        #1e2130;
+            --bg-input:       #252836;
+            --bg-table-head:  #252836;
+            --bg-table-hover: #252836;
+            --bg-nav-active:  #2d2f4a;
+            --bg-nav-hover:   #252836;
+            --bg-modal:       #1e2130;
+            --bg-code:        #252836;
+
+            --text-primary:   #e5e7eb;
+            --text-secondary: #9ca3af;
+            --text-muted:     #6b7280;
+            --text-inverse:   #ffffff;
+            --text-nav-active:#818cf8;
+
+            --border:         #2d3148;
+            --border-focus:   #818cf8;
+            --border-input:   #2d3148;
+
+            --shadow-sm:      0 1px 3px rgba(0,0,0,0.4);
+            --shadow-md:      0 4px 12px rgba(0,0,0,0.4);
+            --shadow-lg:      0 20px 60px rgba(0,0,0,0.7);
+            --shadow-sidebar: 2px 0 10px rgba(0,0,0,0.3);
+
+            --overlay-bg:     rgba(0,0,0,0.7);
+
+            --dark: #e5e7eb;
+            --light: #0f1117;
+        }
+
+        /* ============================================================
+           COLORBLIND MODES
+        ============================================================ */
+
+        /* Deuteranopia — red-green (green-blind, most common) */
+        [data-colorblind="deuteranopia"] {
+            --primary:          #0066cc;
+            --primary-dark:     #0052a3;
+            --secondary:        #e6aa00;
+            --success:          #0099cc;
+            --danger:           #cc6600;
+            --warning:          #ffcc00;
+            --text-nav-active:  #0066cc;
+            --border-focus:     #0066cc;
+        }
+        [data-theme="dark"][data-colorblind="deuteranopia"] {
+            --text-nav-active:  #3399ff;
+            --border-focus:     #3399ff;
+        }
+
+        /* Protanopia — red-blind */
+        [data-colorblind="protanopia"] {
+            --primary:          #0077bb;
+            --primary-dark:     #005e99;
+            --secondary:        #ee7733;
+            --success:          #009988;
+            --danger:           #cc3311;
+            --warning:          #ee9900;
+            --text-nav-active:  #0077bb;
+            --border-focus:     #0077bb;
+        }
+        [data-theme="dark"][data-colorblind="protanopia"] {
+            --text-nav-active:  #33aaff;
+            --border-focus:     #33aaff;
+        }
+
+        /* Tritanopia — blue-yellow blind */
+        [data-colorblind="tritanopia"] {
+            --primary:          #cc0077;
+            --primary-dark:     #a30060;
+            --secondary:        #00aa44;
+            --success:          #007733;
+            --danger:           #ff2200;
+            --warning:          #dd5500;
+            --text-nav-active:  #cc0077;
+            --border-focus:     #cc0077;
+        }
+        [data-theme="dark"][data-colorblind="tritanopia"] {
+            --text-nav-active:  #ff44aa;
+            --border-focus:     #ff44aa;
+        }
+
+        /* High contrast — maximum legibility */
+        [data-colorblind="high-contrast"] {
+            --primary:          #0000ee;
+            --primary-dark:     #0000bb;
+            --secondary:        #880088;
+            --success:          #006600;
+            --danger:           #cc0000;
+            --warning:          #885500;
+            --bg-body:          #ffffff;
+            --bg-sidebar:       #f0f0f0;
+            --bg-topbar:        #ffffff;
+            --bg-card:          #ffffff;
+            --bg-input:         #ffffff;
+            --bg-table-head:    #e0e0e0;
+            --bg-table-hover:   #f5f5f5;
+            --bg-nav-active:    #cce0ff;
+            --bg-nav-hover:     #e8e8e8;
+            --bg-modal:         #ffffff;
+            --text-primary:     #000000;
+            --text-secondary:   #333333;
+            --text-muted:       #555555;
+            --text-nav-active:  #0000cc;
+            --border:           #333333;
+            --border-focus:     #0000ee;
+            --border-input:     #333333;
+        }
+        [data-theme="dark"][data-colorblind="high-contrast"] {
+            --primary:          #77aaff;
+            --success:          #44ff88;
+            --danger:           #ff6655;
+            --warning:          #ffcc44;
+            --bg-body:          #000000;
+            --bg-sidebar:       #111111;
+            --bg-topbar:        #111111;
+            --bg-card:          #111111;
+            --bg-input:         #1a1a1a;
+            --bg-table-head:    #1a1a1a;
+            --bg-table-hover:   #1a1a1a;
+            --bg-nav-active:    #003366;
+            --bg-nav-hover:     #1a1a1a;
+            --bg-modal:         #111111;
+            --text-primary:     #ffffff;
+            --text-secondary:   #eeeeee;
+            --text-muted:       #aaaaaa;
+            --text-nav-active:  #77aaff;
+            --border:           #888888;
+            --border-focus:     #77aaff;
+            --border-input:     #888888;
+        }
+        /* High contrast: extra focus rings */
+        [data-colorblind="high-contrast"] a:focus,
+        [data-colorblind="high-contrast"] button:focus,
+        [data-colorblind="high-contrast"] input:focus,
+        [data-colorblind="high-contrast"] select:focus,
+        [data-colorblind="high-contrast"] textarea:focus {
+            outline: 3px solid var(--primary) !important;
+            outline-offset: 2px;
+        }
+        [data-colorblind="high-contrast"] .btn {
+            border: 2px solid currentColor !important;
+        }
+
+        /* ============================================================
+           ACCESSIBILITY TOPBAR BUTTON + COLORBLIND PICKER POPUP
+        ============================================================ */
+        .a11y-btn {
+            width: 36px; height: 36px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.95rem;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        .a11y-btn:hover { background: var(--bg-nav-hover); color: var(--primary); border-color: var(--primary); }
+        .a11y-btn .cb-active-dot {
+            position: absolute; top: 5px; right: 5px;
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: var(--primary);
+            display: none;
+        }
+        [data-colorblind]:not([data-colorblind="none"]) .a11y-btn .cb-active-dot { display: block; }
+
+        .cb-picker {
+            position: absolute;
+            top: calc(100% + 8px); right: 0;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 0.75rem;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            z-index: 9999;
+            min-width: 230px;
+            display: none;
+        }
+        .cb-picker.open { display: block; animation: cbFadeDown 0.15s ease; }
+        @keyframes cbFadeDown {
+            from { opacity: 0; transform: translateY(-6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .cb-picker-title {
+            font-size: 0.72rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.05em;
+            color: var(--text-muted);
+            padding: 0 0.25rem; margin-bottom: 0.5rem;
+        }
+        .cb-opt {
+            display: flex; align-items: center; gap: 0.65rem;
+            padding: 0.55rem 0.6rem; border-radius: 8px;
+            cursor: pointer; font-size: 0.875rem;
+            color: var(--text-primary);
+            background: none; border: none; width: 100%; text-align: left;
+            transition: background 0.15s;
+        }
+        .cb-opt:hover { background: var(--bg-nav-hover); }
+        .cb-opt.active { background: var(--bg-nav-active); color: var(--text-nav-active); font-weight: 600; }
+        .cb-swatch {
+            width: 22px; height: 22px; border-radius: 50%;
+            border: 2px solid var(--border); flex-shrink: 0;
+        }
+
+        /* Apply transitions to all themeable elements */
+        body, .sidebar, .topbar, .card, input, textarea, select,
+        .nav-item, table, th, td, .modal-content, .alert,
+        .form-group input, .form-group textarea, .form-group select {
+            transition: var(--theme-transition);
         }
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
-            background: var(--light);
-            color: var(--dark);
+            background: var(--bg-body);
+            color: var(--text-primary);
             min-height: 100vh;
         }
         
-        /* Sidebar */
+        /* ============================================================
+           SIDEBAR
+        ============================================================ */
         .sidebar {
             position: fixed;
             left: 0;
             top: 0;
             width: var(--sidebar-width);
             height: 100vh;
-            background: white;
+            background: var(--bg-sidebar);
             border-right: 1px solid var(--border);
             overflow-y: auto;
-            transition: transform 0.3s ease;
+            transition: transform 0.3s ease, background-color 0.2s ease, border-color 0.2s ease;
             z-index: 1000;
-            box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+            box-shadow: var(--shadow-sidebar);
         }
         
         .sidebar-header {
@@ -78,7 +337,7 @@
             font-size: 0.75rem;
             font-weight: 600;
             text-transform: uppercase;
-            color: #6b7280;
+            color: var(--text-muted);
             letter-spacing: 0.05em;
         }
         
@@ -87,22 +346,22 @@
             align-items: center;
             gap: 0.75rem;
             padding: 0.75rem 1rem;
-            color: var(--dark);
+            color: var(--text-primary);
             text-decoration: none;
             transition: all 0.2s ease;
             border-left: 3px solid transparent;
         }
         
         .nav-item:hover {
-            background: #f3f4f6;
+            background: var(--bg-nav-hover);
             border-left-color: var(--primary);
             color: var(--primary);
         }
         
         .nav-item.active {
-            background: #ede9fe;
+            background: var(--bg-nav-active);
             border-left-color: var(--primary);
-            color: var(--primary);
+            color: var(--text-nav-active);
             font-weight: 600;
         }
         
@@ -112,20 +371,22 @@
             font-size: 1.1rem;
         }
         
-        /* Topbar */
+        /* ============================================================
+           TOPBAR
+        ============================================================ */
         .topbar {
             position: fixed;
             left: var(--sidebar-width);
             top: 0;
             right: 0;
             height: var(--topbar-height);
-            background: white;
+            background: var(--bg-topbar);
             border-bottom: 1px solid var(--border);
             display: flex;
             align-items: center;
             justify-content: space-between;
             padding: 0 1.5rem;
-            z-index: 999;
+            z-index: 1001;
         }
         
         .mobile-menu-btn {
@@ -134,15 +395,56 @@
             border: none;
             font-size: 1.5rem;
             cursor: pointer;
-            color: var(--dark);
+            color: var(--text-primary);
         }
         
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
         .topbar-user {
             display: flex;
             align-items: center;
             gap: 0.75rem;
         }
+
+        /* ============================================================
+           DARK MODE TOGGLE BUTTON
+        ============================================================ */
+        .theme-toggle {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            border: 1px solid var(--border);
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .theme-toggle:hover {
+            background: var(--bg-nav-hover);
+            color: var(--primary);
+            border-color: var(--primary);
+            transform: rotate(15deg);
+        }
+
+        .theme-toggle .icon-sun  { display: none; }
+        .theme-toggle .icon-moon { display: block; }
+
+        [data-theme="dark"] .theme-toggle .icon-sun  { display: block; }
+        [data-theme="dark"] .theme-toggle .icon-moon { display: none; }
         
+        /* ============================================================
+           USER AVATAR
+        ============================================================ */
         .user-avatar {
             width: 40px;
             height: 40px;
@@ -157,7 +459,7 @@
             font-weight: 700;
             font-size: 1rem;
             overflow: hidden;
-            border: 2px solid white;
+            border: 2px solid var(--border);
             box-shadow: 0 2px 8px rgba(0,0,0,0.15);
             flex-shrink: 0;
         }
@@ -169,7 +471,6 @@
             display: block;
         }
         
-        /* Profile avatar class for consistency */
         .profile-avatar {
             border-radius: 50%;
             display: flex;
@@ -180,41 +481,31 @@
         }
         
         .profile-avatar-sm {
-            width: 32px;
-            height: 32px;
-            min-width: 32px;
-            min-height: 32px;
-            font-size: 0.85rem;
-            font-weight: 700;
+            width: 32px; height: 32px;
+            min-width: 32px; min-height: 32px;
+            font-size: 0.85rem; font-weight: 700;
         }
         
         .profile-avatar-md {
-            width: 48px;
-            height: 48px;
-            min-width: 48px;
-            min-height: 48px;
-            font-size: 1rem;
-            font-weight: 700;
+            width: 48px; height: 48px;
+            min-width: 48px; min-height: 48px;
+            font-size: 1rem; font-weight: 700;
         }
         
         .profile-avatar-lg {
-            width: 80px;
-            height: 80px;
-            min-width: 80px;
-            min-height: 80px;
-            font-size: 2rem;
-            font-weight: 700;
+            width: 80px; height: 80px;
+            min-width: 80px; min-height: 80px;
+            font-size: 2rem; font-weight: 700;
         }
         
         .profile-avatar img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: block;
+            width: 100%; height: 100%;
+            object-fit: cover; display: block;
         }
         
-        
-        /* Main Content */
+        /* ============================================================
+           MAIN CONTENT
+        ============================================================ */
         .main-content {
             margin-left: var(--sidebar-width);
             margin-top: var(--topbar-height);
@@ -230,21 +521,23 @@
             font-size: 2rem;
             font-weight: 700;
             margin-bottom: 0.5rem;
-            color: var(--dark);
+            color: var(--text-primary);
         }
         
         .page-subtitle {
-            color: #6b7280;
+            color: var(--text-secondary);
             font-size: 0.95rem;
         }
         
-        /* Cards */
+        /* ============================================================
+           CARDS
+        ============================================================ */
         .card {
-            background: white;
+            background: var(--bg-card);
             border-radius: 12px;
             padding: 1.5rem;
             margin-bottom: 1.5rem;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            box-shadow: var(--shadow-sm);
             border: 1px solid var(--border);
         }
         
@@ -260,10 +553,12 @@
         .card-title {
             font-size: 1.25rem;
             font-weight: 600;
-            color: var(--dark);
+            color: var(--text-primary);
         }
         
-        /* Buttons */
+        /* ============================================================
+           BUTTONS
+        ============================================================ */
         .btn {
             padding: 0.625rem 1.25rem;
             border: none;
@@ -308,8 +603,21 @@
             background: #dc2626;
             transform: translateY(-1px);
         }
+
+        .btn-secondary {
+            background: var(--bg-card);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-nav-hover);
+            border-color: var(--primary);
+        }
         
-        /* Tables */
+        /* ============================================================
+           TABLES
+        ============================================================ */
         table {
             width: 100%;
             border-collapse: collapse;
@@ -319,18 +627,22 @@
             padding: 0.75rem;
             text-align: left;
             border-bottom: 1px solid var(--border);
+            color: var(--text-primary);
         }
         
         th {
-            background: #f9fafb;
+            background: var(--bg-table-head);
             font-weight: 600;
+            color: var(--text-secondary);
         }
         
-        tr:hover {
-            background: #fafbfc;
+        tr:hover td {
+            background: var(--bg-table-hover);
         }
         
-        /* Forms */
+        /* ============================================================
+           FORMS
+        ============================================================ */
         .form-group {
             margin-bottom: 1.5rem;
         }
@@ -339,35 +651,71 @@
             display: block;
             margin-bottom: 0.5rem;
             font-weight: 600;
-            color: var(--dark);
+            color: var(--text-primary);
         }
         
         .form-group input,
         .form-group textarea,
-        .form-group select {
-            width: 100%;
-            padding: 0.75rem;
-            border: 2px solid var(--border);
+        .form-group select,
+        input[type="text"],
+        input[type="password"],
+        input[type="email"],
+        input[type="number"],
+        input[type="date"],
+        input[type="datetime-local"],
+        textarea,
+        select {
+            background: var(--bg-input);
+            color: var(--text-primary);
+            border: 2px solid var(--border-input);
             border-radius: 8px;
             font-size: 1rem;
             transition: all 0.2s ease;
             font-family: inherit;
         }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+        }
         
         .form-group input:focus,
         .form-group textarea:focus,
-        .form-group select:focus {
+        .form-group select:focus,
+        input:focus,
+        textarea:focus,
+        select:focus {
             outline: none;
-            border-color: var(--primary);
+            border-color: var(--border-focus);
             box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        input::placeholder,
+        textarea::placeholder {
+            color: var(--text-muted);
         }
         
         .form-group textarea {
             resize: vertical;
             min-height: 100px;
         }
+
+        /* Select dark mode arrow fix */
+        [data-theme="dark"] select {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239ca3af' d='M10.293 3.293L6 7.586 1.707 3.293A1 1 0 00.293 4.707l5 5a1 1 0 001.414 0l5-5a1 1 0 10-1.414-1.414z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            padding-right: 2.5rem;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+        }
         
-        /* Modal */
+        /* ============================================================
+           MODAL
+        ============================================================ */
         .modal {
             display: none;
             position: fixed;
@@ -376,12 +724,12 @@
             top: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.5);
+            background: var(--overlay-bg);
             backdrop-filter: blur(4px);
         }
         
         .modal-content {
-            background: white;
+            background: var(--bg-modal);
             margin: 5vh auto;
             padding: 2rem;
             border-radius: 12px;
@@ -389,7 +737,15 @@
             max-width: 600px;
             max-height: 90vh;
             overflow-y: auto;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--border);
+        }
+
+        .modal-content h2,
+        .modal-content h3,
+        .modal-content p,
+        .modal-content label {
+            color: var(--text-primary);
         }
         
         .close {
@@ -397,7 +753,7 @@
             font-size: 1.5rem;
             font-weight: bold;
             cursor: pointer;
-            color: #999;
+            color: var(--text-muted);
             transition: color 0.3s;
         }
         
@@ -405,7 +761,9 @@
             color: var(--danger);
         }
         
-        /* Alerts */
+        /* ============================================================
+           ALERTS
+        ============================================================ */
         .alert {
             padding: 1rem;
             border-radius: 8px;
@@ -420,14 +778,64 @@
             color: #065f46;
             border-left: 4px solid var(--success);
         }
+
+        [data-theme="dark"] .alert-success {
+            background: #052e16;
+            color: #6ee7b7;
+        }
         
         .alert-error {
             background: #fef2f2;
             color: #7f1d1d;
             border-left: 4px solid var(--danger);
         }
+
+        [data-theme="dark"] .alert-error {
+            background: #2d0a0a;
+            color: #fca5a5;
+        }
+
+        .alert-info {
+            background: #f0f9ff;
+            color: #164e63;
+            border-left: 4px solid #0ea5e9;
+        }
+
+        [data-theme="dark"] .alert-info {
+            background: #0c2436;
+            color: #7dd3fc;
+        }
+
+        .alert-warning {
+            background: #fffbeb;
+            color: #78350f;
+            border-left: 4px solid var(--warning);
+        }
+
+        [data-theme="dark"] .alert-warning {
+            background: #2d1c00;
+            color: #fcd34d;
+        }
+
+        /* ============================================================
+           BADGES / TAGS
+        ============================================================ */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.2rem 0.6rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        [data-theme="dark"] .badge {
+            filter: brightness(0.85) saturate(1.2);
+        }
         
-        /* Mobile Responsive */
+        /* ============================================================
+           MOBILE RESPONSIVE
+        ============================================================ */
         @media (max-width: 768px) {
             .sidebar {
                 transform: translateX(-100%);
@@ -450,62 +858,88 @@
                 display: block;
             }
             
-            .page-title {
-                font-size: 1.5rem;
-            }
-            
-            .card {
-                padding: 1rem;
-            }
-            
-            .btn {
-                font-size: 0.85rem;
-                padding: 0.5rem 1rem;
-            }
+            .page-title { font-size: 1.5rem; }
+            .card { padding: 1rem; }
+            .btn { font-size: 0.85rem; padding: 0.5rem 1rem; }
         }
         
         @media (max-width: 480px) {
-            .topbar {
-                padding: 0 1rem;
-            }
-            
-            .main-content {
-                padding: 0.75rem;
-            }
-            
-            .page-title {
-                font-size: 1.25rem;
-            }
+            .topbar { padding: 0 1rem; }
+            .main-content { padding: 0.75rem; }
+            .page-title { font-size: 1.25rem; }
         }
         
-        /* Overlay for mobile */
         .sidebar-overlay {
             display: none;
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.5);
+            background: var(--overlay-bg);
             z-index: 999;
         }
         
         @media (max-width: 768px) {
-            .sidebar-overlay.show {
-                display: block;
-            }
+            .sidebar-overlay.show { display: block; }
+        }
+
+        /* ============================================================
+           DARK MODE — MISC OVERRIDES
+        ============================================================ */
+        [data-theme="dark"] code,
+        [data-theme="dark"] pre {
+            background: var(--bg-code);
+            color: #e2e8f0;
+        }
+
+        [data-theme="dark"] hr {
+            border-color: var(--border);
+        }
+
+        [data-theme="dark"] .text-gray-500,
+        [data-theme="dark"] .text-gray-600 {
+            color: var(--text-secondary) !important;
+        }
+
+        /* Scrollbar theming */
+        [data-theme="dark"] ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        [data-theme="dark"] ::-webkit-scrollbar-track {
+            background: var(--bg-body);
+        }
+        [data-theme="dark"] ::-webkit-scrollbar-thumb {
+            background: #2d3148;
+            border-radius: 4px;
+        }
+        [data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+            background: #4a4f7a;
         }
     </style>
 </head>
 <body>
+    <!-- Hidden SVG colorblind simulation filters -->
+    <svg style="position:absolute;width:0;height:0;overflow:hidden;" aria-hidden="true">
+        <defs>
+            <filter id="cb-f-deuteranopia">
+                <feColorMatrix type="matrix" values="0.625 0.375 0 0 0  0.7 0.3 0 0 0  0 0.3 0.7 0 0  0 0 0 1 0"/>
+            </filter>
+            <filter id="cb-f-protanopia">
+                <feColorMatrix type="matrix" values="0.567 0.433 0 0 0  0.558 0.442 0 0 0  0 0.242 0.758 0 0  0 0 0 1 0"/>
+            </filter>
+            <filter id="cb-f-tritanopia">
+                <feColorMatrix type="matrix" values="0.95 0.05 0 0 0  0 0.433 0.567 0 0  0 0.475 0.525 0 0  0 0 0 1 0"/>
+            </filter>
+        </defs>
+    </svg>
+
     {% if current_user.is_authenticated %}
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
         <img src="/static/logo.png" alt="ShowWise" style="height: 40px; margin-right: 10px; vertical-align: middle;">
-      
         </div>
         
         <nav class="sidebar-nav">
-<!-- Replace your base.html navigation section with this -->
-
 <nav class="sidebar-nav">
     {% if current_user.is_cast and not current_user.is_admin %}
     <!-- CAST-ONLY NAVIGATION -->
@@ -549,10 +983,6 @@
             <i class="fas fa-calendar-alt"></i>
             <span>My Schedule</span>
         </a>
-        <!--<a href="{{ url_for('chat_page') }}" class="nav-item {% if request.endpoint == 'chat_page' %}active{% endif %}">
-            <i class="fas fa-comments"></i>
-            <span> Chat</span>
-        </a>-->
     </div>
     
     <div class="nav-section">
@@ -593,7 +1023,6 @@
             <i class="fas fa-cog"></i>
             <span>Settings</span>
         </a>
-        </a>
         {% if current_user.is_admin %}
         <a href="{{ url_for('cast_list') }}" class="nav-item {% if request.endpoint == 'cast_list' %}active{% endif %}">
             <i class="fas fa-users"></i>
@@ -612,7 +1041,6 @@
             <span>Admin Panel</span>
         </a>
         {% endif %}
-        </a>
         <a href="{{ url_for('logout') }}" class="nav-item">
             <i class="fas fa-sign-out-alt"></i>
             <span>Logout</span>
@@ -620,8 +1048,7 @@
     </div>
     {% endif %}
 </nav>
-</nav>            </div>
-        </nav>
+</nav>
     </aside>
     
     <!-- Sidebar Overlay (Mobile) -->
@@ -633,15 +1060,49 @@
             <i class="fas fa-bars"></i>
         </button>
         
-        <div class="topbar-user">
-            {% if current_user.profile_picture %}
-            <div class="user-avatar" id="topbarAvatar">
-                <img src="/profile/picture/{{ current_user.username }}" alt="{{ current_user.username }}" onerror="document.getElementById('topbarAvatar').innerHTML='{{ current_user.username[0].upper() }}'">
+        <div class="topbar-right">
+            <!-- Dark mode toggle -->
+            <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle dark mode" aria-label="Toggle dark mode">
+                <i class="fas fa-sun icon-sun"></i>
+                <i class="fas fa-moon icon-moon"></i>
+            </button>
+
+            <!-- Colour vision / accessibility picker -->
+            <div style="position:relative;">
+                <button class="a11y-btn" id="a11yBtn" onclick="toggleCbPicker()" title="Colour vision mode" aria-label="Colour vision mode">
+                    <i class="fas fa-eye"></i>
+                    <span class="cb-active-dot"></span>
+                </button>
+                <div class="cb-picker" id="cbPicker">
+                    <div class="cb-picker-title">Colour Vision Mode</div>
+                    <button class="cb-opt" data-cb="none"          onclick="setColorblind('none')">
+                        <span class="cb-swatch" style="background:linear-gradient(135deg,#6366f1,#ec4899)"></span> Default
+                    </button>
+                    <button class="cb-opt" data-cb="deuteranopia"  onclick="setColorblind('deuteranopia')">
+                        <span class="cb-swatch" style="background:linear-gradient(135deg,#0066cc,#e6aa00)"></span> Deuteranopia
+                    </button>
+                    <button class="cb-opt" data-cb="protanopia"    onclick="setColorblind('protanopia')">
+                        <span class="cb-swatch" style="background:linear-gradient(135deg,#0077bb,#ee7733)"></span> Protanopia
+                    </button>
+                    <button class="cb-opt" data-cb="tritanopia"    onclick="setColorblind('tritanopia')">
+                        <span class="cb-swatch" style="background:linear-gradient(135deg,#cc0077,#00aa44)"></span> Tritanopia
+                    </button>
+                    <button class="cb-opt" data-cb="high-contrast" onclick="setColorblind('high-contrast')">
+                        <span class="cb-swatch" style="background:linear-gradient(135deg,#000,#fff);border-color:#888"></span> High Contrast
+                    </button>
+                </div>
             </div>
-            {% else %}
-            <div class="user-avatar">{{ current_user.username[0].upper() }}</div>
-            {% endif %}
-            <span style="font-weight: 600;">{{ current_user.username }}</span>
+
+            <div class="topbar-user">
+                {% if current_user.profile_picture %}
+                <div class="user-avatar" id="topbarAvatar">
+                    <img src="/profile/picture/{{ current_user.username }}" alt="{{ current_user.username }}" onerror="document.getElementById('topbarAvatar').innerHTML='{{ current_user.username[0].upper() }}'">
+                </div>
+                {% else %}
+                <div class="user-avatar">{{ current_user.username[0].upper() }}</div>
+                {% endif %}
+                <span style="font-weight: 600;">{{ current_user.username }}</span>
+            </div>
         </div>
     </header>
     
@@ -661,6 +1122,70 @@
     {% endif %}
     
     <script>
+        /* ============================================================
+           THEME + ACCESSIBILITY MANAGEMENT
+        ============================================================ */
+
+        // Apply saved preferences before first paint (prevents flash)
+        (function() {
+            const t  = localStorage.getItem('showwise-theme') || 'light';
+            const cb = localStorage.getItem('showwise-colorblind') || 'none';
+            document.documentElement.setAttribute('data-theme', t);
+            document.documentElement.setAttribute('data-colorblind', cb);
+            _applyCbFilter(cb);
+        })();
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', next);
+            localStorage.setItem('showwise-theme', next);
+        }
+
+        /* ---- Colorblind picker ---- */
+        function toggleCbPicker() {
+            document.getElementById('cbPicker').classList.toggle('open');
+        }
+        document.addEventListener('click', function(e) {
+            const btn    = document.getElementById('a11yBtn');
+            const picker = document.getElementById('cbPicker');
+            if (picker && btn && !btn.contains(e.target) && !picker.contains(e.target)) {
+                picker.classList.remove('open');
+            }
+        });
+
+        function setColorblind(mode) {
+            document.documentElement.setAttribute('data-colorblind', mode);
+            localStorage.setItem('showwise-colorblind', mode);
+            _applyCbFilter(mode);
+            _highlightCbOpt(mode);
+            document.getElementById('cbPicker')?.classList.remove('open');
+        }
+
+        function _applyCbFilter(mode) {
+            const filterMap = {
+                deuteranopia:  'url(#cb-f-deuteranopia)',
+                protanopia:    'url(#cb-f-protanopia)',
+                tritanopia:    'url(#cb-f-tritanopia)',
+            };
+            document.body.style.filter = filterMap[mode] || 'none';
+        }
+
+        function _highlightCbOpt(mode) {
+            document.querySelectorAll('.cb-opt').forEach(el => {
+                el.classList.toggle('active', el.dataset.cb === mode);
+            });
+        }
+
+        // Highlight correct option on load
+        document.addEventListener('DOMContentLoaded', function() {
+            const cb = localStorage.getItem('showwise-colorblind') || 'none';
+            _highlightCbOpt(cb);
+        });
+
+        /* ============================================================
+           SIDEBAR
+        ============================================================ */
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('sidebarOverlay');
@@ -675,6 +1200,9 @@
             overlay.classList.remove('show');
         }
         
+        /* ============================================================
+           MODALS
+        ============================================================ */
         function showModal(id) {
             document.getElementById(id).style.display = 'block';
         }
@@ -700,135 +1228,6 @@
             }
         }
     </script>
-    
-    <!-- ShowWise Chat Widget -->
-    <script>
-    (function() {
-        const CHAT_API = '/api/chat';
-        let messages = [];
-        let isOpen = false;
-
-        function createChatWidget() {
-            const widget = document.createElement('div');
-            const styles = `
-                <style>
-                    #chat-button {
-                        position: fixed;
-                        bottom: 20px;
-                        right: 20px;
-                        width: 60px;
-                        height: 60px;
-                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                        border-radius: 50%;
-                        color: white;
-                        border: none;
-                        cursor: pointer;
-                        font-size: 24px;
-                        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-                        z-index: 1000;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        transition: transform 0.2s ease;
-                    }
-                    #chat-button:hover { transform: scale(1.1); }
-                    #chat-box {
-                        position: fixed;
-                        bottom: 90px;
-                        right: 20px;
-                        width: 350px;
-                        height: 500px;
-                        background: white;
-                        border-radius: 12px;
-                        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-                        display: none;
-                        flex-direction: column;
-                        z-index: 999;
-                    }
-                    #chat-box.open { display: flex; }
-                    #chat-header {
-                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                        color: white;
-                        padding: 1rem;
-                        border-radius: 12px 12px 0 0;
-                        font-weight: bold;
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
-                    }
-                    #chat-close { background: none; border: none; color: white; cursor: pointer; font-size: 1.5rem; }
-                    #chat-messages { flex: 1; overflow-y: auto; padding: 1rem; }
-                    .message { margin-bottom: 1rem; padding: 0.75rem; border-radius: 8px; max-width: 80%; word-wrap: break-word; font-size: 0.95rem; }
-                    .message.user { background: #e0e7ff; margin-left: auto; text-align: right; }
-                    .message.admin { background: #f3f4f6; }
-                    .message-name { font-weight: bold; margin-bottom: 0.25rem; display: block; font-size: 0.85rem; }
-                    #chat-input-area { padding: 1rem; border-top: 1px solid #e5e7eb; }
-                    #chat-input { width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 8px; margin-bottom: 0.5rem; font-size: 0.95rem; font-family: inherit; }
-                    #chat-send { width: 100%; padding: 0.75rem; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; transition: background 0.2s ease; }
-                    #chat-send:hover { background: #764ba2; }
-                </style>
-            `;
-            widget.innerHTML = styles + `
-                <button id="chat-button" title="Chat Support">💬</button>
-                <div id="chat-box">
-                    <div id="chat-header">Chat Support<button id="chat-close">✕</button></div>
-                    <div id="chat-messages"></div>
-                    <div id="chat-input-area">
-                        <input type="text" id="chat-input" placeholder="Type your message...">
-                        <button id="chat-send">Send</button>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(widget);
-            document.getElementById('chat-button').addEventListener('click', toggleChat);
-            document.getElementById('chat-close').addEventListener('click', toggleChat);
-            document.getElementById('chat-send').addEventListener('click', sendMessage);
-            document.getElementById('chat-input').addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
-            loadMessages();
-            setInterval(loadMessages, 10000);
-        }
-
-        function toggleChat() {
-            isOpen = !isOpen;
-            document.getElementById('chat-box').classList.toggle('open', isOpen);
-        }
-
-        async function loadMessages() {
-            try {
-                const r = await fetch(CHAT_API + '/messages');
-                const d = await r.json();
-                if (d.success) { messages = d.messages; renderMessages(); }
-            } catch(e) { console.error('Chat error:', e); }
-        }
-
-        function renderMessages() {
-            const c = document.getElementById('chat-messages');
-            if (!messages || !messages.length) { c.innerHTML = '<div style="text-align:center;color:#999;padding:2rem">No messages</div>'; return; }
-            c.innerHTML = messages.map(m => '<div class="message ' + (m.from||'user') + '"><span class="message-name">' + (m.from_name||'Support') + ':</span>' + m.message + '</div>').join('');
-            c.scrollTop = c.scrollHeight;
-        }
-
-        async function sendMessage() {
-            const i = document.getElementById('chat-input');
-            const msg = i.value.trim();
-            if (!msg) return;
-            const name = prompt('Your name:', 'Guest') || 'Guest';
-            if (name === null) return;
-            const email = prompt('Your email:') || '';
-            try {
-                const r = await fetch(CHAT_API + '/send', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name, email, message: msg}) });
-                if (r.ok) { i.value = ''; loadMessages(); } else { alert('Failed'); }
-            } catch(e) { alert('Error: ' + e); }
-        }
-
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', createChatWidget);
-        } else {
-            createChatWidget();
-        }
-    })();
-    </script>
     {% block scripts %}{% endblock %}
 </body>
-</html>
 </html>

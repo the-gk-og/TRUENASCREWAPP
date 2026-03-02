@@ -44,6 +44,21 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_mail import Mail, Message
 
+from email_service import (
+    init_email_service,
+    send_email,
+    send_html_email,
+    send_invite_email,
+    send_crew_assignment_email,
+    send_shift_assignment_email,
+    send_cast_assignment_email,
+    send_cast_welcome_email,
+    send_password_reset_email,
+    send_password_changed_email,
+    send_event_reminder_email,
+    send_welcome_email,
+)
+
 #Werkzeug
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -176,6 +191,8 @@ db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 mail = Mail(app)
+init_email_service(app, mail) 
+
 
 # ==================== BACKEND INITIALIZATION ====================
 
@@ -246,27 +263,7 @@ os.makedirs('backups', exist_ok=True)
 
 notification_tracker = {}
 
-# -------------------- Chat storage & SSE helpers (Rocket.Chat) --------------------
-
-# Note: Rocket.Chat handles persistence server-side
-# SSE subscribers for real-time updates
-_sse_subscribers = []
-
-def _broadcast_sse(message_obj):
-    """Broadcast message to all SSE subscribers"""
-    data = json.dumps(message_obj, default=str)
-    dead = []
-    for q in _sse_subscribers:
-        try:
-            q.put(data)
-        except Exception:
-            dead.append(q)
-    for d in dead:
-        try:
-            _sse_subscribers.remove(d)
-        except ValueError:
-            pass
-
+# -------------------- Rocket.Chat helpers --------------------
 
 def _get_or_create_rc_user(username: str, email: str = None) -> Optional[str]:
     """Get or create Rocket.Chat user"""
@@ -275,45 +272,6 @@ def _get_or_create_rc_user(username: str, email: str = None) -> Optional[str]:
         return None
     
     return rc.get_or_create_user(username, email=email, name=username)
-
-
-def _send_rc_message(room_id: str, username: str, user_name: str, message: str, metadata: Dict = None) -> Optional[str]:
-    """Send message to Rocket.Chat room"""
-    rc = get_rocketchat_client()
-    if not rc.is_connected():
-        return None
-    
-    # Build message text with sender info
-    msg_text = f"{message}"
-    
-    # Send to Rocket.Chat
-    return rc.send_message(room_id, msg_text, metadata=metadata)
-
-
-def _get_rc_messages(room_id: str, count: int = 50, offset: int = 0) -> List[Dict]:
-    """Get messages from Rocket.Chat room"""
-    rc = get_rocketchat_client()
-    if not rc.is_connected():
-        return []
-    
-    return rc.get_messages(room_id, count=count, offset=offset)
-
-
-def _ensure_groups_store():
-    """Rocket.Chat groups are stored server-side - this is a no-op"""
-    pass
-
-
-def _load_groups():
-    """Load groups from Rocket.Chat"""
-    # In production, fetch from Rocket.Chat or database
-    # For now, return empty list - groups are created in Rocket.Chat
-    return []
-
-
-def _save_groups(groups):
-    """Save groups to Rocket.Chat - groups are stored server-side"""
-    pass
 
 # Organization Settings
 ORGANIZATION_SLUG = os.environ.get('ORGANIZATION_SLUG', '')
@@ -1144,8 +1102,8 @@ def verify_backup_code(stored_hashes, provided_code):
 @app.before_request
 def check_service_status():
     """Check kill switch before every request"""
-    # Skip for static files and chat API
-    if request.path.startswith('/static') or request.path.startswith('/api/chat'):
+    # Skip for static files
+    if request.path.startswith('/static'):
         return
     
     backend = get_backend_client()
@@ -1756,9 +1714,9 @@ def signup():
 
     if request.method == 'POST':
         invite_code_str = request.form.get('invite_code', '').strip().upper()
-        username = request.form.get('username', '').strip()
-        email = request.form.get('email', '').strip() or None
-        password = request.form.get('password', '')
+        username        = request.form.get('username', '').strip()
+        email           = request.form.get('email', '').strip() or None
+        password        = request.form.get('password', '')
         confirm_password = request.form.get('confirm_password', '')
 
         # --- Validate invite code ---
@@ -1801,7 +1759,7 @@ def signup():
 
         # --- Create user ---
         user_role = invite.role
-        is_cast = user_role == 'cast'
+        is_cast   = user_role == 'cast'
 
         new_user = User(
             username=username,
@@ -1822,30 +1780,27 @@ def signup():
 
         db.session.commit()
 
-        # Send welcome email
+        # ── Send welcome email ──────────────────────────────────────────────
         if email:
-            subject = f"Welcome to {org.get('name', 'ShowWise')}!"
-            body = f"""Hello {username},
+            send_welcome_email(
+                recipient_email=email,
+                username=username,
+                user_role=user_role,
+                login_url=request.url_root.rstrip('/') + '/login',
+                org=org,
+            )
 
-Your account has been created successfully!
-
-Username: {username}
-Role: {user_role.capitalize()}
-
-You can log in at: {request.url_root}login
-
-Welcome to the team!
-ShowWise"""
-            send_email(subject, email, body)
-
-        log_security_event('SIGNUP', username=username,
-                           description=f'Signed up via invite code {invite_code_str}')
+        log_security_event(
+            'SIGNUP', username=username,
+            description=f'Signed up via invite code {invite_code_str}'
+        )
 
         login_user(new_user, remember=False)
         flash(f'Welcome, {username}! Your account has been created.', 'success')
         return redirect(url_for('cast_events') if is_cast else url_for('dashboard'))
 
     return render_template('signup.html', organization=org, prefill_code=prefill_code)
+
 
 
 
@@ -1904,29 +1859,6 @@ def dashboard():
                          events_this_week=events_this_week,
                          next_event=next_event,
                          now=today)
-
-
-@app.route('/crew/inbox')
-@login_required
-@crew_required
-def inbox_page():
-    """Render the Telegram-style inbox page."""
-    return render_template('crew/inbox.html')
-
-
-@app.route('/crew/chat')
-@login_required
-@crew_required
-def chat_page():
-    """Redirect to Rocket.Chat in a new tab."""
-    rc = get_rocketchat_client()
-    rc_url = rc.server_url if rc.is_connected() else os.environ.get('ROCKETCHAT_URL', '')
-    
-    if not rc_url:
-        flash('Rocket.Chat is not configured')
-        return redirect(url_for('dashboard'))
-    
-    return render_template('crew/chat_redirect.html', rc_url=rc_url)
 
 
 # EQUIPMENT ROUTES
@@ -2781,19 +2713,21 @@ def assign_shift(shift_id):
     """Assign a user to a shift (admin only)"""
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
-    
+
     shift = Shift.query.get_or_404(shift_id)
-    data = request.json
-    
+    data  = request.json
+
     try:
         user_id = data['user_id']
-        user = User.query.get_or_404(user_id)
-        
+        user    = User.query.get_or_404(user_id)
+
         # Check if already assigned
-        existing = ShiftAssignment.query.filter_by(shift_id=shift_id, user_id=user_id).first()
+        existing = ShiftAssignment.query.filter_by(
+            shift_id=shift_id, user_id=user_id
+        ).first()
         if existing:
             return jsonify({'error': 'User already assigned to this shift'}), 409
-        
+
         assignment = ShiftAssignment(
             shift_id=shift_id,
             user_id=user_id,
@@ -2801,37 +2735,31 @@ def assign_shift(shift_id):
             status='pending',
             notes=data.get('notes', '')
         )
-        
         db.session.add(assignment)
         db.session.commit()
-        
-        # Send notification email
+
+        # ── Send shift assignment notification ──────────────────────────
         if user.email:
             event = shift.event
-            subject = f"🎬 Shift Assignment: {shift.title} - {event.title}"
-            body = f"""Hello {user.username},
+            send_shift_assignment_email(
+                recipient_email=user.email,
+                username=user.username,
+                event_title=event.title if event else 'Unknown Event',
+                shift_title=shift.title,
+                shift_date=shift.shift_date.strftime('%B %d, %Y at %I:%M %p'),
+                shift_end_time=shift.shift_end_date.strftime('%I:%M %p'),
+                role=shift.role or 'General Crew',
+                location=shift.location or (event.location if event else '') or 'TBD',
+                positions_needed=shift.positions_needed,
+                description=shift.description or '',
+            )
 
-You have been assigned to a shift for {event.title}!
-
-📋 Shift Details:
-  • Shift: {shift.title}
-  • Date & Time: {shift.shift_date.strftime('%B %d, %Y at %I:%M %p')} - {shift.shift_end_date.strftime('%I:%M %p')}
-  • Role: {shift.role or 'General Crew'}
-  • Location: {shift.location or event.location or 'TBD'}
-  • Positions Needed: {shift.positions_needed}
-
-📝 Description: {shift.description or 'No description'}
-
-Please log in to ShowWise to accept or reject this assignment.
-
-Best regards,
-Production Crew System"""
-            send_email(subject, user.email, body)
-        
         return jsonify({'success': True, 'id': assignment.id})
+
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 400
+
 
 @app.route('/shifts/<int:shift_id>/claim', methods=['POST'])
 @login_required
@@ -3188,41 +3116,33 @@ def my_schedule():
 @login_required
 @crew_required
 def assign_crew():
-    data = request.json
-    assignment = CrewAssignment(event_id=data['event_id'], crew_member=data['crew_member'], role=data.get('role', ''), assigned_via='webapp')
+    data       = request.json
+    assignment = CrewAssignment(
+        event_id=data['event_id'],
+        crew_member=data['crew_member'],
+        role=data.get('role', ''),
+        assigned_via='webapp'
+    )
     db.session.add(assignment)
     db.session.commit()
-    
-    # Send email notification if user has email
-    user = User.query.filter_by(username=data['crew_member']).first()
+
+    # ── Send crew assignment notification ───────────────────────────────
+    user  = User.query.filter_by(username=data['crew_member']).first()
     event = Event.query.get(data['event_id'])
+
     if user and user.email and event:
-        subject = f"🎭 You're assigned to: {event.title}"
-        body = f"""Hello {user.username},
+        send_crew_assignment_email(
+            recipient_email=user.email,
+            username=user.username,
+            event_title=event.title,
+            event_date=event.event_date.strftime('%B %d, %Y at %I:%M %p'),
+            event_location=event.location or 'TBD',
+            role=data.get('role', 'Crew Member'),
+            event_description=event.description or '',
+        )
 
-You have been assigned to an upcoming production event!
-
-📋 Event Details:
-  • Event: {event.title}
-  • Date & Time: {event.event_date.strftime('%B %d, %Y at %I:%M %p')}
-  • Location: {event.location or 'TBD'}
-  • Your Role: {data.get('role', 'Crew Member')}
-
-📝 Description: {event.description or 'No description'}
-
-Please log in to the Production Crew Management System to view:
-  • Pick lists for items to gather
-  • Stage plans for setup
-  • Other crew members assigned to this event
-  • Event details and updates
-
-Let me know if you have any questions!
-
-Best regards,
-Production Crew System"""
-        send_email(subject, user.email, body)
-    
     return jsonify({'success': True, 'id': assignment.id})
+
 
 @app.route('/crew/remove/<int:id>', methods=['DELETE'])
 @login_required
@@ -3237,31 +3157,27 @@ def remove_crew(id):
 @login_required
 @crew_required
 def resend_notification():
-    data = request.json
+    data       = request.json
     assignment = CrewAssignment.query.get(data.get('assignment_id'))
-    event = Event.query.get(data.get('event_id'))
-    
+    event      = Event.query.get(data.get('event_id'))
+
     if not assignment or not event:
         return jsonify({'error': 'Not found'}), 404
-    
+
     user = User.query.filter_by(username=assignment.crew_member).first()
     if user and user.email:
-        subject = f"Reminder: {event.title}"
-        body = f"""Hello {user.username},
-
-This is a reminder that you're assigned to:
-
-📋 Event: {event.title}
-📅 Date & Time: {event.event_date.strftime('%B %d, %Y at %I:%M %p')}
-📍 Location: {event.location or 'TBD'}
-👤 Your Role: {assignment.role or 'Crew Member'}
-
-See you there!
-
-ShowWise System"""
-        send_email(subject, user.email, body)
+        # ── Send event reminder email ───────────────────────────────────
+        send_event_reminder_email(
+            recipient_email=user.email,
+            username=user.username,
+            event_title=event.title,
+            event_date=event.event_date.strftime('%B %d, %Y at %I:%M %p'),
+            event_location=event.location or 'TBD',
+            role=assignment.role or 'Crew Member',
+            reminder_type='tomorrow',   # manual resend treated as a "tomorrow" reminder
+        )
         return jsonify({'success': True})
-    
+
     return jsonify({'error': 'User has no email'}), 400
 
 # DISCORD ROUTES
@@ -3788,6 +3704,24 @@ def email_invite():
     db.session.add(invite)
     db.session.commit()
 
+    # Build signup URL (handles reverse proxies)
+    base_url   = (data.get('base_url') or SIGNUP_BASE_URL or request.url_root).rstrip('/')
+    signup_url = f"{base_url}/signup?invite={code}"
+    role_label = data.get('role', 'crew').capitalize()
+
+    org = get_organization() or DEFAULT_ORG
+
+    # ── Send invite email ───────────────────────────────────────────────
+    sent = send_invite_email(
+        recipient_email=recipient_email,
+        recipient_name=recipient_name,
+        signup_url=signup_url,
+        invite_code=code,
+        role_label=role_label,
+        expires_at=expires_at,
+        org=org,
+    )
+
     # Build signup URL
     signup_url = f"{request.url_root}signup?invite={code}"
     org = get_organization() or DEFAULT_ORG
@@ -3883,25 +3817,20 @@ def assign_all_crew():
     """Assign all crew members to an event"""
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
-    
-    data = request.json
+
+    data     = request.json
     event_id = data.get('event_id')
-    
-    event = Event.query.get_or_404(event_id)
-    
-    # Get all users who are crew (not cast, not staff-only)
-    crew_users = User.query.filter(
-        User.user_role.in_(['crew', 'crew_admin'])
-    ).all()
-    
+    event    = Event.query.get_or_404(event_id)
+
+    crew_users  = User.query.filter(User.user_role.in_(['crew', 'crew_admin'])).all()
     added_count = 0
+
     for user in crew_users:
-        # Check if already assigned
         existing = CrewAssignment.query.filter_by(
-            event_id=event_id, 
+            event_id=event_id,
             crew_member=user.username
         ).first()
-        
+
         if not existing:
             assignment = CrewAssignment(
                 event_id=event_id,
@@ -3911,26 +3840,18 @@ def assign_all_crew():
             )
             db.session.add(assignment)
             added_count += 1
-            
-            # Send email notification
+
+            # ── Send crew assignment notification ───────────────────────
             if user.email:
-                subject = f"🎭 You're assigned to: {event.title}"
-                body = f"""Hello {user.username},
+                send_crew_assignment_email(
+                    recipient_email=user.email,
+                    username=user.username,
+                    event_title=event.title,
+                    event_date=event.event_date.strftime('%B %d, %Y at %I:%M %p'),
+                    event_location=event.location or 'TBD',
+                    role='Crew Member',
+                )
 
-You have been assigned to an upcoming production event!
-
-📋 Event Details:
-  • Event: {event.title}
-  • Date & Time: {event.event_date.strftime('%B %d, %Y at %I:%M %p')}
-  • Location: {event.location or 'TBD'}
-  • Your Role: Crew Member
-
-Please log in to ShowWise to view full event details.
-
-Best regards,
-ShowWise System"""
-                send_email(subject, user.email, body)
-    
     db.session.commit()
     return jsonify({'success': True, 'added': added_count})
 
@@ -4723,17 +4644,15 @@ def create_cast_account():
     """Create a new cast member account (admin only)"""
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
-    
-    data = request.json
+
+    data     = request.json
     username = data.get('username')
     password = data.get('password')
-    email = data.get('email')
-    
-    # Check if username already exists
+    email    = data.get('email')
+
     if User.query.filter_by(username=username).first():
         return jsonify({'error': 'Username already exists'}), 400
-    
-    # Create user with cast access
+
     user = User(
         username=username,
         password_hash=generate_password_hash(password),
@@ -4743,34 +4662,15 @@ def create_cast_account():
     )
     db.session.add(user)
     db.session.commit()
-    
-    # Send welcome email if email provided
+
+    # ── Send cast welcome / credentials email ───────────────────────────
     if email:
-        subject = "🎭 Welcome to ShowWise Cast Portal"
-        body = f"""Hello {username},
+        send_cast_welcome_email(
+            recipient_email=email,
+            username=username,
+            password=password,
+        )
 
-Welcome to the ShowWise Cast Portal!
-
-Your account has been created by your production team.
-
-Login Credentials:
-  • Username: {username}
-  • Password: {password}
-
-IMPORTANT: Please change your password after your first login.
-
-You can now access:
-  • Your production schedules
-  • Cast-specific notes and information
-  • Call times and rehearsal information
-  • Communication with the production team
-
-Login at: {request.url_root}login
-
-Break a leg!
-ShowWise Production Team"""
-        send_email(subject, email, body)
-    
     return jsonify({'success': True, 'user_id': user.id, 'username': username})
 
 # ==================== ADMIN: UPDATE CAST/EVENT LINKING ====================
@@ -4780,24 +4680,23 @@ def add_cast():
     """Add a cast member to an event (admin only)"""
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
-    
+
     data = request.json
-    
+
     # Get the user by username or user_id
     user = None
     if data.get('user_id'):
         user = User.query.get(data['user_id'])
     elif data.get('actor_name'):
         user = User.query.filter_by(username=data['actor_name']).first()
-    
+
     if not user:
         return jsonify({'error': 'User not found'}), 404
-    
+
     # Ensure user has cast access
     if not user.is_cast:
         user.is_cast = True
-    
-    # Create cast member record
+
     cast = CastMember(
         actor_name=user.username,
         character_name=data['character_name'],
@@ -4810,31 +4709,21 @@ def add_cast():
     )
     db.session.add(cast)
     db.session.commit()
-    
-    # Send notification if event specified
+
+    # ── Send cast assignment notification ───────────────────────────────
     if cast.event_id and user.email:
         event = Event.query.get(cast.event_id)
-        subject = f"🎭 You've been cast in: {event.title}"
-        body = f"""Hello {user.username},
+        if event:
+            send_cast_assignment_email(
+                recipient_email=user.email,
+                username=user.username,
+                event_title=event.title,
+                event_date=event.event_date.strftime('%B %d, %Y at %I:%M %p'),
+                event_location=event.location or 'TBD',
+                character_name=cast.character_name,
+                role_type=cast.role_type,
+            )
 
-You have been cast in an upcoming production!
-
-📋 Production Details:
-  • Event: {event.title}
-  • Character: {cast.character_name}
-  • Role: {cast.role_type}
-  • Date: {event.event_date.strftime('%B %d, %Y at %I:%M %p')}
-  • Location: {event.location or 'TBD'}
-
-Login to ShowWise Cast Portal to view:
-  • Cast-specific schedules and call times
-  • Production notes
-  • Your character information
-
-Break a leg!
-ShowWise Production Team"""
-        send_email(subject, user.email, body)
-    
     return jsonify({'success': True, 'id': cast.id})
 
 # ==================== ADMIN: CAST SCHEDULE MANAGEMENT ====================
@@ -5003,53 +4892,43 @@ def change_password_page():
     """Password change page for all users"""
     return render_template('/crew/change_password.html')
 
+
+
 @app.route('/change-password', methods=['POST'])
 @login_required
 def change_password():
     """Handle password change request"""
-    data = request.json
+    data             = request.json
     current_password = data.get('current_password')
-    new_password = data.get('new_password')
+    new_password     = data.get('new_password')
     confirm_password = data.get('confirm_password')
-    
-    # Validation
+
     if not current_password or not new_password or not confirm_password:
         return jsonify({'error': 'All fields are required'}), 400
-    
-    # Check current password
+
     if not check_password_hash(current_user.password_hash, current_password):
         return jsonify({'error': 'Current password is incorrect'}), 400
-    
-    # Check new password length
+
     if len(new_password) < 6:
         return jsonify({'error': 'New password must be at least 6 characters'}), 400
-    
-    # Check passwords match
+
     if new_password != confirm_password:
         return jsonify({'error': 'New passwords do not match'}), 400
-    
-    # Check new password is different
+
     if current_password == new_password:
         return jsonify({'error': 'New password must be different from current password'}), 400
-    
-    # Update password
+
     current_user.password_hash = generate_password_hash(new_password)
     db.session.commit()
-    
-    # Send confirmation email if email exists
+
+    # ── Send password changed confirmation ──────────────────────────────
     if current_user.email:
-        subject = "Password Changed - ShowWise"
-        body = f"""Hello {current_user.username},
+        send_password_changed_email(
+            recipient_email=current_user.email,
+            username=current_user.username,
+            changed_at=datetime.now().strftime('%B %d, %Y at %I:%M %p'),
+        )
 
-Your ShowWise password has been successfully changed.
-
-If you did not make this change, please contact your administrator immediately.
-
-Changed at: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}
-
-ShowWise Team"""
-        send_email(subject, current_user.email, body)
-    
     return jsonify({'success': True, 'message': 'Password changed successfully'})
 
 # ==================== HIRED EQUIPMENT ROUTES ====================
@@ -5911,152 +5790,7 @@ def view_designer_plan(design_id):
     return redirect(url_for('stage_designer', design_id=design_id))
 
 
-# ==================== CHAT API ====================
 
-@app.route('/api/chat/send', methods=['POST'])
-def api_chat_send():
-    """Send chat message via Rocket.Chat
-    
-    Accepts JSON fields: org_slug, message, user_name, user_email, team, recipients (list), group_id
-    """
-    data = request.json or {}
-    org_slug = data.get('org_slug', os.getenv('ORG_SLUG', ''))
-    message = data.get('message')
-    user_name = data.get('user_name') or 'Anonymous'
-    user_email = data.get('user_email')
-    team = data.get('team')
-    recipients = data.get('recipients') or []
-    group_id = data.get('group_id')
-
-    if not message:
-        return jsonify({'success': False, 'error': 'Message required'}), 400
-
-    rc = get_rocketchat_client()
-    
-    if not rc.is_connected():
-        # Fallback: log to backend
-        backend = get_backend_client()
-        if backend:
-            try:
-                backend.send_chat_message(user_name, message, user_email)
-            except Exception as e:
-                print(f"Backend chat failed: {e}")
-        return jsonify({'success': True, 'message_id': None, 'note': 'Rocket.Chat offline, logged to backend'}), 500
-
-    room_id = None
-    
-    try:
-        # Ensure sender is a Rocket.Chat user
-        _get_or_create_rc_user(user_name, email=user_email)
-
-        if group_id:
-            # Group message - use group room (group_id is the RC group name)
-            room_id = rc.get_or_create_group(str(group_id), members=[user_name])
-        
-        elif recipients:
-            if 'support' in recipients:
-                # Support DM - send to support channel or admin group
-                room_id = rc.get_or_create_channel('support', topic='Support messages')
-                if room_id:
-                    # Add support staff if needed
-                    rc.add_user_to_channel(room_id, user_name)
-            
-            elif len(recipients) == 1:
-                # Direct message with one user
-                recipient = recipients[0]
-                _get_or_create_rc_user(recipient)
-                room_id = rc.get_or_create_direct_message(recipient)
-            
-            else:
-                # Group message with multiple recipients
-                room_name = f"group_{'-'.join(sorted(recipients)[:3])}"
-                room_id = rc.get_or_create_group(room_name, members=recipients + [user_name])
-        
-        elif team:
-            # Team channel message
-            team_name = team or 'general'
-            room_id = rc.get_or_create_channel(team_name, topic=f'{team_name} team channel')
-            if room_id:
-                rc.add_user_to_channel(room_id, user_name)
-        
-        else:
-            # Default: general team channel
-            room_id = rc.get_or_create_channel('general', topic='General team channel')
-            if room_id:
-                rc.add_user_to_channel(room_id, user_name)
-
-        # Send message
-        if room_id:
-            msg_ts = rc.send_message(room_id, message, metadata={
-                'sender': user_name,
-                'email': user_email,
-                'team': team,
-                'group_id': group_id,
-                'recipients': recipients
-            })
-            
-            # Broadcast to SSE subscribers (for real-time UI updates)
-            msg_obj = {
-                'id': msg_ts,
-                'timestamp': datetime.utcnow().isoformat(),
-                'from_name': user_name,
-                'message': message,
-                'team': team,
-                'recipients': recipients,
-                'group_id': group_id
-            }
-            try:
-                _broadcast_sse(msg_obj)
-            except Exception as e:
-                print(f"SSE broadcast error: {e}")
-            
-            # Log to backend
-            backend = get_backend_client()
-            if backend:
-                try:
-                    backend.send_chat_message(user_name, message, user_email)
-                except Exception:
-                    pass
-            
-            return jsonify({'success': True, 'message_id': msg_ts})
-        
-        else:
-            return jsonify({'success': False, 'error': 'Failed to create/get Rocket.Chat room'}), 500
-    
-    except Exception as e:
-        print(f"Chat send error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/api/chat/messages', methods=['GET'])
-def api_chat_get_messages():
-    """Get chat messages"""
-    backend = get_backend_client()
-    if backend:
-        messages = backend.get_chat_messages(limit=50)
-        return jsonify({'success': True, 'messages': messages})
-    
-    return jsonify({'success': False, 'messages': []}), 500
-
-
-@app.route('/api/chat/stream')
-def api_chat_stream():
-    """SSE stream endpoint for new chat messages (in-process subscribers only)"""
-    def gen(q):
-        # Initial keep-alive comment
-        yield ': connected\n\n'
-        try:
-            while True:
-                data = q.get()
-                yield f'data: {data}\n\n'
-        except GeneratorExit:
-            return
-
-    q = queue.Queue()
-    _sse_subscribers.append(q)
-
-    return Response(stream_with_context(gen(q)), mimetype='text/event-stream')
 
 
 @app.route('/api/rocketchat/info')
@@ -6103,196 +5837,16 @@ def api_rocketchat_info():
         }), 500
 
 
-@app.route('/api/chat/stream')
-@login_required
-def api_chat_inbox(username):
-    """Return paginated messages for a user's inbox from Rocket.Chat"""
-    # Security: only allow querying your own inbox unless admin
-    if username != current_user.username and not current_user.is_admin:
-        return jsonify({'success': False, 'error': 'Forbidden'}), 403
-    
-    try:
-        page = int(request.args.get('page', 1))
-        per_page = int(request.args.get('per_page', 50))
-    except ValueError:
-        page = 1
-        per_page = 50
-
-    rc = get_rocketchat_client()
-    
-    if not rc.is_connected():
-        # Fallback: return empty inbox
-        return jsonify({
-            'success': False, 
-            'error': 'Rocket.Chat offline',
-            'total': 0, 
-            'page': page, 
-            'per_page': per_page, 
-            'messages': []
-        })
-
-    try:
-        # Get user's Rocket.Chat rooms
-        rooms = rc.list_user_rooms(username)
-        all_messages = []
-
-        # Fetch messages from each room (limit per room to avoid too much data)
-        for room in rooms:
-            room_id = room.get('_id')
-            if room_id:
-                messages = rc.get_messages(room_id, count=per_page, offset=0)
-                for msg in messages:
-                    # Convert Rocket.Chat message format to our format
-                    converted = {
-                        'id': msg.get('_id', msg.get('ts')),
-                        'timestamp': msg.get('ts', datetime.utcnow().isoformat()),
-                        'from_name': msg.get('u', {}).get('username', 'Unknown'),
-                        'message': msg.get('msg', ''),
-                        'team': room.get('name', 'general'),
-                        'recipients': [],
-                        'group_id': None,
-                        'group_name': room.get('name'),
-                        'read_by': [username]  # Assume read in Rocket.Chat
-                    }
-                    all_messages.append(converted)
-        
-        # Sort by timestamp desc
-        all_messages.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
-        
-        # Pagination
-        start = (page - 1) * per_page
-        end = start + per_page
-        paged = all_messages[start:end]
-
-        return jsonify({
-            'success': True, 
-            'total': len(all_messages), 
-            'page': page, 
-            'per_page': per_page, 
-            'messages': paged
-        })
-    
-    except Exception as e:
-        print(f"Error fetching inbox: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'total': 0,
-            'page': page,
-            'per_page': per_page,
-            'messages': []
-        }), 500
 
 
-@app.route('/api/chat/mark-read', methods=['POST'])
-@login_required
-def api_chat_mark_read():
-    """Mark message as read (Rocket.Chat handling)
-    
-    Note: Rocket.Chat handles read receipts automatically.
-    This endpoint is kept for compatibility with frontend expectations.
-    """
-    data = request.json or {}
-    msg_id = data.get('msg_id')
-    username = data.get('username') or current_user.username
-    
-    if not msg_id:
-        return jsonify({'success': False, 'error': 'msg_id required'}), 400
-
-    # In a full Rocket.Chat integration, you could:
-    # 1. Call Rocket.Chat read receipt API
-    # 2. Track in a database for analytics
-    # For now, just acknowledge
-    
-    return jsonify({'success': True, 'note': 'Rocket.Chat handles read receipts automatically'})
 
 
-@app.route('/api/chat/groups', methods=['POST'])
-@login_required
-def api_chat_create_group():
-    """Create a group chat in Rocket.Chat
-    
-    Body: name, members (list of usernames), created_by
-    """
-    data = request.json or {}
-    name = data.get('name')
-    members = data.get('members') or []
-    created_by = data.get('created_by') or current_user.username
-
-    if not name or not members:
-        return jsonify({'success': False, 'error': 'name and members required'}), 400
-
-    rc = get_rocketchat_client()
-    
-    if not rc.is_connected():
-        return jsonify({'success': False, 'error': 'Rocket.Chat offline'}), 500
-
-    try:
-        # Ensure all members are Rocket.Chat users
-        for member in members:
-            _get_or_create_rc_user(member)
-        
-        # Create group in Rocket.Chat
-        group_name = f"group_{name.replace(' ', '_').lower()}"
-        group_id = rc.get_or_create_group(group_name, members=members)
-        
-        if group_id:
-            return jsonify({
-                'success': True, 
-                'group': {
-                    'id': group_id,
-                    'name': name,
-                    'members': members,
-                    'created_by': created_by,
-                    'created_at': datetime.utcnow().isoformat()
-                }
-            })
-        else:
-            return jsonify({'success': False, 'error': 'Failed to create group in Rocket.Chat'}), 500
-    
-    except Exception as e:
-        print(f"Error creating group: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@app.route('/api/chat/groups/<username>', methods=['GET'])
-@login_required
-def api_chat_list_groups(username):
-    """List user's groups in Rocket.Chat
-    
-    Only allow listing your own groups unless admin
-    """
-    if username != current_user.username and not current_user.is_admin:
-        return jsonify({'success': False, 'error': 'Forbidden'}), 403
 
-    rc = get_rocketchat_client()
-    
-    if not rc.is_connected():
-        return jsonify({'success': True, 'groups': []})
 
-    try:
-        # In Rocket.Chat, users are members of groups automatically
-        # You could fetch the user's rooms and filter for type 'p' (private)
-        rooms = rc.list_user_rooms(username)
-        
-        groups = [
-            {
-                'id': r.get('_id'),
-                'name': r.get('name'),
-                'members': r.get('usernames', []),
-                'created_at': r.get('ts', datetime.utcnow().isoformat())
-            }
-            for r in rooms
-            if r.get('teamMain') is False  # Filter out main team channels
-        ]
-        
-        return jsonify({'success': True, 'groups': groups})
-    
-    except Exception as e:
-        print(f"Error listing groups: {e}")
-        return jsonify({'success': True, 'groups': []})
+
+
 
 
 @app.route('/api/users', methods=['GET'])
@@ -6304,68 +5858,10 @@ def api_list_users():
     return jsonify({'success': True, 'users': user_list})
 
 
-@app.route('/api/chat/unread-count/<username>')
-@login_required
-def api_chat_unread_count(username):
-    """Get unread message count from Rocket.Chat
-    
-    Security: only allow checking your own unread count unless admin
-    """
-    if username != current_user.username and not current_user.is_admin:
-        return jsonify({'success': False, 'error': 'Forbidden'}), 403
-
-    rc = get_rocketchat_client()
-    
-    if not rc.is_connected():
-        return jsonify({'success': True, 'unread': 0})
-
-    try:
-        # Fetch user's rooms and sum unread counts
-        rooms = rc.list_user_rooms(username)
-        
-        unread_count = 0
-        for room in rooms:
-            # Rocket.Chat provides unread count
-            unread = room.get('unread', 0)
-            unread_count += unread
-        
-        return jsonify({'success': True, 'unread': unread_count})
-    
-    except Exception as e:
-        print(f"Error getting unread count: {e}")
-        return jsonify({'success': True, 'unread': 0})
 
 
-@app.route('/api/chat/mark-all-read', methods=['POST'])
-@login_required
-def api_chat_mark_all_read():
-    """Mark all messages as read in Rocket.Chat
-    
-    Security: only allow marking own messages unless admin
-    """
-    data = request.json or {}
-    username = data.get('username') or current_user.username
-    
-    if username != current_user.username and not current_user.is_admin:
-        return jsonify({'success': False, 'error': 'Forbidden'}), 403
 
-    rc = get_rocketchat_client()
-    
-    if not rc.is_connected():
-        return jsonify({'success': False, 'error': 'Rocket.Chat offline'}), 500
 
-    try:
-        # Fetch user's rooms
-        rooms = rc.list_user_rooms(username)
-        
-        # Mark all as read in each room (Rocket.Chat handles this automatically)
-        # This is a placeholder - in a full implementation, you'd call Rocket.Chat API
-        
-        return jsonify({'success': True, 'note': 'All messages marked as read (Rocket.Chat handles this automatically)'})
-    
-    except Exception as e:
-        print(f"Error marking all as read: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 # ==================== PROFILE PICTURE & ACCOUNT MANAGEMENT ====================
@@ -6510,135 +6006,121 @@ def forgot_password():
     if request.method == 'GET':
         org = get_organization() or DEFAULT_ORG
         return render_template('forgot_password.html', organization=org)
-    
-    # POST request - send reset email
-    data = request.json
-    username_or_email = data.get('username_or_email', '').strip()
-    
+
+    # POST — send reset email
+    data                 = request.json
+    username_or_email    = data.get('username_or_email', '').strip()
+
     if not username_or_email:
         return jsonify({'error': 'Username or email required'}), 400
-    
-    # Find user by username or email
+
     user = User.query.filter(
         (User.username == username_or_email) | (User.email == username_or_email)
     ).first()
-    
+
     if not user:
-        # Don't reveal if user exists - security best practice
-        return jsonify({'success': True, 'message': 'If that account exists, an email has been sent with reset instructions'}), 200
-    
+        # Don't reveal whether the account exists
+        return jsonify({
+            'success': True,
+            'message': 'If that account exists, an email has been sent with reset instructions'
+        }), 200
+
     if not user.email:
         return jsonify({'error': 'This account has no email address associated'}), 400
-    
+
     try:
-        # Generate reset token (valid for 24 hours)
-        reset_token = secrets.token_urlsafe(32)
-        user.password_reset_token = reset_token
+        # Generate reset token (valid 24 h)
+        reset_token              = secrets.token_urlsafe(32)
+        user.password_reset_token  = reset_token
         user.password_reset_expiry = datetime.utcnow() + timedelta(hours=24)
         db.session.commit()
-        
-        # Build reset URL
-        reset_url = f"{MAIN_SERVER_URL}/password/reset/{reset_token}"
-        org = get_organization() or DEFAULT_ORG
-        
-        # Send reset email
-        subject = f"Password Reset Request - {org.get('name', 'ShowWise')}"
-        body = f"""Hello {user.username},
 
-You've requested to reset your password. Click the link below (or copy it into your browser):
+        reset_url = f"{SIGNUP_BASE_URL}/password/reset/{reset_token}"
+        org       = get_organization() or DEFAULT_ORG
 
-{reset_url}
+        # ── Send password reset email ───────────────────────────────────
+        sent = send_password_reset_email(
+            recipient_email=user.email,
+            username=user.username,
+            reset_url=reset_url,
+            org=org,
+        )
 
-This link will expire in 24 hours.
-
-If you did not request this, please ignore this email and your password will remain unchanged.
-
-ShowWise Team
-{org.get('name', 'ShowWise')}"""
-        
-        sent = send_email(subject, user.email, body)
-        
         if sent:
             log_security_event('PASSWORD_RESET_REQUESTED', username=user.username)
             return jsonify({'success': True, 'message': 'Password reset email sent'}), 200
         else:
-            return jsonify({'error': 'Could not send email (check email configuration)'}), 500
-    
+            return jsonify({
+                'error': 'Could not send email (check email configuration)'
+            }), 500
+
     except Exception as e:
         print(f"Password forgot error: {e}")
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/password/reset/<token>', methods=['GET', 'POST'])
 def reset_password(token):
     """Password reset page and handler"""
     if request.method == 'GET':
-        # Verify token exists and is valid
         user = User.query.filter_by(password_reset_token=token).first()
-        
-        if not user or not user.password_reset_expiry or user.password_reset_expiry < datetime.utcnow():
+        if not user or not user.password_reset_expiry \
+                or user.password_reset_expiry < datetime.utcnow():
             flash('Password reset link is invalid or has expired', 'error')
             return redirect(url_for('login'))
-        
+
         org = get_organization() or DEFAULT_ORG
         return render_template('reset_password.html', token=token, organization=org)
-    
-    # POST request - reset the password
-    data = request.json
-    new_password = data.get('new_password', '').strip()
+
+    # POST — apply the new password
+    data             = request.json
+    new_password     = data.get('new_password', '').strip()
     confirm_password = data.get('confirm_password', '').strip()
-    
-    # Verify token
+
     user = User.query.filter_by(password_reset_token=token).first()
-    
+
     if not user:
         return jsonify({'error': 'Invalid reset token'}), 400
-    
+
     if not user.password_reset_expiry or user.password_reset_expiry < datetime.utcnow():
-        # Clear expired token
-        user.password_reset_token = None
+        user.password_reset_token  = None
         user.password_reset_expiry = None
         db.session.commit()
         return jsonify({'error': 'Reset link has expired'}), 400
-    
-    # Validate new password
+
     if len(new_password) < 6:
         return jsonify({'error': 'Password must be at least 6 characters'}), 400
-    
+
     if new_password != confirm_password:
         return jsonify({'error': 'Passwords do not match'}), 400
-    
+
     try:
-        # Update password
-        user.password_hash = generate_password_hash(new_password)
-        user.password_reset_token = None
+        user.password_hash         = generate_password_hash(new_password)
+        user.password_reset_token  = None
         user.password_reset_expiry = None
         db.session.commit()
-        
-        # Log security event
+
         log_security_event('PASSWORD_RESET_COMPLETED', username=user.username)
-        
-        # Send confirmation email
+
+        # ── Send password changed confirmation ──────────────────────────
         if user.email:
-            subject = "Your Password Has Been Reset - ShowWise"
-            body = f"""Hello {user.username},
+            send_password_changed_email(
+                recipient_email=user.email,
+                username=user.username,
+                changed_at=datetime.now().strftime('%B %d, %Y at %I:%M %p'),
+            )
 
-Your password has been successfully reset.
-
-If you did not make this change, please contact your administrator immediately.
-
-ShowWise Team"""
-            send_email(subject, user.email, body)
-        
         return jsonify({
             'success': True,
             'message': 'Password reset successfully',
             'redirect': url_for('login')
         }), 200
-    
+
     except Exception as e:
         db.session.rollback()
         print(f"Password reset error: {e}")
         return jsonify({'error': str(e)}), 500
+
 
 # ==================== EVENT JOIN FROM CALENDAR ====================
 

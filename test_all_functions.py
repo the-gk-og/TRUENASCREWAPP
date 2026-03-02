@@ -346,30 +346,6 @@ class TestEquipmentRoutes:
 class TestChatRoutes:
     """Test chat routes"""
     
-    def test_inbox_page(self, client, test_user):
-        """Test inbox page loads"""
-        client.post('/login', data={
-            'username': 'testuser',
-            'password': 'password123'
-        })
-        response = client.get('/crew/inbox')
-        assert response.status_code == 200
-    
-    def test_chat_page_redirect(self, client, test_user):
-        """Test chat page redirects"""
-        client.post('/login', data={
-            'username': 'testuser',
-            'password': 'password123'
-        })
-        with patch('app.get_rocketchat_client') as mock_rc:
-            mock_client = MagicMock()
-            mock_client.is_connected.return_value = True
-            mock_client.server_url = 'http://rocket.test'
-            mock_rc.return_value = mock_client
-            
-            response = client.get('/crew/chat')
-            assert response.status_code == 200
-    
     @patch('app.get_rocketchat_client')
     def test_rocketchat_info(self, mock_rc, client, test_user):
         """Test Rocket.Chat info endpoint"""

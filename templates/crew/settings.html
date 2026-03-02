@@ -12,6 +12,9 @@
     <button class="settings-tab active" onclick="switchTab('security')" id="tab-security">
         <i class="fas fa-shield-alt"></i> Security
     </button>
+    <button class="settings-tab" onclick="switchTab('appearance')" id="tab-appearance">
+        <i class="fas fa-palette"></i> Appearance
+    </button>
     <button class="settings-tab" onclick="switchTab('2fa')" id="tab-2fa">
         <i class="fas fa-mobile-alt"></i> Two-Factor Auth
         {% if tfa and tfa.enabled %}
@@ -41,8 +44,8 @@
             <h3 class="card-title"><i class="fas fa-key"></i> Change Password</h3>
         </div>
 
-        <div style="background: #f0f4ff; padding: 1rem; border-radius: 8px; border-left: 4px solid var(--primary); margin-bottom: 1.5rem;">
-            <p style="margin: 0; color: #1e40af; font-size: 0.95rem;">
+        <div style="background: var(--bg-nav-active); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--primary); margin-bottom: 1.5rem;">
+            <p style="margin: 0; color: var(--text-primary); font-size: 0.95rem;">
                 <i class="fas fa-info-circle"></i> <strong>Password Requirements:</strong>
                 Minimum 6 characters, must be different from your current password.
             </p>
@@ -60,7 +63,7 @@
                     <div style="height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden;">
                         <div id="passwordStrength" style="height: 100%; width: 0%; transition: all 0.3s ease;"></div>
                     </div>
-                    <small id="strengthText" style="color: #6b7280; display: block; margin-top: 0.25rem;"></small>
+                    <small id="strengthText" style="color: var(--text-secondary); display: block; margin-top: 0.25rem;"></small>
                 </div>
             </div>
             <div class="form-group">
@@ -100,7 +103,7 @@
                             accept="image/png,image/jpeg,image/gif,image/webp"
                             style="padding: 0.5rem; border: 2px dashed var(--border); border-radius: 8px; width: 100%; cursor: pointer;"
                         >
-                        <small style="color: #6b7280; display: block; margin-top: 0.5rem;">PNG, JPG, GIF, or WebP max 16MB</small>
+                        <small style="color: var(--text-secondary); display: block; margin-top: 0.5rem;">PNG, JPG, GIF, or WebP max 16MB</small>
                     </div>
                     
                     <div style="display: flex; gap: 1rem;">
@@ -127,20 +130,20 @@
         </div>
         
         <div id="accountInfoView" style="display: grid; gap: 0.75rem; max-width: 400px;">
-            <div style="display: flex; justify-content: space-between; padding: 0.75rem; background: #f9fafb; border-radius: 8px;">
-                <span style="color: #6b7280;">Username</span>
+            <div style="display: flex; justify-content: space-between; padding: 0.75rem; background: var(--bg-table-head); border-radius: 8px;">
+                <span style="color: var(--text-secondary);">Username</span>
                 <strong id="usernameDisplay">{{ current_user.username }}</strong>
             </div>
-            <div style="display: flex; justify-content: space-between; padding: 0.75rem; background: #f9fafb; border-radius: 8px;">
-                <span style="color: #6b7280;">Email</span>
+            <div style="display: flex; justify-content: space-between; padding: 0.75rem; background: var(--bg-table-head); border-radius: 8px;">
+                <span style="color: var(--text-secondary);">Email</span>
                 <strong id="emailDisplay">{{ current_user.email or 'Not set' }}</strong>
             </div>
-            <div style="display: flex; justify-content: space-between; padding: 0.75rem; background: #f9fafb; border-radius: 8px;">
-                <span style="color: #6b7280;">Role</span>
+            <div style="display: flex; justify-content: space-between; padding: 0.75rem; background: var(--bg-table-head); border-radius: 8px;">
+                <span style="color: var(--text-secondary);">Role</span>
                 <strong>{% if current_user.is_admin %}Admin{% elif current_user.is_cast %}Cast{% else %}Crew{% endif %}</strong>
             </div>
-            <div style="display: flex; justify-content: space-between; padding: 0.75rem; background: #f9fafb; border-radius: 8px;">
-                <span style="color: #6b7280;">Member Since</span>
+            <div style="display: flex; justify-content: space-between; padding: 0.75rem; background: var(--bg-table-head); border-radius: 8px;">
+                <span style="color: var(--text-secondary);">Member Since</span>
                 <strong>{{ current_user.created_at.strftime('%B %d, %Y') }}</strong>
             </div>
             <button type="button" class="btn btn-primary" onclick="toggleAccountEdit()" style="align-self: flex-start; margin-top: 0.5rem;">
@@ -149,31 +152,22 @@
         </div>
         
         <form id="accountInfoForm" style="display: none; margin-top: 1.5rem;">
-            <div style="background: #f0f4ff; padding: 1rem; border-radius: 8px; border-left: 4px solid var(--primary); margin-bottom: 1.5rem;">
-                <p style="margin: 0; color: #1e40af; font-size: 0.95rem;">
+            <div style="background: var(--bg-nav-active); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--primary); margin-bottom: 1.5rem;">
+                <p style="margin: 0; color: var(--text-primary); font-size: 0.95rem;">
                     <i class="fas fa-info-circle"></i> <strong>Note:</strong> Leave fields blank to keep current values.
                 </p>
             </div>
             
             <div class="form-group">
                 <label for="editUsername"><i class="fas fa-user"></i> Username</label>
-                <input 
-                    type="text" 
-                    id="editUsername" 
-                    placeholder="Enter new username (min 3 chars, leave blank to keep)" 
-                    minlength="3"
-                >
-                <small style="color: #6b7280;">Minimum 3 characters</small>
+                <input type="text" id="editUsername" placeholder="Enter new username (min 3 chars, leave blank to keep)" minlength="3">
+                <small style="color: var(--text-secondary);">Minimum 3 characters</small>
             </div>
             
             <div class="form-group">
                 <label for="editEmail"><i class="fas fa-envelope"></i> Email Address</label>
-                <input 
-                    type="email" 
-                    id="editEmail" 
-                    placeholder="Enter email (leave blank to remove)"
-                >
-                <small style="color: #6b7280;">Used for notifications and password reset</small>
+                <input type="email" id="editEmail" placeholder="Enter email (leave blank to remove)">
+                <small style="color: var(--text-secondary);">Used for notifications and password reset</small>
             </div>
             
             <div id="accountInfoMessage" style="margin-bottom: 1rem; display: none; padding: 0.75rem; border-radius: 8px;" class="message"></div>
@@ -188,6 +182,150 @@
             </div>
         </form>
     </div>
+</div>
+
+<!-- ==================== APPEARANCE TAB ==================== -->
+<div class="tab-panel" id="panel-appearance">
+
+    <!-- Dark Mode -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-moon"></i> Display Theme</h3>
+        </div>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Choose between light and dark interface themes. Your preference is saved automatically.</p>
+
+        <div class="appearance-option-row" id="theme-light-row" onclick="applyTheme('light')">
+            <div class="appearance-preview theme-preview-light">
+                <div class="prev-topbar"></div>
+                <div class="prev-body">
+                    <div class="prev-sidebar"></div>
+                    <div class="prev-content">
+                        <div class="prev-card"></div>
+                        <div class="prev-card"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="appearance-option-info">
+                <strong>Light Mode</strong>
+                <span>Bright, clean interface — great for well-lit environments</span>
+            </div>
+            <div class="appearance-radio" id="radio-theme-light"><i class="fas fa-check-circle"></i></div>
+        </div>
+
+        <div class="appearance-option-row" id="theme-dark-row" onclick="applyTheme('dark')">
+            <div class="appearance-preview theme-preview-dark">
+                <div class="prev-topbar"></div>
+                <div class="prev-body">
+                    <div class="prev-sidebar"></div>
+                    <div class="prev-content">
+                        <div class="prev-card"></div>
+                        <div class="prev-card"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="appearance-option-info">
+                <strong>Dark Mode</strong>
+                <span>Easy on the eyes in low-light conditions</span>
+            </div>
+            <div class="appearance-radio" id="radio-theme-dark"><i class="fas fa-check-circle"></i></div>
+        </div>
+    </div>
+
+    <!-- Colour Vision / Colorblind Modes -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-eye"></i> Colour Vision Mode</h3>
+        </div>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+            Adjust the colour palette to improve visibility for different types of colour vision deficiency.
+            Changes take effect immediately across all pages.
+        </p>
+
+        <div class="cb-grid">
+
+            <div class="cb-card" id="cbcard-none" onclick="applyCb('none')">
+                <div class="cb-card-preview">
+                    <span class="cbp-dot" style="background:#6366f1"></span>
+                    <span class="cbp-dot" style="background:#10b981"></span>
+                    <span class="cbp-dot" style="background:#ef4444"></span>
+                    <span class="cbp-dot" style="background:#f59e0b"></span>
+                    <span class="cbp-dot" style="background:#ec4899"></span>
+                </div>
+                <div class="cb-card-label">
+                    <strong>Default</strong>
+                    <span>Standard colour palette</span>
+                </div>
+                <div class="cb-card-check" id="cbcheck-none"><i class="fas fa-check-circle"></i></div>
+            </div>
+
+            <div class="cb-card" id="cbcard-deuteranopia" onclick="applyCb('deuteranopia')">
+                <div class="cb-card-preview">
+                    <span class="cbp-dot" style="background:#0066cc"></span>
+                    <span class="cbp-dot" style="background:#0099cc"></span>
+                    <span class="cbp-dot" style="background:#cc6600"></span>
+                    <span class="cbp-dot" style="background:#ffcc00"></span>
+                    <span class="cbp-dot" style="background:#e6aa00"></span>
+                </div>
+                <div class="cb-card-label">
+                    <strong>Deuteranopia</strong>
+                    <span>Red-green (green-blind) — most common type</span>
+                </div>
+                <div class="cb-card-check" id="cbcheck-deuteranopia"><i class="fas fa-check-circle"></i></div>
+            </div>
+
+            <div class="cb-card" id="cbcard-protanopia" onclick="applyCb('protanopia')">
+                <div class="cb-card-preview">
+                    <span class="cbp-dot" style="background:#0077bb"></span>
+                    <span class="cbp-dot" style="background:#009988"></span>
+                    <span class="cbp-dot" style="background:#cc3311"></span>
+                    <span class="cbp-dot" style="background:#ee9900"></span>
+                    <span class="cbp-dot" style="background:#ee7733"></span>
+                </div>
+                <div class="cb-card-label">
+                    <strong>Protanopia</strong>
+                    <span>Red-blind — red tones appear darker</span>
+                </div>
+                <div class="cb-card-check" id="cbcheck-protanopia"><i class="fas fa-check-circle"></i></div>
+            </div>
+
+            <div class="cb-card" id="cbcard-tritanopia" onclick="applyCb('tritanopia')">
+                <div class="cb-card-preview">
+                    <span class="cbp-dot" style="background:#cc0077"></span>
+                    <span class="cbp-dot" style="background:#007733"></span>
+                    <span class="cbp-dot" style="background:#ff2200"></span>
+                    <span class="cbp-dot" style="background:#dd5500"></span>
+                    <span class="cbp-dot" style="background:#00aa44"></span>
+                </div>
+                <div class="cb-card-label">
+                    <strong>Tritanopia</strong>
+                    <span>Blue-yellow blind — blue tones altered</span>
+                </div>
+                <div class="cb-card-check" id="cbcheck-tritanopia"><i class="fas fa-check-circle"></i></div>
+            </div>
+
+            <div class="cb-card" id="cbcard-high-contrast" onclick="applyCb('high-contrast')">
+                <div class="cb-card-preview" style="background:#1a1a1a; border-radius: 8px; padding: 0.5rem;">
+                    <span class="cbp-dot" style="background:#77aaff"></span>
+                    <span class="cbp-dot" style="background:#44ff88"></span>
+                    <span class="cbp-dot" style="background:#ff6655"></span>
+                    <span class="cbp-dot" style="background:#ffcc44"></span>
+                    <span class="cbp-dot" style="background:#ffffff"></span>
+                </div>
+                <div class="cb-card-label">
+                    <strong>High Contrast</strong>
+                    <span>Maximum legibility for low vision</span>
+                </div>
+                <div class="cb-card-check" id="cbcheck-high-contrast"><i class="fas fa-check-circle"></i></div>
+            </div>
+
+        </div>
+
+        <div class="cb-info-box" id="cbInfoBox" style="display:none;">
+            <i class="fas fa-info-circle"></i>
+            <span id="cbInfoText"></span>
+        </div>
+    </div>
+
 </div>
 
 <!-- ==================== 2FA TAB ==================== -->
@@ -218,16 +356,15 @@
             Your account is protected with 2FA.
         </div>
 
-        <!-- ==================== SKIP 2FA FOR OAUTH TOGGLE ==================== -->
-        <div style="background: #f9fafb; border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; margin-bottom: 1.5rem;">
+        <div style="background: var(--bg-table-head); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; margin-bottom: 1.5rem;">
             <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
                 <div>
-                    <h4 style="margin: 0 0 0.25rem; color: var(--dark); font-size: 0.95rem;">
+                    <h4 style="margin: 0 0 0.25rem; color: var(--text-primary); font-size: 0.95rem;">
                         <i class="fab fa-google" style="color: #4285f4; margin-right: 0.4rem;"></i>
                         Skip 2FA when signing in with Google
                     </h4>
-                    <p style="margin: 0; color: #6b7280; font-size: 0.85rem;">
-                        When enabled, signing in with your linked Google account will bypass the TOTP prompt. Google's own security protects the login.
+                    <p style="margin: 0; color: var(--text-secondary); font-size: 0.85rem;">
+                        When enabled, signing in with your linked Google account will bypass the TOTP prompt.
                     </p>
                 </div>
                 <label class="toggle-switch" title="Toggle 2FA bypass for Google OAuth">
@@ -237,7 +374,7 @@
                     <span class="toggle-slider"></span>
                 </label>
             </div>
-            <p id="skip2faOauthStatus" style="margin: 0.75rem 0 0; font-size: 0.82rem; color: #6b7280;"></p>
+            <p id="skip2faOauthStatus" style="margin: 0.75rem 0 0; font-size: 0.82rem; color: var(--text-muted);"></p>
         </div>
 
         <button onclick="showDisable2FA()" class="btn btn-danger">
@@ -255,7 +392,7 @@
             {% if current_user.discord_id %}
             <span style="color: var(--success); font-weight: 600;"><i class="fas fa-check-circle"></i> Linked</span>
             {% else %}
-            <span style="color: #6b7280; font-weight: 600;">Not Linked</span>
+            <span style="color: var(--text-muted); font-weight: 600;">Not Linked</span>
             {% endif %}
         </div>
 
@@ -268,9 +405,9 @@
             <i class="fas fa-unlink"></i> Unlink Discord
         </button>
         {% else %}
-        <div style="background: #f0f4ff; padding: 1.5rem; border-radius: 8px; border-left: 4px solid var(--primary); margin-bottom: 1.5rem;">
+        <div style="background: var(--bg-nav-active); padding: 1.5rem; border-radius: 8px; border-left: 4px solid var(--primary); margin-bottom: 1.5rem;">
             <h4 style="margin-bottom: 1rem; color: var(--primary);">How to Link:</h4>
-            <ol style="margin-left: 1.5rem; line-height: 1.8;">
+            <ol style="margin-left: 1.5rem; line-height: 1.8; color: var(--text-primary);">
                 <li>Use command <code>/link-account</code> in Discord</li>
                 <li>Enter your ShowWise username and password</li>
                 <li>Your account will be linked automatically</li>
@@ -278,15 +415,15 @@
         </div>
         {% endif %}
 
-        <h4 style="margin: 1.5rem 0 1rem;">Benefits of Linking</h4>
+        <h4 style="margin: 1.5rem 0 1rem; color: var(--text-primary);">Benefits of Linking</h4>
         <div style="display: grid; gap: 0.75rem;">
-            <div style="background: #f9fafb; padding: 1rem; border-radius: 8px;">
-                <strong><i class="fas fa-bell" style="color: var(--warning);"></i> Event Notifications</strong>
-                <p style="color: #6b7280; font-size: 0.9rem; margin-top: 0.25rem;">Get pinged 1 week and 1 day before events you're assigned to.</p>
+            <div style="background: var(--bg-table-head); padding: 1rem; border-radius: 8px;">
+                <strong style="color: var(--text-primary);"><i class="fas fa-bell" style="color: var(--warning);"></i> Event Notifications</strong>
+                <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 0.25rem;">Get pinged 1 week and 1 day before events you're assigned to.</p>
             </div>
-            <div style="background: #f9fafb; padding: 1rem; border-radius: 8px;">
-                <strong><i class="fas fa-comments" style="color: var(--success);"></i> Team Communication</strong>
-                <p style="color: #6b7280; font-size: 0.9rem; margin-top: 0.25rem;">Collaborate with your crew while managing events here.</p>
+            <div style="background: var(--bg-table-head); padding: 1rem; border-radius: 8px;">
+                <strong style="color: var(--text-primary);"><i class="fas fa-comments" style="color: var(--success);"></i> Team Communication</strong>
+                <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 0.25rem;">Collaborate with your crew while managing events here.</p>
             </div>
         </div>
     </div>
@@ -300,18 +437,18 @@
             {% if google_conn %}
             <span style="color: var(--success); font-weight: 600;"><i class="fas fa-check-circle"></i> Connected</span>
             {% else %}
-            <span style="color: #6b7280; font-weight: 600;">Not Connected</span>
+            <span style="color: var(--text-muted); font-weight: 600;">Not Connected</span>
             {% endif %}
         </div>
 
         {% if google_conn %}
-        <p style="margin-bottom: 1rem;">Linked to: <strong>{{ google_conn.email }}</strong></p>
-        <p style="color: #6b7280; font-size: 0.9rem; margin-bottom: 1.5rem;">You can sign in using your Google account.</p>
+        <p style="margin-bottom: 1rem; color: var(--text-primary);">Linked to: <strong>{{ google_conn.email }}</strong></p>
+        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1.5rem;">You can sign in using your Google account.</p>
         <button onclick="showUnlinkGoogle()" class="btn btn-danger">
             <i class="fab fa-google"></i> Unlink Google Account
         </button>
         {% else %}
-        <p style="margin-bottom: 1.5rem;">Link your Google account to sign in with one click on the login page.</p>
+        <p style="margin-bottom: 1.5rem; color: var(--text-primary);">Link your Google account to sign in with one click on the login page.</p>
         <a href="{{ url_for('google_login') }}" class="btn btn-primary">
             <svg width="18" height="18" viewBox="0 0 24 24" style="margin-right: 4px;">
                 <path fill="#fff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -338,7 +475,7 @@
                 <img id="qrCode" src="" alt="QR Code" style="max-width: 280px; border: 2px solid var(--border); padding: 1rem; border-radius: 8px;">
             </div>
             <p style="margin-bottom: 0.5rem; font-weight: 600;">Or enter this code manually:</p>
-            <div style="background: var(--light); padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem;">
+            <div style="background: var(--bg-table-head); padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem;">
                 <code id="secretKey" style="font-size: 1.1rem; letter-spacing: 2px; flex: 1;"></code>
                 <button onclick="copySecret()" class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;"><i class="fas fa-copy"></i></button>
             </div>
@@ -363,7 +500,7 @@
                 <i class="fas fa-exclamation-triangle" style="color: var(--warning);"></i>
                 <strong>Save these backup codes!</strong> They can only be shown once.
             </div>
-            <div style="background: var(--light); padding: 1.5rem; border-radius: 8px; margin: 1.5rem 0;">
+            <div style="background: var(--bg-table-head); padding: 1.5rem; border-radius: 8px; margin: 1.5rem 0;">
                 <div id="backupCodes" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; font-family: monospace; font-size: 1rem;"></div>
             </div>
             <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
@@ -397,7 +534,7 @@
     <div class="modal-content">
         <span class="close" onclick="hideModal('unlinkDiscordModal')">&times;</span>
         <h2 style="margin-bottom: 1rem; color: var(--danger);"><i class="fas fa-unlink"></i> Unlink Discord</h2>
-        <p style="margin-bottom: 1.5rem; color: #666;">You will stop receiving Discord notifications and won't be able to use Discord bot commands.</p>
+        <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">You will stop receiving Discord notifications and won't be able to use Discord bot commands.</p>
         <div style="display: flex; gap: 1rem;">
             <button onclick="unlinkDiscord()" class="btn btn-danger" style="flex: 1;"><i class="fas fa-unlink"></i> Unlink</button>
             <button onclick="hideModal('unlinkDiscordModal')" class="btn btn-primary" style="flex: 1;">Cancel</button>
@@ -406,29 +543,21 @@
 </div>
 
 <style>
+/* ---- Tabs ---- */
 .settings-tab {
     padding: 0.85rem 1.5rem;
-    border: none;
-    background: none;
-    cursor: pointer;
-    font-weight: 600;
-    color: #6b7280;
+    border: none; background: none; cursor: pointer;
+    font-weight: 600; color: var(--text-secondary);
     border-bottom: 3px solid transparent;
     transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    white-space: nowrap;
-    font-size: 0.95rem;
+    display: flex; align-items: center; gap: 0.5rem;
+    white-space: nowrap; font-size: 0.95rem;
 }
 .settings-tab:hover { color: var(--primary); }
 .settings-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
 .tab-badge {
-    padding: 0.15rem 0.5rem;
-    border-radius: 10px;
-    font-size: 0.7rem;
-    font-weight: 700;
-    text-transform: uppercase;
+    padding: 0.15rem 0.5rem; border-radius: 10px;
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
 }
 .tab-badge.success { background: #d1fae5; color: #065f46; }
 .tab-badge.warning { background: #fef3c7; color: #78350f; }
@@ -436,44 +565,119 @@
 .tab-panel.active { display: block; animation: fadeIn 0.2s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 
-/* Toggle switch */
+/* ---- Toggle switch ---- */
 .toggle-switch {
-    position: relative;
-    display: inline-block;
-    width: 52px;
-    height: 28px;
-    flex-shrink: 0;
-    cursor: pointer;
+    position: relative; display: inline-block;
+    width: 52px; height: 28px; flex-shrink: 0; cursor: pointer;
 }
 .toggle-switch input { opacity: 0; width: 0; height: 0; }
 .toggle-slider {
-    position: absolute;
-    inset: 0;
-    background: #d1d5db;
-    border-radius: 28px;
-    transition: 0.3s;
+    position: absolute; inset: 0;
+    background: var(--border); border-radius: 28px; transition: 0.3s;
 }
 .toggle-slider::before {
-    content: '';
-    position: absolute;
-    width: 22px;
-    height: 22px;
-    left: 3px;
-    bottom: 3px;
-    background: white;
-    border-radius: 50%;
-    transition: 0.3s;
+    content: ''; position: absolute;
+    width: 22px; height: 22px; left: 3px; bottom: 3px;
+    background: var(--bg-body); border-radius: 50%; transition: 0.3s;
     box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 .toggle-switch input:checked + .toggle-slider { background: var(--success); }
 .toggle-switch input:checked + .toggle-slider::before { transform: translateX(24px); }
+
+/* ---- Appearance tab: theme rows ---- */
+.appearance-option-row {
+    display: flex; align-items: center; gap: 1.25rem;
+    padding: 1rem; border-radius: 10px;
+    border: 2px solid var(--border);
+    cursor: pointer; margin-bottom: 0.75rem;
+    transition: border-color 0.2s, background 0.2s;
+}
+.appearance-option-row:hover { border-color: var(--primary); background: var(--bg-nav-hover); }
+.appearance-option-row.selected { border-color: var(--primary); background: var(--bg-nav-active); }
+
+.appearance-preview {
+    width: 90px; height: 56px; border-radius: 8px;
+    overflow: hidden; flex-shrink: 0;
+    border: 1px solid var(--border);
+}
+.appearance-preview .prev-topbar { height: 12px; }
+.appearance-preview .prev-body { display: flex; height: 44px; }
+.appearance-preview .prev-sidebar { width: 22px; }
+.appearance-preview .prev-content { flex: 1; display: flex; flex-direction: column; gap: 3px; padding: 3px; }
+.appearance-preview .prev-card { flex: 1; border-radius: 2px; }
+
+.theme-preview-light { background: #f9fafb; }
+.theme-preview-light .prev-topbar { background: #ffffff; border-bottom: 1px solid #e5e7eb; }
+.theme-preview-light .prev-sidebar { background: #ffffff; border-right: 1px solid #e5e7eb; }
+.theme-preview-light .prev-card { background: #ffffff; border: 1px solid #e5e7eb; }
+
+.theme-preview-dark { background: #0f1117; }
+.theme-preview-dark .prev-topbar { background: #1a1d27; border-bottom: 1px solid #2d3148; }
+.theme-preview-dark .prev-sidebar { background: #1a1d27; border-right: 1px solid #2d3148; }
+.theme-preview-dark .prev-card { background: #1e2130; border: 1px solid #2d3148; }
+
+.appearance-option-info { flex: 1; }
+.appearance-option-info strong { display: block; font-size: 0.95rem; color: var(--text-primary); margin-bottom: 0.2rem; }
+.appearance-option-info span { font-size: 0.85rem; color: var(--text-secondary); }
+
+.appearance-radio { font-size: 1.3rem; color: var(--border); transition: color 0.2s; flex-shrink: 0; }
+.appearance-option-row.selected .appearance-radio { color: var(--primary); }
+
+/* ---- Colorblind mode cards ---- */
+.cb-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+/* Responsive: single column on smaller screens */
+@media (max-width: 600px) {
+    .cb-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.cb-card {
+    display: flex; align-items: center; gap: 1rem;
+    padding: 0.9rem 1rem;
+    border: 2px solid var(--border); border-radius: 10px;
+    cursor: pointer; transition: border-color 0.2s, background 0.2s;
+    position: relative;
+}
+.cb-card:hover { border-color: var(--primary); background: var(--bg-nav-hover); }
+.cb-card.selected { border-color: var(--primary); background: var(--bg-nav-active); }
+.cb-card-preview {
+    display: flex; gap: 4px; align-items: center; flex-shrink: 0;
+}
+.cbp-dot {
+    display: inline-block;
+    width: 14px; height: 14px; border-radius: 50%;
+}
+.cb-card-label { flex: 1; }
+.cb-card-label strong { display: block; font-size: 0.9rem; color: var(--text-primary); margin-bottom: 0.15rem; }
+.cb-card-label span { font-size: 0.78rem; color: var(--text-secondary); }
+.cb-card-check { font-size: 1.2rem; color: var(--border); transition: color 0.2s; flex-shrink: 0; }
+.cb-card.selected .cb-card-check { color: var(--primary); }
+
+/* ---- Info box ---- */
+.cb-info-box {
+    display: flex; align-items: flex-start; gap: 0.75rem;
+    padding: 0.875rem 1rem;
+    background: var(--bg-nav-active);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+}
+.cb-info-box i { color: var(--primary); margin-top: 2px; flex-shrink: 0; }
 </style>
 
 {% endblock %}
 
 {% block scripts %}
 <script>
-// Tab switching
+// ---- Tab switching ----
 function switchTab(name) {
     document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -485,9 +689,66 @@ function switchTab(name) {
 window.addEventListener('DOMContentLoaded', () => {
     const hash = location.hash.replace('#', '');
     if (hash && document.getElementById('tab-' + hash)) switchTab(hash);
+    syncAppearanceUI();
 });
 
-// Password strength
+// ---- Appearance tab: sync UI to current stored prefs ----
+function syncAppearanceUI() {
+    const theme = localStorage.getItem('showwise-theme') || 'light';
+    const cb    = localStorage.getItem('showwise-colorblind') || 'none';
+
+    // Theme rows
+    document.getElementById('theme-light-row')?.classList.toggle('selected', theme === 'light');
+    document.getElementById('theme-dark-row')?.classList.toggle('selected', theme === 'dark');
+
+    // CB cards
+    document.querySelectorAll('.cb-card').forEach(el => {
+        el.classList.toggle('selected', el.id === 'cbcard-' + cb);
+    });
+}
+
+// ---- Apply theme from appearance tab ----
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('showwise-theme', theme);
+    syncAppearanceUI();
+}
+
+// ---- Apply colorblind mode from appearance tab ----
+const CB_INFO = {
+    none:          'Standard colour palette — no adjustments applied.',
+    deuteranopia:  'Deuteranopia mode adjusts greens and reds to use blue-teal and orange tones that are distinguishable for people with green-blind colour deficiency.',
+    protanopia:    'Protanopia mode replaces red-dependent colours with blue and orange alternatives suitable for those with red-blind colour deficiency.',
+    tritanopia:    'Tritanopia mode adjusts blue and yellow tones, replacing them with pink and green alternatives for those with blue-yellow colour deficiency.',
+    'high-contrast': 'High Contrast mode maximises foreground/background contrast ratios, adds visible focus outlines, and improves legibility for users with low vision.',
+};
+
+function applyCb(mode) {
+    // Call the global setColorblind function defined in base.html
+    setColorblind(mode);
+    syncAppearanceUI();
+
+    // Show info box
+    const box  = document.getElementById('cbInfoBox');
+    const text = document.getElementById('cbInfoText');
+    if (box && text) {
+        text.textContent = CB_INFO[mode] || '';
+        box.style.display = mode === 'none' ? 'none' : 'flex';
+    }
+}
+
+// Sync CB info box on load
+document.addEventListener('DOMContentLoaded', () => {
+    const cb = localStorage.getItem('showwise-colorblind') || 'none';
+    const box  = document.getElementById('cbInfoBox');
+    const text = document.getElementById('cbInfoText');
+    if (box && text && cb !== 'none') {
+        text.textContent = CB_INFO[cb] || '';
+        box.style.display = 'flex';
+    }
+});
+
+// ---- Password strength ----
 document.getElementById('newPassword').addEventListener('input', function() {
     const pw = this.value;
     const bar = document.getElementById('passwordStrength');
@@ -515,16 +776,16 @@ document.getElementById('confirmPassword').addEventListener('input', function() 
     el.style.color = match ? 'var(--success)' : 'var(--danger)';
 });
 
-// Change password
+// ---- Change password ----
 document.getElementById('changePasswordForm').addEventListener('submit', function(e) {
     e.preventDefault();
     const cur = document.getElementById('currentPassword').value;
-    const nw = document.getElementById('newPassword').value;
-    const cf = document.getElementById('confirmPassword').value;
+    const nw  = document.getElementById('newPassword').value;
+    const cf  = document.getElementById('confirmPassword').value;
     const btn = document.getElementById('pwSubmitBtn');
     if (nw.length < 6) { showAlert('Password must be at least 6 characters', 'error'); return; }
-    if (nw !== cf) { showAlert('Passwords do not match', 'error'); return; }
-    if (cur === nw) { showAlert('New password must differ from current', 'error'); return; }
+    if (nw !== cf)     { showAlert('Passwords do not match', 'error'); return; }
+    if (cur === nw)    { showAlert('New password must differ from current', 'error'); return; }
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Changing...';
     fetch('/change-password', {
@@ -539,32 +800,23 @@ document.getElementById('changePasswordForm').addEventListener('submit', functio
     });
 });
 
-// ==================== SKIP 2FA FOR OAUTH TOGGLE ====================
+// ---- Skip 2FA for OAuth ----
 function toggleSkip2faOauth(enabled) {
     const statusEl = document.getElementById('skip2faOauthStatus');
-    if (statusEl) {
-        statusEl.textContent = 'Saving...';
-        statusEl.style.color = '#6b7280';
-    }
+    if (statusEl) { statusEl.textContent = 'Saving...'; statusEl.style.color = 'var(--text-muted)'; }
     fetch('/api/settings/skip-2fa-oauth', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ enabled })
     }).then(r => r.json()).then(d => {
         if (d.success) {
-            showAlert(enabled
-                ? 'Google sign-in will now skip the 2FA prompt.'
-                : '2FA will be required even when signing in with Google.',
-            'success');
+            showAlert(enabled ? 'Google sign-in will now skip the 2FA prompt.' : '2FA will be required even when signing in with Google.', 'success');
             if (statusEl) {
-                statusEl.textContent = enabled
-                    ? '✓ Google sign-in bypasses 2FA prompt.'
-                    : '2FA prompt is required for all login methods.';
-                statusEl.style.color = enabled ? 'var(--success)' : '#6b7280';
+                statusEl.textContent = enabled ? '✓ Google sign-in bypasses 2FA prompt.' : '2FA prompt is required for all login methods.';
+                statusEl.style.color = enabled ? 'var(--success)' : 'var(--text-muted)';
             }
         } else {
             showAlert(d.error || 'Failed to update setting', 'error');
-            // Revert toggle
             document.getElementById('skip2faOauthToggle').checked = !enabled;
         }
     }).catch(() => {
@@ -573,7 +825,7 @@ function toggleSkip2faOauth(enabled) {
     });
 }
 
-// 2FA setup
+// ---- 2FA setup ----
 let currentSecret = '', backupCodesData = [];
 
 function startSetup2FA() {
@@ -583,16 +835,14 @@ function startSetup2FA() {
             currentSecret = d.secret;
             document.getElementById('qrCode').src = d.qr_code;
             document.getElementById('secretKey').textContent = d.secret;
-            document.getElementById('step1').style.display = 'block';
-            document.getElementById('step2').style.display = 'none';
-            document.getElementById('step3').style.display = 'none';
+            ['step1','step2','step3'].forEach((s,i) => document.getElementById(s).style.display = i===0 ? 'block' : 'none');
             showModal('setup2faModal');
         } else alert(d.error || 'Setup failed');
     });
 }
-function nextStep() { document.getElementById('step1').style.display='none'; document.getElementById('step2').style.display='block'; document.getElementById('verifyCode').focus(); }
+function nextStep()     { document.getElementById('step1').style.display='none'; document.getElementById('step2').style.display='block'; document.getElementById('verifyCode').focus(); }
 function previousStep() { document.getElementById('step2').style.display='none'; document.getElementById('step1').style.display='block'; }
-function copySecret() { navigator.clipboard.writeText(currentSecret); showAlert('Secret copied!'); }
+function copySecret()   { navigator.clipboard.writeText(currentSecret); showAlert('Secret copied!'); }
 function verifySetup() {
     const code = document.getElementById('verifyCode').value.trim();
     if (code.length !== 6) { alert('Enter a 6-digit code'); return; }
@@ -600,15 +850,15 @@ function verifySetup() {
     .then(r => r.json()).then(d => {
         if (d.success) {
             backupCodesData = d.backup_codes;
-            document.getElementById('backupCodes').innerHTML = d.backup_codes.map(c => `<div style="padding:0.5rem;background:white;border-radius:4px;text-align:center;">${c}</div>`).join('');
+            document.getElementById('backupCodes').innerHTML = d.backup_codes.map(c => `<div style="padding:0.5rem;background:var(--bg-card);border-radius:4px;text-align:center;border:1px solid var(--border);">${c}</div>`).join('');
             document.getElementById('step2').style.display='none';
             document.getElementById('step3').style.display='block';
         } else alert(d.error || 'Verification failed');
     });
 }
 function downloadBackupCodes() {
-    const blob = new Blob([backupCodesData.join('\n')], {type:'text/plain'});
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([backupCodesData.join('\n')], {type:'text/plain'}));
     a.download = 'showwise-backup-codes.txt'; a.click();
 }
 function copyBackupCodes() { navigator.clipboard.writeText(backupCodesData.join('\n')); showAlert('Backup codes copied!'); }
@@ -624,7 +874,7 @@ function disable2FA() {
     });
 }
 
-// Discord unlink
+// ---- Discord / Google unlink ----
 function unlinkDiscord() {
     fetch('/settings/link-discord', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({discord_id: null, discord_username: null}) })
     .then(r => r.json()).then(d => {
@@ -632,8 +882,6 @@ function unlinkDiscord() {
         else showAlert(d.error, 'error');
     });
 }
-
-// Google unlink
 function showUnlinkGoogle() {
     const pw = prompt('Enter your password to unlink Google account:');
     if (!pw) return;
@@ -644,70 +892,41 @@ function showUnlinkGoogle() {
     });
 }
 
-// ==================== PROFILE PICTURE UPLOAD ====================
+// ---- Profile picture upload ----
 document.getElementById('profilePictureForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     const fileInput = document.getElementById('profilePictureInput');
     const file = fileInput.files[0];
-    
-    if (!file) {
-        showAlert('Please select a file', 'error');
-        return;
-    }
-    
+    if (!file) { showAlert('Please select a file', 'error'); return; }
     const btn = document.getElementById('uploadPictureBtn');
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
-    
     const formData = new FormData();
     formData.append('file', file);
-    
     try {
-        const response = await fetch('/profile/picture/upload', {
-            method: 'POST',
-            body: formData
-        });
-        
+        const response = await fetch('/profile/picture/upload', { method: 'POST', body: formData });
         const data = await response.json();
-        
         if (response.ok) {
             showAlert('✓ Profile picture updated successfully!', 'success');
-            // Update preview
             document.getElementById('profilePreview').src = '/profile/picture/{{ current_user.username }}?t=' + Date.now();
             fileInput.value = '';
             setTimeout(() => location.reload(), 1500);
-        } else {
-            showAlert(data.error || 'Upload failed', 'error');
-        }
-    } catch (err) {
-        showAlert('Network error', 'error');
-        console.error(err);
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-check"></i> Upload';
-    }
+        } else showAlert(data.error || 'Upload failed', 'error');
+    } catch (err) { showAlert('Network error', 'error'); }
+    finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Upload'; }
 });
 
-// Delete profile picture
 document.getElementById('deletePictureBtn')?.addEventListener('click', async function() {
     if (!confirm('Remove your profile picture?')) return;
-    
     try {
         const response = await fetch('/profile/picture/delete', { method: 'POST' });
         const data = await response.json();
-        
-        if (response.ok) {
-            showAlert('✓ Profile picture removed', 'success');
-            setTimeout(() => location.reload(), 1000);
-        } else {
-            showAlert(data.error || 'Failed to remove picture', 'error');
-        }
-    } catch (err) {
-        showAlert('Network error', 'error');
-    }
+        if (response.ok) { showAlert('✓ Profile picture removed', 'success'); setTimeout(() => location.reload(), 1000); }
+        else showAlert(data.error || 'Failed to remove picture', 'error');
+    } catch (err) { showAlert('Network error', 'error'); }
 });
 
-// ==================== ACCOUNT INFO EDITING ====================
+// ---- Account info editing ----
 function toggleAccountEdit() {
     const view = document.getElementById('accountInfoView');
     const form = document.getElementById('accountInfoForm');
@@ -717,53 +936,28 @@ function toggleAccountEdit() {
 
 document.getElementById('accountInfoForm').addEventListener('submit', async function(e) {
     e.preventDefault();
-    
     const username = document.getElementById('editUsername').value.trim();
-    const email = document.getElementById('editEmail').value.trim();
-    
-    if (!username && !email) {
-        showAlert('Enter at least one field to update', 'error');
-        return;
-    }
-    
-    if (username && username.length < 3) {
-        showAlert('Username must be at least 3 characters', 'error');
-        return;
-    }
-    
+    const email    = document.getElementById('editEmail').value.trim();
+    if (!username && !email) { showAlert('Enter at least one field to update', 'error'); return; }
+    if (username && username.length < 3) { showAlert('Username must be at least 3 characters', 'error'); return; }
     const btn = document.getElementById('saveAccountBtn');
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
-    
     try {
         const response = await fetch('/settings/update-account', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                username: username || null,
-                email: email || null
-            })
+            body: JSON.stringify({ username: username || null, email: email || null })
         });
-        
         const data = await response.json();
-        
         if (response.ok) {
             showAlert('✓ Account information updated!', 'success');
-            // Update display
             if (username) document.getElementById('usernameDisplay').textContent = username;
             if (email) document.getElementById('emailDisplay').textContent = email;
-            
             setTimeout(() => location.reload(), 1500);
-        } else {
-            showAlert(data.error || 'Update failed', 'error');
-        }
-    } catch (err) {
-        showAlert('Network error', 'error');
-        console.error(err);
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-check"></i> Save Changes';
-    }
+        } else showAlert(data.error || 'Update failed', 'error');
+    } catch (err) { showAlert('Network error', 'error'); }
+    finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Save Changes'; }
 });
 </script>
 {% endblock %}

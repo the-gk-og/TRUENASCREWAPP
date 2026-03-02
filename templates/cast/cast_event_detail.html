@@ -56,16 +56,16 @@
         <h3 style="margin: 0 0 1rem 0; color: var(--primary);"><i class="fas fa-user-tag"></i> Your Role</h3>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
             <div>
-                <p style="margin: 0.5rem 0; color: #4338ca;">
+                <p style="margin: 0.5rem 0; color: var(--primary);">
                     <strong>Character:</strong> {{ cast_member.character_name }}
                 </p>
-                <p style="margin: 0.5rem 0; color: #4338ca;">
+                <p style="margin: 0.5rem 0; color: var(--primary);">
                     <strong>Role Type:</strong> {{ cast_member.role_type|capitalize }}
                 </p>
             </div>
             {% if cast_member.notes %}
-            <div style="background: white; padding: 1rem; border-radius: 6px;">
-                <p style="margin: 0; color: #4338ca; font-size: 0.9rem;">
+            <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px;">
+                <p style="margin: 0; color: var(--text-primary); font-size: 0.9rem;">
                     <strong>Director's Notes:</strong><br>
                     {{ cast_member.notes }}
                 </p>
@@ -93,7 +93,7 @@
         </div>
         {% else %}
         <div id="castDescriptionView">
-            <p style="margin: 0; color: #999; font-style: italic;">No cast information yet.</p>
+            <p style="margin: 0; color: var(--text-secondary); font-style: italic;">No cast information yet.</p>
         </div>
         {% endif %}
         
@@ -151,7 +151,7 @@
         {% endfor %}
     </div>
     {% else %}
-    <p style="color: #666; text-align: center; padding: 1rem;">No schedule items yet.</p>
+    <p style="color: var(--text-secondary); text-align: center; padding: 1rem;">No schedule items yet.</p>
     {% endif %}
 </div>
 
@@ -164,7 +164,7 @@
         </button>
     </div>
     
-    <p style="color: #666; font-size: 0.9rem; margin-bottom: 1rem;">show running order</p>
+    <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">show running order</p>
     
     {% if event.crew_run_items %}
     <div id="crewRunList" style="display: flex; flex-direction: column; gap: 0.75rem;">
@@ -225,7 +225,7 @@
         </p>
     </div>
     {% else %}
-    <p style="color: #666; text-align: center; padding: 2rem;">No run list items yet.</p>
+    <p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No run list items yet.</p>
     {% endif %}
 </div>
 
@@ -312,7 +312,7 @@
             </div>
             {% endfor %}
         {% else %}
-        <p style="color: #666; text-align: center; padding: 1rem;">No cast notes yet.</p>
+        <p style="color: var(--text-secondary); text-align: center; padding: 1rem;">No cast notes yet.</p>
         {% endif %}
     </div>
 </div>
@@ -336,7 +336,7 @@
         {% endfor %}
     </div>
     {% else %}
-    <p style="color: #666; text-align: center; padding: 1rem;">No cast assigned yet.</p>
+    <p style="color: var(--text-secondary); text-align: center; padding: 1rem;">No cast assigned yet.</p>
     {% endif %}
 </div>
 

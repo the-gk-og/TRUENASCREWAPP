@@ -220,57 +220,6 @@ class ShowWiseBackend:
         # If backend is unreachable, allow access (fail open)
         logger.warning("Could not check kill switch - allowing access")
         return False, ''
-    
-    # ==================== CHAT API ====================
-    
-    def send_chat_message(self, user_name: str, message: str, 
-                         user_email: Optional[str] = None) -> Optional[int]:
-        """
-        Send chat message to backend
-        
-        Args:
-            user_name: Customer name
-            message: Message content
-            user_email: Customer email (optional)
-            
-        Returns:
-            Message ID if sent successfully, None otherwise
-        """
-        data = {
-            'org_slug': self.org_slug,
-            'user_name': user_name,
-            'user_email': user_email,
-            'message': message
-        }
-        
-        result = self._make_request('POST', '/api/chat/send', data=data, use_api_key=False)
-        
-        if result and result.get('success'):
-            msg_id = result.get('message_id')
-            logger.info(f"Chat message sent: {msg_id}")
-            return msg_id
-        
-        logger.error("Failed to send chat message")
-        return None
-    
-    def get_chat_messages(self, limit: int = 50) -> List[Dict]:
-        """
-        Get recent chat messages
-        
-        Args:
-            limit: Maximum number of messages (max 50)
-            
-        Returns:
-            List of message dicts
-        """
-        result = self._make_request('GET', f'/api/chat/messages/{self.org_slug}', use_api_key=False)
-        
-        if result and result.get('success'):
-            messages = result.get('messages', [])
-            return messages[-limit:] if len(messages) > limit else messages
-        
-        return []
-
 
 # ==================== FLASK DECORATORS ====================
 
