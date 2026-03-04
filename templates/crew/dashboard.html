@@ -524,7 +524,7 @@
             <span class="section-title-icon">⚡</span> Quick Actions
         </h3>
         <div class="quick-actions">
-            <a href="{{ url_for('event_detail', id=upcoming_events[0].id) if upcoming_events else 'javascript:void(0)' }}" class="quick-action-btn" {% if not upcoming_events %}style="opacity: 0.5; cursor: not-allowed; pointer-events: none;"{% endif %}>
+            <a href="{{ url_for('events.event_detail', id=upcoming_events[0].id) if upcoming_events else 'javascript:void(0)' }}" class="quick-action-btn" {% if not upcoming_events %}style="opacity: 0.5; cursor: not-allowed; pointer-events: none;"{% endif %}>
                 <div class="quick-action-icon">📌</div>
                 <div>Next Event</div>
             </a>
@@ -591,7 +591,7 @@
                     {% endif %}
                 </div>
                 <div class="event-card-footer">
-                    <a href="{{ url_for('event_detail', id=event.id) }}" class="event-card-btn event-card-btn-primary">
+                    <a href="{{ url_for('events.event_detail', id=event.id) }}" class="event-card-btn event-card-btn-primary">
                         <i class="fas fa-arrow-right"></i> View Details
                     </a>
                 </div>

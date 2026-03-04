@@ -11,7 +11,7 @@
 <!-- Upcoming Events -->
 <div class="card">
     <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-calendar-alt"></i> Upcoming Productions</h3>
-    
+
     {% set upcoming = events|selectattr('event_date', 'ge', now)|list %}
     {% if upcoming %}
     <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 1.5rem;">
@@ -29,7 +29,7 @@
             {% if event.location %}
             <p style="color: #666; margin-bottom: 0.5rem;">📍 {{ event.location }}</p>
             {% endif %}
-            
+
             {% if not current_user.is_admin %}
             {% set my_role = event.cast_members|selectattr('user_id', 'equalto', current_user.id)|first %}
             {% if my_role %}
@@ -43,9 +43,9 @@
             </div>
             {% endif %}
             {% endif %}
-            
+
             <p style="color: #666; margin-bottom: 1rem;">👥 {{ event.cast_members|length }} cast members</p>
-            <a href="{{ url_for('cast_event_detail', id=event.id) }}" class="btn btn-primary">View Details</a>
+            <a href="{{ url_for('cast.cast_event_detail', id=event.id) }}" class="btn btn-primary">View Details</a>
         </div>
         {% endfor %}
     </div>
@@ -57,7 +57,7 @@
 <!-- Past Events -->
 <div class="card" style="margin-top: 2rem;">
     <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-history"></i> Past Productions</h3>
-    
+
     {% set past = events|rejectattr('event_date', 'ge', now)|list %}
     {% if past %}
     <table>
@@ -81,15 +81,11 @@
                 {% if not current_user.is_admin %}
                 <td>
                     {% set my_role = event.cast_members|selectattr('user_id', 'equalto', current_user.id)|first %}
-                    {% if my_role %}
-                    {{ my_role.character_name }}
-                    {% else %}
-                    -
-                    {% endif %}
+                    {% if my_role %}{{ my_role.character_name }}{% else %}-{% endif %}
                 </td>
                 {% endif %}
                 <td>
-                    <a href="{{ url_for('cast_event_detail', id=event.id) }}" class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.9rem;">View</a>
+                    <a href="{{ url_for('cast.cast_event_detail', id=event.id) }}" class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.9rem;">View</a>
                 </td>
             </tr>
             {% endfor %}
@@ -107,5 +103,4 @@
     <p style="color: #6b7280;">You haven't been assigned to any productions yet.</p>
 </div>
 {% endif %}
-
 {% endblock %}
