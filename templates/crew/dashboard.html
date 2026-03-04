@@ -528,19 +528,19 @@
                 <div class="quick-action-icon">📌</div>
                 <div>Next Event</div>
             </a>
-            <a href="{{ url_for('calendar') }}" class="quick-action-btn">
+            <a href="{{ url_for('calendar.calendar') }}" class="quick-action-btn">
                 <div class="quick-action-icon">📅</div>
                 <div>Calendar</div>
             </a>
-            <a href="{{ url_for('equipment_list') }}" class="quick-action-btn">
+            <a href="{{ url_for('equipment.equipment_list') }}" class="quick-action-btn">
                 <div class="quick-action-icon">📦</div>
                 <div>Equipment</div>
             </a>
-            <a href="{{ url_for('picklist') }}" class="quick-action-btn">
+            <a href="{{ url_for('picklist.picklist') }}" class="quick-action-btn">
                 <div class="quick-action-icon">📋</div>
                 <div>Pick Lists</div>
             </a>
-            <a href="{{ url_for('stageplans') }}" class="quick-action-btn">
+            <a href="{{ url_for('stage_designer.stageplans') }}" class="quick-action-btn">
                 <div class="quick-action-icon">🎨</div>
                 <div>Stage Plans</div>
             </a>
@@ -602,7 +602,7 @@
         <div class="empty-state">
             <div class="empty-state-icon">📭</div>
             <p class="empty-state-text">No upcoming events scheduled yet.</p>
-            <a href="{{ url_for('calendar') }}" class="empty-state-btn">
+            <a href="{{ url_for('calendar.calendar') }}" class="empty-state-btn">
                 <i class="fas fa-plus"></i> Create an Event
             </a>
         </div>
