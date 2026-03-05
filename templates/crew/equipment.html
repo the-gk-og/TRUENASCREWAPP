@@ -9,12 +9,15 @@
         <h2>📦 Equipment Management</h2>
         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
             <button onclick="showModal('scanModal')" class="btn btn-primary">📱 Scan Barcode</button>
+            <button onclick="downloadCSVTemplate()" class="btn btn-secondary" title="Download a blank CSV template to fill in and import">
+                <i class="fas fa-download"></i> CSV Template
+            </button>
             {% if current_user.is_admin %}
             <a href="{{ url_for('equipment.barcode_page') }}" class="btn btn-success" style="text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;">
                 <i class="fas fa-barcode"></i> Generate Barcodes
             </a>
             <label class="btn btn-secondary" style="cursor: pointer; margin: 0;" title="Import CSV">
-                <i class="fas fa-file-csv"></i> Import CSV
+                <i class="fas fa-file-upload"></i> Import CSV
                 <input type="file" id="csvFileInput" accept=".csv" style="display:none;" onchange="importCSV(this)">
             </label>
             <button onclick="openAddModal()" class="btn btn-success">+ Add Equipment</button>
@@ -224,6 +227,19 @@ let allEquipment = {{ equipment_json|tojson }};
 let isScanning   = false;
 let picModalEquipmentId   = null;
 let picModalType          = 'item'; // 'item' | 'location'
+
+// ── CSV Template download ────────────────────────────────────────────────────
+function downloadCSVTemplate() {
+    const headers = ['barcode', 'name', 'quantity_owned', 'category', 'location', 'notes'];
+    const example = ['EQ-001', 'Example Item', '1', 'Lighting', 'Storage Room A Shelf 2', 'Optional notes here'];
+    const csv = [headers.join(','), example.join(',')].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'equipment_import_template.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
 
 // ── Search ──────────────────────────────────────────────────────────────────
 document.getElementById('searchInput').addEventListener('input', function(e) {
