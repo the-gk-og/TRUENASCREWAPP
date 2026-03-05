@@ -696,18 +696,10 @@ function fmtDate(d) {
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-/**
- * FIX #2 — eventsOnDay uses local-date arithmetic only (no UTC drift).
- */
+// Events are single‑day in this app, so we treat an event as
+// belonging to the day that matches its local start date.
 function eventsOnDay(day) {
-    const d = new Date(day.getFullYear(), day.getMonth(), day.getDate());
-    return EVENTS_RAW.filter(e => {
-        const s = new Date(e.start.getFullYear(), e.start.getMonth(), e.start.getDate());
-        const end = e.end
-            ? new Date(e.end.getFullYear(), e.end.getMonth(), e.end.getDate())
-            : addDays(s, 1);
-        return d >= s && d < end;
-    });
+    return EVENTS_RAW.filter(e => sameDay(e.start, day));
 }
 
 /**
@@ -941,8 +933,26 @@ function renderScheduler() {
 
             days.forEach(d => {
                 const isTod = sameDay(d, today);
-                // Get events this user is assigned to on this day — deduplicated by event id
-                const userEvents = eventsOnDay(d).filter(e => e.crew.includes(username));
+                // Get events this user is assigned to on this day — either via crew assignment
+                // or via an accepted/confirmed shift assignment.
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const dd = String(d.getDate()).padStart(2, '0');
+                const dayStr = `${y}-${m}-${dd}`;
+
+                const shiftEventIds = new Set(
+                    SHIFTS_DATA
+                        .filter(s =>
+                            s.shift_date.startsWith(dayStr) &&
+                            Array.isArray(s.assigned_users) &&
+                            s.assigned_users.includes(username)
+                        )
+                        .map(s => s.event_id)
+                );
+
+                const userEvents = eventsOnDay(d).filter(
+                    e => e.crew.includes(username) || shiftEventIds.has(e.id)
+                );
                 const seenEventIds = new Set();
 
                 const userUnavail = UNAVAILABILITIES.filter(u => {
