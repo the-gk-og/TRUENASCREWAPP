@@ -301,6 +301,88 @@
         opacity: 0.5;
     }
 
+    /* Compact week strip (top day scroller) */
+    .week-strip-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .week-strip {
+        display: flex;
+        gap: 0.35rem;
+        overflow-x: auto;
+        padding-bottom: 0.25rem;
+        flex: 1;
+    }
+
+    .week-day-pill {
+        min-width: 52px;
+        padding: 0.35rem 0.25rem;
+        border-radius: 999px;
+        text-align: center;
+        border: 1px solid var(--border);
+        background: white;
+        cursor: pointer;
+        font-size: 0.75rem;
+        color: #6b7280;
+        flex-shrink: 0;
+    }
+
+    .week-day-pill span {
+        display: block;
+        line-height: 1.1;
+    }
+
+    .week-day-pill .wd-label {
+        font-weight: 600;
+    }
+
+    .week-day-pill .wd-date {
+        font-size: 0.7rem;
+    }
+
+    .week-day-pill.active {
+        background: var(--primary);
+        color: white;
+        border-color: var(--primary);
+    }
+
+    .week-nav-btn {
+        border: 1px solid var(--border);
+        background: white;
+        border-radius: 999px;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 0.8rem;
+        color: #4b5563;
+    }
+
+    .week-nav-btn:hover {
+        background: var(--bg-nav-hover);
+    }
+
+    .week-today-btn {
+        border: 1px solid var(--border);
+        background: #f3f4f6;
+        border-radius: 999px;
+        padding: 0.25rem 0.7rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        cursor: pointer;
+        color: #374151;
+        white-space: nowrap;
+    }
+
+    .week-today-btn:hover {
+        background: #e5e7eb;
+    }
+
     .section-title {
         font-size: 1.3rem;
         font-weight: 700;
@@ -390,6 +472,13 @@
 
     <!-- List View -->
     <div id="listView">
+        <!-- Top compact week strip (Only me style) -->
+        <div class="week-strip-wrapper">
+            <button class="week-nav-btn" onclick="shiftWeek(-1)"><i class="fas fa-chevron-left"></i></button>
+            <div id="weekStrip" class="week-strip"></div>
+            <button class="week-nav-btn" onclick="shiftWeek(1)"><i class="fas fa-chevron-right"></i></button>
+            <button class="week-today-btn" onclick="jumpToToday()">Today</button>
+        </div>
         <div id="scheduleContent"></div>
     </div>
 
@@ -420,6 +509,9 @@ const NOW = new Date('{{ now.isoformat() }}');
 const assignmentsByDate = {};
 const openShiftsByDate = {};
 let assignmentsProcessed = false;
+let selectedDateKey = null; // currently focused day in the week strip
+let allScheduleDates = [];  // sorted list of all date keys
+let weekWindowStart = 0;    // index into allScheduleDates for the current top strip window
 
 function processAssignments() {
     if (assignmentsProcessed) return;
@@ -536,6 +628,7 @@ function switchView(view) {
 
 function renderSchedule() {
     const dates = Object.keys(assignmentsByDate).sort();
+    allScheduleDates = dates;
     
     if (dates.length === 0) {
         document.getElementById('scheduleContent').innerHTML = `
@@ -546,9 +639,21 @@ function renderSchedule() {
         `;
         return;
     }
-    
+
+    // Initialise selected date to "today" if present, otherwise first date
+    if (!selectedDateKey) {
+        const todayKey = new Date().toISOString().split('T')[0];
+        selectedDateKey = dates.includes(todayKey) ? todayKey : dates[0];
+        // Align week window to the week containing the selected date
+        const idx = dates.indexOf(selectedDateKey);
+        weekWindowStart = Math.max(0, Math.floor(idx / 7) * 7);
+    }
+
+    // Build compact week strip (up to 7 days from current window)
+    buildWeekStrip();
+
     let html = '';
-    
+
     dates.forEach(dateKey => {
         const items = assignmentsByDate[dateKey];
         const date = items[0].time;
@@ -558,7 +663,7 @@ function renderSchedule() {
         const year = date.getFullYear();
         
         html += `
-            <div class="date-section">
+            <div class="date-section" id="date-section-${dateKey}">
                 <div class="date-header">
                     <div class="date-badge">
                         <div class="day-num">${date.getDate()}</div>
@@ -668,6 +773,90 @@ function renderSchedule() {
     });
     
     document.getElementById('scheduleContent').innerHTML = html;
+
+    // After first render, scroll to the currently selected day section
+    scrollToSelectedDay();
+}
+
+function buildWeekStrip() {
+    const container = document.getElementById('weekStrip');
+    if (!container) return;
+
+    if (!allScheduleDates.length) {
+        container.innerHTML = '';
+        return;
+    }
+
+    // Clamp window start
+    if (weekWindowStart < 0) weekWindowStart = 0;
+    if (weekWindowStart >= allScheduleDates.length) {
+        weekWindowStart = Math.max(0, allScheduleDates.length - 1);
+    }
+
+    const windowKeys = allScheduleDates.slice(weekWindowStart, weekWindowStart + 7);
+
+    let stripHtml = '';
+    windowKeys.forEach(key => {
+        const items = assignmentsByDate[key];
+        if (!items || items.length === 0) return;
+        const d = items[0].time;
+        const dow = d.toLocaleDateString('en-US', { weekday: 'short' });
+        const day = d.getDate();
+
+        stripHtml += `
+            <div class="week-day-pill ${key === selectedDateKey ? 'active' : ''}" onclick="selectScheduleDay('${key}')">
+                <span class="wd-label">${dow}</span>
+                <span class="wd-date">${day}</span>
+            </div>
+        `;
+    });
+
+    container.innerHTML = stripHtml;
+}
+
+function selectScheduleDay(dateKey) {
+    selectedDateKey = dateKey;
+    buildWeekStrip();
+    scrollToSelectedDay();
+}
+
+function shiftWeek(direction) {
+    if (!allScheduleDates.length) return;
+    weekWindowStart += direction * 7;
+    if (weekWindowStart < 0) weekWindowStart = 0;
+    if (weekWindowStart >= allScheduleDates.length) {
+        weekWindowStart = Math.max(0, allScheduleDates.length - 1);
+    }
+
+    const windowKeys = allScheduleDates.slice(weekWindowStart, weekWindowStart + 7);
+    if (windowKeys.length && !windowKeys.includes(selectedDateKey)) {
+        selectedDateKey = windowKeys[0];
+    }
+    buildWeekStrip();
+    scrollToSelectedDay();
+}
+
+function jumpToToday() {
+    if (!allScheduleDates.length) return;
+    const todayKey = new Date().toISOString().split('T')[0];
+    const idx = allScheduleDates.indexOf(todayKey);
+    if (idx >= 0) {
+        selectedDateKey = todayKey;
+        weekWindowStart = Math.max(0, Math.floor(idx / 7) * 7);
+    } else {
+        selectedDateKey = allScheduleDates[0];
+        weekWindowStart = 0;
+    }
+    buildWeekStrip();
+    scrollToSelectedDay();
+}
+
+function scrollToSelectedDay() {
+    if (!selectedDateKey) return;
+    const el = document.getElementById(`date-section-${selectedDateKey}`);
+    if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 }
 
 function renderOpenShifts(filterEventId) {
