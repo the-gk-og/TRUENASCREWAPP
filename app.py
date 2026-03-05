@@ -7,11 +7,10 @@ from flask import Flask, render_template, request
 import os
 import atexit
 
-from flask import render_template, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import get_config
-from extensions import db, login_manager, mail
+from extensions import db, login_manager, mail, oauth
 from routes import register_blueprints
 from services.email_service import init_email_service
 
@@ -27,7 +26,7 @@ def create_app(config_name: str | None = None):
     else:
         app.config.from_object(get_config())
 
-    # Trust proxy headers (Cloudflare / nginx)
+    # Trust proxy headers (Cloudflare / nginx / tunnels)
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
     # Initialise extensions
@@ -35,6 +34,20 @@ def create_app(config_name: str | None = None):
     login_manager.init_app(app)
     mail.init_app(app)
     init_email_service(app, mail)
+
+    # --- NEW: Authlib OAuth (Google PKCE) ---
+    oauth.init_app(app)
+    oauth.register(
+        name="google",
+        client_id=app.config["GOOGLE_CLIENT_ID"],
+        client_secret=app.config["GOOGLE_CLIENT_SECRET"],
+        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+        client_kwargs={
+            "scope": "openid email profile",
+            "code_challenge_method": "S256",
+        },
+    )
+    # ----------------------------------------
 
     # User loader
     from models import User
@@ -82,7 +95,7 @@ def create_app(config_name: str | None = None):
         os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], sub), exist_ok=True)
     os.makedirs('backups', exist_ok=True)
 
-    # Register all blueprints
+    # Register all blueprints (OAuth now ready)
     register_blueprints(app)
 
     # Backend client
@@ -166,8 +179,6 @@ def init_db(app):
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
-
-from flask import Flask   # noqa: E402 — needed here for factory pattern
 
 if __name__ == '__main__':
     app = create_app()
