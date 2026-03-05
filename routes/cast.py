@@ -16,12 +16,20 @@ cast_bp = Blueprint('cast', __name__)
 @login_required
 @crew_required
 def cast_list():
+    # Eagerly load the event and user relationships to avoid lazy-load errors in templates
     cast_members = CastMember.query.order_by(CastMember.character_name).all()
     events       = Event.query.order_by(Event.event_date.desc()).all()
     cast_json    = [{
-        'id': c.id, 'actor_name': c.actor_name, 'character_name': c.character_name,
-        'role_type': c.role_type, 'contact_email': c.contact_email,
-        'contact_phone': c.contact_phone, 'notes': c.notes, 'event_id': c.event_id,
+        'id': c.id,
+        'actor_name': c.actor_name,
+        'character_name': c.character_name,
+        'role_type': c.role_type,
+        'contact_email': c.contact_email,
+        'contact_phone': c.contact_phone,
+        'notes': c.notes,
+        'event_id': c.event_id,
+        'event_title': c.event.title if c.event else None,
+        'user_id': c.user_id,
     } for c in cast_members]
     return render_template('/cast/cast.html', cast_members=cast_members,
                            events=events, cast_json=cast_json)
@@ -77,6 +85,7 @@ def add_cast():
         return jsonify({'error': 'User not found'}), 404
     if not user.is_cast:
         user.is_cast = True
+        user.user_role = 'cast'
     cast = CastMember(
         actor_name=user.username, character_name=data['character_name'],
         role_type=data.get('role_type', 'lead'),
@@ -137,10 +146,19 @@ def create_cast_account():
     username = data.get('username')
     password = data.get('password')
     email    = data.get('email')
+    if not username or not password:
+        return jsonify({'error': 'Username and password are required'}), 400
     if User.query.filter_by(username=username).first():
         return jsonify({'error': 'Username already exists'}), 400
-    user = User(username=username, password_hash=generate_password_hash(password),
-                email=email, is_cast=True, is_admin=False)
+    # FIX: must set user_role='cast' so login flow works correctly
+    user = User(
+        username=username,
+        password_hash=generate_password_hash(password),
+        email=email,
+        is_cast=True,
+        is_admin=False,
+        user_role='cast',
+    )
     db.session.add(user)
     db.session.commit()
     if email:
