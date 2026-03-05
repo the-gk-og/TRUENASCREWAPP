@@ -447,7 +447,6 @@
 {% endblock %}
 
 {% block scripts %}
-<!-- QR Code library -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <script>
@@ -457,7 +456,6 @@ let currentSignupUrl = '';
 let currentInviteExpiry = null;
 let qrCodeInstance = null;
 
-// Signup base URL — set from .env via template variable (falls back to window.location.origin)
 const SIGNUP_BASE_URL = '{{ config.get("SIGNUP_BASE_URL", "") }}';
 
 // ==================== STATS ====================
@@ -515,9 +513,7 @@ function loadInvites() {
 function generateQRCode(url, containerId) {
     const container = document.getElementById(containerId);
     container.innerHTML = '';
-    if (qrCodeInstance) {
-        qrCodeInstance = null;
-    }
+    qrCodeInstance = null;
     qrCodeInstance = new QRCode(container, {
         text: url,
         width: 220,
@@ -570,7 +566,6 @@ function downloadPosterForCode(code, signupUrl, expiresAt) {
     tempDiv.style.cssText = 'position:absolute;left:-9999px;top:-9999px;';
     document.body.appendChild(tempDiv);
 
-    // High-res QR for crisp output
     new QRCode(tempDiv, {
         text: signupUrl,
         width: 600,
@@ -589,7 +584,6 @@ function downloadPosterForCode(code, signupUrl, expiresAt) {
 
 function buildPosterPDF(code, signupUrl, qrCanvas, expiresAt) {
     const canvas = document.getElementById('posterCanvas');
-    // A4 at 300dpi = 2480 × 3508px
     const W = 2480, H = 3508;
     canvas.width = W;
     canvas.height = H;
@@ -597,35 +591,29 @@ function buildPosterPDF(code, signupUrl, qrCanvas, expiresAt) {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
 
-    // Scale factor relative to the original 794px layout
     const S = W / 794;
     const sc = n => n * S;
 
-    // --- Background gradient ---
     const grad = ctx.createLinearGradient(0, 0, W, H);
     grad.addColorStop(0, '#6366f1');
     grad.addColorStop(1, '#a855f7');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
 
-    // --- White card — tight 20px bezel ---
     const cardX = sc(20), cardY = sc(20), cardW = W - sc(40), cardH = H - sc(40);
     ctx.fillStyle = '#ffffff';
     roundRect(ctx, cardX, cardY, cardW, cardH, sc(24));
     ctx.fill();
 
-    // --- "Join ShowWise" heading ---
     ctx.fillStyle = '#1f2937';
     ctx.textAlign = 'center';
     ctx.font = `bold ${sc(58)}px system-ui, Arial, sans-serif`;
     ctx.fillText('Join ShowWise', W / 2, cardY + sc(100));
 
-    // --- Subheading ---
     ctx.font = `${sc(26)}px system-ui, Arial, sans-serif`;
     ctx.fillStyle = '#6b7280';
     ctx.fillText('Scan the QR code or use the invite code below', W / 2, cardY + sc(148));
 
-    // --- Divider ---
     ctx.strokeStyle = '#e5e7eb';
     ctx.lineWidth = sc(2);
     ctx.beginPath();
@@ -633,13 +621,11 @@ function buildPosterPDF(code, signupUrl, qrCanvas, expiresAt) {
     ctx.lineTo(cardX + cardW - sc(60), cardY + sc(170));
     ctx.stroke();
 
-    // --- QR Code ---
     if (qrCanvas) {
         const qrSize = sc(280);
         const qrX = (W - qrSize) / 2;
         const qrY = cardY + sc(195);
 
-        // QR background
         ctx.fillStyle = '#f9fafb';
         roundRect(ctx, qrX - sc(20), qrY - sc(20), qrSize + sc(40), qrSize + sc(40), sc(16));
         ctx.fill();
@@ -647,26 +633,20 @@ function buildPosterPDF(code, signupUrl, qrCanvas, expiresAt) {
         ctx.lineWidth = sc(2);
         roundRect(ctx, qrX - sc(20), qrY - sc(20), qrSize + sc(40), qrSize + sc(40), sc(16));
         ctx.stroke();
-
         ctx.drawImage(qrCanvas, qrX, qrY, qrSize, qrSize);
     }
 
-    // --- "Scan to join" label ---
     ctx.font = `bold ${sc(22)}px system-ui, Arial, sans-serif`;
     ctx.fillStyle = '#6366f1';
     ctx.textAlign = 'center';
     ctx.fillText('📱 Scan to join', W / 2, cardY + sc(195) + sc(280) + sc(55));
 
-    // --- URL below QR ---
     ctx.font = `${sc(16)}px monospace`;
     ctx.fillStyle = '#9ca3af';
     ctx.textAlign = 'center';
-    const signupBase = (typeof SIGNUP_BASE_URL !== 'undefined' && SIGNUP_BASE_URL)
-        ? SIGNUP_BASE_URL : window.location.origin;
     const shortUrl = signupUrl.replace('https://', '').replace('http://', '');
     ctx.fillText(shortUrl, W / 2, cardY + sc(195) + sc(280) + sc(85));
 
-    // --- "Can't scan?" dashed divider ---
     const midY = cardY + sc(195) + sc(280) + sc(120);
     ctx.strokeStyle = '#e5e7eb';
     ctx.lineWidth = sc(1.5);
@@ -681,7 +661,6 @@ function buildPosterPDF(code, signupUrl, qrCanvas, expiresAt) {
     ctx.fillStyle = '#9ca3af';
     ctx.fillText("Can't scan? Enter the code manually", W / 2, midY + sc(30));
 
-    // --- Invite Code Box ---
     const codeBoxY = midY + sc(50);
     const codeBoxH = sc(90);
     const codeBoxX = cardX + sc(60);
@@ -708,7 +687,6 @@ function buildPosterPDF(code, signupUrl, qrCanvas, expiresAt) {
     ctx.fillStyle = '#7c3aed';
     ctx.fillText('INVITE CODE — Use at signup', W / 2, codeBoxY + sc(79));
 
-    // --- Expiry fine print ---
     if (expiresAt) {
         const expDate = new Date(expiresAt);
         const expStr = expDate.toLocaleDateString('en-AU', {
@@ -721,14 +699,12 @@ function buildPosterPDF(code, signupUrl, qrCanvas, expiresAt) {
         ctx.fillText(`This invite expires ${expStr}`, W / 2, codeBoxY + codeBoxH + sc(28));
     }
 
-    // --- Footer ---
     const footerY = cardY + cardH - sc(30);
     ctx.font = `${sc(15)}px system-ui, Arial, sans-serif`;
     ctx.fillStyle = '#9ca3af';
     ctx.textAlign = 'center';
     ctx.fillText('ShowWise — Production Crew Management', W / 2, footerY);
 
-    // --- Download ---
     canvas.toBlob(blob => {
         const link = document.createElement('a');
         link.download = `showwise-invite-poster-${code}.png`;
@@ -739,7 +715,6 @@ function buildPosterPDF(code, signupUrl, qrCanvas, expiresAt) {
     showAlert('Poster downloaded!', 'success');
 }
 
-// Canvas helpers
 function roundRect(ctx, x, y, w, h, r) {
     ctx.beginPath();
     ctx.moveTo(x + r, y);
@@ -754,19 +729,7 @@ function roundRect(ctx, x, y, w, h, r) {
     ctx.closePath();
 }
 
-function roundRectTop(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h);
-    ctx.lineTo(x, y + h);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
-}
-
-// ==================== INVITE GENERATION ====================
+// ==================== ON PAGE LOAD ====================
 window.addEventListener('DOMContentLoaded', () => {
     const d = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     const iso = d.toISOString().slice(0, 16);
@@ -778,136 +741,11 @@ window.addEventListener('DOMContentLoaded', () => {
     loadInvites();
 });
 
-document.getElementById('generateInviteForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    fetch('/admin/invites/generate', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            role: document.getElementById('inviteRole').value,
-            expires_at: document.getElementById('inviteExpiry').value,
-            max_uses: parseInt(document.getElementById('inviteMaxUses').value) || 1,
-            note: document.getElementById('inviteNote').value
-        })
-    }).then(r => r.json()).then(d => {
-        if (d.success) {
-            currentInviteCode = d.code;
-            currentInviteExpiry = document.getElementById('inviteExpiry').value;
-            const base = SIGNUP_BASE_URL || window.location.origin;
-            currentSignupUrl = base + '/signup?invite=' + d.code;
-            document.getElementById('generatedCode').textContent = d.code;
-            document.getElementById('generatedLink').textContent = 'Signup link: ' + currentSignupUrl;
-            document.getElementById('generatedInvite').style.display = 'block';
-            loadInvites();
-        } else showAlert(d.error || 'Error', 'error');
-    });
-});
-
+// ==================== COPY INVITE CODE ====================
 function copyInviteCode() {
     navigator.clipboard.writeText(currentInviteCode);
     showAlert('Code copied!', 'success');
 }
-
-// ==================== EMAIL INVITE (single) ====================
-document.getElementById('emailInviteForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const btn = document.getElementById('emailInviteBtn');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
-    fetch('/admin/invites/email', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            email: document.getElementById('inviteEmail').value,
-            name: document.getElementById('inviteName').value,
-            role: document.getElementById('emailInviteRole').value,
-            expires_at: document.getElementById('emailInviteExpiry').value,
-            base_url: SIGNUP_BASE_URL || window.location.origin
-        })
-    }).then(r => r.json()).then(d => {
-        if (d.success) {
-            showAlert('Invite sent to ' + document.getElementById('inviteEmail').value, 'success');
-            hideModal('emailInviteModal');
-            loadInvites();
-        } else showAlert(d.error || 'Failed to send', 'error');
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Invite Email';
-    });
-});
-
-// ==================== BATCH EMAIL INVITES ====================
-document.getElementById('batchEmailForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const raw = document.getElementById('batchEmails').value.trim();
-    if (!raw) { showAlert('Please enter at least one email address', 'error'); return; }
-
-    // Parse emails — support newlines, commas, and "Name <email>" format
-    const lines = raw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
-    const parsed = lines.map(line => {
-        const match = line.match(/^(.+?)\s*<([^>]+)>$/);
-        if (match) return { name: match[1].trim(), email: match[2].trim() };
-        return { name: '', email: line };
-    }).filter(e => e.email.includes('@'));
-
-    if (!parsed.length) { showAlert('No valid email addresses found', 'error'); return; }
-
-    const btn = document.getElementById('batchEmailBtn');
-    btn.disabled = true;
-    btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Sending 0 / ${parsed.length}...`;
-
-    let sent = 0, failed = 0;
-    const results = [];
-    const expiresAt = document.getElementById('batchExpiry').value;
-    const role = document.getElementById('batchRole').value;
-
-    const sendNext = (index) => {
-        if (index >= parsed.length) {
-            // Done
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Batch Invites';
-            const resultsDiv = document.getElementById('batchResults');
-            resultsDiv.style.display = 'block';
-            resultsDiv.innerHTML = `
-                <div style="background: var(--bg-nav-active); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
-                    <strong style="color: var(--success);">✓ Done — ${sent} sent, ${failed} failed</strong>
-                </div>
-                ${results.map(r => `
-                    <div style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0.75rem;border-radius:6px;margin-bottom:0.3rem;background:${r.ok ? 'var(--bg-nav-hover)' : 'var(--bg-body)};">
-                        <span style="font-size:0.85rem;">${r.email}</span>
-                        <span style="font-size:0.8rem;color:${r.ok ? 'var(--success)' : 'var(--danger)'};">\${r.ok ? '✓ Sent' : '✗ ' + r.error}</span>
-                    </div>
-                `).join('')}
-            `;
-            loadInvites();
-            return;
-        }
-
-        const person = parsed[index];
-        btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Sending ${index + 1} / ${parsed.length}...`;
-
-        fetch('/admin/invites/email', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                email: person.email,
-                name: person.name,
-                role: role,
-                expires_at: expiresAt,
-                base_url: SIGNUP_BASE_URL || window.location.origin
-            })
-        }).then(r => r.json()).then(d => {
-            if (d.success) { sent++; results.push({ email: person.email, ok: true }); }
-            else { failed++; results.push({ email: person.email, ok: false, error: d.error || 'Failed' }); }
-            sendNext(index + 1);
-        }).catch(err => {
-            failed++;
-            results.push({ email: person.email, ok: false, error: 'Network error' });
-            sendNext(index + 1);
-        });
-    };
-
-    sendNext(0);
-});
 
 // ==================== REVOKE / DELETE INVITE ====================
 function revokeInvite(id) {
@@ -948,22 +786,6 @@ function clearForce2FA(userId, username) {
 }
 
 // ==================== USER CRUD ====================
-document.getElementById('addCrewForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const data = {
-        username: document.getElementById('crewUsername').value,
-        email: document.getElementById('crewEmail').value || null,
-        password: document.getElementById('crewPassword').value,
-        is_admin: document.getElementById('isAdmin').checked,
-        user_role: document.getElementById('userRole').value
-    };
-    fetch('/admin/users/add', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) })
-    .then(r => r.json()).then(result => {
-        if (result.success) { showAlert('User created!', 'success'); setTimeout(() => location.reload(), 1000); }
-        else showAlert(result.error, 'error');
-    });
-});
-
 function editUserModal(userId) {
     fetch(`/admin/users/get/${userId}`)
     .then(r => r.json()).then(user => {
@@ -979,25 +801,6 @@ function editUserModal(userId) {
     });
 }
 
-document.getElementById('editUserForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const userId = document.getElementById('editUserId').value;
-    const data = {
-        username: document.getElementById('editUsername').value,
-        email: document.getElementById('editEmail').value || null,
-        password: document.getElementById('editPassword').value || null,
-        user_role: document.getElementById('editUserRole').value,
-        is_admin: document.getElementById('editIsAdmin').checked,
-        discord_id: document.getElementById('editDiscordId').value || null,
-        discord_username: document.getElementById('editDiscordUsername').value || null
-    };
-    fetch(`/admin/users/edit/${userId}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) })
-    .then(r => r.json()).then(result => {
-        if (result.success) { showAlert('User updated!', 'success'); setTimeout(() => location.reload(), 1000); }
-        else showAlert(result.error || 'Error', 'error');
-    });
-});
-
 function deleteUser(id) {
     if (!confirm('Delete this user? This cannot be undone.')) return;
     fetch(`/admin/users/delete/${id}`, { method: 'DELETE' })
@@ -1011,14 +814,17 @@ function deleteUser(id) {
 function loadBackups() {
     fetch('/admin/backups').then(r => r.json()).then(backups => {
         let html = '';
-        if (!backups.length) { html = '<p style="color:var(--text-secondary);text-align:center;">No backups yet</p>'; }
-        else {
+        if (!backups.length) {
+            html = '<p style="color:var(--text-secondary);text-align:center;">No backups yet</p>';
+        } else {
             html = '<table style="font-size:0.9rem;"><tbody>';
             backups.forEach(b => {
                 const date = new Date(b.date);
                 const size = (b.size / 1024 / 1024).toFixed(2);
-                html += `<tr><td><strong>${b.name}</strong><br><small style="color:var(--text-secondary);">${size} MB &bull; ${date.toLocaleString()}</small></td>
-                         <td style="text-align:right;"><a href="/admin/download-backup/${b.name}" class="btn btn-primary" style="padding:0.4rem 0.8rem;font-size:0.85rem;width:auto;"><i class="fas fa-download"></i></a></td></tr>`;
+                html += `<tr>
+                    <td><strong>${b.name}</strong><br><small style="color:var(--text-secondary);">${size} MB &bull; ${date.toLocaleString()}</small></td>
+                    <td style="text-align:right;"><a href="/admin/download-backup/${b.name}" class="btn btn-primary" style="padding:0.4rem 0.8rem;font-size:0.85rem;width:auto;"><i class="fas fa-download"></i></a></td>
+                </tr>`;
             });
             html += '</tbody></table>';
         }
@@ -1038,37 +844,197 @@ function createBackup() {
     });
 }
 
-// CSV import
-document.getElementById('csvForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const formData = new FormData();
-    formData.append('file', document.getElementById('csvFile').files[0]);
-    fetch('/equipment/import-csv', { method: 'POST', body: formData })
-    .then(r => r.json()).then(result => {
-        if (result.success) showAlert(`Imported ${result.imported} items!`, 'success');
-        else showAlert(result.error, 'error');
-    });
-});
+// ==================== ALL FORM SUBMISSIONS (event delegation) ====================
+document.addEventListener('submit', function(e) {
+    const id = e.target.id;
 
-document.getElementById('sheetdbForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    fetch('/equipment/import-sheetdb', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ sheet_id: document.getElementById('sheetId').value }) })
-    .then(r => r.json()).then(result => {
-        if (result.success) showAlert(`Imported ${result.imported} items!`, 'success');
-        else showAlert(result.error, 'error');
-    });
-});
+    if (id === 'addCrewForm') {
+        e.preventDefault();
+        fetch('/admin/users/add', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                username: document.getElementById('crewUsername').value,
+                email: document.getElementById('crewEmail').value || null,
+                password: document.getElementById('crewPassword').value,
+                is_admin: document.getElementById('isAdmin').checked,
+                user_role: document.getElementById('userRole').value
+            })
+        }).then(r => r.json()).then(result => {
+            if (result.success) { showAlert('User created!', 'success'); setTimeout(() => location.reload(), 1000); }
+            else showAlert(result.error, 'error');
+        });
+    }
 
-document.getElementById('restoreForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    if (!confirm('⚠️ WARNING: This will replace your entire database!\n\nAre you absolutely sure?')) return;
-    const formData = new FormData();
-    formData.append('file', document.getElementById('restoreFile').files[0]);
-    fetch('/admin/restore', { method: 'POST', body: formData })
-    .then(r => r.json()).then(result => {
-        if (result.success) { showAlert(result.message, 'success'); setTimeout(() => location.reload(), 1000); }
-        else showAlert(result.error, 'error');
-    });
+    if (id === 'editUserForm') {
+        e.preventDefault();
+        const userId = document.getElementById('editUserId').value;
+        fetch(`/admin/users/edit/${userId}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                username: document.getElementById('editUsername').value,
+                email: document.getElementById('editEmail').value || null,
+                password: document.getElementById('editPassword').value || null,
+                user_role: document.getElementById('editUserRole').value,
+                is_admin: document.getElementById('editIsAdmin').checked,
+                discord_id: document.getElementById('editDiscordId').value || null,
+                discord_username: document.getElementById('editDiscordUsername').value || null
+            })
+        }).then(r => r.json()).then(result => {
+            if (result.success) { showAlert('User updated!', 'success'); setTimeout(() => location.reload(), 1000); }
+            else showAlert(result.error || 'Error', 'error');
+        });
+    }
+
+    if (id === 'generateInviteForm') {
+        e.preventDefault();
+        fetch('/admin/invites/generate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                role: document.getElementById('inviteRole').value,
+                expires_at: document.getElementById('inviteExpiry').value,
+                max_uses: parseInt(document.getElementById('inviteMaxUses').value) || 1,
+                note: document.getElementById('inviteNote').value
+            })
+        }).then(r => r.json()).then(d => {
+            if (d.success) {
+                currentInviteCode = d.code;
+                currentInviteExpiry = document.getElementById('inviteExpiry').value;
+                const base = SIGNUP_BASE_URL || window.location.origin;
+                currentSignupUrl = base + '/signup?invite=' + d.code;
+                document.getElementById('generatedCode').textContent = d.code;
+                document.getElementById('generatedLink').textContent = 'Signup link: ' + currentSignupUrl;
+                document.getElementById('generatedInvite').style.display = 'block';
+                loadInvites();
+            } else showAlert(d.error || 'Error', 'error');
+        });
+    }
+
+    if (id === 'emailInviteForm') {
+        e.preventDefault();
+        const btn = document.getElementById('emailInviteBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+        fetch('/admin/invites/email', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                email: document.getElementById('inviteEmail').value,
+                name: document.getElementById('inviteName').value,
+                role: document.getElementById('emailInviteRole').value,
+                expires_at: document.getElementById('emailInviteExpiry').value,
+                base_url: SIGNUP_BASE_URL || window.location.origin
+            })
+        }).then(r => r.json()).then(d => {
+            if (d.success) {
+                showAlert('Invite sent to ' + document.getElementById('inviteEmail').value, 'success');
+                hideModal('emailInviteModal');
+                loadInvites();
+            } else showAlert(d.error || 'Failed to send', 'error');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Invite Email';
+        });
+    }
+
+    if (id === 'batchEmailForm') {
+        e.preventDefault();
+        const raw = document.getElementById('batchEmails').value.trim();
+        if (!raw) { showAlert('Please enter at least one email address', 'error'); return; }
+        const lines = raw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+        const parsed = lines.map(line => {
+            const match = line.match(/^(.+?)\s*<([^>]+)>$/);
+            if (match) return { name: match[1].trim(), email: match[2].trim() };
+            return { name: '', email: line };
+        }).filter(entry => entry.email.includes('@'));
+        if (!parsed.length) { showAlert('No valid email addresses found', 'error'); return; }
+        const btn = document.getElementById('batchEmailBtn');
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Sending 0 / ${parsed.length}...`;
+        let sent = 0, failed = 0;
+        const results = [];
+        const expiresAt = document.getElementById('batchExpiry').value;
+        const role = document.getElementById('batchRole').value;
+        const sendNext = (index) => {
+            if (index >= parsed.length) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Batch Invites';
+                const resultsDiv = document.getElementById('batchResults');
+                resultsDiv.style.display = 'block';
+                resultsDiv.innerHTML = `
+                    <div style="background:var(--bg-nav-active);border:1px solid var(--border);border-radius:8px;padding:1rem;margin-bottom:1rem;">
+                        <strong style="color:var(--success);">✓ Done — ${sent} sent, ${failed} failed</strong>
+                    </div>
+                    ${results.map(r => `
+                        <div style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0.75rem;border-radius:6px;margin-bottom:0.3rem;background:var(--bg-nav-hover);">
+                            <span style="font-size:0.85rem;">${r.email}</span>
+                            <span style="font-size:0.8rem;color:${r.ok ? 'var(--success)' : 'var(--danger)'};">${r.ok ? '✓ Sent' : '✗ ' + r.error}</span>
+                        </div>
+                    `).join('')}`;
+                loadInvites();
+                return;
+            }
+            const person = parsed[index];
+            btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Sending ${index + 1} / ${parsed.length}...`;
+            fetch('/admin/invites/email', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    email: person.email,
+                    name: person.name,
+                    role,
+                    expires_at: expiresAt,
+                    base_url: SIGNUP_BASE_URL || window.location.origin
+                })
+            }).then(r => r.json()).then(d => {
+                if (d.success) { sent++; results.push({ email: person.email, ok: true }); }
+                else { failed++; results.push({ email: person.email, ok: false, error: d.error || 'Failed' }); }
+                sendNext(index + 1);
+            }).catch(() => {
+                failed++;
+                results.push({ email: person.email, ok: false, error: 'Network error' });
+                sendNext(index + 1);
+            });
+        };
+        sendNext(0);
+    }
+
+    if (id === 'csvForm') {
+        e.preventDefault();
+        const formData = new FormData();
+        formData.append('file', document.getElementById('csvFile').files[0]);
+        fetch('/equipment/import-csv', { method: 'POST', body: formData })
+        .then(r => r.json()).then(result => {
+            if (result.success) showAlert(`Imported ${result.imported} items!`, 'success');
+            else showAlert(result.error, 'error');
+        });
+    }
+
+    if (id === 'sheetdbForm') {
+        e.preventDefault();
+        fetch('/equipment/import-sheetdb', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ sheet_id: document.getElementById('sheetId').value })
+        }).then(r => r.json()).then(result => {
+            if (result.success) showAlert(`Imported ${result.imported} items!`, 'success');
+            else showAlert(result.error, 'error');
+        });
+    }
+
+    if (id === 'restoreForm') {
+        e.preventDefault();
+        if (!confirm('⚠️ WARNING: This will replace your entire database!\n\nAre you absolutely sure?')) return;
+        const formData = new FormData();
+        formData.append('file', document.getElementById('restoreFile').files[0]);
+        fetch('/admin/restore', { method: 'POST', body: formData })
+        .then(r => r.json()).then(result => {
+            if (result.success) { showAlert(result.message, 'success'); setTimeout(() => location.reload(), 1000); }
+            else showAlert(result.error, 'error');
+        });
+    }
 });
 </script>
+
 {% endblock %}

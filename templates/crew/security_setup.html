@@ -9,8 +9,136 @@
 </div>
 
 <div style="display: grid; grid-template-columns: 1fr; gap: 1rem;">
-    <!-- Include the TOTP settings block (reuse markup from totp_setting) -->
     {% include 'crew/totp_setting.html' %}
 </div>
 
+<!-- 2FA Setup Modal -->
+<div id="setup2faModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('setup2faModal')">&times;</span>
+        <div id="step1">
+            <h2 style="margin-bottom: 1rem;"><i class="fas fa-qrcode"></i> Step 1: Scan QR Code</h2>
+            <p style="margin-bottom: 1rem;">Scan this QR code with your authenticator app:</p>
+            <div style="text-align: center; margin: 2rem 0;">
+                <img id="qrCode" src="" alt="QR Code" style="max-width: 300px; border: 2px solid var(--border); padding: 1rem; border-radius: 8px;">
+            </div>
+            <p style="margin-bottom: 0.5rem; font-weight: 600;">Or enter this code manually:</p>
+            <div style="background: var(--bg-table-head); padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem;">
+                <code id="secretKey" style="font-size: 1.1rem; letter-spacing: 2px; flex: 1;"></code>
+                <button onclick="copySecret()" class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;"><i class="fas fa-copy"></i></button>
+            </div>
+            <button onclick="nextStep()" class="btn btn-primary" style="width: 100%;">
+                <i class="fas fa-arrow-right"></i> Next: Verify Code
+            </button>
+        </div>
+        <div id="step2" style="display: none;">
+            <h2 style="margin-bottom: 1rem;"><i class="fas fa-key"></i> Step 2: Verify Code</h2>
+            <p style="margin-bottom: 1.5rem;">Enter the 6-digit code from your authenticator app:</p>
+            <div class="form-group">
+                <input type="text" id="verifyCode" placeholder="000000" maxlength="6"
+                       pattern="[0-9]{6}" inputmode="numeric"
+                       style="text-align: center; font-size: 1.5rem; letter-spacing: 8px; font-family: monospace;">
+            </div>
+            <div style="display: flex; gap: 1rem;">
+                <button onclick="previousStep()" class="btn btn-primary" style="flex: 1;"><i class="fas fa-arrow-left"></i> Back</button>
+                <button onclick="verifySetup()" class="btn btn-success" style="flex: 2;"><i class="fas fa-check"></i> Verify & Enable 2FA</button>
+            </div>
+        </div>
+        <div id="step3" style="display: none;">
+            <h2 style="margin-bottom: 1rem; color: var(--success);"><i class="fas fa-check-circle"></i> 2FA Enabled!</h2>
+            <div class="alert alert-error" style="border-left-color: var(--warning); background: #fef3c7; color: #78350f;">
+                <i class="fas fa-exclamation-triangle" style="color: var(--warning);"></i>
+                <strong>Save these backup codes!</strong> They can only be shown once.
+            </div>
+            <div style="background: var(--bg-table-head); padding: 1.5rem; border-radius: 8px; margin: 1.5rem 0;">
+                <div id="backupCodes" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; font-family: monospace; font-size: 1rem;"></div>
+            </div>
+            <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                <button onclick="downloadBackupCodes()" class="btn btn-primary"><i class="fas fa-download"></i> Download</button>
+                <button onclick="copyBackupCodes()" class="btn btn-primary"><i class="fas fa-copy"></i> Copy</button>
+                <button onclick="finish2FASetup()" class="btn btn-success" style="margin-left: auto;"><i class="fas fa-check"></i> Finish</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Disable 2FA Modal -->
+<div id="disable2faModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('disable2faModal')">&times;</span>
+        <h2 style="margin-bottom: 1rem; color: var(--danger);"><i class="fas fa-exclamation-triangle"></i> Disable 2FA</h2>
+        <div class="alert alert-error"><i class="fas fa-exclamation-triangle"></i> Warning: Disabling 2FA will make your account less secure.</div>
+        <div class="form-group" style="margin-top: 1rem;">
+            <label>Enter your password to confirm:</label>
+            <input type="password" id="disablePassword" placeholder="Your current password">
+        </div>
+        <div style="display: flex; gap: 1rem;">
+            <button onclick="hideModal('disable2faModal')" class="btn btn-primary" style="flex: 1;">Cancel</button>
+            <button onclick="disable2FA()" class="btn btn-danger" style="flex: 1;"><i class="fas fa-times"></i> Disable 2FA</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentSecret = '', backupCodesData = [];
+
+function startSetup2FA() {
+    fetch('/api/2fa/setup', { method: 'POST', headers: {'Content-Type': 'application/json'} })
+    .then(r => r.json()).then(d => {
+        if (d.success) {
+            currentSecret = d.secret;
+            document.getElementById('qrCode').src = d.qr_code;
+            document.getElementById('secretKey').textContent = d.secret;
+            ['step1','step2','step3'].forEach((s,i) => document.getElementById(s).style.display = i===0 ? 'block' : 'none');
+            showModal('setup2faModal');
+        } else { alert(d.error || 'Setup failed'); }
+    });
+}
+function nextStep()     { document.getElementById('step1').style.display='none'; document.getElementById('step2').style.display='block'; document.getElementById('verifyCode').focus(); }
+function previousStep() { document.getElementById('step2').style.display='none'; document.getElementById('step1').style.display='block'; }
+function copySecret()   { navigator.clipboard.writeText(currentSecret); showAlert('Secret copied!'); }
+function verifySetup() {
+    const code = document.getElementById('verifyCode').value.trim();
+    if (code.length !== 6) { alert('Enter a 6-digit code'); return; }
+    fetch('/api/2fa/verify-setup', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({code}) })
+    .then(r => r.json()).then(d => {
+        if (d.success) {
+            backupCodesData = d.backup_codes;
+            document.getElementById('backupCodes').innerHTML = d.backup_codes.map(c =>
+                `<div style="padding:0.5rem;background:var(--bg-card);border-radius:4px;text-align:center;border:1px solid var(--border);">${c}</div>`
+            ).join('');
+            document.getElementById('step2').style.display='none';
+            document.getElementById('step3').style.display='block';
+        } else { alert(d.error || 'Verification failed'); }
+    });
+}
+function downloadBackupCodes() {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([backupCodesData.join('\n')], {type:'text/plain'}));
+    a.download = 'showwise-backup-codes.txt'; a.click();
+}
+function copyBackupCodes() { navigator.clipboard.writeText(backupCodesData.join('\n')); showAlert('Backup codes copied!'); }
+function finish2FASetup() { hideModal('setup2faModal'); location.reload(); }
+function disable2FA() {
+    const pw = document.getElementById('disablePassword').value;
+    if (!pw) { alert('Enter your password'); return; }
+    fetch('/api/2fa/disable', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({password: pw}) })
+    .then(r => r.json()).then(d => {
+        if (d.success) { showAlert('2FA disabled', 'success'); setTimeout(() => location.reload(), 1000); }
+        else { alert(d.error || 'Failed'); }
+    });
+}
+function showUnlinkGoogle() {
+    const pw = prompt('Enter your password to unlink Google account:');
+    if (!pw) return;
+    fetch('/auth/google/unlink', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({password: pw}) })
+    .then(r => r.json()).then(d => {
+        if (d.success) { showAlert('Google unlinked', 'success'); setTimeout(() => location.reload(), 1000); }
+        else { alert(d.error || 'Failed'); }
+    });
+}
+</script>
 {% endblock %}
