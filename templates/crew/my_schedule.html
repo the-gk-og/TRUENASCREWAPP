@@ -421,88 +421,95 @@ const assignmentsByDate = {};
 const openShiftsByDate = {};
 
 function processAssignments() {
-    // Group assignments by shift date
-    ASSIGNMENTS.forEach(assignment => {
-        if (assignment.shift && assignment.shift.shift_date) {
-            const date = new Date(assignment.shift.shift_date);
-            const dateKey = date.toISOString().split('T')[0];
-            
-            if (!assignmentsByDate[dateKey]) {
-                assignmentsByDate[dateKey] = [];
-            }
-            
-            assignmentsByDate[dateKey].push({
-                type: 'shift',
-                id: assignment.id,
-                title: assignment.shift.title,
-                time: date,
-                endTime: new Date(assignment.shift.shift_end_date),
-                role: assignment.shift.role,
-                location: assignment.shift.location,
-                description: assignment.shift.description,
-                status: assignment.status,
-                crewCount: assignment.shift.assignments_count,
-                positionsNeeded: assignment.shift.positions_needed,
-                eventTitle: assignment.shift.event ? assignment.shift.event.title : '',
-                shiftId: assignment.shift.id,
-                eventId: assignment.shift.event_id
-            });
-        }
-    });
-    
-    // Group crew assignments by event date
-    CREW_ASSIGNMENTS.forEach(assignment => {
-        if (assignment.event && assignment.event.event_date) {
-            const date = new Date(assignment.event.event_date);
-            const dateKey = date.toISOString().split('T')[0];
-            
-            if (!assignmentsByDate[dateKey]) {
-                assignmentsByDate[dateKey] = [];
-            }
-            
-            assignmentsByDate[dateKey].push({
-                type: 'event',
-                id: assignment.id,
-                title: assignment.event.title,
-                time: date,
-                endTime: assignment.event.event_end_date ? new Date(assignment.event.event_end_date) : null,
-                role: assignment.role,
-                location: assignment.event.location,
-                description: assignment.event.description,
-                crewCount: assignment.event.crew_assignments.length,
-                createdBy: assignment.event.created_by,
-                eventId: assignment.event.id
-            });
-        }
-    });
-    
-    // Group open shifts by date (deduplicated by shift ID)
+    // ---- shift assignments ----------------------------------------
     const seenShiftIds = new Set();
+
+    ASSIGNMENTS.forEach(assignment => {
+        if (!assignment.shift || !assignment.shift.shift_date) return;
+
+        // *** KEY FIX: skip if we've already rendered this shift ***
+        if (seenShiftIds.has(assignment.shift.id)) return;
+        seenShiftIds.add(assignment.shift.id);
+
+        const date = new Date(assignment.shift.shift_date);
+        const dateKey = date.toISOString().split('T')[0];
+
+        if (!assignmentsByDate[dateKey]) assignmentsByDate[dateKey] = [];
+
+        assignmentsByDate[dateKey].push({
+            type: 'shift',
+            id: assignment.id,
+            title: assignment.shift.title,
+            time: date,
+            endTime: new Date(assignment.shift.shift_end_date),
+            role: assignment.shift.role,
+            location: assignment.shift.location,
+            description: assignment.shift.description,
+            status: assignment.status,
+            crewCount: assignment.shift.assignments_count,
+            positionsNeeded: assignment.shift.positions_needed,
+            eventTitle: assignment.shift.event ? assignment.shift.event.title : '',
+            shiftId: assignment.shift.id,
+            eventId: assignment.shift.event_id,
+        });
+    });
+
+    // ---- crew (event-level) assignments ---------------------------
+    const seenEventIds = new Set();
+
+    CREW_ASSIGNMENTS.forEach(assignment => {
+        if (!assignment.event || !assignment.event.event_date) return;
+
+        // *** KEY FIX: skip duplicate events ***
+        if (seenEventIds.has(assignment.event.id)) return;
+        seenEventIds.add(assignment.event.id);
+
+        const date = new Date(assignment.event.event_date);
+        const dateKey = date.toISOString().split('T')[0];
+
+        if (!assignmentsByDate[dateKey]) assignmentsByDate[dateKey] = [];
+
+        assignmentsByDate[dateKey].push({
+            type: 'event',
+            id: assignment.id,
+            title: assignment.event.title,
+            time: date,
+            endTime: assignment.event.event_end_date
+                ? new Date(assignment.event.event_end_date)
+                : null,
+            role: assignment.role,
+            location: assignment.event.location,
+            description: assignment.event.description,
+            crewCount: assignment.event.crew_assignments
+                ? assignment.event.crew_assignments.length
+                : 0,
+            createdBy: assignment.event.created_by,
+            eventId: assignment.event.id,
+        });
+    });
+
+    // ---- open shifts ----------------------------------------------
+    const seenOpenIds = new Set();
+
     OPEN_SHIFTS.forEach(shift => {
+        // *** KEY FIX: skip duplicate open shifts ***
+        if (seenOpenIds.has(shift.id)) return;
+        seenOpenIds.add(shift.id);
+
+        // Skip if user already has this shift
+        if (ASSIGNMENTS.some(a => a.shift && a.shift.id === shift.id)) return;
+
         const date = new Date(shift.shift_date);
         const dateKey = date.toISOString().split('T')[0];
-        
-        // Skip if we've already seen this shift ID (avoid duplicates)
-        if (seenShiftIds.has(shift.id)) {
-            return;
-        }
-        
-        if (!openShiftsByDate[dateKey]) {
-            openShiftsByDate[dateKey] = [];
-        }
-        
-        // Check if user already has this shift
-        const alreadyClaimed = ASSIGNMENTS.some(a => a.shift && a.shift.id === shift.id);
-        
-        if (!alreadyClaimed) {
-            seenShiftIds.add(shift.id);
-            openShiftsByDate[dateKey].push({
-                ...shift,
-                date: date
-            });
-        }
+
+        if (!openShiftsByDate[dateKey]) openShiftsByDate[dateKey] = [];
+
+        openShiftsByDate[dateKey].push({ ...shift, date });
     });
 }
+
+
+
 
 function switchView(view) {
     document.getElementById('listView').style.display = view === 'list' ? 'block' : 'none';

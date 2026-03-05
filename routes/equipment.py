@@ -1,4 +1,4 @@
-"""routes/equipment.py — Equipment CRUD, barcodes, CSV import."""
+"""routes/equipment.py — Equipment CRUD, barcodes, CSV import, pictures."""
 
 import io, csv, os
 from datetime import datetime
@@ -15,6 +15,27 @@ from decorators import crew_required
 
 equipment_bp = Blueprint('equipment', __name__)
 
+UPLOAD_FOLDER         = 'uploads'
+EQUIPMENT_PICS_FOLDER = os.path.join(UPLOAD_FOLDER, 'equipment')
+ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+
+
+def _allowed_image(filename: str) -> bool:
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_IMAGE_EXTENSIONS
+
+
+def _remove_file(relative_path: str):
+    try:
+        full = os.path.join(UPLOAD_FOLDER, relative_path)
+        if os.path.exists(full):
+            os.remove(full)
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# List
+# ---------------------------------------------------------------------------
 
 @equipment_bp.route('/equipment')
 @login_required
@@ -25,6 +46,22 @@ def equipment_list():
     return render_template('/crew/equipment.html', equipment=equipment, equipment_json=equipment_json)
 
 
+# ---------------------------------------------------------------------------
+# Detail page  ← NEW
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/equipment/<int:id>')
+@login_required
+@crew_required
+def equipment_detail(id):
+    eq = Equipment.query.get_or_404(id)
+    return render_template('crew/equipment_detail.html', item=eq)
+
+
+# ---------------------------------------------------------------------------
+# Barcode lookup
+# ---------------------------------------------------------------------------
+
 @equipment_bp.route('/equipment/barcode/<barcode>')
 @login_required
 @crew_required
@@ -34,6 +71,10 @@ def equipment_by_barcode(barcode):
         return jsonify(eq.to_dict())
     return jsonify({'error': 'Equipment not found'}), 404
 
+
+# ---------------------------------------------------------------------------
+# Add / Update / Delete
+# ---------------------------------------------------------------------------
 
 @equipment_bp.route('/equipment/add', methods=['POST'])
 @login_required
@@ -76,10 +117,139 @@ def delete_equipment(id):
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
     eq = Equipment.query.get_or_404(id)
+    if eq.picture:
+        _remove_file(eq.picture)
+    if eq.location_picture:
+        _remove_file(eq.location_picture)
     db.session.delete(eq)
     db.session.commit()
     return jsonify({'success': True})
 
+
+# ---------------------------------------------------------------------------
+# Equipment picture (photo of the item)
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/equipment/<int:id>/picture', methods=['POST'])
+@login_required
+@crew_required
+def upload_equipment_picture(id):
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    eq = Equipment.query.get_or_404(id)
+
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+    if not _allowed_image(file.filename):
+        return jsonify({'error': 'Invalid file type. Allowed: png, jpg, jpeg, gif, webp'}), 400
+
+    os.makedirs(EQUIPMENT_PICS_FOLDER, exist_ok=True)
+
+    if eq.picture:
+        _remove_file(eq.picture)
+
+    ext      = file.filename.rsplit('.', 1)[1].lower()
+    filename = f"equipment_{id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{ext}"
+    file.save(os.path.join(EQUIPMENT_PICS_FOLDER, filename))
+
+    eq.picture = f"equipment/{filename}"
+    db.session.commit()
+    return jsonify({'success': True, 'picture_url': url_for('equipment.serve_equipment_picture', id=id)})
+
+
+@equipment_bp.route('/equipment/<int:id>/picture', methods=['DELETE'])
+@login_required
+@crew_required
+def delete_equipment_picture(id):
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    eq = Equipment.query.get_or_404(id)
+    if eq.picture:
+        _remove_file(eq.picture)
+        eq.picture = None
+        db.session.commit()
+    return jsonify({'success': True})
+
+
+@equipment_bp.route('/equipment/<int:id>/picture/view')
+@login_required
+def serve_equipment_picture(id):
+    eq = Equipment.query.get_or_404(id)
+    if not eq.picture:
+        return '', 404
+    try:
+        return send_from_directory(UPLOAD_FOLDER, eq.picture)
+    except Exception:
+        return '', 404
+
+
+# ---------------------------------------------------------------------------
+# Location picture (photo of the storage location)  ← NEW
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/equipment/<int:id>/location-picture', methods=['POST'])
+@login_required
+@crew_required
+def upload_equipment_location_picture(id):
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    eq = Equipment.query.get_or_404(id)
+
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+    if not _allowed_image(file.filename):
+        return jsonify({'error': 'Invalid file type. Allowed: png, jpg, jpeg, gif, webp'}), 400
+
+    os.makedirs(EQUIPMENT_PICS_FOLDER, exist_ok=True)
+
+    if eq.location_picture:
+        _remove_file(eq.location_picture)
+
+    ext      = file.filename.rsplit('.', 1)[1].lower()
+    filename = f"equipment_loc_{id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{ext}"
+    file.save(os.path.join(EQUIPMENT_PICS_FOLDER, filename))
+
+    eq.location_picture = f"equipment/{filename}"
+    db.session.commit()
+    return jsonify({'success': True,
+                    'location_picture_url': url_for('equipment.serve_equipment_location_picture', id=id)})
+
+
+@equipment_bp.route('/equipment/<int:id>/location-picture', methods=['DELETE'])
+@login_required
+@crew_required
+def delete_equipment_location_picture(id):
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    eq = Equipment.query.get_or_404(id)
+    if eq.location_picture:
+        _remove_file(eq.location_picture)
+        eq.location_picture = None
+        db.session.commit()
+    return jsonify({'success': True})
+
+
+@equipment_bp.route('/equipment/<int:id>/location-picture/view')
+@login_required
+def serve_equipment_location_picture(id):
+    eq = Equipment.query.get_or_404(id)
+    if not eq.location_picture:
+        return '', 404
+    try:
+        return send_from_directory(UPLOAD_FOLDER, eq.location_picture)
+    except Exception:
+        return '', 404
+
+
+# ---------------------------------------------------------------------------
+# CSV import  (FIXED: now imports quantity_owned correctly)
+# ---------------------------------------------------------------------------
 
 @equipment_bp.route('/equipment/import-csv', methods=['POST'])
 @login_required
@@ -90,28 +260,66 @@ def import_csv():
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
     try:
-        stream     = io.StringIO(request.files['file'].stream.read().decode('utf8'), newline=None)
+        raw = request.files['file'].stream.read()
+        try:
+            text = raw.decode('utf-8')
+        except UnicodeDecodeError:
+            text = raw.decode('latin-1')
+
+        stream     = io.StringIO(text, newline=None)
         csv_reader = csv.DictReader(stream)
-        count      = 0
-        for row in csv_reader:
-            barcode = row.get('barcode') or row.get('Barcode')
-            name    = row.get('name')    or row.get('Name')
+
+        count   = 0
+        skipped = 0
+        errors  = []
+
+        for row_num, row in enumerate(csv_reader, start=2):
+            def _get(row, *keys):
+                for k in keys:
+                    for rk, rv in row.items():
+                        if rk and rk.strip().lower() == k.lower():
+                            return (rv or '').strip()
+                return ''
+
+            barcode = _get(row, 'barcode')
+            name    = _get(row, 'name')
+
             if not barcode or not name:
+                skipped += 1
                 continue
+
             if Equipment.query.filter_by(barcode=barcode).first():
+                skipped += 1
                 continue
-            db.session.add(Equipment(
-                barcode=barcode, name=name,
-                category=row.get('category') or row.get('Category') or '',
-                location=row.get('location') or row.get('Location') or '',
-                notes=row.get('notes')       or row.get('Notes')    or '',
-            ))
-            count += 1
+
+            qty_raw = _get(row, 'quantity_owned', 'quantity', 'qty')
+            try:
+                qty = max(1, int(qty_raw)) if qty_raw else 1
+            except ValueError:
+                qty = 1
+
+            try:
+                db.session.add(Equipment(
+                    barcode=barcode, name=name,
+                    category=_get(row, 'category'),
+                    location=_get(row, 'location'),
+                    notes=_get(row, 'notes'),
+                    quantity_owned=qty,
+                ))
+                count += 1
+            except Exception as row_exc:
+                errors.append(f"Row {row_num}: {row_exc}")
+
         db.session.commit()
-        return jsonify({'success': True, 'imported': count})
+        return jsonify({'success': True, 'imported': count, 'skipped': skipped, 'errors': errors})
     except Exception as exc:
+        db.session.rollback()
         return jsonify({'error': f'Import failed: {exc}'}), 400
 
+
+# ---------------------------------------------------------------------------
+# Barcodes
+# ---------------------------------------------------------------------------
 
 @equipment_bp.route('/equipment/barcodes')
 @login_required

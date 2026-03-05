@@ -1,0 +1,471 @@
+{% extends "base.html" %}
+
+{% block title %}{{ item.name }} — ShowWise{% endblock %}
+
+{% block content %}
+
+<style>
+/* ── Detail page styles ─────────────────────────────────────────────────── */
+.detail-hero {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+@media (max-width: 700px) {
+    .detail-hero { grid-template-columns: 1fr; }
+}
+
+.photo-card {
+    background: var(--bg-card);
+    border: 2px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.photo-card-header {
+    padding: 0.75rem 1rem;
+    font-weight: 700;
+    font-size: 0.9rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-bottom: 2px solid var(--border);
+}
+
+.photo-card-header.item-header   { background: #e0e7ff; color: #3730a3; }
+.photo-card-header.loc-header    { background: #fef3c7; color: #92400e; }
+
+.photo-card-body {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 220px;
+    padding: 1rem;
+    cursor: pointer;
+    transition: background 0.2s;
+    position: relative;
+}
+.photo-card-body:hover { background: var(--bg-nav-hover); }
+
+.photo-card-body img {
+    max-width: 100%;
+    max-height: 260px;
+    border-radius: 10px;
+    object-fit: contain;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+}
+
+.photo-placeholder {
+    text-align: center;
+    color: var(--text-muted);
+}
+.photo-placeholder .ph-icon { font-size: 3.5rem; margin-bottom: 0.5rem; }
+.photo-placeholder p { font-size: 0.9rem; margin: 0; }
+
+.photo-card-footer {
+    padding: 0.75rem 1rem;
+    border-top: 2px solid var(--border);
+    display: flex;
+    gap: 0.5rem;
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.info-chip {
+    background: var(--bg-nav-active);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem;
+}
+.info-chip .label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--text-secondary);
+    margin-bottom: 0.35rem;
+}
+.info-chip .value {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    word-break: break-word;
+}
+.info-chip .value.barcode-val {
+    font-family: monospace;
+    font-size: 1rem;
+    background: var(--bg-card);
+    padding: 0.35rem 0.6rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    display: inline-block;
+}
+.info-chip .value.loc-val {
+    background: #fef3c7;
+    color: #92400e;
+    padding: 0.3rem 0.75rem;
+    border-radius: 20px;
+    display: inline-block;
+    font-size: 1rem;
+}
+.info-chip .value.qty-val {
+    background: #e0e7ff;
+    color: #3730a3;
+    padding: 0.3rem 0.75rem;
+    border-radius: 20px;
+    display: inline-block;
+    font-size: 1rem;
+}
+
+@keyframes progressPulse {
+    0%   { opacity: 1; }
+    50%  { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+</style>
+
+<!-- Breadcrumb -->
+<div style="margin-bottom:1.25rem; font-size:0.9rem; color:var(--text-secondary);">
+    <a href="{{ url_for('equipment.equipment_list') }}" style="color:var(--primary); text-decoration:none;">
+        <i class="fas fa-boxes"></i> Equipment
+    </a>
+    <span style="margin:0 0.5rem; opacity:0.5;">/</span>
+    <span style="color:var(--text-primary); font-weight:600;">{{ item.name }}</span>
+</div>
+
+<!-- Page header -->
+<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.5rem;">
+    <div>
+        <h1 style="margin:0; font-size:1.75rem;">{{ item.name }}</h1>
+        {% if item.category %}
+        <span style="background:#e0e7ff; color:#3730a3; padding:0.3rem 0.9rem; border-radius:20px; font-size:0.85rem; font-weight:600; margin-top:0.5rem; display:inline-block;">
+            {{ item.category }}
+        </span>
+        {% endif %}
+    </div>
+    <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+        <a href="{{ url_for('equipment.equipment_list') }}" class="btn btn-secondary" style="text-decoration:none;">
+            <i class="fas fa-arrow-left"></i> Back
+        </a>
+        {% if current_user.is_admin %}
+        <button onclick="openEditModal()" class="btn btn-primary">
+            <i class="fas fa-edit"></i> Edit
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+<!-- ── Two photo cards ──────────────────────────────────────────────────── -->
+<div class="detail-hero">
+
+    <!-- Item photo -->
+    <div class="photo-card">
+        <div class="photo-card-header item-header">
+            <i class="fas fa-camera"></i> Equipment Photo
+        </div>
+        <div class="photo-card-body"
+             {% if item.picture %}
+             onclick="viewImg('{{ url_for('equipment.serve_equipment_picture', id=item.id) }}', '{{ item.name|e }}')"
+             title="Click to enlarge"
+             {% endif %}>
+            {% if item.picture %}
+            <img src="{{ url_for('equipment.serve_equipment_picture', id=item.id) }}" alt="{{ item.name }}">
+            {% else %}
+            <div class="photo-placeholder">
+                <div class="ph-icon">📦</div>
+                <p>No equipment photo yet</p>
+                {% if current_user.is_admin %}
+                <p style="margin-top:0.25rem; font-size:0.8rem;">Use the button below to add one</p>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+        {% if current_user.is_admin %}
+        <div class="photo-card-footer">
+            <button onclick="openPicModal('item')" class="btn btn-primary" style="flex:1; font-size:0.85rem;">
+                <i class="fas fa-camera"></i>
+                {{ 'Replace Photo' if item.picture else 'Upload Photo' }}
+            </button>
+            {% if item.picture %}
+            <button onclick="deletePic('item')" class="btn btn-danger" style="font-size:0.85rem;" title="Remove photo">
+                <i class="fas fa-trash"></i>
+            </button>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Location photo -->
+    <div class="photo-card">
+        <div class="photo-card-header loc-header">
+            <i class="fas fa-map-marker-alt"></i> Storage Location Photo
+        </div>
+        <div class="photo-card-body"
+             {% if item.location_picture %}
+             onclick="viewImg('{{ url_for('equipment.serve_equipment_location_picture', id=item.id) }}', 'Storage: {{ item.location|e if item.location else item.name|e }}')"
+             title="Click to enlarge"
+             {% endif %}>
+            {% if item.location_picture %}
+            <img src="{{ url_for('equipment.serve_equipment_location_picture', id=item.id) }}" alt="Storage location">
+            {% else %}
+            <div class="photo-placeholder">
+                <div class="ph-icon">📍</div>
+                <p>No location photo yet</p>
+                {% if current_user.is_admin %}
+                <p style="margin-top:0.25rem; font-size:0.8rem;">Help crew find this item by adding a photo</p>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+        {% if current_user.is_admin %}
+        <div class="photo-card-footer">
+            <button onclick="openPicModal('location')" class="btn btn-primary" style="flex:1; font-size:0.85rem; background:#f59e0b; border-color:#f59e0b;">
+                <i class="fas fa-map-marker-alt"></i>
+                {{ 'Replace Location Photo' if item.location_picture else 'Upload Location Photo' }}
+            </button>
+            {% if item.location_picture %}
+            <button onclick="deletePic('location')" class="btn btn-danger" style="font-size:0.85rem;" title="Remove photo">
+                <i class="fas fa-trash"></i>
+            </button>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+
+<!-- ── Info chips ────────────────────────────────────────────────────────── -->
+<div class="info-grid">
+    <div class="info-chip">
+        <div class="label"><i class="fas fa-barcode"></i> Barcode</div>
+        <div class="value barcode-val">{{ item.barcode }}</div>
+    </div>
+    <div class="info-chip">
+        <div class="label"><i class="fas fa-layer-group"></i> Quantity Owned</div>
+        <div class="value qty-val">{{ item.quantity_owned or 1 }}</div>
+    </div>
+    {% if item.category %}
+    <div class="info-chip">
+        <div class="label"><i class="fas fa-tag"></i> Category</div>
+        <div class="value">{{ item.category }}</div>
+    </div>
+    {% endif %}
+    {% if item.location %}
+    <div class="info-chip">
+        <div class="label"><i class="fas fa-map-marker-alt"></i> Storage Location</div>
+        <div class="value loc-val">{{ item.location }}</div>
+    </div>
+    {% endif %}
+    <div class="info-chip">
+        <div class="label"><i class="fas fa-calendar-alt"></i> Added</div>
+        <div class="value" style="font-size:0.95rem;">{{ item.created_at.strftime('%d %b %Y') if item.created_at else '—' }}</div>
+    </div>
+</div>
+
+{% if item.notes %}
+<div class="card" style="margin-bottom:1.5rem; border-left:4px solid var(--primary);">
+    <h3 style="margin-bottom:0.75rem;"><i class="fas fa-sticky-note"></i> Notes</h3>
+    <p style="margin:0; white-space:pre-wrap; color:var(--text-secondary);">{{ item.notes }}</p>
+</div>
+{% endif %}
+
+<!-- ── Full image viewer ──────────────────────────────────────────────────── -->
+<div id="imgViewer" class="modal" onclick="hideModal('imgViewer')" style="display:none;">
+    <div style="max-width:90vw; max-height:90vh; margin:auto; margin-top:5vh; text-align:center;">
+        <img id="imgViewerSrc" src="" alt=""
+             style="max-width:100%; max-height:85vh; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+        <p id="imgViewerCaption" style="color:#fff; margin-top:0.75rem; font-size:1rem; font-weight:600;"></p>
+        <p style="color:rgba(255,255,255,0.6); font-size:0.85rem; margin-top:0.25rem;">Click anywhere to close</p>
+    </div>
+</div>
+
+{% if current_user.is_admin %}
+
+<!-- ── Edit modal ────────────────────────────────────────────────────────── -->
+<div id="editModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideModal('editModal')">&times;</span>
+        <h2>Edit Equipment</h2>
+        <form id="editForm" onsubmit="submitEdit(event)">
+            <div class="form-group">
+                <label>Name *</label>
+                <input type="text" id="eName" value="{{ item.name }}" required>
+            </div>
+            <div class="form-group">
+                <label>Quantity Owned</label>
+                <input type="number" id="eQty" value="{{ item.quantity_owned or 1 }}" min="1" required>
+            </div>
+            <div class="form-group">
+                <label>Category</label>
+                <input type="text" id="eCat" value="{{ item.category or '' }}">
+            </div>
+            <div class="form-group">
+                <label>Storage Location</label>
+                <input type="text" id="eLoc" value="{{ item.location or '' }}">
+            </div>
+            <div class="form-group">
+                <label>Notes</label>
+                <textarea id="eNotes">{{ item.notes or '' }}</textarea>
+            </div>
+            <button type="submit" class="btn btn-success" style="width:100%;">Save Changes</button>
+        </form>
+    </div>
+</div>
+
+<!-- ── Upload modal (shared for both types) ──────────────────────────────── -->
+<div id="picModal" class="modal">
+    <div class="modal-content" style="max-width:440px;">
+        <span class="close" onclick="hideModal('picModal')">&times;</span>
+        <h2 id="picModalTitle" style="margin-bottom:1.5rem;"></h2>
+
+        <div id="uploadArea"
+             style="border:2px dashed var(--border); border-radius:10px; padding:2.5rem; text-align:center; cursor:pointer; transition:border-color 0.2s;"
+             onclick="document.getElementById('picFileInput').click()"
+             ondragover="event.preventDefault(); this.style.borderColor='var(--primary)';"
+             ondragleave="this.style.borderColor='var(--border)';"
+             ondrop="handleDrop(event)">
+            <p id="picModalIcon" style="font-size:2.5rem; margin-bottom:0.5rem;"></p>
+            <p style="color:var(--text-secondary); margin:0; font-weight:600;">Click or drag & drop</p>
+            <p style="color:var(--text-muted); font-size:0.8rem; margin-top:0.25rem;">PNG, JPG, JPEG, GIF, WEBP</p>
+        </div>
+        <input type="file" id="picFileInput" accept="image/*" style="display:none;" onchange="doUpload(this.files[0])">
+
+        <div id="picProgress" style="display:none; margin-top:1rem;">
+            <div style="background:var(--border); border-radius:4px; height:6px; overflow:hidden;">
+                <div style="width:100%; height:100%; background:var(--primary); animation:progressPulse 1s infinite;"></div>
+            </div>
+            <p style="text-align:center; color:var(--text-secondary); font-size:0.85rem; margin-top:0.5rem;">Uploading…</p>
+        </div>
+    </div>
+</div>
+
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const ITEM_ID = {{ item.id }};
+
+// ── Full image viewer ────────────────────────────────────────────────────────
+function viewImg(url, caption) {
+    document.getElementById('imgViewerSrc').src        = url;
+    document.getElementById('imgViewerCaption').textContent = caption;
+    showModal('imgViewer');
+}
+
+{% if current_user.is_admin %}
+
+// ── Edit ─────────────────────────────────────────────────────────────────────
+function openEditModal() { showModal('editModal'); }
+
+function submitEdit(e) {
+    e.preventDefault();
+    fetch(`/equipment/update/${ITEM_ID}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            name:           document.getElementById('eName').value,
+            quantity_owned: parseInt(document.getElementById('eQty').value) || 1,
+            category:       document.getElementById('eCat').value,
+            location:       document.getElementById('eLoc').value,
+            notes:          document.getElementById('eNotes').value,
+        })
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            hideModal('editModal');
+            showAlert('Equipment updated!', 'success');
+            setTimeout(() => location.reload(), 700);
+        } else {
+            showAlert(result.error || 'Update failed.', 'error');
+        }
+    });
+}
+
+// ── Picture upload ────────────────────────────────────────────────────────────
+let currentPicType = 'item'; // 'item' | 'location'
+
+function openPicModal(type) {
+    currentPicType = type;
+    const isLoc = type === 'location';
+    document.getElementById('picModalTitle').innerHTML = isLoc
+        ? '<i class="fas fa-map-marker-alt" style="color:#f59e0b;"></i> Upload Storage Location Photo'
+        : '<i class="fas fa-camera"></i> Upload Equipment Photo';
+    document.getElementById('picModalIcon').textContent = isLoc ? '📍' : '📷';
+    document.getElementById('picProgress').style.display = 'none';
+    showModal('picModal');
+}
+
+function handleDrop(event) {
+    event.preventDefault();
+    document.getElementById('uploadArea').style.borderColor = 'var(--border)';
+    const file = event.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) doUpload(file);
+    else showAlert('Please drop an image file.', 'error');
+}
+
+function doUpload(file) {
+    if (!file) return;
+    document.getElementById('picProgress').style.display = 'block';
+
+    const fd = new FormData();
+    fd.append('file', file);
+
+    const endpoint = currentPicType === 'location'
+        ? `/equipment/${ITEM_ID}/location-picture`
+        : `/equipment/${ITEM_ID}/picture`;
+
+    fetch(endpoint, { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(result => {
+            document.getElementById('picProgress').style.display = 'none';
+            if (result.success) {
+                showAlert('Photo uploaded!', 'success');
+                hideModal('picModal');
+                setTimeout(() => location.reload(), 600);
+            } else {
+                showAlert(result.error || 'Upload failed.', 'error');
+            }
+        })
+        .catch(() => {
+            document.getElementById('picProgress').style.display = 'none';
+            showAlert('Upload failed.', 'error');
+        });
+}
+
+function deletePic(type) {
+    const label = type === 'location' ? 'location photo' : 'equipment photo';
+    if (!confirm(`Remove this ${label}?`)) return;
+
+    const endpoint = type === 'location'
+        ? `/equipment/${ITEM_ID}/location-picture`
+        : `/equipment/${ITEM_ID}/picture`;
+
+    fetch(endpoint, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                showAlert('Photo removed.', 'success');
+                setTimeout(() => location.reload(), 600);
+            } else {
+                showAlert(result.error || 'Failed to remove.', 'error');
+            }
+        });
+}
+
+{% endif %}
+</script>
+{% endblock %}

@@ -2,6 +2,9 @@
 models.py
 =========
 All SQLAlchemy database models for ShowWise.
+Equipment gains two optional picture fields:
+  picture          – photo of the item itself
+  location_picture – photo of the storage location
 """
 
 from datetime import datetime
@@ -9,24 +12,20 @@ from extensions import db
 from flask_login import UserMixin
 
 
-# ---------------------------------------------------------------------------
-# Users & Auth
-# ---------------------------------------------------------------------------
-
 class User(UserMixin, db.Model):
-    id                 = db.Column(db.Integer, primary_key=True)
-    username           = db.Column(db.String(80), unique=True, nullable=False)
-    email              = db.Column(db.String(120), unique=True, nullable=True)
-    discord_id         = db.Column(db.String(50), unique=True, nullable=True)
-    discord_username   = db.Column(db.String(100), nullable=True)
-    password_hash      = db.Column(db.String(200))
-    is_admin           = db.Column(db.Boolean, default=False)
-    created_at         = db.Column(db.DateTime, default=datetime.utcnow)
-    is_cast            = db.Column(db.Boolean, default=False)
-    user_role          = db.Column(db.String(20), default='crew')   # 'crew' | 'staff' | 'cast'
-    force_2fa_setup    = db.Column(db.Boolean, default=False)
-    skip_2fa_for_oauth = db.Column(db.Boolean, default=False)
-    profile_picture    = db.Column(db.String(300), nullable=True)
+    id                    = db.Column(db.Integer, primary_key=True)
+    username              = db.Column(db.String(80), unique=True, nullable=False)
+    email                 = db.Column(db.String(120), unique=True, nullable=True)
+    discord_id            = db.Column(db.String(50), unique=True, nullable=True)
+    discord_username      = db.Column(db.String(100), nullable=True)
+    password_hash         = db.Column(db.String(200))
+    is_admin              = db.Column(db.Boolean, default=False)
+    created_at            = db.Column(db.DateTime, default=datetime.utcnow)
+    is_cast               = db.Column(db.Boolean, default=False)
+    user_role             = db.Column(db.String(20), default='crew')
+    force_2fa_setup       = db.Column(db.Boolean, default=False)
+    skip_2fa_for_oauth    = db.Column(db.Boolean, default=False)
+    profile_picture       = db.Column(db.String(300), nullable=True)
     password_reset_token  = db.Column(db.String(100), nullable=True)
     password_reset_expiry = db.Column(db.DateTime, nullable=True)
 
@@ -36,9 +35,8 @@ class TwoFactorAuth(db.Model):
     user_id      = db.Column(db.Integer, db.ForeignKey('user.id'), unique=True, nullable=False)
     secret       = db.Column(db.String(32), nullable=False)
     enabled      = db.Column(db.Boolean, default=False)
-    backup_codes = db.Column(db.Text)   # JSON array of hashed backup codes
+    backup_codes = db.Column(db.Text)
     created_at   = db.Column(db.DateTime, default=datetime.utcnow)
-
     user = db.relationship('User', backref='two_factor_auth')
 
 
@@ -53,17 +51,11 @@ class OAuthConnection(db.Model):
     token_expiry     = db.Column(db.DateTime)
     created_at       = db.Column(db.DateTime, default=datetime.utcnow)
     last_login       = db.Column(db.DateTime)
-
     user = db.relationship('User', backref='oauth_connections')
-
     __table_args__ = (
         db.UniqueConstraint('provider', 'provider_user_id', name='unique_provider_user'),
     )
 
-
-# ---------------------------------------------------------------------------
-# Invite codes
-# ---------------------------------------------------------------------------
 
 invite_code_uses = db.Table(
     'invite_code_uses',
@@ -73,35 +65,39 @@ invite_code_uses = db.Table(
 
 
 class InviteCode(db.Model):
-    id          = db.Column(db.Integer, primary_key=True)
-    code        = db.Column(db.String(32), unique=True, nullable=False)
-    role        = db.Column(db.String(20), default='crew')
-    created_by  = db.Column(db.String(80), nullable=False)
-    created_at  = db.Column(db.DateTime, default=datetime.utcnow)
-    expires_at  = db.Column(db.DateTime, nullable=False)
-    max_uses    = db.Column(db.Integer, default=1)
-    use_count   = db.Column(db.Integer, default=0)
-    is_active   = db.Column(db.Boolean, default=True)
-    note        = db.Column(db.String(200))
-
+    id         = db.Column(db.Integer, primary_key=True)
+    code       = db.Column(db.String(32), unique=True, nullable=False)
+    role       = db.Column(db.String(20), default='crew')
+    created_by = db.Column(db.String(80), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    max_uses   = db.Column(db.Integer, default=1)
+    use_count  = db.Column(db.Integer, default=0)
+    is_active  = db.Column(db.Boolean, default=True)
+    note       = db.Column(db.String(200))
     used_by_users = db.relationship('User', secondary=invite_code_uses, backref='invite_code')
 
 
 # ---------------------------------------------------------------------------
-# Equipment
+# Equipment  ← two new picture columns
 # ---------------------------------------------------------------------------
 
 class Equipment(db.Model):
-    id             = db.Column(db.Integer, primary_key=True)
-    barcode        = db.Column(db.String(100), unique=True, nullable=False)
-    name           = db.Column(db.String(200), nullable=False)
-    category       = db.Column(db.String(100))
-    location       = db.Column(db.String(200))
-    notes          = db.Column(db.Text)
-    created_at     = db.Column(db.DateTime, default=datetime.utcnow)
-    quantity_owned = db.Column(db.Integer, default=1)
+    id               = db.Column(db.Integer, primary_key=True)
+    barcode          = db.Column(db.String(100), unique=True, nullable=False)
+    name             = db.Column(db.String(200), nullable=False)
+    category         = db.Column(db.String(100))
+    location         = db.Column(db.String(200))
+    notes            = db.Column(db.Text)
+    created_at       = db.Column(db.DateTime, default=datetime.utcnow)
+    quantity_owned   = db.Column(db.Integer, default=1)
+    # Photo of the item itself
+    picture          = db.Column(db.String(300), nullable=True)
+    # Photo of where it lives in storage
+    location_picture = db.Column(db.String(300), nullable=True)
 
     def to_dict(self):
+        from flask import url_for
         return {
             'id':             self.id,
             'barcode':        self.barcode,
@@ -110,6 +106,14 @@ class Equipment(db.Model):
             'location':       self.location or '',
             'notes':          self.notes or '',
             'quantity_owned': self.quantity_owned or 1,
+            'picture_url': (
+                url_for('equipment.serve_equipment_picture', id=self.id)
+                if self.picture else None
+            ),
+            'location_picture_url': (
+                url_for('equipment.serve_equipment_location_picture', id=self.id)
+                if self.location_picture else None
+            ),
         }
 
 
@@ -126,7 +130,6 @@ class HiredEquipment(db.Model):
     returned_at = db.Column(db.DateTime, nullable=True)
     event_id    = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=True)
     created_at  = db.Column(db.DateTime, default=datetime.utcnow)
-
     checklist_items = db.relationship(
         'HiredEquipmentCheckItem', backref='hired_equipment', cascade='all, delete-orphan'
     )
@@ -134,16 +137,12 @@ class HiredEquipment(db.Model):
 
 
 class HiredEquipmentCheckItem(db.Model):
-    id                  = db.Column(db.Integer, primary_key=True)
-    hired_equipment_id  = db.Column(db.Integer, db.ForeignKey('hired_equipment.id'), nullable=False)
-    item_name           = db.Column(db.String(200), nullable=False)
-    is_checked          = db.Column(db.Boolean, default=False)
-    notes               = db.Column(db.Text)
+    id                 = db.Column(db.Integer, primary_key=True)
+    hired_equipment_id = db.Column(db.Integer, db.ForeignKey('hired_equipment.id'), nullable=False)
+    item_name          = db.Column(db.String(200), nullable=False)
+    is_checked         = db.Column(db.Boolean, default=False)
+    notes              = db.Column(db.Text)
 
-
-# ---------------------------------------------------------------------------
-# Events
-# ---------------------------------------------------------------------------
 
 class Event(db.Model):
     id                    = db.Column(db.Integer, primary_key=True)
@@ -156,23 +155,15 @@ class Event(db.Model):
     created_at            = db.Column(db.DateTime, default=datetime.utcnow)
     discord_message_id    = db.Column(db.String(50), nullable=True)
     cast_description      = db.Column(db.Text)
-    # Recurrence
     recurrence_pattern    = db.Column(db.String(50), nullable=True)
     recurrence_interval   = db.Column(db.Integer, default=1)
     recurrence_end_date   = db.Column(db.DateTime, nullable=True)
     recurrence_count      = db.Column(db.Integer, nullable=True)
     is_recurring_instance = db.Column(db.Boolean, default=False)
     recurring_event_id    = db.Column(db.Integer, nullable=True)
-
-    crew_assignments = db.relationship(
-        'CrewAssignment', backref='event', lazy=True, cascade='all, delete-orphan'
-    )
-    pick_list_items = db.relationship(
-        'PickListItem', backref='event', lazy=True, cascade='all, delete-orphan'
-    )
-    stage_plans = db.relationship(
-        'StagePlan', backref='event', lazy=True, cascade='all, delete-orphan'
-    )
+    crew_assignments = db.relationship('CrewAssignment', backref='event', lazy=True, cascade='all, delete-orphan')
+    pick_list_items  = db.relationship('PickListItem',   backref='event', lazy=True, cascade='all, delete-orphan')
+    stage_plans      = db.relationship('StagePlan',      backref='event', lazy=True, cascade='all, delete-orphan')
 
 
 class CrewAssignment(db.Model):
@@ -191,10 +182,7 @@ class EventSchedule(db.Model):
     scheduled_time = db.Column(db.DateTime, nullable=False)
     description    = db.Column(db.Text)
     created_at     = db.Column(db.DateTime, default=datetime.utcnow)
-
-    event = db.relationship(
-        'Event', backref=db.backref('schedules', cascade='all, delete-orphan')
-    )
+    event = db.relationship('Event', backref=db.backref('schedules', cascade='all, delete-orphan'))
 
 
 class EventNote(db.Model):
@@ -204,15 +192,8 @@ class EventNote(db.Model):
     created_by = db.Column(db.String(80), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    event = db.relationship('Event', backref=db.backref('notes', cascade='all, delete-orphan'))
 
-    event = db.relationship(
-        'Event', backref=db.backref('notes', cascade='all, delete-orphan')
-    )
-
-
-# ---------------------------------------------------------------------------
-# Pick list & Stage plans
-# ---------------------------------------------------------------------------
 
 class PickListItem(db.Model):
     id           = db.Column(db.Integer, primary_key=True)
@@ -235,10 +216,6 @@ class StagePlan(db.Model):
     event_id    = db.Column(db.Integer, db.ForeignKey('event.id'))
 
 
-# ---------------------------------------------------------------------------
-# Shifts
-# ---------------------------------------------------------------------------
-
 class Shift(db.Model):
     id               = db.Column(db.Integer, primary_key=True)
     event_id         = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
@@ -253,7 +230,6 @@ class Shift(db.Model):
     created_by       = db.Column(db.String(80), nullable=False)
     created_at       = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at       = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
     event       = db.relationship('Event', backref=db.backref('shifts', cascade='all, delete-orphan'))
     assignments = db.relationship('ShiftAssignment', backref='shift', lazy=True, cascade='all, delete-orphan')
 
@@ -268,7 +244,6 @@ class ShiftAssignment(db.Model):
     assigned_at  = db.Column(db.DateTime, default=datetime.utcnow)
     responded_at = db.Column(db.DateTime, nullable=True)
     updated_at   = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
     user = db.relationship('User', backref='shift_assignments')
 
 
@@ -279,7 +254,6 @@ class ShiftNote(db.Model):
     content    = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
     shift = db.relationship('Shift', backref='notes')
 
 
@@ -293,28 +267,22 @@ class ShiftTask(db.Model):
     created_by  = db.Column(db.String(80), nullable=False)
     created_at  = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at  = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
     shift = db.relationship('Shift', backref='tasks')
 
 
-# ---------------------------------------------------------------------------
-# Cast
-# ---------------------------------------------------------------------------
-
 class CastMember(db.Model):
-    id              = db.Column(db.Integer, primary_key=True)
-    actor_name      = db.Column(db.String(200), nullable=False)
-    character_name  = db.Column(db.String(200), nullable=False)
-    role_type       = db.Column(db.String(50), default='lead')
-    contact_email   = db.Column(db.String(120), nullable=True)
-    contact_phone   = db.Column(db.String(50), nullable=True)
-    notes           = db.Column(db.Text)
-    event_id        = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=True)
-    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
-    user_id         = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
-
+    id             = db.Column(db.Integer, primary_key=True)
+    actor_name     = db.Column(db.String(200), nullable=False)
+    character_name = db.Column(db.String(200), nullable=False)
+    role_type      = db.Column(db.String(50), default='lead')
+    contact_email  = db.Column(db.String(120), nullable=True)
+    contact_phone  = db.Column(db.String(50), nullable=True)
+    notes          = db.Column(db.Text)
+    event_id       = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=True)
+    created_at     = db.Column(db.DateTime, default=datetime.utcnow)
+    user_id        = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     event = db.relationship('Event', backref='cast_members')
-    user  = db.relationship('User', backref='cast_roles')
+    user  = db.relationship('User',  backref='cast_roles')
 
 
 class CastSchedule(db.Model):
@@ -324,10 +292,7 @@ class CastSchedule(db.Model):
     scheduled_time = db.Column(db.DateTime, nullable=False)
     description    = db.Column(db.Text)
     created_at     = db.Column(db.DateTime, default=datetime.utcnow)
-
-    event = db.relationship(
-        'Event', backref=db.backref('cast_schedules', cascade='all, delete-orphan')
-    )
+    event = db.relationship('Event', backref=db.backref('cast_schedules', cascade='all, delete-orphan'))
 
 
 class CastNote(db.Model):
@@ -337,15 +302,8 @@ class CastNote(db.Model):
     created_by = db.Column(db.String(80), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    event = db.relationship('Event', backref=db.backref('cast_notes', cascade='all, delete-orphan'))
 
-    event = db.relationship(
-        'Event', backref=db.backref('cast_notes', cascade='all, delete-orphan')
-    )
-
-
-# ---------------------------------------------------------------------------
-# Run lists
-# ---------------------------------------------------------------------------
 
 class CrewRunItem(db.Model):
     id           = db.Column(db.Integer, primary_key=True)
@@ -357,12 +315,9 @@ class CrewRunItem(db.Model):
     cue_type     = db.Column(db.String(50))
     notes        = db.Column(db.Text)
     created_at   = db.Column(db.DateTime, default=datetime.utcnow)
-
     event = db.relationship(
         'Event',
-        backref=db.backref(
-            'crew_run_items', cascade='all, delete-orphan', order_by='CrewRunItem.order_number'
-        ),
+        backref=db.backref('crew_run_items', cascade='all, delete-orphan', order_by='CrewRunItem.order_number'),
     )
 
 
@@ -377,18 +332,11 @@ class CastRunItem(db.Model):
     cast_involved = db.Column(db.Text)
     notes         = db.Column(db.Text)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-
     event = db.relationship(
         'Event',
-        backref=db.backref(
-            'cast_run_items', cascade='all, delete-orphan', order_by='CastRunItem.order_number'
-        ),
+        backref=db.backref('cast_run_items', cascade='all, delete-orphan', order_by='CastRunItem.order_number'),
     )
 
-
-# ---------------------------------------------------------------------------
-# Stage plan designer
-# ---------------------------------------------------------------------------
 
 class StagePlanTemplate(db.Model):
     id          = db.Column(db.Integer, primary_key=True)
@@ -412,7 +360,6 @@ class StagePlanDesign(db.Model):
     created_by  = db.Column(db.String(80))
     created_at  = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at  = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
     event    = db.relationship('Event', backref='stage_designs')
     template = db.relationship('StagePlanTemplate', backref='designs')
 
@@ -429,10 +376,6 @@ class StagePlanObject(db.Model):
     is_public      = db.Column(db.Boolean, default=True)
 
 
-# ---------------------------------------------------------------------------
-# To-do list
-# ---------------------------------------------------------------------------
-
 class TodoItem(db.Model):
     id           = db.Column(db.Integer, primary_key=True)
     user_id      = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -444,14 +387,9 @@ class TodoItem(db.Model):
     event_id     = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=True)
     created_at   = db.Column(db.DateTime, default=datetime.utcnow)
     completed_at = db.Column(db.DateTime, nullable=True)
-
-    user  = db.relationship('User', backref='todos')
+    user  = db.relationship('User',  backref='todos')
     event = db.relationship('Event', backref='todos')
 
-
-# ---------------------------------------------------------------------------
-# Availability / unavailability
-# ---------------------------------------------------------------------------
 
 class UserUnavailability(db.Model):
     id                  = db.Column(db.Integer, primary_key=True)
@@ -467,7 +405,6 @@ class UserUnavailability(db.Model):
     recurrence_interval = db.Column(db.Integer, default=1)
     recurrence_end_date = db.Column(db.DateTime, nullable=True)
     recurrence_count    = db.Column(db.Integer, nullable=True)
-
     user = db.relationship('User', backref='unavailabilities')
 
 
@@ -476,15 +413,14 @@ class RecurringUnavailability(db.Model):
     user_id         = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     title           = db.Column(db.String(200), nullable=False)
     description     = db.Column(db.Text)
-    start_time      = db.Column(db.String(5), nullable=False)   # HH:MM
-    end_time        = db.Column(db.String(5), nullable=False)   # HH:MM
-    pattern_type    = db.Column(db.String(20), nullable=False)  # 'daily'|'weekly'|'monthly'
-    days_of_week    = db.Column(db.String(50), nullable=True)   # comma-separated ints
+    start_time      = db.Column(db.String(5), nullable=False)
+    end_time        = db.Column(db.String(5), nullable=False)
+    pattern_type    = db.Column(db.String(20), nullable=False)
+    days_of_week    = db.Column(db.String(50), nullable=True)
     day_of_month    = db.Column(db.Integer, nullable=True)
     start_date      = db.Column(db.DateTime, nullable=False)
     end_date        = db.Column(db.DateTime, nullable=True)
     is_active       = db.Column(db.Boolean, default=True)
     created_at      = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at      = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
     user = db.relationship('User', backref='recurring_unavailabilities')
