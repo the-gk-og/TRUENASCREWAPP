@@ -9,7 +9,7 @@
 </div>
 
 <div style="display: flex; gap: 1rem; margin-bottom: 2rem;">
-    <a href="{{ url_for('equipment_list') }}" class="btn btn-primary">
+    <a href="{{ url_for('equipment.equipment_list') }}" class="btn btn-primary">
         <i class="fas fa-arrow-left"></i> Back to Equipment
     </a>
 </div>
@@ -116,7 +116,7 @@
     <div style="text-align: center; padding: 3rem; color: var(--text-secondary);">
         <p style="font-size: 3rem; margin-bottom: 1rem;">📦</p>
         <p>No equipment found. Add equipment first to generate barcodes.</p>
-        <a href="{{ url_for('equipment_list') }}" class="btn btn-primary" style="margin-top: 1rem;">Go to Equipment</a>
+        <a href="{{ url_for('equipment.equipment_list') }}" class="btn btn-primary" style="margin-top: 1rem;">Go to Equipment</a>
     </div>
     {% endif %}
 </div>

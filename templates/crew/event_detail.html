@@ -16,7 +16,7 @@
 
 
 <div class="card">
-    <a href="{{ url_for('calendar') }}" style="color: #667eea; text-decoration: none; margin-bottom: 1rem; display: inline-block;">
+    <a href="{{ url_for('calendar.calendar') }}" style="color: #667eea; text-decoration: none; margin-bottom: 1rem; display: inline-block;">
         ← Back to Calendar
     </a>
     
@@ -323,7 +323,7 @@
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
         <h3>📅 Shifts ({{ shifts_data|length }})</h3>
         {% if current_user.is_admin %}
-        <a href="{{ url_for('shift_management') }}" class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.9rem; text-decoration: none;">
+        <a href="{{ url_for('shifts.shift_management') }}" class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.9rem; text-decoration: none;">
             <i class="fas fa-plus"></i> Manage Shifts
         </a>
         {% endif %}
@@ -385,10 +385,10 @@
 <div class="card">
     <h3 style="margin-bottom: 1rem;">Quick Links</h3>
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem;">
-        <a href="{{ url_for('picklist', event_id=event.id) }}" class="btn btn-primary">
+        <a href="{{ url_for('picklist.picklist', event_id=event.id) }}" class="btn btn-primary">
             📋 Pick List ({{ event.pick_list_items|length }})
         </a>
-        <a href="{{ url_for('stageplans', event_id=event.id) }}" class="btn btn-primary">
+        <a href="{{ url_for('stage_designer.stageplans', event_id=event.id) }}" class="btn btn-primary">
             🎨 Stage Plans ({{ event.stage_plans|length }})
         </a>
     </div>

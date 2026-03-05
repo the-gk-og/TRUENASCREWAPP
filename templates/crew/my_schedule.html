@@ -301,6 +301,88 @@
         opacity: 0.5;
     }
 
+    /* Compact week strip (top day scroller) */
+    .week-strip-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .week-strip {
+        display: flex;
+        gap: 0.35rem;
+        overflow-x: auto;
+        padding-bottom: 0.25rem;
+        flex: 1;
+    }
+
+    .week-day-pill {
+        min-width: 52px;
+        padding: 0.35rem 0.25rem;
+        border-radius: 999px;
+        text-align: center;
+        border: 1px solid var(--border);
+        background: white;
+        cursor: pointer;
+        font-size: 0.75rem;
+        color: #6b7280;
+        flex-shrink: 0;
+    }
+
+    .week-day-pill span {
+        display: block;
+        line-height: 1.1;
+    }
+
+    .week-day-pill .wd-label {
+        font-weight: 600;
+    }
+
+    .week-day-pill .wd-date {
+        font-size: 0.7rem;
+    }
+
+    .week-day-pill.active {
+        background: var(--primary);
+        color: white;
+        border-color: var(--primary);
+    }
+
+    .week-nav-btn {
+        border: 1px solid var(--border);
+        background: white;
+        border-radius: 999px;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 0.8rem;
+        color: #4b5563;
+    }
+
+    .week-nav-btn:hover {
+        background: var(--bg-nav-hover);
+    }
+
+    .week-today-btn {
+        border: 1px solid var(--border);
+        background: #f3f4f6;
+        border-radius: 999px;
+        padding: 0.25rem 0.7rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        cursor: pointer;
+        color: #374151;
+        white-space: nowrap;
+    }
+
+    .week-today-btn:hover {
+        background: #e5e7eb;
+    }
+
     .section-title {
         font-size: 1.3rem;
         font-weight: 700;
@@ -390,6 +472,13 @@
 
     <!-- List View -->
     <div id="listView">
+        <!-- Top compact week strip (Only me style) -->
+        <div class="week-strip-wrapper">
+            <button class="week-nav-btn" onclick="shiftWeek(-1)"><i class="fas fa-chevron-left"></i></button>
+            <div id="weekStrip" class="week-strip"></div>
+            <button class="week-nav-btn" onclick="shiftWeek(1)"><i class="fas fa-chevron-right"></i></button>
+            <button class="week-today-btn" onclick="jumpToToday()">Today</button>
+        </div>
         <div id="scheduleContent"></div>
     </div>
 
@@ -419,90 +508,108 @@ const NOW = new Date('{{ now.isoformat() }}');
 // Organize assignments by date
 const assignmentsByDate = {};
 const openShiftsByDate = {};
+let assignmentsProcessed = false;
+let selectedDateKey = null; // currently focused day in the week strip
+let allScheduleDates = [];  // sorted list of all date keys
+let weekWindowStart = 0;    // index into allScheduleDates for the current top strip window
 
 function processAssignments() {
-    // Group assignments by shift date
-    ASSIGNMENTS.forEach(assignment => {
-        if (assignment.shift && assignment.shift.shift_date) {
-            const date = new Date(assignment.shift.shift_date);
-            const dateKey = date.toISOString().split('T')[0];
-            
-            if (!assignmentsByDate[dateKey]) {
-                assignmentsByDate[dateKey] = [];
-            }
-            
-            assignmentsByDate[dateKey].push({
-                type: 'shift',
-                id: assignment.id,
-                title: assignment.shift.title,
-                time: date,
-                endTime: new Date(assignment.shift.shift_end_date),
-                role: assignment.shift.role,
-                location: assignment.shift.location,
-                description: assignment.shift.description,
-                status: assignment.status,
-                crewCount: assignment.shift.assignments_count,
-                positionsNeeded: assignment.shift.positions_needed,
-                eventTitle: assignment.shift.event ? assignment.shift.event.title : '',
-                shiftId: assignment.shift.id,
-                eventId: assignment.shift.event_id
-            });
-        }
-    });
-    
-    // Group crew assignments by event date
-    CREW_ASSIGNMENTS.forEach(assignment => {
-        if (assignment.event && assignment.event.event_date) {
-            const date = new Date(assignment.event.event_date);
-            const dateKey = date.toISOString().split('T')[0];
-            
-            if (!assignmentsByDate[dateKey]) {
-                assignmentsByDate[dateKey] = [];
-            }
-            
-            assignmentsByDate[dateKey].push({
-                type: 'event',
-                id: assignment.id,
-                title: assignment.event.title,
-                time: date,
-                endTime: assignment.event.event_end_date ? new Date(assignment.event.event_end_date) : null,
-                role: assignment.role,
-                location: assignment.event.location,
-                description: assignment.event.description,
-                crewCount: assignment.event.crew_assignments.length,
-                createdBy: assignment.event.created_by,
-                eventId: assignment.event.id
-            });
-        }
-    });
-    
-    // Group open shifts by date (deduplicated by shift ID)
+    if (assignmentsProcessed) return;
+    assignmentsProcessed = true;
+
+    // Ensure maps start empty
+    Object.keys(assignmentsByDate).forEach(k => delete assignmentsByDate[k]);
+    Object.keys(openShiftsByDate).forEach(k => delete openShiftsByDate[k]);
+
+    // ---- shift assignments ----------------------------------------
     const seenShiftIds = new Set();
+
+    ASSIGNMENTS.forEach(assignment => {
+        if (!assignment.shift || !assignment.shift.shift_date) return;
+
+        if (seenShiftIds.has(assignment.shift.id)) return;
+        seenShiftIds.add(assignment.shift.id);
+
+        const rawDate = assignment.shift.shift_date;
+        const date = new Date(rawDate);
+        const dateKey = String(rawDate).split('T')[0]; // keep original calendar day
+
+        if (!assignmentsByDate[dateKey]) assignmentsByDate[dateKey] = [];
+
+        assignmentsByDate[dateKey].push({
+            type: 'shift',
+            id: assignment.id,
+            title: assignment.shift.title,
+            time: date,
+            endTime: new Date(assignment.shift.shift_end_date),
+            role: assignment.shift.role,
+            location: assignment.shift.location,
+            description: assignment.shift.description,
+            status: assignment.status,
+            crewCount: assignment.shift.assignments_count,
+            positionsNeeded: assignment.shift.positions_needed,
+            eventTitle: assignment.shift.event ? assignment.shift.event.title : '',
+            shiftId: assignment.shift.id,
+            eventId: assignment.shift.event_id,
+        });
+    });
+
+    // ---- crew (event-level) assignments ---------------------------
+    const seenEventIds = new Set();
+
+    CREW_ASSIGNMENTS.forEach(assignment => {
+        if (!assignment.event || !assignment.event.event_date) return;
+
+        if (seenEventIds.has(assignment.event.id)) return;
+        seenEventIds.add(assignment.event.id);
+
+        const rawDate = assignment.event.event_date;
+        const date = new Date(rawDate);
+        const dateKey = String(rawDate).split('T')[0]; // keep original calendar day
+
+        if (!assignmentsByDate[dateKey]) assignmentsByDate[dateKey] = [];
+
+        assignmentsByDate[dateKey].push({
+            type: 'event',
+            id: assignment.id,
+            title: assignment.event.title,
+            time: date,
+            endTime: assignment.event.event_end_date
+                ? new Date(assignment.event.event_end_date)
+                : null,
+            role: assignment.role,
+            location: assignment.event.location,
+            description: assignment.event.description,
+            crewCount: assignment.event.crew_assignments
+                ? assignment.event.crew_assignments.length
+                : 0,
+            createdBy: assignment.event.created_by,
+            eventId: assignment.event.id,
+        });
+    });
+
+    // ---- open shifts ----------------------------------------------
+    const seenOpenIds = new Set();
+
     OPEN_SHIFTS.forEach(shift => {
-        const date = new Date(shift.shift_date);
-        const dateKey = date.toISOString().split('T')[0];
-        
-        // Skip if we've already seen this shift ID (avoid duplicates)
-        if (seenShiftIds.has(shift.id)) {
-            return;
-        }
-        
-        if (!openShiftsByDate[dateKey]) {
-            openShiftsByDate[dateKey] = [];
-        }
-        
-        // Check if user already has this shift
-        const alreadyClaimed = ASSIGNMENTS.some(a => a.shift && a.shift.id === shift.id);
-        
-        if (!alreadyClaimed) {
-            seenShiftIds.add(shift.id);
-            openShiftsByDate[dateKey].push({
-                ...shift,
-                date: date
-            });
-        }
+        if (seenOpenIds.has(shift.id)) return;
+        seenOpenIds.add(shift.id);
+
+        // Skip if user already has this shift
+        if (ASSIGNMENTS.some(a => a.shift && a.shift.id === shift.id)) return;
+
+        const rawDate = shift.shift_date;
+        const date = new Date(rawDate);
+        const dateKey = String(rawDate).split('T')[0]; // keep original calendar day
+
+        if (!openShiftsByDate[dateKey]) openShiftsByDate[dateKey] = [];
+
+        openShiftsByDate[dateKey].push({ ...shift, date });
     });
 }
+
+
+
 
 function switchView(view) {
     document.getElementById('listView').style.display = view === 'list' ? 'block' : 'none';
@@ -520,9 +627,8 @@ function switchView(view) {
 }
 
 function renderSchedule() {
-    processAssignments();
-    
     const dates = Object.keys(assignmentsByDate).sort();
+    allScheduleDates = dates;
     
     if (dates.length === 0) {
         document.getElementById('scheduleContent').innerHTML = `
@@ -533,9 +639,21 @@ function renderSchedule() {
         `;
         return;
     }
-    
+
+    // Initialise selected date to "today" if present, otherwise first date
+    if (!selectedDateKey) {
+        const todayKey = new Date().toISOString().split('T')[0];
+        selectedDateKey = dates.includes(todayKey) ? todayKey : dates[0];
+        // Align week window to the week containing the selected date
+        const idx = dates.indexOf(selectedDateKey);
+        weekWindowStart = Math.max(0, Math.floor(idx / 7) * 7);
+    }
+
+    // Build compact week strip (up to 7 days from current window)
+    buildWeekStrip();
+
     let html = '';
-    
+
     dates.forEach(dateKey => {
         const items = assignmentsByDate[dateKey];
         const date = items[0].time;
@@ -545,7 +663,7 @@ function renderSchedule() {
         const year = date.getFullYear();
         
         html += `
-            <div class="date-section">
+            <div class="date-section" id="date-section-${dateKey}">
                 <div class="date-header">
                     <div class="date-badge">
                         <div class="day-num">${date.getDate()}</div>
@@ -567,7 +685,10 @@ function renderSchedule() {
             const endTimeStr = item.endTime ? item.endTime.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'}) : '';
             
             let cardHtml = `
-                <div class="event-card ${item.type === 'shift' ? 'shift' : ''} ${item.status ? 'pending' : ''}">
+                <div class="event-card 
+                    ${item.type === 'shift' ? 'shift' : ''} 
+                    ${item.status === 'pending' ? 'pending' : ''} 
+                    ${item.status === 'rejected' ? 'rejected' : ''}">
                     <div class="event-header">
                         <h4 class="event-title">${escapeHtml(item.title)}</h4>
                         <div class="event-time">
@@ -652,6 +773,90 @@ function renderSchedule() {
     });
     
     document.getElementById('scheduleContent').innerHTML = html;
+
+    // After first render, scroll to the currently selected day section
+    scrollToSelectedDay();
+}
+
+function buildWeekStrip() {
+    const container = document.getElementById('weekStrip');
+    if (!container) return;
+
+    if (!allScheduleDates.length) {
+        container.innerHTML = '';
+        return;
+    }
+
+    // Clamp window start
+    if (weekWindowStart < 0) weekWindowStart = 0;
+    if (weekWindowStart >= allScheduleDates.length) {
+        weekWindowStart = Math.max(0, allScheduleDates.length - 1);
+    }
+
+    const windowKeys = allScheduleDates.slice(weekWindowStart, weekWindowStart + 7);
+
+    let stripHtml = '';
+    windowKeys.forEach(key => {
+        const items = assignmentsByDate[key];
+        if (!items || items.length === 0) return;
+        const d = items[0].time;
+        const dow = d.toLocaleDateString('en-US', { weekday: 'short' });
+        const day = d.getDate();
+
+        stripHtml += `
+            <div class="week-day-pill ${key === selectedDateKey ? 'active' : ''}" onclick="selectScheduleDay('${key}')">
+                <span class="wd-label">${dow}</span>
+                <span class="wd-date">${day}</span>
+            </div>
+        `;
+    });
+
+    container.innerHTML = stripHtml;
+}
+
+function selectScheduleDay(dateKey) {
+    selectedDateKey = dateKey;
+    buildWeekStrip();
+    scrollToSelectedDay();
+}
+
+function shiftWeek(direction) {
+    if (!allScheduleDates.length) return;
+    weekWindowStart += direction * 7;
+    if (weekWindowStart < 0) weekWindowStart = 0;
+    if (weekWindowStart >= allScheduleDates.length) {
+        weekWindowStart = Math.max(0, allScheduleDates.length - 1);
+    }
+
+    const windowKeys = allScheduleDates.slice(weekWindowStart, weekWindowStart + 7);
+    if (windowKeys.length && !windowKeys.includes(selectedDateKey)) {
+        selectedDateKey = windowKeys[0];
+    }
+    buildWeekStrip();
+    scrollToSelectedDay();
+}
+
+function jumpToToday() {
+    if (!allScheduleDates.length) return;
+    const todayKey = new Date().toISOString().split('T')[0];
+    const idx = allScheduleDates.indexOf(todayKey);
+    if (idx >= 0) {
+        selectedDateKey = todayKey;
+        weekWindowStart = Math.max(0, Math.floor(idx / 7) * 7);
+    } else {
+        selectedDateKey = allScheduleDates[0];
+        weekWindowStart = 0;
+    }
+    buildWeekStrip();
+    scrollToSelectedDay();
+}
+
+function scrollToSelectedDay() {
+    if (!selectedDateKey) return;
+    const el = document.getElementById(`date-section-${selectedDateKey}`);
+    if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 }
 
 function renderOpenShifts(filterEventId) {

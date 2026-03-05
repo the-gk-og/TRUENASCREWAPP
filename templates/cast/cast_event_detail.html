@@ -1,38 +1,30 @@
-
 {% extends "base.html" %}
 
 {% block title %}{{ event.title }} - Cast Portal{% endblock %}
 
 {% block content %}
-
 <style>
-.sortable-ghost {
-    opacity: 0.4;
-}
-
-.run-item:hover {
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    transition: box-shadow 0.2s ease;
-}
+.sortable-ghost { opacity: 0.4; }
+.run-item:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: box-shadow 0.2s ease; }
 </style>
 
 <div class="card">
-    <a href="{{ url_for('cast_events') }}" style="color: var(--primary); text-decoration: none; margin-bottom: 1rem; display: inline-block;">
+    <a href="{{ url_for('cast.cast_events') }}" style="color: var(--primary); text-decoration: none; margin-bottom: 1rem; display: inline-block;">
         ← Back to Cast Events
     </a>
-    
+
     <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem;">
         <h1 style="margin: 0;">{{ event.title }}</h1>
-        
+
         {% if current_user.is_admin %}
         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-            <a href="{{ url_for('event_detail', id=event.id) }}" class="btn btn-primary" style="padding: 0.5rem 1rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+            <a href="{{ url_for('events.event_detail', id=event.id) }}" class="btn btn-primary" style="padding: 0.5rem 1rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
                 <i class="fas fa-hard-hat"></i> Switch to Crew View
             </a>
         </div>
         {% endif %}
     </div>
-    
+
     <!-- Event Overview -->
     <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid var(--warning);">
         <p style="color: #78350f; margin: 0.5rem 0; font-size: 1.05rem;">
@@ -49,8 +41,8 @@
         </p>
         {% endif %}
     </div>
-    
-    <!-- My Character Info (only for non-admin cast) -->
+
+    <!-- My Character Info -->
     {% if not current_user.is_admin and cast_member %}
     <div style="background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%); padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem; border-left: 4px solid var(--primary);">
         <h3 style="margin: 0 0 1rem 0; color: var(--primary);"><i class="fas fa-user-tag"></i> Your Role</h3>
@@ -66,15 +58,14 @@
             {% if cast_member.notes %}
             <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px;">
                 <p style="margin: 0; color: var(--text-primary); font-size: 0.9rem;">
-                    <strong>Director's Notes:</strong><br>
-                    {{ cast_member.notes }}
+                    <strong>Director's Notes:</strong><br>{{ cast_member.notes }}
                 </p>
             </div>
             {% endif %}
         </div>
     </div>
     {% endif %}
-    
+
     <!-- Cast Description -->
     {% if event.cast_description or current_user.is_admin %}
     <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 6px; margin-bottom: 1.5rem; border-left: 4px solid var(--secondary);">
@@ -86,17 +77,15 @@
             </button>
             {% endif %}
         </div>
-        
-        {% if event.cast_description %}
+
         <div id="castDescriptionView">
+            {% if event.cast_description %}
             <p style="margin: 0; white-space: pre-wrap; word-break: break-word;">{{ event.cast_description }}</p>
-        </div>
-        {% else %}
-        <div id="castDescriptionView">
+            {% else %}
             <p style="margin: 0; color: var(--text-secondary); font-style: italic;">No cast information yet.</p>
+            {% endif %}
         </div>
-        {% endif %}
-        
+
         {% if current_user.is_admin %}
         <div id="castDescriptionEdit" style="display: none;">
             <textarea id="castDescriptionTextarea" style="width: 100%; min-height: 150px; padding: 0.75rem; border: 2px solid var(--border); border-radius: 6px; font-family: inherit;">{{ event.cast_description or '' }}</textarea>
@@ -124,7 +113,7 @@
         </button>
         {% endif %}
     </div>
-    
+
     {% if cast_schedules %}
     <div style="display: flex; flex-direction: column; gap: 0.75rem;">
         {% for schedule in cast_schedules %}
@@ -136,9 +125,7 @@
                         <i class="fas fa-clock"></i> {{ schedule.scheduled_time.strftime('%I:%M %p on %B %d, %Y') }}
                     </p>
                     {% if schedule.description %}
-                    <p style="margin: 0.5rem 0 0 0; color: #0c4a6e; font-size: 0.9rem;">
-                        {{ schedule.description }}
-                    </p>
+                    <p style="margin: 0.5rem 0 0 0; color: #0c4a6e; font-size: 0.9rem;">{{ schedule.description }}</p>
                     {% endif %}
                 </div>
                 {% if current_user.is_admin %}
@@ -158,14 +145,14 @@
 <!-- CREW RUN LIST -->
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
-        <h3><i class="fas fa-list-ol"></i>Run List</h3>
-        <button onclick="showModal('addCrewRunModal')" class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
+        <h3><i class="fas fa-list-ol"></i> Run List</h3>
+        <button onclick="openAddCrewRunModal()" class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
             + Add Item
         </button>
     </div>
-    
-    <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">show running order</p>
-    
+
+    <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">Show running order</p>
+
     {% if event.crew_run_items %}
     <div id="crewRunList" style="display: flex; flex-direction: column; gap: 0.75rem;">
         {% for item in event.crew_run_items %}
@@ -177,13 +164,13 @@
                         {{ item.order_number }}
                     </span>
                 </div>
-                
+
                 <div style="flex: 1; min-width: 0;">
                     <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.5rem;">
                         <h4 style="margin: 0; color: var(--dark);">{{ item.title }}</h4>
                         {% if item.cue_type %}
-                        <span style="background: {% if item.cue_type == 'Lighting' %}#fef3c7{% elif item.cue_type == 'Sound' %}#e0e7ff{% elif item.cue_type == 'Props' %}#dcfce7{% else %}#f3f4f6{% endif %}; 
-                                     color: {% if item.cue_type == 'Lighting' %}#78350f{% elif item.cue_type == 'Sound' %}#3730a3{% elif item.cue_type == 'Props' %}#065f46{% else %}#374151{% endif %}; 
+                        <span style="background: {% if item.cue_type == 'Lighting' %}#fef3c7{% elif item.cue_type == 'Sound' %}#e0e7ff{% elif item.cue_type == 'Props' %}#dcfce7{% else %}#f3f4f6{% endif %};
+                                     color: {% if item.cue_type == 'Lighting' %}#78350f{% elif item.cue_type == 'Sound' %}#3730a3{% elif item.cue_type == 'Props' %}#065f46{% else %}#374151{% endif %};
                                      padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600;">
                             {{ item.cue_type }}
                         </span>
@@ -194,18 +181,18 @@
                         </span>
                         {% endif %}
                     </div>
-                    
+
                     {% if item.description %}
                     <p style="margin: 0.5rem 0; color: #6b7280; font-size: 0.9rem;">{{ item.description }}</p>
                     {% endif %}
-                    
+
                     {% if item.notes %}
                     <p style="margin: 0.5rem 0; color: #9ca3af; font-size: 0.85rem; font-style: italic;">
                         <i class="fas fa-sticky-note"></i> {{ item.notes }}
                     </p>
                     {% endif %}
                 </div>
-                
+
                 <div style="display: flex; gap: 0.25rem; flex-shrink: 0;">
                     <button onclick="editCrewRunItem({{ item.id }})" class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
                         <i class="fas fa-edit"></i>
@@ -218,7 +205,7 @@
         </div>
         {% endfor %}
     </div>
-    
+
     <div style="background: #f0f9ff; padding: 1rem; border-radius: 6px; margin-top: 1rem; border-left: 3px solid var(--primary);">
         <p style="margin: 0; color: #1e40af; font-size: 0.85rem;">
             <i class="fas fa-info-circle"></i> <strong>Tip:</strong> Drag and drop items to reorder the run list
@@ -229,44 +216,52 @@
     {% endif %}
 </div>
 
-<!-- Add Crew Run Item Modal -->
+<!-- Add/Edit Crew Run Item Modal -->
 <div id="addCrewRunModal" class="modal">
     <div class="modal-content">
         <span class="close" onclick="hideModal('addCrewRunModal')">&times;</span>
         <h2 id="crewRunModalTitle"><i class="fas fa-plus"></i> Add Run Item</h2>
         <form id="addCrewRunForm">
             <input type="hidden" id="crewRunItemId">
-            
-            <div class="form-group">
-                <label>Title (act name)</label>
-                <input type="text" id="crewRunTitle" required placeholder="Enter cue or step title">
-            </div>
-            
 
-            
+            <div class="form-group">
+                <label>Title *</label>
+                <input type="text" id="crewRunTitle" required placeholder="Enter act or cue title">
+            </div>
+
+            <div class="form-group">
+                <label>Cue Type</label>
+                <select id="crewRunCueType">
+                    <option value="">None</option>
+                    <option value="Lighting">Lighting</option>
+                    <option value="Sound">Sound</option>
+                    <option value="Props">Props</option>
+                    <option value="Stage">Stage</option>
+                    <option value="Video">Video</option>
+                </select>
+            </div>
+
             <div class="form-group">
                 <label>Duration</label>
                 <input type="text" id="crewRunDuration" placeholder="e.g., 5 min, 30 sec">
             </div>
-            
+
             <div class="form-group">
                 <label>Description</label>
                 <textarea id="crewRunDescription" rows="3" placeholder="Detailed instructions..."></textarea>
             </div>
-            
+
             <div class="form-group">
                 <label>Notes</label>
                 <textarea id="crewRunNotes" rows="2" placeholder="Additional notes or warnings..."></textarea>
             </div>
-            
+
             <button type="submit" class="btn btn-success" style="width: 100%;">
                 <i class="fas fa-check"></i> <span id="crewRunSubmitText">Add Item</span>
             </button>
         </form>
     </div>
 </div>
-
-
 
 <!-- CAST NOTES -->
 <div class="card">
@@ -278,39 +273,39 @@
         </button>
         {% endif %}
     </div>
-    
+
     <div id="castNotesList">
         {% if cast_notes %}
-            {% for note in cast_notes %}
-            <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--warning); margin-bottom: 0.75rem;">
-                <div style="display: flex; justify-content: between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
-                    <div style="flex: 1; min-width: 0;">
-                        <p style="margin: 0.25rem 0; color: #555; font-size: 0.85rem;">
-                            <strong>{{ note.created_by }}</strong> • {{ note.created_at.strftime('%b %d, %Y at %I:%M %p') }}
-                        </p>
-                        <p id="cast-note-content-{{ note.id }}" style="margin: 0.5rem 0; color: #333; word-break: break-word;">{{ note.content }}</p>
-                        {% if current_user.is_admin %}
-                        <div id="cast-note-edit-{{ note.id }}" style="display: none; margin: 0.5rem 0;">
-                            <textarea id="cast-note-textarea-{{ note.id }}" style="width: 100%; padding: 0.5rem; border: 2px solid var(--border); border-radius: 6px; min-height: 80px; font-family: inherit;">{{ note.content }}</textarea>
-                        </div>
-                        {% endif %}
-                    </div>
+        {% for note in cast_notes %}
+        <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--warning); margin-bottom: 0.75rem;">
+            <div style="display: flex; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 0;">
+                    <p style="margin: 0.25rem 0; color: #555; font-size: 0.85rem;">
+                        <strong>{{ note.created_by }}</strong> • {{ note.created_at.strftime('%b %d, %Y at %I:%M %p') }}
+                    </p>
+                    <p id="cast-note-content-{{ note.id }}" style="margin: 0.5rem 0; color: #333; word-break: break-word;">{{ note.content }}</p>
                     {% if current_user.is_admin %}
-                    <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
-                        <button onclick="editCastNoteToggle({{ note.id }})" id="cast-edit-btn-{{ note.id }}" class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button onclick="saveCastNoteEdit({{ note.id }})" id="cast-save-btn-{{ note.id }}" style="display: none; padding: 0.4rem 0.8rem; font-size: 0.8rem;" class="btn btn-success">
-                            <i class="fas fa-save"></i>
-                        </button>
-                        <button onclick="deleteCastNote({{ note.id }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
-                            <i class="fas fa-trash"></i>
-                        </button>
+                    <div id="cast-note-edit-{{ note.id }}" style="display: none; margin: 0.5rem 0;">
+                        <textarea id="cast-note-textarea-{{ note.id }}" style="width: 100%; padding: 0.5rem; border: 2px solid var(--border); border-radius: 6px; min-height: 80px; font-family: inherit;">{{ note.content }}</textarea>
                     </div>
                     {% endif %}
                 </div>
+                {% if current_user.is_admin %}
+                <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
+                    <button onclick="editCastNoteToggle({{ note.id }})" id="cast-edit-btn-{{ note.id }}" class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button onclick="saveCastNoteEdit({{ note.id }})" id="cast-save-btn-{{ note.id }}" style="display: none; padding: 0.4rem 0.8rem; font-size: 0.8rem;" class="btn btn-success">
+                        <i class="fas fa-save"></i>
+                    </button>
+                    <button onclick="deleteCastNote({{ note.id }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+                {% endif %}
             </div>
-            {% endfor %}
+        </div>
+        {% endfor %}
         {% else %}
         <p style="color: var(--text-secondary); text-align: center; padding: 1rem;">No cast notes yet.</p>
         {% endif %}
@@ -320,15 +315,15 @@
 <!-- CAST LIST -->
 <div class="card">
     <h3 style="margin-bottom: 1rem;"><i class="fas fa-users"></i> Cast List ({{ cast_members|length }})</h3>
-    
+
     {% if cast_members %}
     <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
         {% for member in cast_members %}
         <div style="background: #f9fafb; border: 2px solid #e5e7eb; padding: 1rem; border-radius: 8px; border-left: 4px solid {% if member.role_type == 'lead' %}var(--danger){% elif member.role_type == 'supporting' %}var(--warning){% else %}var(--success){% endif %};">
             <h4 style="margin: 0 0 0.5rem 0; color: var(--dark);">{{ member.actor_name }}</h4>
             <p style="margin: 0.25rem 0; color: var(--primary); font-weight: 600;">as {{ member.character_name }}</p>
-            <span style="background: {% if member.role_type == 'lead' %}#fee2e2{% elif member.role_type == 'supporting' %}#fef3c7{% else %}#dcfce7{% endif %}; 
-                         color: {% if member.role_type == 'lead' %}#991b1b{% elif member.role_type == 'supporting' %}#78350f{% else %}#065f46{% endif %}; 
+            <span style="background: {% if member.role_type == 'lead' %}#fee2e2{% elif member.role_type == 'supporting' %}#fef3c7{% else %}#dcfce7{% endif %};
+                         color: {% if member.role_type == 'lead' %}#991b1b{% elif member.role_type == 'supporting' %}#78350f{% else %}#065f46{% endif %};
                          padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; display: inline-block; margin-top: 0.5rem;">
                 {{ member.role_type|upper }}
             </span>
@@ -342,15 +337,13 @@
 
 <!-- ADMIN MODALS -->
 {% if current_user.is_admin %}
-
-<!-- Add Cast Schedule Modal -->
 <div id="addCastScheduleModal" class="modal">
     <div class="modal-content">
         <span class="close" onclick="hideModal('addCastScheduleModal')">&times;</span>
         <h2>Add Cast Schedule</h2>
         <form id="addCastScheduleForm">
             <div class="form-group">
-                <label>Schedule Title * (e.g., Call Time, Rehearsal, Costume Fitting)</label>
+                <label>Schedule Title *</label>
                 <input type="text" id="castScheduleTitle" placeholder="e.g., Call Time" required>
             </div>
             <div class="form-group">
@@ -368,7 +361,6 @@
     </div>
 </div>
 
-<!-- Add Cast Note Modal -->
 <div id="addCastNoteModal" class="modal">
     <div class="modal-content">
         <span class="close" onclick="hideModal('addCastNoteModal')">&times;</span>
@@ -383,34 +375,127 @@
         </form>
     </div>
 </div>
-
 {% endif %}
-
 {% endblock %}
 
 {% block scripts %}
 <script>
-{% if current_user.is_admin %}
+let crewRunData = {{ event.crew_run_items|tojson }};
 
-// Inline Cast Description Editing
+// ── Modal helpers ──────────────────────────────────────────────────────────
+function showModal(id) {
+    document.getElementById(id).style.display = 'block';
+}
+function hideModal(id) {
+    document.getElementById(id).style.display = 'none';
+}
+
+// ── Crew Run List ──────────────────────────────────────────────────────────
+function openAddCrewRunModal() {
+    document.getElementById('crewRunModalTitle').innerHTML = '<i class="fas fa-plus"></i> Add Run Item';
+    document.getElementById('crewRunSubmitText').textContent = 'Add Item';
+    document.getElementById('addCrewRunForm').reset();
+    document.getElementById('crewRunItemId').value = '';
+    showModal('addCrewRunModal');
+}
+
+document.getElementById('addCrewRunForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const itemId = document.getElementById('crewRunItemId').value;
+    const data = {
+        title:       document.getElementById('crewRunTitle').value,
+        cue_type:    document.getElementById('crewRunCueType').value,
+        duration:    document.getElementById('crewRunDuration').value,
+        description: document.getElementById('crewRunDescription').value,
+        notes:       document.getElementById('crewRunNotes').value
+    };
+
+    const url    = itemId ? `/events/crew-run/${itemId}/edit` : `/events/{{ event.id }}/crew-run/add`;
+    const method = itemId ? 'PUT' : 'POST';
+
+    fetch(url, {
+        method: method,
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            showAlert(itemId ? 'Run item updated!' : 'Run item added!', 'success');
+            hideModal('addCrewRunModal');
+            setTimeout(() => location.reload(), 500);
+        } else {
+            showAlert(result.error || 'Error saving item', 'error');
+        }
+    });
+});
+
+function editCrewRunItem(id) {
+    const item = crewRunData.find(i => i.id === id);
+    if (!item) return;
+
+    document.getElementById('crewRunModalTitle').innerHTML = '<i class="fas fa-edit"></i> Edit Run Item';
+    document.getElementById('crewRunSubmitText').textContent = 'Update Item';
+    document.getElementById('crewRunItemId').value  = item.id;
+    document.getElementById('crewRunTitle').value   = item.title;
+    document.getElementById('crewRunCueType').value = item.cue_type  || '';
+    document.getElementById('crewRunDuration').value    = item.duration    || '';
+    document.getElementById('crewRunDescription').value = item.description || '';
+    document.getElementById('crewRunNotes').value        = item.notes       || '';
+
+    showModal('addCrewRunModal');
+}
+
+function deleteCrewRunItem(id) {
+    if (!confirm('Delete this run item?')) return;
+
+    fetch(`/events/crew-run/${id}/delete`, {method: 'DELETE'})
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                showAlert('Run item deleted!', 'success');
+                location.reload();
+            }
+        });
+}
+
+// Drag-and-drop reorder
+if (document.getElementById('crewRunList')) {
+    new Sortable(document.getElementById('crewRunList'), {
+        animation: 150,
+        handle: '.fa-grip-vertical',
+        ghostClass: 'sortable-ghost',
+        onEnd: function() {
+            const itemIds = Array.from(document.querySelectorAll('.run-item')).map(el => el.dataset.id);
+            fetch(`/events/{{ event.id }}/crew-run/reorder`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({item_ids: itemIds})
+            })
+            .then(r => r.json())
+            .then(result => { if (result.success) location.reload(); });
+        }
+    });
+}
+
+{% if current_user.is_admin %}
+// ── Cast Description ───────────────────────────────────────────────────────
 function editCastDescription() {
     document.getElementById('castDescriptionView').style.display = 'none';
     document.getElementById('castDescriptionEdit').style.display = 'block';
     document.getElementById('castDescriptionTextarea').focus();
 }
-
 function cancelCastDescriptionEdit() {
     document.getElementById('castDescriptionView').style.display = 'block';
     document.getElementById('castDescriptionEdit').style.display = 'none';
 }
-
 function saveCastDescription() {
     const content = document.getElementById('castDescriptionTextarea').value;
-
     fetch('/events/{{ event.id }}/edit-cast', {
         method: 'PUT',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ cast_description: content })
+        body: JSON.stringify({cast_description: content})
     })
     .then(r => r.json())
     .then(result => {
@@ -421,20 +506,17 @@ function saveCastDescription() {
     });
 }
 
-// Add Cast Schedule
+// ── Cast Schedule ──────────────────────────────────────────────────────────
 document.getElementById('addCastScheduleForm').addEventListener('submit', function(e) {
     e.preventDefault();
-
-    const data = {
-        title: document.getElementById('castScheduleTitle').value,
-        scheduled_time: document.getElementById('castScheduleTime').value,
-        description: document.getElementById('castScheduleDescription').value
-    };
-
     fetch('/events/{{ event.id }}/cast-schedule/add', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
+        body: JSON.stringify({
+            title:          document.getElementById('castScheduleTitle').value,
+            scheduled_time: document.getElementById('castScheduleTime').value,
+            description:    document.getElementById('castScheduleDescription').value
+        })
     })
     .then(r => r.json())
     .then(result => {
@@ -449,32 +531,22 @@ document.getElementById('addCastScheduleForm').addEventListener('submit', functi
     });
 });
 
-// Delete Cast Schedule
 function deleteCastSchedule(id) {
     if (!confirm('Delete this schedule item?')) return;
-
     fetch(`/events/cast-schedule/${id}/delete`, {method: 'DELETE'})
         .then(r => r.json())
         .then(result => {
-            if (result.success) {
-                showAlert('Schedule deleted!', 'success');
-                location.reload();
-            }
+            if (result.success) { showAlert('Schedule deleted!', 'success'); location.reload(); }
         });
 }
 
-// Add Cast Note
+// ── Cast Notes ─────────────────────────────────────────────────────────────
 document.getElementById('addCastNoteForm').addEventListener('submit', function(e) {
     e.preventDefault();
-
-    const data = {
-        content: document.getElementById('castNoteContent').value
-    };
-
     fetch('/events/{{ event.id }}/cast-notes/add', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
+        body: JSON.stringify({content: document.getElementById('castNoteContent').value})
     })
     .then(r => r.json())
     .then(result => {
@@ -487,166 +559,42 @@ document.getElementById('addCastNoteForm').addEventListener('submit', function(e
             showAlert(result.error || 'Error adding note', 'error');
         }
     });
-}
+});
 
-// Edit Cast Note Toggle
 function editCastNoteToggle(noteId) {
-    const content = document.getElementById(`cast-note-content-${noteId}`);
-    const editDiv = document.getElementById(`cast-note-edit-${noteId}`);
-    const editBtn = document.getElementById(`cast-edit-btn-${noteId}`);
-    const saveBtn = document.getElementById(`cast-save-btn-${noteId}`);
+    const content  = document.getElementById(`cast-note-content-${noteId}`);
+    const editDiv  = document.getElementById(`cast-note-edit-${noteId}`);
+    const editBtn  = document.getElementById(`cast-edit-btn-${noteId}`);
+    const saveBtn  = document.getElementById(`cast-save-btn-${noteId}`);
+    const isEditing = editDiv.style.display !== 'none';
 
-    if (editDiv.style.display === 'none') {
-        content.style.display = 'none';
-        editDiv.style.display = 'block';
-        editBtn.style.display = 'none';
-        saveBtn.style.display = 'inline-block';
-    } else {
-        content.style.display = 'block';
-        editDiv.style.display = 'none';
-        editBtn.style.display = 'inline-block';
-        saveBtn.style.display = 'none';
-    }
+    content.style.display  = isEditing ? 'block'        : 'none';
+    editDiv.style.display  = isEditing ? 'none'         : 'block';
+    editBtn.style.display  = isEditing ? 'inline-block' : 'none';
+    saveBtn.style.display  = isEditing ? 'none'         : 'inline-block';
 }
 
-// Save Cast Note Edit
 function saveCastNoteEdit(noteId) {
     const newContent = document.getElementById(`cast-note-textarea-${noteId}`).value;
-    const data = { content: newContent };
-
     fetch(`/events/cast-notes/${noteId}/edit`, {
         method: 'PUT',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
+        body: JSON.stringify({content: newContent})
     })
     .then(r => r.json())
     .then(result => {
-        if (result.success) {
-            showAlert('Note updated!', 'success');
-            setTimeout(() => location.reload(), 500);
-        }
+        if (result.success) { showAlert('Note updated!', 'success'); setTimeout(() => location.reload(), 500); }
     });
 }
 
-// Delete Cast Note
 function deleteCastNote(noteId) {
     if (!confirm('Delete this note?')) return;
-
     fetch(`/events/cast-notes/${noteId}/delete`, {method: 'DELETE'})
         .then(r => r.json())
         .then(result => {
-            if (result.success) {
-                showAlert('Note deleted!', 'success');
-                location.reload();
-            }
+            if (result.success) { showAlert('Note deleted!', 'success'); location.reload(); }
         });
 }
-
 {% endif %}
-
-// Crew Run List Management
-let crewRunData = {{ event.crew_run_items|tojson }};
-
-// Add/Edit Crew Run Item
-document.getElementById('addCrewRunForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    const itemId = document.getElementById('crewRunItemId').value;
-    const data = {
-        title: document.getElementById('crewRunTitle').value,
-        cue_type: document.getElementById('crewRunCueType').value,
-        duration: document.getElementById('crewRunDuration').value,
-        description: document.getElementById('crewRunDescription').value,
-        notes: document.getElementById('crewRunNotes').value
-    };
-    
-    const url = itemId ? `/events/crew-run/${itemId}/edit` : `/events/{{ event.id }}/crew-run/add`;
-    const method = itemId ? 'PUT' : 'POST';
-    
-    fetch(url, {
-        method: method,
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(r => r.json())
-    .then(result => {
-        if (result.success) {
-            showAlert(itemId ? 'Run item updated!' : 'Run item added!', 'success');
-            hideModal('addCrewRunModal');
-            setTimeout(() => location.reload(), 500);
-        }
-    });
-});
-
-// Edit Crew Run Item
-function editCrewRunItem(id) {
-    const item = crewRunData.find(i => i.id === id);
-    if (!item) return;
-    
-    document.getElementById('crewRunModalTitle').innerHTML = '<i class="fas fa-edit"></i> Edit Crew Run Item';
-    document.getElementById('crewRunSubmitText').textContent = 'Update Item';
-    document.getElementById('crewRunItemId').value = item.id;
-    document.getElementById('crewRunTitle').value = item.title;
-    document.getElementById('crewRunCueType').value = item.cue_type || '';
-    document.getElementById('crewRunDuration').value = item.duration || '';
-    document.getElementById('crewRunDescription').value = item.description || '';
-    document.getElementById('crewRunNotes').value = item.notes || '';
-    
-    showModal('addCrewRunModal');
-}
-
-// Delete Crew Run Item
-function deleteCrewRunItem(id) {
-    if (!confirm('Delete this run item?')) return;
-    
-    fetch(`/events/crew-run/${id}/delete`, {method: 'DELETE'})
-        .then(r => r.json())
-        .then(result => {
-            if (result.success) {
-                showAlert('Run item deleted!', 'success');
-                location.reload();
-            }
-        });
-}
-
-// Reset form when opening for add
-function showModal(id) {
-    if (id === 'addCrewRunModal') {
-        document.getElementById('crewRunModalTitle').innerHTML = '<i class="fas fa-plus"></i> Add Crew Run Item';
-        document.getElementById('crewRunSubmitText').textContent = 'Add Item';
-        document.getElementById('addCrewRunForm').reset();
-        document.getElementById('crewRunItemId').value = '';
-    }
-    document.getElementById(id).style.display = 'block';
-}
-
-// Drag and Drop for Crew Run List
-if (document.getElementById('crewRunList')) {
-    new Sortable(document.getElementById('crewRunList'), {
-        animation: 150,
-        handle: '.fa-grip-vertical',
-        ghostClass: 'sortable-ghost',
-        onEnd: function(evt) {
-            const itemIds = Array.from(document.querySelectorAll('.run-item')).map(el => el.dataset.id);
-            
-            fetch(`/events/{{ event.id }}/crew-run/reorder`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ item_ids: itemIds })
-            })
-            .then(r => r.json())
-            .then(result => {
-                if (result.success) {
-                    location.reload();
-                }
-            });
-        }
-    });
-}
-
-
-
-
-
 </script>
 {% endblock %}

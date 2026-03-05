@@ -5,96 +5,130 @@
 {% block content %}
 
 <div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.75rem;">
         <h2>📦 Equipment Management</h2>
-        <div style="display: flex; gap: 0.5rem;">
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
             <button onclick="showModal('scanModal')" class="btn btn-primary">📱 Scan Barcode</button>
+            <button onclick="downloadCSVTemplate()" class="btn btn-secondary" title="Download a blank CSV template to fill in and import">
+                <i class="fas fa-download"></i> CSV Template
+            </button>
             {% if current_user.is_admin %}
-            <a href="{{ url_for('barcode_page') }}" class="btn btn-success" style="text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;">
+            <a href="{{ url_for('equipment.barcode_page') }}" class="btn btn-success" style="text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;">
                 <i class="fas fa-barcode"></i> Generate Barcodes
             </a>
-            <button onclick="showModal('addModal')" class="btn btn-success">+ Add Equipment</button>
+            <label class="btn btn-secondary" style="cursor: pointer; margin: 0;" title="Import CSV">
+                <i class="fas fa-file-upload"></i> Import CSV
+                <input type="file" id="csvFileInput" accept=".csv" style="display:none;" onchange="importCSV(this)">
+            </label>
+            <button onclick="openAddModal()" class="btn btn-success">+ Add Equipment</button>
             {% endif %}
         </div>
     </div>
 
+    <!-- CSV import status -->
+    <div id="importStatus" style="display:none;" class="alert alert-info">
+        <i class="fas fa-spinner fa-spin"></i> Importing…
+    </div>
+
     <div class="form-group">
-        <input type="text" id="searchInput" placeholder="🔍 Search by name, barcode, or location..." style="font-size: 1rem;">
+        <input type="text" id="searchInput" placeholder="🔍 Search by name, barcode, category or location…" style="font-size: 1rem;">
     </div>
 
     <div id="equipmentList">
-       
- <table>
-    <thead>
-        <tr>
-            <th>Barcode</th>
-            <th>Name</th>
-            <th>Quantity</th>
-            <th>Category</th>
-            <th>Location</th>
-            <th>Notes</th>
-            {% if current_user.is_admin %}
-            <th>Actions</th>
-            {% endif %}
-        </tr>
-    </thead>
-    <tbody>
-        {% for item in equipment %}
-        <tr data-id="{{ item.id }}">
-            <td><code>{{ item.barcode }}</code></td>
-            <td><strong>{{ item.name }}</strong></td>
-            <td>
-                <span style="background: #e0e7ff; color: var(--primary); padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600;">
-                    {{ item.quantity_owned if item.quantity_owned else 1 }}
-                </span>
-            </td>
-            <td>{{ item.category or '-' }}</td>
-            <td>{{ item.location or '-' }}</td>
-            <td>{{ item.notes[:50] }}{% if item.notes|length > 50 %}...{% endif %}</td>
-            {% if current_user.is_admin %}
-            <td>
-                <button onclick="editEquipment({{ item.id }})" class="btn btn-primary">Edit</button>
-                <button onclick="deleteEquipment({{ item.id }})" class="btn btn-danger">Delete</button>
-            </td>
-            {% endif %}
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:52px;">Photo</th>
+                    <th>Barcode</th>
+                    <th>Name</th>
+                    <th>Qty</th>
+                    <th>Category</th>
+                    <th>Location</th>
+                    <th>Notes</th>
+                    {% if current_user.is_admin %}
+                    <th>Actions</th>
+                    {% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in equipment %}
+                <tr data-id="{{ item.id }}">
+                    <!-- Equipment photo thumbnail -->
+                    <td>
+                        {% if item.picture %}
+                        <img src="{{ url_for('equipment.serve_equipment_picture', id=item.id) }}"
+                             alt="{{ item.name }}"
+                             onclick="viewPicture('{{ url_for('equipment.serve_equipment_picture', id=item.id) }}', '{{ item.name|e }}')"
+                             style="width:40px; height:40px; object-fit:cover; border-radius:8px; cursor:pointer; border:2px solid var(--border); display:block;">
+                        {% else %}
+                        <div style="width:40px; height:40px; border-radius:8px; background:var(--bg-nav-active); display:flex; align-items:center; justify-content:center; font-size:1.2rem; border:2px solid var(--border);">📦</div>
+                        {% endif %}
+                    </td>
+                    <td><code>{{ item.barcode }}</code></td>
+                    <td>
+                        <a href="{{ url_for('equipment.equipment_detail', id=item.id) }}"
+                           style="font-weight:600; color:var(--primary); text-decoration:none;"
+                           title="View details">
+                            {{ item.name }}
+                        </a>
+                    </td>
+                    <td>
+                        <span style="background:#e0e7ff; color:var(--primary); padding:0.25rem 0.75rem; border-radius:20px; font-size:0.85rem; font-weight:600;">
+                            {{ item.quantity_owned if item.quantity_owned else 1 }}
+                        </span>
+                    </td>
+                    <td>{{ item.category or '-' }}</td>
+                    <td>{{ item.location or '-' }}</td>
+                    <td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ item.notes or '' }}">
+                        {{ (item.notes or '')[:50] }}{% if item.notes and item.notes|length > 50 %}…{% endif %}
+                    </td>
+                    {% if current_user.is_admin %}
+                    <td style="white-space:nowrap;">
+                        <button onclick="editEquipment({{ item.id }})" class="btn btn-primary" style="padding:0.4rem 0.75rem; font-size:0.8rem;">Edit</button>
+                        <button onclick="openPictureModal({{ item.id }}, '{{ item.name|e }}', {{ 'true' if item.picture else 'false' }}, 'item')" class="btn btn-secondary" style="padding:0.4rem 0.75rem; font-size:0.8rem;" title="Item photo">
+                            <i class="fas fa-camera"></i>
+                        </button>
+                        <button onclick="openPictureModal({{ item.id }}, '{{ item.name|e }}', {{ 'true' if item.location_picture else 'false' }}, 'location')" class="btn btn-secondary" style="padding:0.4rem 0.75rem; font-size:0.8rem; background:#f59e0b;" title="Storage location photo">
+                            <i class="fas fa-map-marker-alt"></i>
+                        </button>
+                        <button onclick="deleteEquipment({{ item.id }})" class="btn btn-danger" style="padding:0.4rem 0.75rem; font-size:0.8rem;">Delete</button>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 </div>
 
-<!-- Scan Modal -->
+<!-- ───────────────────── Scan Modal ───────────────────── -->
 <div id="scanModal" class="modal">
     <div class="modal-content">
         <span class="close" onclick="hideModal('scanModal')">&times;</span>
         <h2>Scan Barcode</h2>
-
         <div style="margin-bottom: 1rem;">
             <button onclick="startCamera()" class="btn btn-primary" id="startCameraBtn">📷 Start Camera</button>
-            <button onclick="stopCamera()" class="btn btn-danger" id="stopCameraBtn" style="display: none;">Stop Camera</button>
+            <button onclick="stopCamera()" class="btn btn-danger" id="stopCameraBtn" style="display:none;">Stop Camera</button>
         </div>
-
-        <div id="cameraContainer" style="display: none; margin-bottom: 1rem;">
-            <div id="interactive" class="viewport" style="width: 100%; max-width: 640px; height: 480px; margin: 0 auto; border: 2px solid #ddd; border-radius: 6px;"></div>
+        <div id="cameraContainer" style="display:none; margin-bottom:1rem;">
+            <div id="interactive" class="viewport" style="width:100%; max-width:640px; height:480px; margin:0 auto; border:2px solid var(--border); border-radius:6px;"></div>
         </div>
-
-        <p style="margin-bottom: 1rem; text-align: center;">OR enter manually:</p>
+        <p style="margin-bottom:1rem; text-align:center;">OR enter manually:</p>
         <div class="form-group">
-            <input type="text" id="barcodeInput" placeholder="Enter barcode..." autofocus>
+            <input type="text" id="barcodeInput" placeholder="Enter barcode…">
         </div>
         <button onclick="lookupBarcode()" class="btn btn-primary">Look Up</button>
-        <div id="barcodeResult" style="margin-top: 1.5rem;"></div>
+        <div id="barcodeResult" style="margin-top:1.5rem;"></div>
     </div>
 </div>
 
-<!-- Add/Edit Modal -->
+<!-- ───────────────────── Add / Edit Modal ───────────────────── -->
 {% if current_user.is_admin %}
 <div id="addModal" class="modal">
     <div class="modal-content">
         <span class="close" onclick="hideModal('addModal')">&times;</span>
         <h2 id="modalTitle">Add Equipment</h2>
-        <form id="equipmentForm">
+        <form id="equipmentForm" onsubmit="submitEquipmentForm(event)">
             <input type="hidden" id="equipmentId">
             <div class="form-group">
                 <label>Barcode *</label>
@@ -105,84 +139,175 @@
                 <input type="text" id="name" required>
             </div>
             <div class="form-group">
-                <label>Quantity Owned *</label>
+                <label>Quantity Owned</label>
                 <input type="number" id="quantityOwned" value="1" min="1" required>
-                <small style="color: #666; display: block; margin-top: 0.25rem;">
-                    How many of this item do you own? Used for allocation tracking.
-                </small>
+                <small style="color:var(--text-secondary); display:block; margin-top:0.25rem;">How many of this item do you own?</small>
             </div>
             <div class="form-group">
                 <label>Category</label>
-                <input type="text" id="category" placeholder="e.g., Lighting, Audio, Video">
+                <input type="text" id="category" placeholder="e.g. Lighting, Audio, Video">
             </div>
             <div class="form-group">
                 <label>Storage Location</label>
-                <input type="text" id="location" placeholder="e.g., Storage Room A, Shelf 3">
+                <input type="text" id="location" placeholder="e.g. Storage Room A, Shelf 3">
             </div>
             <div class="form-group">
                 <label>Notes</label>
-                <textarea id="notes" placeholder="Additional information..."></textarea>
+                <textarea id="notes" placeholder="Additional information…"></textarea>
             </div>
-            <button type="submit" class="btn btn-success">Save Equipment</button>
+            <button type="submit" class="btn btn-success" style="width:100%;">Save Equipment</button>
         </form>
     </div>
 </div>
+
+<!-- ───────────────────── Picture / Location-Picture Modal ───────────────────── -->
+<div id="pictureModal" class="modal">
+    <div class="modal-content" style="max-width:440px;">
+        <span class="close" onclick="hideModal('pictureModal')">&times;</span>
+        <h2 id="picModalTitle" style="margin-bottom:0.5rem;"></h2>
+        <p id="picModalName" style="color:var(--text-secondary); margin-bottom:1.25rem; font-weight:600;"></p>
+
+        <!-- Current photo preview -->
+        <div id="currentPicContainer" style="display:none; margin-bottom:1.25rem; text-align:center;">
+            <img id="currentPicImg" src="" alt="Current photo"
+                 style="max-width:100%; max-height:220px; border-radius:10px; border:2px solid var(--border); object-fit:contain;">
+            <br>
+            <button onclick="deletePicture()" class="btn btn-danger" style="margin-top:0.75rem; width:100%;">
+                <i class="fas fa-trash"></i> Remove Photo
+            </button>
+        </div>
+
+        <!-- Upload area -->
+        <div id="uploadArea"
+             style="border:2px dashed var(--border); border-radius:10px; padding:2rem; text-align:center; cursor:pointer; transition:border-color 0.2s;"
+             onclick="document.getElementById('picFileInput').click()"
+             ondragover="event.preventDefault(); this.style.borderColor='var(--primary)';"
+             ondragleave="this.style.borderColor='var(--border)';"
+             ondrop="handlePicDrop(event)">
+            <p id="picModalIcon" style="font-size:2rem; margin-bottom:0.5rem;">📷</p>
+            <p style="color:var(--text-secondary); margin:0;">Click or drag & drop to upload a photo</p>
+            <p style="color:var(--text-muted); font-size:0.8rem; margin-top:0.25rem;">PNG, JPG, JPEG, GIF, WEBP</p>
+        </div>
+        <input type="file" id="picFileInput" accept="image/*" style="display:none;" onchange="uploadPicture(this.files[0])">
+
+        <div id="picUploadProgress" style="display:none; margin-top:1rem;">
+            <div style="background:var(--border); border-radius:4px; height:6px; overflow:hidden;">
+                <div style="width:100%; height:100%; background:var(--primary); animation:progressPulse 1s infinite;"></div>
+            </div>
+            <p style="text-align:center; color:var(--text-secondary); font-size:0.85rem; margin-top:0.5rem;">Uploading…</p>
+        </div>
+    </div>
+</div>
+
+<!-- ───────────────────── Full Image Viewer ───────────────────── -->
+<div id="imageViewerModal" class="modal" onclick="hideModal('imageViewerModal')" style="display:none;">
+    <div style="max-width:90vw; max-height:90vh; margin:auto; margin-top:5vh; text-align:center;">
+        <img id="imageViewerImg" src="" alt=""
+             style="max-width:100%; max-height:85vh; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+        <p id="imageViewerCaption" style="color:#fff; margin-top:0.75rem; font-size:1rem; font-weight:600;"></p>
+    </div>
+</div>
+
 {% endif %}
+
+<style>
+@keyframes progressPulse {
+    0%   { opacity: 1; }
+    50%  { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+</style>
+
 {% endblock %}
 
 {% block scripts %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <script>
 let allEquipment = {{ equipment_json|tojson }};
-let isScanning = false;
+let isScanning   = false;
+let picModalEquipmentId   = null;
+let picModalType          = 'item'; // 'item' | 'location'
 
-// Search filter
+// ── CSV Template download ────────────────────────────────────────────────────
+function downloadCSVTemplate() {
+    const headers = ['barcode', 'name', 'quantity_owned', 'category', 'location', 'notes'];
+    const example = ['EQ-001', 'Example Item', '1', 'Lighting', 'Storage Room A Shelf 2', 'Optional notes here'];
+    const csv = [headers.join(','), example.join(',')].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'equipment_import_template.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
+// ── Search ──────────────────────────────────────────────────────────────────
 document.getElementById('searchInput').addEventListener('input', function(e) {
-    const query = e.target.value.toLowerCase();
-    const rows = document.querySelectorAll('#equipmentList tbody tr');
-    rows.forEach(row => {
-        const text = row.textContent.toLowerCase();
-        row.style.display = text.includes(query) ? '' : 'none';
+    const q = e.target.value.toLowerCase();
+    document.querySelectorAll('#equipmentList tbody tr').forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
     });
 });
 
-// Barcode scanning
+// ── CSV import ───────────────────────────────────────────────────────────────
+function importCSV(input) {
+    if (!input.files.length) return;
+    const file = input.files[0];
+    const status = document.getElementById('importStatus');
+    status.style.display = 'flex';
+    status.className = 'alert alert-info';
+    status.innerHTML = '<i class="fas fa-spinner fa-spin"></i>&nbsp; Importing…';
+
+    const fd = new FormData();
+    fd.append('file', file);
+
+    fetch('/equipment/import-csv', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                status.className = 'alert alert-success';
+                let msg = `<i class="fas fa-check-circle"></i>&nbsp; Imported <strong>${result.imported}</strong> item(s)`;
+                if (result.skipped)  msg += `, skipped <strong>${result.skipped}</strong>`;
+                if (result.errors && result.errors.length)
+                    msg += `<br><small style="color:var(--danger);">${result.errors.join('<br>')}</small>`;
+                status.innerHTML = msg;
+                setTimeout(() => location.reload(), 1800);
+            } else {
+                status.className = 'alert alert-error';
+                status.innerHTML = `<i class="fas fa-exclamation-circle"></i>&nbsp; ${result.error}`;
+            }
+        })
+        .catch(err => {
+            status.className = 'alert alert-error';
+            status.innerHTML = `<i class="fas fa-exclamation-circle"></i>&nbsp; ${err}`;
+        });
+
+    input.value = '';
+}
+
+// ── Barcode scanning ─────────────────────────────────────────────────────────
 function startCamera() {
     if (isScanning) return;
-    const container = document.getElementById('cameraContainer');
+    const container   = document.getElementById('cameraContainer');
     const interactive = document.querySelector('#interactive');
     container.style.display = 'block';
-    document.getElementById('startCameraBtn').style.display = 'none';
-    document.getElementById('stopCameraBtn').style.display = 'inline-block';
+    document.getElementById('startCameraBtn').style.display  = 'none';
+    document.getElementById('stopCameraBtn').style.display   = 'inline-block';
 
     setTimeout(() => {
         Quagga.init({
             inputStream: {
-                name: "Live",
-                type: "LiveStream",
-                target: interactive,
-                constraints: {
-                    width: 640,
-                    height: 480,
-                    facingMode: "environment"
-                }
+                name: 'Live', type: 'LiveStream', target: interactive,
+                constraints: { width: 640, height: 480, facingMode: 'environment' }
             },
-            decoder: {
-                readers: ["code_128_reader"]
-            }
+            decoder: { readers: ['code_128_reader'] }
         }, function(err) {
-            if (err) {
-                console.error(err);
-                alert('Camera error. Check permissions.');
-                stopCamera();
-                return;
-            }
+            if (err) { console.error(err); alert('Camera error. Check permissions.'); stopCamera(); return; }
             isScanning = true;
             Quagga.start();
         });
-
         Quagga.onDetected(function(result) {
-            if (!result || !result.codeResult || !result.codeResult.code) return;
+            if (!result?.codeResult?.code) return;
             const barcode = result.codeResult.code;
             stopCamera();
             hideModal('scanModal');
@@ -192,162 +317,208 @@ function startCamera() {
 }
 
 function stopCamera() {
-    if (isScanning) {
-        Quagga.stop();
-        Quagga.offDetected();
-        isScanning = false;
-    }
-    document.getElementById('cameraContainer').style.display = 'none';
-    document.getElementById('startCameraBtn').style.display = 'inline-block';
-    document.getElementById('stopCameraBtn').style.display = 'none';
+    if (isScanning) { Quagga.stop(); Quagga.offDetected(); isScanning = false; }
+    document.getElementById('cameraContainer').style.display  = 'none';
+    document.getElementById('startCameraBtn').style.display   = 'inline-block';
+    document.getElementById('stopCameraBtn').style.display    = 'none';
 }
 
-// Barcode lookup
-document.getElementById('barcodeInput')?.addEventListener('keypress', function(e) {
+document.getElementById('barcodeInput')?.addEventListener('keypress', e => {
     if (e.key === 'Enter') lookupBarcode();
 });
 
 function lookupBarcode(barcode = null) {
     barcode = barcode || document.getElementById('barcodeInput').value.trim();
     if (!barcode) return;
-
-    fetch(`/equipment/barcode/${barcode}`)
+    fetch(`/equipment/barcode/${encodeURIComponent(barcode)}`)
         .then(r => r.json())
         .then(data => {
-            const resultDiv = document.getElementById('barcodeResult');
+            const div = document.getElementById('barcodeResult');
             if (data.error) {
-                resultDiv.innerHTML = '<div class="alert alert-error">Equipment not found!</div>';
+                div.innerHTML = '<div class="alert alert-error">Equipment not found!</div>';
             } else {
-                resultDiv.innerHTML = `
-                    <div class="card" style="background: #f8f9fa; padding: 1.5rem;">
+                const picHtml = data.picture_url
+                    ? `<img src="${data.picture_url}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;margin-bottom:0.75rem;">`
+                    : '';
+                div.innerHTML = `
+                    <div class="card" style="background:var(--bg-nav-hover); padding:1.5rem; text-align:center;">
+                        ${picHtml}
                         <h3>${data.name}</h3>
                         <p><strong>Barcode:</strong> ${data.barcode}</p>
                         <p><strong>Category:</strong> ${data.category || 'N/A'}</p>
-                        <p><strong>Location:</strong> <span style="background: #ffd700; padding: 0.25rem 0.5rem; border-radius: 4px; font-weight: bold;">${data.location || 'N/A'}</span></p>
+                        <p><strong>Location:</strong>
+                            <span style="background:#ffd700;color:#000;padding:0.25rem 0.5rem;border-radius:4px;font-weight:bold;">
+                                ${data.location || 'N/A'}
+                            </span>
+                        </p>
                         ${data.notes ? `<p><strong>Notes:</strong> ${data.notes}</p>` : ''}
-                    </div>
-                `;
-                showModal('scanModal'); // Optional: reopen modal to show result
+                        <a href="/equipment/${data.id}" class="btn btn-primary" style="margin-top:0.75rem; display:inline-block; text-decoration:none;">View Details</a>
+                    </div>`;
+                showModal('scanModal');
             }
         });
 }
 
-// Admin actions
+// ── Admin: Add / Edit ────────────────────────────────────────────────────────
 {% if current_user.is_admin %}
-document.getElementById('equipmentForm')?.addEventListener('submit', function(e) {
-    e.preventDefault();
-    const id = document.getElementById('equipmentId').value;
-    const data = {
-        barcode: document.getElementById('barcode').value,
-        name: document.getElementById('name').value,
-         category: document.getElementById('category').value,
-        location: document.getElementById('location').value,
-        notes: document.getElementById('notes').value
-    };
 
-    const url = id ? `/equipment/update/${id}` : '/equipment/add';
-    const method = id ? 'PUT' : 'POST';
-
-    fetch(url, {
-        method: method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-    })
-    .then(r => r.json())
-    .then(result => {
-        if (result.success) {
-            location.reload();
-        } else {
-            alert('Failed to save equipment. Please try again.');
-        }
-    });
-});
+function openAddModal() {
+    document.getElementById('modalTitle').textContent = 'Add Equipment';
+    document.getElementById('equipmentId').value = '';
+    document.getElementById('barcode').value      = '';
+    document.getElementById('name').value         = '';
+    document.getElementById('quantityOwned').value = 1;
+    document.getElementById('category').value     = '';
+    document.getElementById('location').value     = '';
+    document.getElementById('notes').value        = '';
+    document.getElementById('barcode').readOnly   = false;
+    showModal('addModal');
+}
 
 function editEquipment(id) {
     const item = allEquipment.find(e => e.id === id);
     if (!item) return;
-
-    document.getElementById('modalTitle').textContent = 'Edit Equipment';
-    document.getElementById('equipmentId').value = item.id;
-    document.getElementById('barcode').value = item.barcode;
-    document.getElementById('name').value = item.name;
-    document.getElementById('category').value = item.category || '';
-    document.getElementById('location').value = item.location || '';
-    document.getElementById('notes').value = item.notes || '';
-
+    document.getElementById('modalTitle').textContent    = 'Edit Equipment';
+    document.getElementById('equipmentId').value         = item.id;
+    document.getElementById('barcode').value             = item.barcode;
+    document.getElementById('barcode').readOnly          = true;
+    document.getElementById('name').value                = item.name;
+    document.getElementById('quantityOwned').value       = item.quantity_owned || 1;
+    document.getElementById('category').value            = item.category || '';
+    document.getElementById('location').value            = item.location || '';
+    document.getElementById('notes').value               = item.notes || '';
     showModal('addModal');
 }
 
-function deleteEquipment(id) {
-    if (!confirm('Delete this equipment item?')) return;
-
-    fetch(`/equipment/delete/${id}`, { method: 'DELETE' })
+function submitEquipmentForm(e) {
+    e.preventDefault();
+    const id = document.getElementById('equipmentId').value;
+    const data = {
+        barcode:        document.getElementById('barcode').value,
+        name:           document.getElementById('name').value,
+        quantity_owned: parseInt(document.getElementById('quantityOwned').value) || 1,
+        category:       document.getElementById('category').value,
+        location:       document.getElementById('location').value,
+        notes:          document.getElementById('notes').value,
+    };
+    const url    = id ? `/equipment/update/${id}` : '/equipment/add';
+    const method = id ? 'PUT' : 'POST';
+    fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
         .then(r => r.json())
         .then(result => {
             if (result.success) {
-                location.reload();
+                hideModal('addModal');
+                showAlert(id ? 'Equipment updated!' : 'Equipment added!', 'success');
+                setTimeout(() => location.reload(), 800);
             } else {
-                alert('Failed to delete equipment. Please try again.');
+                showAlert(result.error || 'Failed to save equipment.', 'error');
             }
         });
 }
+
+function deleteEquipment(id) {
+    if (!confirm('Delete this equipment item? This cannot be undone.')) return;
+    fetch(`/equipment/delete/${id}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) { showAlert('Equipment deleted.', 'success'); setTimeout(() => location.reload(), 600); }
+            else showAlert(result.error || 'Failed to delete.', 'error');
+        });
+}
+
+// ── Picture / Location-picture management ────────────────────────────────────
+function openPictureModal(id, name, hasPicture, type) {
+    picModalEquipmentId = id;
+    picModalType        = type; // 'item' | 'location'
+
+    const isLocation = type === 'location';
+    document.getElementById('picModalTitle').innerHTML =
+        isLocation
+            ? '<i class="fas fa-map-marker-alt" style="color:#f59e0b;"></i> Storage Location Photo'
+            : '<i class="fas fa-camera"></i> Equipment Photo';
+    document.getElementById('picModalName').textContent = name;
+    document.getElementById('picModalIcon').textContent = isLocation ? '📍' : '📷';
+
+    const currentContainer = document.getElementById('currentPicContainer');
+    const currentImg       = document.getElementById('currentPicImg');
+
+    if (hasPicture) {
+        const viewUrl = isLocation
+            ? `/equipment/${id}/location-picture/view?t=${Date.now()}`
+            : `/equipment/${id}/picture/view?t=${Date.now()}`;
+        currentImg.src = viewUrl;
+        currentContainer.style.display = 'block';
+    } else {
+        currentContainer.style.display = 'none';
+    }
+    document.getElementById('picUploadProgress').style.display = 'none';
+    showModal('pictureModal');
+}
+
+function handlePicDrop(event) {
+    event.preventDefault();
+    document.getElementById('uploadArea').style.borderColor = 'var(--border)';
+    const file = event.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) uploadPicture(file);
+    else showAlert('Please drop an image file.', 'error');
+}
+
+function uploadPicture(file) {
+    if (!file || !picModalEquipmentId) return;
+    const progress = document.getElementById('picUploadProgress');
+    progress.style.display = 'block';
+
+    const fd = new FormData();
+    fd.append('file', file);
+
+    const endpoint = picModalType === 'location'
+        ? `/equipment/${picModalEquipmentId}/location-picture`
+        : `/equipment/${picModalEquipmentId}/picture`;
+
+    fetch(endpoint, { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(result => {
+            progress.style.display = 'none';
+            if (result.success) {
+                showAlert('Photo uploaded!', 'success');
+                hideModal('pictureModal');
+                setTimeout(() => location.reload(), 600);
+            } else {
+                showAlert(result.error || 'Upload failed.', 'error');
+            }
+        })
+        .catch(() => {
+            progress.style.display = 'none';
+            showAlert('Upload failed.', 'error');
+        });
+}
+
+function deletePicture() {
+    if (!picModalEquipmentId || !confirm('Remove this photo?')) return;
+    const endpoint = picModalType === 'location'
+        ? `/equipment/${picModalEquipmentId}/location-picture`
+        : `/equipment/${picModalEquipmentId}/picture`;
+
+    fetch(endpoint, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                showAlert('Photo removed.', 'success');
+                hideModal('pictureModal');
+                setTimeout(() => location.reload(), 600);
+            } else {
+                showAlert(result.error || 'Failed to remove photo.', 'error');
+            }
+        });
+}
+
 {% endif %}
 
-// Modal helpers
-function showModal(id) {
-    document.getElementById(id).style.display = 'block';
+// ── Full-image viewer ────────────────────────────────────────────────────────
+function viewPicture(url, name) {
+    document.getElementById('imageViewerImg').src             = url;
+    document.getElementById('imageViewerCaption').textContent = name;
+    showModal('imageViewerModal');
 }
-
-function hideModal(id) {
-    document.getElementById(id).style.display = 'none';
-}
-
-document.getElementById('equipmentForm')?.addEventListener('submit', function(e) {
-    e.preventDefault();
-    const id = document.getElementById('equipmentId').value;
-    const data = {
-        barcode: document.getElementById('barcode').value,
-        name: document.getElementById('name').value,
-        quantity_owned: parseInt(document.getElementById('quantityOwned').value) || 1,
-        category: document.getElementById('category').value,
-        location: document.getElementById('location').value,
-        notes: document.getElementById('notes').value
-    };
-
-    const url = id ? `/equipment/update/${id}` : '/equipment/add';
-    const method = id ? 'PUT' : 'POST';
-
-    fetch(url, {
-        method: method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-    })
-    .then(r => r.json())
-    .then(result => {
-        if (result.success) {
-            showAlert(id ? 'Equipment updated!' : 'Equipment added!', 'success');
-            setTimeout(() => location.reload(), 1000);
-        } else {
-            showAlert('Failed to save equipment. Please try again.', 'error');
-        }
-    });
-});
-
-function editEquipment(id) {
-    const item = allEquipment.find(e => e.id === id);
-    if (!item) return;
-
-    document.getElementById('modalTitle').textContent = 'Edit Equipment';
-    document.getElementById('equipmentId').value = item.id;
-    document.getElementById('barcode').value = item.barcode;
-    document.getElementById('name').value = item.name;
-    document.getElementById('quantityOwned').value = item.quantity_owned || 1;
-    document.getElementById('category').value = item.category || '';
-    document.getElementById('location').value = item.location || '';
-    document.getElementById('notes').value = item.notes || '';
-
-    showModal('addModal');
-}
-
 </script>
 {% endblock %}
