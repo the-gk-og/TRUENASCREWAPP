@@ -13,6 +13,8 @@ from extensions import db
 from models import Equipment, PickListItem
 from decorators import crew_required
 
+from routes import _is_mobile
+
 equipment_bp = Blueprint('equipment', __name__)
 
 UPLOAD_FOLDER         = 'uploads'
@@ -43,7 +45,8 @@ def _remove_file(relative_path: str):
 def equipment_list():
     equipment      = Equipment.query.all()
     equipment_json = [e.to_dict() for e in equipment]
-    return render_template('/crew/equipment.html', equipment=equipment, equipment_json=equipment_json)
+    template = 'crew/equipment_mobile.html' if _is_mobile(request.user_agent.string) else 'crew/equipment.html'
+    return render_template(template, equipment=equipment, equipment_json=equipment_json)
 
 
 # ---------------------------------------------------------------------------
