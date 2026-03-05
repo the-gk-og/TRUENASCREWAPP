@@ -1,0 +1,993 @@
+{% extends "base.html" %}
+{% block title %}Equipment — ShowWise{% endblock %}
+
+{% block content %}
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500;600&family=Share+Tech+Mono&display=swap');
+
+.main-content { padding: 0 !important; }
+
+:root {
+  --m-bg:       var(--bg-body);
+  --m-surface:  var(--bg-card);
+  --m-surface2: var(--bg-table-head);
+  --m-border:   var(--border);
+  --m-accent:   #f5a623;
+  --m-cyan:     #00d4ff;
+  --m-green:    #00e676;
+  --m-red:      #ff4444;
+  --m-text:     var(--text-primary);
+  --m-muted:    var(--text-secondary);
+  --m-mono:     'Share Tech Mono', monospace;
+  --m-display:  'Barlow Condensed', sans-serif;
+  --m-body:     'Barlow', sans-serif;
+  --m-radius:   12px;
+  --m-tap:      56px;
+}
+
+/* ── Shell ── */
+.m-page {
+  font-family: var(--m-body);
+  background: var(--m-bg);
+  color: var(--m-text);
+  min-height: 100vh;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+/* ── Header ── */
+.m-header {
+  background: var(--m-surface);
+  border-bottom: 2px solid var(--m-accent);
+  padding: 0.7rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 200;
+}
+.m-header-title {
+  font-family: var(--m-display);
+  font-weight: 900;
+  font-size: 1.45rem;
+  letter-spacing: 0.04em;
+  color: var(--m-accent);
+  text-transform: uppercase;
+  line-height: 1;
+}
+.m-header-sub {
+  font-size: 0.65rem;
+  color: var(--m-muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-family: var(--m-mono);
+  margin-top: 1px;
+}
+.m-item-count {
+  font-family: var(--m-mono);
+  font-size: 0.78rem;
+  color: var(--m-muted);
+  background: var(--m-surface2);
+  border: 1px solid var(--m-border);
+  border-radius: 20px;
+  padding: 0.25rem 0.7rem;
+}
+.m-item-count b { color: var(--m-cyan); }
+
+/* ── Tabs ── */
+.m-tabs {
+  display: flex;
+  background: var(--m-surface);
+  border-bottom: 1px solid var(--m-border);
+  position: sticky;
+  top: 60px;
+  z-index: 199;
+}
+.m-tab {
+  flex: 1;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  font-family: var(--m-display);
+  font-weight: 700;
+  font-size: 0.9rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--m-muted);
+  cursor: pointer;
+  border: none;
+  background: none;
+  border-bottom: 3px solid transparent;
+  transition: all 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.m-tab.active {
+  color: var(--m-accent);
+  border-bottom-color: var(--m-accent);
+  background: rgba(245,166,35,0.04);
+}
+.m-tab:active { background: var(--m-surface2); }
+.m-tab-icon { font-size: 1rem; }
+
+/* ══ SEARCH PANEL ══ */
+.m-panel { display: none; }
+.m-panel.active { display: block; }
+
+.m-search-bar {
+  padding: 0.875rem;
+  background: var(--m-surface);
+  border-bottom: 1px solid var(--m-border);
+  display: flex;
+  gap: 0.5rem;
+}
+.m-search-input {
+  flex: 1;
+  background: var(--m-surface2);
+  border: 2px solid var(--m-border);
+  border-radius: var(--m-radius);
+  color: var(--m-text);
+  font-family: var(--m-body);
+  font-size: 1.05rem;
+  font-weight: 500;
+  padding: 0 1rem;
+  height: var(--m-tap);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  -webkit-appearance: none;
+}
+.m-search-input::placeholder { color: var(--m-muted); }
+.m-search-input:focus {
+  border-color: var(--m-cyan);
+  box-shadow: 0 0 0 3px rgba(0,212,255,0.12);
+}
+.m-clear-btn {
+  width: var(--m-tap); height: var(--m-tap);
+  background: var(--m-surface2);
+  border: 2px solid var(--m-border);
+  border-radius: var(--m-radius);
+  color: var(--m-muted);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem; cursor: pointer; flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.m-clear-btn:active { background: var(--m-border); }
+
+/* Category chips */
+.m-chips {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding: 0.6rem 0.875rem 0.75rem;
+  background: var(--m-surface);
+  border-bottom: 1px solid var(--m-border);
+  scrollbar-width: none;
+}
+.m-chips::-webkit-scrollbar { display: none; }
+.m-chip {
+  background: var(--m-surface2);
+  border: 1.5px solid var(--m-border);
+  border-radius: 20px;
+  padding: 0.25rem 0.8rem;
+  font-size: 0.75rem;
+  font-family: var(--m-display);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--m-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: all 0.12s;
+}
+.m-chip.active { background: var(--m-accent); border-color: var(--m-accent); color: #000; }
+.m-chip:active { opacity: 0.7; }
+
+/* Results meta */
+.m-meta {
+  padding: 0.4rem 0.875rem;
+  font-family: var(--m-mono);
+  font-size: 0.7rem;
+  color: var(--m-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.m-meta b { color: var(--m-cyan); }
+
+/* Item list */
+.m-list {
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.m-card {
+  background: var(--m-surface);
+  border: 1.5px solid var(--m-border);
+  border-radius: var(--m-radius);
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.7rem;
+  text-decoration: none;
+  color: var(--m-text);
+  position: relative;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.1s;
+}
+.m-card::before {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--m-border);
+  transition: background 0.12s;
+}
+.m-card.touched { background: var(--m-surface2); border-color: var(--m-cyan); }
+.m-card.touched::before { background: var(--m-cyan); }
+
+.m-thumb {
+  width: 50px; height: 50px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--m-surface2);
+  border: 1.5px solid var(--m-border);
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.3rem;
+}
+.m-thumb img { width: 100%; height: 100%; object-fit: cover; }
+
+.m-card-body { flex: 1; min-width: 0; }
+.m-card-name {
+  font-family: var(--m-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+.m-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.4rem;
+  margin-top: 0.25rem;
+}
+.m-tag {
+  font-family: var(--m-mono);
+  font-size: 0.67rem;
+  padding: 0.12rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+.m-tag-cat  { color: var(--m-cyan);   border-color: rgba(0,212,255,0.3);  background: rgba(0,212,255,0.07); }
+.m-tag-loc  { color: var(--m-accent); border-color: rgba(245,166,35,0.3); background: rgba(245,166,35,0.07); }
+.m-tag-code { color: var(--m-muted);  border-color: var(--m-border);      background: transparent; }
+
+.m-qty-wrap { text-align: right; flex-shrink: 0; }
+.m-qty-num {
+  font-family: var(--m-display);
+  font-weight: 900;
+  font-size: 1.25rem;
+  color: var(--m-accent);
+  line-height: 1;
+}
+.m-qty-lbl {
+  font-family: var(--m-mono);
+  font-size: 0.58rem;
+  color: var(--m-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Empty state */
+.m-empty {
+  text-align: center;
+  padding: 3rem 1.5rem;
+  display: none;
+}
+.m-empty-icon { font-size: 2.5rem; margin-bottom: 0.75rem; }
+.m-empty h3 {
+  font-family: var(--m-display);
+  font-size: 1.3rem; font-weight: 800;
+  letter-spacing: 0.05em;
+  color: var(--m-text);
+  margin-bottom: 0.4rem;
+}
+.m-empty p { font-size: 0.875rem; color: var(--m-muted); }
+
+/* Shimmer */
+.m-shimmer {
+  height: 68px;
+  background: linear-gradient(90deg, var(--m-surface) 25%, var(--m-surface2) 50%, var(--m-surface) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite;
+  border-radius: var(--m-radius);
+  border: 1.5px solid var(--m-border);
+}
+@keyframes shimmer { 0% { background-position: 200% center; } 100% { background-position: -200% center; } }
+
+/* ══ SCAN PANEL ══ */
+.m-scan-panel {
+  padding: 0.875rem;
+}
+
+.m-viewport {
+  width: 100%;
+  border-radius: var(--m-radius);
+  overflow: hidden;
+  border: 2px solid var(--m-border);
+  background: #000;
+  position: relative;
+  aspect-ratio: 4 / 3;
+  transition: border-color 0.2s;
+}
+.m-viewport.live  { border-color: var(--m-cyan); }
+.m-viewport.found { border-color: var(--m-green); }
+.m-viewport video, .m-viewport canvas {
+  width: 100% !important; height: 100% !important;
+  object-fit: cover; display: block;
+}
+
+.m-cam-idle {
+  position: absolute; inset: 0;
+  background: #000;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 0.6rem;
+}
+.m-cam-idle .idle-icon { font-size: 3.5rem; }
+.m-cam-idle p {
+  font-family: var(--m-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--m-muted);
+  text-align: center;
+  padding: 0 2rem;
+  line-height: 1.6;
+}
+
+.m-reticle-layer {
+  position: absolute; inset: 0;
+  display: none; align-items: center; justify-content: center;
+  pointer-events: none;
+}
+.m-reticle-layer.show { display: flex; }
+.m-reticle {
+  width: 72%;
+  height: 76px;
+  border: 2px solid var(--m-accent);
+  border-radius: 6px;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,0.5);
+  position: relative;
+  animation: reticlePulse 2s ease-in-out infinite;
+}
+@keyframes reticlePulse {
+  0%,100% { border-color: var(--m-accent); box-shadow: 0 0 0 9999px rgba(0,0,0,0.5), 0 0 14px rgba(245,166,35,0.4); }
+  50%      { border-color: var(--m-cyan);  box-shadow: 0 0 0 9999px rgba(0,0,0,0.5), 0 0 14px rgba(0,212,255,0.6); }
+}
+.m-reticle::before, .m-reticle::after {
+  content: ''; position: absolute;
+  width: 14px; height: 14px;
+}
+.m-reticle::before { top:-2px; left:-2px; border-top:3px solid var(--m-cyan); border-left:3px solid var(--m-cyan); }
+.m-reticle::after  { bottom:-2px; right:-2px; border-bottom:3px solid var(--m-cyan); border-right:3px solid var(--m-cyan); }
+.m-scan-line {
+  position: absolute; left:0; right:0; height:2px;
+  background: linear-gradient(90deg, transparent, var(--m-cyan), transparent);
+  animation: sweepLine 1.4s linear infinite;
+}
+@keyframes sweepLine { 0% { top:0; opacity:0.9; } 100% { top:100%; opacity:0.1; } }
+
+/* Status bar */
+.m-status-bar {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.5rem 0;
+  font-family: var(--m-mono);
+  font-size: 0.7rem;
+  color: var(--m-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.m-status-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--m-muted);
+  flex-shrink: 0;
+}
+.m-status-dot.live  { background: var(--m-green); animation: blink 1.5s infinite; }
+.m-status-dot.found { background: var(--m-accent); }
+@keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
+/* Cam buttons */
+.m-cam-btns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-top: 0;
+}
+.m-btn {
+  height: var(--m-tap);
+  border: none;
+  border-radius: var(--m-radius);
+  font-family: var(--m-display);
+  font-weight: 800;
+  font-size: 1rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 0.4rem;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.1s, transform 0.1s;
+}
+.m-btn:active { opacity: 0.8; transform: scale(0.97); }
+.m-btn-primary { background: var(--m-accent); color: #000; }
+.m-btn-ghost   { background: var(--m-surface2); color: var(--m-text); border: 1.5px solid var(--m-border); }
+.m-btn-red     { background: var(--m-red); color: #fff; }
+.m-btn-full    { grid-column: 1 / -1; }
+
+/* Divider */
+.m-divider {
+  display: flex; align-items: center; gap: 0.75rem;
+  margin: 0.875rem 0;
+  font-family: var(--m-mono);
+  font-size: 0.7rem; color: var(--m-muted);
+  text-transform: uppercase; letter-spacing: 0.1em;
+}
+.m-divider::before, .m-divider::after { content:''; flex:1; height:1px; background:var(--m-border); }
+
+/* Manual input */
+.m-manual {
+  display: flex; gap: 0.5rem;
+}
+.m-manual-input {
+  flex: 1;
+  background: var(--m-surface2);
+  border: 2px solid var(--m-border);
+  border-radius: var(--m-radius);
+  color: var(--m-text);
+  font-family: var(--m-mono);
+  font-size: 1rem;
+  padding: 0 1rem;
+  height: var(--m-tap);
+  outline: none;
+  letter-spacing: 0.04em;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.m-manual-input::placeholder { color: var(--m-muted); }
+.m-manual-input:focus { border-color: var(--m-cyan); box-shadow: 0 0 0 3px rgba(0,212,255,0.12); }
+.m-go-btn {
+  height: var(--m-tap); padding: 0 1.25rem;
+  background: var(--m-accent); color: #000;
+  border: none; border-radius: var(--m-radius);
+  font-family: var(--m-display); font-weight: 900;
+  font-size: 1rem; letter-spacing: 0.06em; text-transform: uppercase;
+  cursor: pointer; flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.1s, transform 0.1s;
+}
+.m-go-btn:active { opacity: 0.8; transform: scale(0.97); }
+
+/* Result card */
+.m-result { margin-top: 0.875rem; }
+
+.m-result-card {
+  background: var(--m-surface);
+  border: 1.5px solid var(--m-accent);
+  border-radius: var(--m-radius);
+  overflow: hidden;
+  animation: resultSlide 0.22s ease;
+}
+@keyframes resultSlide { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+.m-result-photo { width:100%; max-height:180px; object-fit:cover; display:block; }
+
+.m-result-body { padding: 0.875rem; }
+.m-result-name {
+  font-family: var(--m-display);
+  font-weight: 900; font-size: 1.7rem;
+  letter-spacing: 0.02em; line-height: 1.1;
+  margin-bottom: 0.5rem;
+}
+
+.m-result-location {
+  display: flex; align-items: center; gap: 0.5rem;
+  background: rgba(245,166,35,0.1);
+  border: 1.5px solid rgba(245,166,35,0.35);
+  border-radius: 8px;
+  padding: 0.55rem 0.875rem;
+  margin-bottom: 0.875rem;
+}
+.m-result-location .rl-icon { font-size: 1.15rem; flex-shrink:0; }
+.m-result-location .rl-label {
+  font-family: var(--m-mono);
+  font-size: 0.62rem; color: var(--m-muted);
+  text-transform: uppercase; letter-spacing: 0.1em;
+}
+.m-result-location .rl-val {
+  font-family: var(--m-display);
+  font-weight: 800; font-size: 1.1rem;
+  color: var(--m-accent);
+  letter-spacing: 0.03em;
+}
+
+.m-result-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 0.4rem; margin-bottom: 0.875rem;
+}
+.m-result-field {
+  background: var(--m-surface2);
+  border: 1px solid var(--m-border);
+  border-radius: 8px; padding: 0.45rem 0.7rem;
+}
+.m-rf-label {
+  font-family: var(--m-mono); font-size: 0.6rem;
+  color: var(--m-muted); text-transform: uppercase;
+  letter-spacing: 0.1em; margin-bottom: 0.15rem;
+}
+.m-rf-val {
+  font-family: var(--m-display); font-weight: 700;
+  font-size: 0.95rem; color: var(--m-text);
+}
+.m-rf-val.accent { color: var(--m-accent); font-size: 1.2rem; }
+.m-rf-val.cyan   { color: var(--m-cyan); }
+.m-result-field.full { grid-column: 1 / -1; }
+.m-result-field.full .m-rf-val { font-family: var(--m-mono); font-size: 0.82rem; word-break: break-all; }
+
+.m-result-notes {
+  font-size: 0.82rem; color: var(--m-muted);
+  background: var(--m-surface2);
+  border: 1px solid var(--m-border);
+  border-radius: 8px; padding: 0.55rem 0.75rem;
+  margin-bottom: 0.875rem; font-style: italic; line-height: 1.5;
+}
+
+.m-result-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; }
+.m-result-actions a {
+  height: 48px;
+  border-radius: 8px;
+  font-family: var(--m-display); font-weight: 800;
+  font-size: 0.9rem; letter-spacing: 0.06em; text-transform: uppercase;
+  display: flex; align-items: center; justify-content: center;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.1s;
+}
+.m-result-actions a:active { opacity: 0.8; }
+.m-ra-detail   { background: var(--m-cyan);   color: #000; }
+.m-ra-again    { background: var(--m-surface2); color: var(--m-text); border: 1.5px solid var(--m-border); }
+
+/* Not found */
+.m-not-found {
+  background: var(--m-surface);
+  border: 1.5px solid var(--m-red);
+  border-radius: var(--m-radius);
+  padding: 1.5rem; text-align: center;
+  animation: resultSlide 0.2s ease; margin-top: 0.875rem;
+}
+.m-not-found .nf-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
+.m-not-found h3 {
+  font-family: var(--m-display); font-weight: 900;
+  font-size: 1.4rem; color: var(--m-red); letter-spacing: 0.05em;
+}
+.m-not-found p { font-family: var(--m-mono); font-size: 0.78rem; color: var(--m-muted); margin-top: 0.3rem; }
+
+/* Loading */
+.m-loading {
+  text-align: center; padding: 2rem;
+  color: var(--m-muted); font-family: var(--m-mono);
+  font-size: 0.82rem; letter-spacing: 0.08em; text-transform: uppercase;
+  margin-top: 0.875rem;
+}
+.m-spin { display: inline-block; font-size: 1.6rem; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+
+/* Toast */
+.m-toast {
+  position: fixed; top: 68px; left: 50%;
+  transform: translateX(-50%); z-index: 600;
+  background: var(--m-surface2);
+  border: 1.5px solid var(--m-border);
+  border-radius: 999px;
+  padding: 0.55rem 1.1rem;
+  font-family: var(--m-mono); font-size: 0.8rem;
+  color: var(--m-text);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  pointer-events: none; white-space: nowrap;
+  animation: toastIn 0.2s ease;
+}
+@keyframes toastIn { from { opacity:0; transform: translateX(-50%) translateY(-8px); } to { opacity:1; transform: translateX(-50%) translateY(0); } }
+.m-toast.ok  { border-color: rgba(0,230,118,0.5); color: var(--m-green); }
+.m-toast.err { border-color: rgba(255,68,68,0.5);  color: var(--m-red); }
+</style>
+
+<div class="m-page">
+
+  <!-- Header -->
+  <header class="m-header">
+    <div>
+      <div class="m-header-title">📦 Equipment</div>
+      <div class="m-header-sub">Mobile Quickfind</div>
+    </div>
+    <div class="m-item-count"><b id="totalBadge">{{ equipment|length }}</b> items</div>
+  </header>
+
+  <!-- Tabs -->
+  <div class="m-tabs">
+    <button class="m-tab active" id="tabSearch" onclick="switchTab('search')">
+      <span class="m-tab-icon">🔎</span> Search
+    </button>
+    <button class="m-tab" id="tabScan" onclick="switchTab('scan')">
+      <span class="m-tab-icon">📱</span> Scan
+    </button>
+  </div>
+
+  <!-- ── SEARCH PANEL ── -->
+  <div class="m-panel active" id="panelSearch">
+
+    <div class="m-search-bar">
+      <input type="search" id="searchInput" class="m-search-input"
+             placeholder="Name, barcode, location…"
+             autocomplete="off" autocorrect="off" spellcheck="false"
+             inputmode="search">
+      <button class="m-clear-btn" onclick="clearSearch()">✕</button>
+    </div>
+
+    <div class="m-chips" id="chipRow">
+      <button class="m-chip active" data-cat="all" onclick="setChip(this,'all')">All</button>
+    </div>
+
+    <div class="m-meta" id="metaStrip"></div>
+
+    <div class="m-list" id="itemList">
+      <div class="m-shimmer"></div>
+      <div class="m-shimmer"></div>
+      <div class="m-shimmer"></div>
+      <div class="m-shimmer"></div>
+    </div>
+
+    <div class="m-empty" id="searchEmpty">
+      <div class="m-empty-icon">🔍</div>
+      <h3>Nothing found</h3>
+      <p>Try a different term, or switch to Scan.</p>
+    </div>
+
+  </div><!-- /panelSearch -->
+
+  <!-- ── SCAN PANEL ── -->
+  <div class="m-panel" id="panelScan">
+    <div class="m-scan-panel">
+
+      <!-- Viewport -->
+      <div class="m-viewport" id="scanViewport">
+        <div class="m-cam-idle" id="camIdle">
+          <div class="idle-icon">📷</div>
+          <p>Tap Start Camera<br>to scan a barcode</p>
+        </div>
+        <div class="m-reticle-layer" id="reticleLayer">
+          <div class="m-reticle"><div class="m-scan-line"></div></div>
+        </div>
+      </div>
+
+      <!-- Status -->
+      <div class="m-status-bar">
+        <div class="m-status-dot" id="camDot"></div>
+        <span id="camStatus">Camera off — tap Start to begin</span>
+      </div>
+
+      <!-- Camera buttons -->
+      <div class="m-cam-btns">
+        <button class="m-btn m-btn-primary" id="startBtn" onclick="startScan()">▶ Start Camera</button>
+        <button class="m-btn m-btn-red"     id="stopBtn"  onclick="stopScan()" style="display:none;">■ Stop</button>
+        <button class="m-btn m-btn-ghost"   id="againBtn" onclick="scanAgain()" style="display:none;">🔄 Scan Again</button>
+      </div>
+
+      <div class="m-divider">or type manually</div>
+
+      <div class="m-manual">
+        <input type="text" id="manualInput" class="m-manual-input"
+               placeholder="Enter barcode…"
+               autocomplete="off" spellcheck="false" inputmode="text">
+        <button class="m-go-btn" onclick="manualLookup()">🔍 Go</button>
+      </div>
+
+      <div id="scanResult"></div>
+
+    </div>
+  </div><!-- /panelScan -->
+
+</div><!-- .m-page -->
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+<script>
+const ALL = {{ equipment_json | tojson }};
+let activeCategory = 'all';
+let searchQuery    = '';
+let isScanning     = false;
+let activeTab      = 'search';
+
+/* ── Init ── */
+document.addEventListener('DOMContentLoaded', () => {
+  buildChips();
+  renderList();
+  document.getElementById('searchInput').addEventListener('input', e => {
+    searchQuery = e.target.value.trim().toLowerCase();
+    renderList();
+  });
+  document.getElementById('manualInput').addEventListener('keypress', e => {
+    if (e.key === 'Enter') manualLookup();
+  });
+});
+
+/* ── Tabs ── */
+function switchTab(tab) {
+  activeTab = tab;
+  document.getElementById('panelSearch').classList.toggle('active', tab === 'search');
+  document.getElementById('panelScan').classList.toggle('active',   tab === 'scan');
+  document.getElementById('tabSearch').classList.toggle('active',   tab === 'search');
+  document.getElementById('tabScan').classList.toggle('active',     tab === 'scan');
+  if (tab === 'search') {
+    stopScan();
+    document.getElementById('searchInput').focus();
+  }
+}
+
+/* ── Chips ── */
+function buildChips() {
+  const cats = [...new Set(ALL.map(e => e.category).filter(Boolean).sort())];
+  const row  = document.getElementById('chipRow');
+  cats.forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'm-chip'; btn.dataset.cat = c; btn.textContent = c;
+    btn.onclick = () => setChip(btn, c);
+    row.appendChild(btn);
+  });
+}
+function setChip(el, cat) {
+  document.querySelectorAll('.m-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  activeCategory = cat;
+  renderList();
+}
+
+/* ── Render list ── */
+function renderList() {
+  const filtered = ALL.filter(item => {
+    if (activeCategory !== 'all' && (item.category||'') !== activeCategory) return false;
+    if (!searchQuery) return true;
+    return [item.name, item.barcode, item.category, item.location, item.notes]
+      .join(' ').toLowerCase().includes(searchQuery);
+  });
+
+  const list  = document.getElementById('itemList');
+  const empty = document.getElementById('searchEmpty');
+  const meta  = document.getElementById('metaStrip');
+  list.innerHTML = '';
+
+  if (filtered.length === 0) {
+    empty.style.display = 'block';
+    meta.innerHTML = ''; return;
+  }
+  empty.style.display = 'none';
+  meta.innerHTML = filtered.length < ALL.length
+    ? `Showing <b>${filtered.length}</b> of ${ALL.length}`
+    : `All <b>${ALL.length}</b> items`;
+
+  filtered.forEach(item => {
+    const a = document.createElement('a');
+    a.className = 'm-card'; a.href = `/equipment/${item.id}`;
+    a.addEventListener('touchstart', () => a.classList.add('touched'));
+    a.addEventListener('touchend',   () => setTimeout(() => a.classList.remove('touched'), 180));
+
+    const thumb = item.picture_url
+      ? `<div class="m-thumb"><img src="${item.picture_url}" alt="${esc(item.name)}" loading="lazy"></div>`
+      : `<div class="m-thumb">📦</div>`;
+    const catTag  = item.category ? `<span class="m-tag m-tag-cat">${esc(item.category)}</span>` : '';
+    const locTag  = item.location ? `<span class="m-tag m-tag-loc">📍 ${esc(item.location)}</span>` : '';
+    const codeTag = item.barcode  ? `<span class="m-tag m-tag-code">${esc(item.barcode)}</span>` : '';
+
+    a.innerHTML = `
+      ${thumb}
+      <div class="m-card-body">
+        <div class="m-card-name">${highlight(esc(item.name), searchQuery)}</div>
+        <div class="m-card-tags">${catTag}${locTag}${codeTag}</div>
+      </div>
+      <div class="m-qty-wrap">
+        <div class="m-qty-num">${item.quantity_owned||1}</div>
+        <div class="m-qty-lbl">qty</div>
+      </div>`;
+    list.appendChild(a);
+  });
+}
+
+function clearSearch() {
+  document.getElementById('searchInput').value = '';
+  searchQuery = ''; renderList();
+  document.getElementById('searchInput').focus();
+}
+
+function highlight(text, q) {
+  if (!q) return text;
+  const idx = text.toLowerCase().indexOf(q.toLowerCase());
+  if (idx < 0) return text;
+  return text.slice(0,idx)
+    + `<mark style="background:rgba(245,166,35,0.3);color:var(--m-text);border-radius:2px;">`
+    + text.slice(idx, idx+q.length) + `</mark>`
+    + text.slice(idx+q.length);
+}
+
+/* ── Camera ── */
+function startScan() {
+  if (isScanning) return;
+  setCamState('starting', 'Starting camera…');
+  document.getElementById('camIdle').style.display = 'none';
+  document.getElementById('reticleLayer').classList.add('show');
+  document.getElementById('startBtn').style.display = 'none';
+  document.getElementById('stopBtn').style.display  = 'flex';
+  document.getElementById('againBtn').style.display = 'none';
+  document.getElementById('scanViewport').classList.add('live');
+  document.getElementById('scanResult').innerHTML = '';
+
+  Quagga.init({
+    inputStream: {
+      name: 'Live', type: 'LiveStream',
+      target: document.getElementById('scanViewport'),
+      constraints: { facingMode:'environment', width:{ideal:1280}, height:{ideal:720} }
+    },
+    decoder: { readers: ['code_128_reader','ean_reader','ean_8_reader','code_39_reader','upc_reader'] },
+    locate: true,
+  }, err => {
+    if (err) { setCamState('off','Camera unavailable — use manual entry'); resetCam(); toast('Camera unavailable','err'); return; }
+    isScanning = true;
+    Quagga.start();
+    setCamState('live', 'Scanning — point at barcode');
+  });
+
+  Quagga.onDetected(result => {
+    const code = result?.codeResult?.code;
+    if (!code) return;
+    try { navigator.vibrate && navigator.vibrate([40,20,60]); } catch(e){}
+    stopScan();
+    fetchBarcode(code);
+  });
+}
+
+function stopScan() {
+  if (isScanning) { Quagga.stop(); Quagga.offDetected(); isScanning = false; }
+  resetCam();
+}
+function scanAgain() {
+  document.getElementById('scanResult').innerHTML = '';
+  document.getElementById('againBtn').style.display = 'none';
+  startScan();
+}
+function resetCam() {
+  document.getElementById('startBtn').style.display = 'flex';
+  document.getElementById('stopBtn').style.display  = 'none';
+  document.getElementById('reticleLayer').classList.remove('show');
+  document.getElementById('camIdle').style.display  = 'flex';
+  document.getElementById('scanViewport').classList.remove('live','found');
+  setCamState('off', 'Camera off');
+}
+function setCamState(state, text) {
+  const dot = document.getElementById('camDot');
+  dot.className = 'm-status-dot' + (state==='live' ? ' live' : state==='found' ? ' found' : '');
+  document.getElementById('camStatus').textContent = text;
+}
+
+/* ── Barcode lookup ── */
+function manualLookup() {
+  const v = document.getElementById('manualInput').value.trim();
+  if (!v) { toast('Enter a barcode first','err'); return; }
+  stopScan();
+  fetchBarcode(v);
+}
+
+function fetchBarcode(code) {
+  document.getElementById('scanResult').innerHTML =
+    `<div class="m-loading"><div class="m-spin">⚙️</div><br>Looking up barcode…</div>`;
+  fetch(`/equipment/barcode/${encodeURIComponent(code)}`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) { showNotFound(code); }
+      else            { showResult(data); }
+    })
+    .catch(() => { document.getElementById('scanResult').innerHTML=''; toast('Network error','err'); });
+}
+
+function showNotFound(code) {
+  document.getElementById('scanResult').innerHTML = `
+    <div class="m-not-found">
+      <div class="nf-icon">❌</div>
+      <h3>NOT FOUND</h3>
+      <p>Barcode: ${esc(code)}</p>
+      <button class="m-btn m-btn-ghost m-btn-full" onclick="scanAgain()" style="margin-top:0.875rem;">
+        🔄 Try Again
+      </button>
+    </div>`;
+  toast('No item matched that barcode', 'err');
+}
+
+function showResult(item) {
+  const photo = item.picture_url
+    ? `<img src="${item.picture_url}" class="m-result-photo" alt="${esc(item.name)}">`  : '';
+  const locHtml = item.location
+    ? `<div class="m-result-location">
+        <span class="rl-icon">📍</span>
+        <div>
+          <div class="rl-label">Storage Location</div>
+          <div class="rl-val">${esc(item.location)}</div>
+        </div>
+      </div>`
+    : `<div class="m-result-location" style="opacity:0.35;">
+        <span class="rl-icon">📍</span>
+        <div><div class="rl-label">Location</div><div class="rl-val" style="color:var(--m-muted)">Not set</div></div>
+      </div>`;
+  const notes = item.notes
+    ? `<div class="m-result-notes">💬 ${esc(item.notes)}</div>` : '';
+
+  document.getElementById('scanResult').innerHTML = `
+    <div class="m-result-card">
+      ${photo}
+      <div class="m-result-body">
+        <div class="m-result-name">${esc(item.name)}</div>
+        ${locHtml}
+        <div class="m-result-grid">
+          <div class="m-result-field">
+            <div class="m-rf-label">Qty Owned</div>
+            <div class="m-rf-val accent">${item.quantity_owned||1}</div>
+          </div>
+          <div class="m-result-field">
+            <div class="m-rf-label">Category</div>
+            <div class="m-rf-val cyan">${esc(item.category||'—')}</div>
+          </div>
+          <div class="m-result-field full">
+            <div class="m-rf-label">Barcode</div>
+            <div class="m-rf-val">${esc(item.barcode)}</div>
+          </div>
+        </div>
+        ${notes}
+        <div class="m-result-actions">
+          <a href="/equipment/${item.id}" class="m-ra-detail">📄 Details</a>
+          <a href="javascript:void(0)" onclick="scanAgain()" class="m-ra-again">🔄 Again</a>
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('scanViewport').classList.add('found');
+  document.getElementById('againBtn').style.display = 'flex';
+  setCamState('found', `Found: ${item.name}`);
+  toast(`✓ ${item.name}`, 'ok');
+}
+
+/* ── Toast ── */
+let _toastTimer;
+function toast(msg, type='') {
+  const ex = document.getElementById('mToast');
+  if (ex) ex.remove();
+  clearTimeout(_toastTimer);
+  const t = document.createElement('div');
+  t.id = 'mToast'; t.className = `m-toast ${type}`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  _toastTimer = setTimeout(() => t?.remove(), 2800);
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.appendChild(document.createTextNode(s||''));
+  return d.innerHTML;
+}
+</script>
+{% endblock %}
