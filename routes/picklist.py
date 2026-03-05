@@ -5,6 +5,7 @@ from flask_login import login_required, current_user
 from extensions import db
 from models import Event, PickListItem, Equipment, HiredEquipment
 from decorators import crew_required
+from routes import _is_mobile
 
 picklist_bp = Blueprint('picklist', __name__)
 
@@ -17,14 +18,21 @@ def picklist():
     event    = Event.query.get(event_id) if event_id else None
     items    = PickListItem.query.filter_by(event_id=event_id).all() if event_id \
                else PickListItem.query.filter_by(event_id=None).all()
-    events        = Event.query.order_by(Event.event_date.desc()).all()
-    all_equipment = Equipment.query.all()
+    events          = Event.query.order_by(Event.event_date.desc()).all()
+    all_equipment   = Equipment.query.all()
     hired_equipment = HiredEquipment.query.filter_by(is_returned=False).order_by(HiredEquipment.return_date).all()
-    return render_template('/crew/picklist.html',
-                           items=items, events=events, current_event=event,
-                           all_equipment=all_equipment,
-                           all_equipment_json=[e.to_dict() for e in all_equipment],
-                           hired_equipment=hired_equipment)
+
+    template = '/crew/picklist_mobile.html' if _is_mobile(request.user_agent.string) else '/crew/picklist.html'
+
+    return render_template(
+        template,
+        items=items,
+        events=events,
+        current_event=event,
+        all_equipment=all_equipment,
+        all_equipment_json=[e.to_dict() for e in all_equipment],
+        hired_equipment=hired_equipment,
+    )
 
 
 @picklist_bp.route('/picklist/add', methods=['POST'])
