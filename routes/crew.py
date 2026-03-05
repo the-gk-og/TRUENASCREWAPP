@@ -206,69 +206,155 @@ def leave_event():
 # My schedule
 # ---------------------------------------------------------------------------
 
-@crew_bp.route('/my-schedule')
+@crew_bp.route('/crew/my-schedule')
 @login_required
 @crew_required
 def my_schedule():
-    shift_assignments = ShiftAssignment.query.filter_by(user_id=current_user.id).all()
+    from models import Shift, ShiftAssignment, CrewAssignment, Event, User
+    from datetime import datetime
+
+    now = datetime.now()
+
+    # ------------------------------------------------------------------ #
+    # 1. Shift assignments for the current user
+    #    Use distinct() + explicit join to avoid row-multiplication when
+    #    a shift has multiple assignments (one row per assignment otherwise).
+    # ------------------------------------------------------------------ #
+    raw_assignments = (
+        ShiftAssignment.query
+        .filter_by(user_id=current_user.id)
+        .all()
+    )
+
+    # Deduplicate by assignment id (safety net)
+    seen_assignment_ids = set()
     assignments = []
-    for sa in shift_assignments:
-        shift = sa.shift
-        event = shift.event if shift else None
+    for a in raw_assignments:
+        if a.id in seen_assignment_ids:
+            continue
+        seen_assignment_ids.add(a.id)
+
+        shift = Shift.query.get(a.shift_id)
+        if not shift:
+            continue
+
+        event = Event.query.get(shift.event_id) if shift.event_id else None
+        assigned_count = ShiftAssignment.query.filter_by(
+            shift_id=shift.id,
+            # count accepted + confirmed only
+        ).filter(ShiftAssignment.status.in_(['accepted', 'confirmed'])).count()
+
         assignments.append({
-            'id': sa.id, 'user_id': sa.user_id,
-            'shift_id': shift.id if shift else None,
-            'status': sa.status, 'assigned_by': sa.assigned_by,
-            'assigned_at': sa.assigned_at.isoformat() if sa.assigned_at else None,
-            'responded_at': sa.responded_at.isoformat() if sa.responded_at else None,
-            'notes': sa.notes,
+            'id': a.id,
+            'status': a.status,
             'shift': {
-                'id': shift.id, 'title': shift.title,
-                'description': shift.description,
+                'id': shift.id,
+                'title': shift.title,
+                'role': shift.role or '',
                 'shift_date': shift.shift_date.isoformat(),
                 'shift_end_date': shift.shift_end_date.isoformat(),
-                'location': shift.location, 'role': shift.role,
+                'location': shift.location or '',
+                'description': shift.description or '',
                 'positions_needed': shift.positions_needed,
+                'assignments_count': assigned_count,
                 'event_id': shift.event_id,
                 'event': {
-                    'id': event.id, 'title': event.title,
+                    'id': event.id,
+                    'title': event.title,
+                    'location': event.location or '',
+                    'description': event.description or '',
                     'event_date': event.event_date.isoformat(),
                     'event_end_date': event.event_end_date.isoformat() if event.event_end_date else None,
+                    'created_by': event.created_by,
+                    'crew_assignments': [
+                        {'id': ca.id, 'crew_member': ca.crew_member, 'role': ca.role}
+                        for ca in event.crew_assignments
+                    ],
                 } if event else None,
-            } if shift else None,
+            }
         })
 
-    crew_assignments_objs = CrewAssignment.query.filter_by(crew_member=current_user.username).all()
+    # ------------------------------------------------------------------ #
+    # 2. Crew (event-level) assignments — deduplicated by assignment id
+    # ------------------------------------------------------------------ #
+    raw_crew = (
+        CrewAssignment.query
+        .filter_by(crew_member=current_user.username)
+        .all()
+    )
+
+    seen_crew_ids = set()
     crew_assignments = []
-    for ca in crew_assignments_objs:
-        event = ca.event
-        crew  = event.crew_assignments if event else []
+    for ca in raw_crew:
+        if ca.id in seen_crew_ids:
+            continue
+        seen_crew_ids.add(ca.id)
+
+        event = Event.query.get(ca.event_id) if ca.event_id else None
+        if not event:
+            continue
+
         crew_assignments.append({
-            'id': ca.id, 'crew_member': ca.crew_member, 'role': ca.role,
-            'assigned_at': ca.assigned_at.isoformat(),
-            'event_id': event.id if event else None,
+            'id': ca.id,
+            'role': ca.role or '',
             'event': {
-                'id': event.id, 'title': event.title,
-                'description': event.description,
+                'id': event.id,
+                'title': event.title,
+                'location': event.location or '',
+                'description': event.description or '',
                 'event_date': event.event_date.isoformat(),
                 'event_end_date': event.event_end_date.isoformat() if event.event_end_date else None,
-                'location': event.location,
-                'crew_assignments': [{'crew_member': c.crew_member, 'role': c.role} for c in crew],
-            } if event else None,
+                'created_by': event.created_by,
+                'crew_assignments': [
+                    {'id': x.id, 'crew_member': x.crew_member, 'role': x.role}
+                    for x in event.crew_assignments
+                ],
+            }
         })
 
+    # ------------------------------------------------------------------ #
+    # 3. Open shifts — shifts the user has NOT yet claimed, deduplicated
+    #    by shift id.
+    # ------------------------------------------------------------------ #
+    claimed_shift_ids = {a['shift']['id'] for a in assignments}
+
+    all_open = (
+        Shift.query
+        .filter_by(is_open=True)
+        .all()
+    )
+
+    seen_open_ids = set()
     open_shifts = []
-    for shift in Shift.query.filter_by(is_open=True).join(Event).order_by(Event.event_date).all():
-        event = shift.event
+    for shift in all_open:
+        if shift.id in seen_open_ids:
+            continue
+        if shift.id in claimed_shift_ids:
+            continue
+        seen_open_ids.add(shift.id)
+
+        confirmed_count = ShiftAssignment.query.filter_by(
+            shift_id=shift.id
+        ).filter(ShiftAssignment.status.in_(['accepted', 'confirmed'])).count()
+
+        if confirmed_count >= shift.positions_needed:
+            continue  # already full
+
+        event = Event.query.get(shift.event_id) if shift.event_id else None
+
         open_shifts.append({
-            'id': shift.id, 'title': shift.title, 'description': shift.description,
+            'id': shift.id,
+            'title': shift.title,
+            'role': shift.role or '',
             'shift_date': shift.shift_date.isoformat(),
             'shift_end_date': shift.shift_end_date.isoformat(),
-            'location': shift.location, 'role': shift.role,
+            'location': shift.location or '',
+            'description': shift.description or '',
             'positions_needed': shift.positions_needed,
-            'assignments_count': len(shift.assignments),
-            'event_id': event.id if event else None,
-            'event_title': event.title if event else None,
+            'assignments_count': confirmed_count,
+            'is_open': shift.is_open,
+            'event_id': shift.event_id,
+            'event_title': event.title if event else '',
         })
 
     return render_template(
@@ -276,9 +362,8 @@ def my_schedule():
         assignments=assignments,
         crew_assignments=crew_assignments,
         open_shifts=open_shifts,
-        now=datetime.now(),
+        now=now,
     )
-
 
 # ---------------------------------------------------------------------------
 # Unavailability

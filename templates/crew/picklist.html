@@ -1,4 +1,3 @@
-
 {% extends "base.html" %}
 
 {% block title %}Pick List - ShowWise{% endblock %}
@@ -12,89 +11,108 @@
             <button onclick="toggleBulkMode()" class="btn btn-primary" id="bulkModeBtn">
                 <i class="fas fa-check-square"></i> Bulk Delete
             </button>
-            <button onclick="selectAll()" class="btn btn-primary" id="selectAllBtn" style="display: none;">
+            <button onclick="selectAll()" class="btn btn-primary" id="selectAllBtn" style="display:none;">
                 <i class="fas fa-check-double"></i> Select All
             </button>
         </div>
     </div>
-    
-    <span id="selectedCount" style="display: none; color: var(--primary); font-weight: 600; padding: 0.5rem 1rem; background: #f0f4ff; border-radius: 6px; margin-bottom: 1rem; display: inline-block;">
+
+    <span id="selectedCountBadge" style="display:none; color:var(--primary); font-weight:600; padding:0.5rem 1rem; background:#f0f4ff; border-radius:6px; margin-bottom:1rem; display:inline-block;">
         <i class="fas fa-info-circle"></i> <span id="countText">0 selected</span>
     </span>
-    
+
     <div class="form-group">
         <label>Filter by Event:</label>
-        <select id="eventFilter" onchange="window.location.href='/picklist?event_id='+this.value" style="width: 100%; padding: 0.75rem;">
+        <select id="eventFilter" onchange="window.location.href='/picklist?event_id='+this.value" style="width:100%; padding:0.75rem;">
             <option value="">All Items (General)</option>
             {% for event in events %}
             <option value="{{ event.id }}" {% if current_event and current_event.id == event.id %}selected{% endif %}>
-                {{ event.title }} - {{ event.event_date.strftime('%b %d, %Y') }}
+                {{ event.title }} – {{ event.event_date.strftime('%b %d, %Y') }}
             </option>
             {% endfor %}
         </select>
     </div>
-    
+
     {% if current_event %}
-    <div style="background: linear-gradient(135deg, #e8f4f8 0%, #d1e7f4 100%); padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; border-left: 4px solid var(--primary);">
-        <p style="margin: 0.25rem 0;"><strong>🎭 Event:</strong> {{ current_event.title }}</p>
-        <p style="margin: 0.25rem 0; color: #555; font-size: 0.9rem;"><strong>📅</strong> {{ current_event.event_date.strftime('%B %d, %Y at %I:%M %p') }}</p>
-        <p style="margin: 0.25rem 0; color: #555; font-size: 0.9rem;"><strong>📍</strong> {{ current_event.location or 'N/A' }}</p>
+    <div style="background:linear-gradient(135deg,#e8f4f8 0%,#d1e7f4 100%); padding:1rem; border-radius:8px; margin-bottom:1.5rem; border-left:4px solid var(--primary);">
+        <p style="margin:0.25rem 0;"><strong>🎭 Event:</strong> {{ current_event.title }}</p>
+        <p style="margin:0.25rem 0; color:var(--text-secondary); font-size:0.9rem;"><strong>📅</strong> {{ current_event.event_date.strftime('%B %d, %Y at %I:%M %p') }}</p>
+        <p style="margin:0.25rem 0; color:var(--text-secondary); font-size:0.9rem;"><strong>📍</strong> {{ current_event.location or 'N/A' }}</p>
     </div>
     {% endif %}
-    
+
     {% if items %}
     <div id="pickList">
         {% set checked_count = items|selectattr('is_checked')|list|length %}
-        <div style="background: #f0f4ff; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid var(--primary);">
-            <p style="margin: 0; font-weight: 600; font-size: 1.1rem;">
+        <div style="background:#f0f4ff; padding:1rem; border-radius:8px; margin-bottom:1rem; border-left:4px solid var(--primary);">
+            <p style="margin:0; font-weight:600; font-size:1.1rem;">
                 <i class="fas fa-tasks"></i> {{ checked_count }} / {{ items|length }} items gathered
             </p>
-            <div style="width: 100%; height: 8px; background: #e5e7eb; border-radius: 4px; margin-top: 0.5rem; overflow: hidden;">
-                <div style="width: {{ (checked_count / items|length * 100)|int }}%; height: 100%; background: linear-gradient(90deg, var(--success) 0%, var(--primary) 100%); transition: width 0.3s ease;"></div>
+            <div style="width:100%; height:8px; background:var(--border); border-radius:4px; margin-top:0.5rem; overflow:hidden;">
+                <div style="width:{{ (checked_count / items|length * 100)|int }}%; height:100%; background:linear-gradient(90deg, var(--success) 0%, var(--primary) 100%); transition:width 0.3s ease;"></div>
             </div>
         </div>
-        
-        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+
+        <div style="display:flex; flex-direction:column; gap:0.75rem;">
             {% for item in items %}
-            <div class="picklist-item" data-id="{{ item.id }}" style="background: {% if item.is_checked %}var(--bg-nav-hover){% else %}var(--bg-card){% endif %}; border: 2px solid {% if item.is_checked %}var(--success){% else %}var(--border){% endif %}; padding: 1rem; border-radius: 8px; transition: all 0.3s ease;">
-                <div style="display: flex; align-items: flex-start; gap: 0.75rem;">
-                    <input type="checkbox" class="bulk-checkbox" style="width: 20px; height: 20px; display: none; cursor: pointer; flex-shrink: 0; margin-top: 0.25rem;">
-                    <input 
-                        type="checkbox" 
-                        class="check-item-checkbox"
-                        {% if item.is_checked %}checked{% endif %} 
-                        onchange="toggleItem({{ item.id }})" 
-                        style="width: 24px; height: 24px; cursor: pointer; flex-shrink: 0; margin-top: 0.25rem;"
-                    >
-                    <div style="flex: 1; min-width: 0;">
-                        <h4 style="{% if item.is_checked %}text-decoration: line-through; color: var(--text-secondary);{% else %}color: var(--dark);{% endif %} margin: 0 0 0.5rem 0; word-break: break-word;">
+            <div class="picklist-item" data-id="{{ item.id }}"
+                 style="background:{% if item.is_checked %}var(--bg-nav-hover){% else %}var(--bg-card){% endif %}; border:2px solid {% if item.is_checked %}var(--success){% else %}var(--border){% endif %}; padding:1rem; border-radius:8px; transition:all 0.3s ease;">
+                <div style="display:flex; align-items:flex-start; gap:0.75rem;">
+
+                    <!-- Bulk select checkbox (hidden unless bulk mode) -->
+                    <input type="checkbox" class="bulk-checkbox" style="width:20px; height:20px; display:none; cursor:pointer; flex-shrink:0; margin-top:0.25rem;">
+
+                    <!-- Gathered checkbox -->
+                    <input type="checkbox" class="check-item-checkbox"
+                           {% if item.is_checked %}checked{% endif %}
+                           onchange="toggleItem({{ item.id }})"
+                           style="width:24px; height:24px; cursor:pointer; flex-shrink:0; margin-top:0.25rem;">
+
+                    <!-- Equipment photo thumbnail (if linked to equipment with a picture) -->
+                    {% if item.equipment and item.equipment.picture %}
+                    <img src="{{ url_for('equipment.serve_equipment_picture', id=item.equipment.id) }}"
+                         alt="{{ item.equipment.name }}"
+                         onclick="viewEquipmentPic('{{ url_for('equipment.serve_equipment_picture', id=item.equipment.id) }}', '{{ item.equipment.name|e }}')"
+                         style="width:52px; height:52px; object-fit:cover; border-radius:8px; flex-shrink:0; border:2px solid var(--border); cursor:pointer; margin-top:0.1rem;"
+                         title="Click to enlarge">
+                    {% elif item.equipment %}
+                    <!-- Equipment linked but no photo -->
+                    <div style="width:52px; height:52px; border-radius:8px; background:var(--bg-nav-active); display:flex; align-items:center; justify-content:center; font-size:1.5rem; flex-shrink:0; border:2px solid var(--border); margin-top:0.1rem;" title="{{ item.equipment.name }}">📦</div>
+                    {% endif %}
+
+                    <div style="flex:1; min-width:0;">
+                        <h4 style="{% if item.is_checked %}text-decoration:line-through; color:var(--text-secondary);{% else %}color:var(--text-primary);{% endif %} margin:0 0 0.5rem 0; word-break:break-word;">
                             {{ item.item_name }}
                         </h4>
-                        
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 0.5rem; font-size: 0.85rem; margin-bottom: 0.75rem;">
-                            <div style="background: var(--bg-nav-active); padding: 0.5rem; border-radius: 6px;">
-                                <strong style="color: var(--primary);">Qty:</strong> {{ item.quantity }}
+
+                        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(100px, 1fr)); gap:0.5rem; font-size:0.85rem; margin-bottom:0.75rem;">
+                            <div style="background:var(--bg-nav-active); padding:0.5rem; border-radius:6px;">
+                                <strong style="color:var(--primary);">Qty:</strong> {{ item.quantity }}
                             </div>
-                            <div style="background: var(--bg-nav-active); padding: 0.5rem; border-radius: 6px;">
-                                <strong style="color: var(--primary);">By:</strong> {{ item.added_by }}
+                            <div style="background:var(--bg-nav-active); padding:0.5rem; border-radius:6px;">
+                                <strong style="color:var(--primary);">By:</strong> {{ item.added_by }}
                             </div>
                         </div>
-                        
-                        <!-- Equipment Details -->
+
+                        <!-- Equipment details (if linked) -->
                         {% if item.equipment %}
-                        <div style="background: #fef3c7; padding: 0.75rem; border-radius: 6px; border-left: 3px solid var(--warning); margin-bottom: 0.75rem;">
-                            <p style="margin: 0.25rem 0; font-size: 0.85rem;"><strong>📍 Location:</strong> {{ item.equipment.location }}</p>
-                            <p style="margin: 0.25rem 0; font-size: 0.85rem;"><strong>🏷️ Category:</strong> {{ item.equipment.category }}</p>
+                        <div style="background:#fef3c7; padding:0.75rem; border-radius:6px; border-left:3px solid var(--warning); margin-bottom:0.75rem;">
+                            {% if item.equipment.location %}
+                            <p style="margin:0.25rem 0; font-size:0.85rem;"><strong>📍 Location:</strong> {{ item.equipment.location }}</p>
+                            {% endif %}
+                            {% if item.equipment.category %}
+                            <p style="margin:0.25rem 0; font-size:0.85rem;"><strong>🏷️ Category:</strong> {{ item.equipment.category }}</p>
+                            {% endif %}
                             {% if item.equipment.barcode %}
-                            <p style="margin: 0.25rem 0; font-size: 0.85rem;"><strong>📦 Barcode:</strong> <code>{{ item.equipment.barcode }}</code></p>
+                            <p style="margin:0.25rem 0; font-size:0.85rem;"><strong>📦 Barcode:</strong> <code>{{ item.equipment.barcode }}</code></p>
                             {% endif %}
                             {% if item.equipment.notes %}
-                            <p style="margin: 0.25rem 0; font-size: 0.85rem;"><strong>📝 Notes:</strong> {{ item.equipment.notes }}</p>
+                            <p style="margin:0.25rem 0; font-size:0.85rem;"><strong>📝 Notes:</strong> {{ item.equipment.notes }}</p>
                             {% endif %}
                         </div>
                         {% endif %}
-                        
-                        <button onclick="deleteItem({{ item.id }})" class="btn btn-danger" style="padding: 0.5rem 1rem; font-size: 0.85rem; width: 100%;">
+
+                        <button onclick="deleteItem({{ item.id }})" class="btn btn-danger" style="padding:0.5rem 1rem; font-size:0.85rem; width:100%;">
                             <i class="fas fa-trash"></i> Remove
                         </button>
                     </div>
@@ -104,51 +122,63 @@
         </div>
     </div>
     {% else %}
-    <div style="text-align: center; padding: 3rem 1rem;">
-        <p style="font-size: 3rem; margin-bottom: 1rem;">📋</p>
-        <p style="color: #666; font-size: 1.1rem;">No items in this pick list yet.</p>
-        <p style="color: #999; margin-bottom: 1.5rem;">Add items to get started!</p>
+    <div style="text-align:center; padding:3rem 1rem;">
+        <p style="font-size:3rem; margin-bottom:1rem;">📋</p>
+        <p style="color:var(--text-secondary); font-size:1.1rem;">No items in this pick list yet.</p>
+        <p style="color:var(--text-muted); margin-bottom:1.5rem;">Add items to get started!</p>
         <button onclick="showModal('addItemModal')" class="btn btn-success">+ Add First Item</button>
     </div>
     {% endif %}
 </div>
 
-<!-- Add Item Modal -->
+<!-- ───────────────────── Add Item Modal ───────────────────── -->
 <div id="addItemModal" class="modal">
     <div class="modal-content">
         <span class="close" onclick="hideModal('addItemModal')">&times;</span>
-        <h2 style="margin-bottom: 1.5rem;"><i class="fas fa-plus"></i> Add Item to Pick List</h2>
-        
-        <div style="margin-bottom: 1.5rem;">
-            <button type="button" onclick="switchMode('equipment')" id="equipBtn" class="btn btn-primary" style="width: 32%; margin-right: 1%;">
+        <h2 style="margin-bottom:1.5rem;"><i class="fas fa-plus"></i> Add Item to Pick List</h2>
+
+        <div style="margin-bottom:1.5rem; display:flex; gap:0.5rem;">
+            <button type="button" onclick="switchMode('equipment')" id="equipBtn" class="btn btn-primary" style="flex:1;">
                 <i class="fas fa-box"></i> Equipment
             </button>
-            <button type="button" onclick="switchMode('hired')" id="hiredBtn" class="btn btn-primary" style="width: 32%; margin-right: 1%;">
+            <button type="button" onclick="switchMode('hired')" id="hiredBtn" class="btn btn-secondary" style="flex:1;">
                 <i class="fas fa-handshake"></i> Hired
             </button>
-            <button type="button" onclick="switchMode('manual')" id="manualBtn" class="btn btn-primary" style="width: 32%;">
-                <i class="fas fa-plus"></i> Manual
+            <button type="button" onclick="switchMode('manual')" id="manualBtn" class="btn btn-secondary" style="flex:1;">
+                <i class="fas fa-pen"></i> Manual
             </button>
         </div>
-        
-        <!-- Quantity Warning Alert -->
-        <div id="quantityWarning" style="display: none; background: #fef3c7; border-left: 4px solid var(--warning); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
-            <h4 style="color: var(--warning); margin-bottom: 0.5rem;"><i class="fas fa-exclamation-triangle"></i> Quantity Warning</h4>
-            <p id="warningText" style="color: #78350f; margin: 0; font-size: 0.9rem;"></p>
-            <p style="color: #78350f; margin: 0.5rem 0 0 0; font-size: 0.85rem;">
-                <strong>Note:</strong> You can still add this item if needed.
-            </p>
+
+        <!-- Quantity Warning -->
+        <div id="quantityWarning" style="display:none; background:#fef3c7; border-left:4px solid var(--warning); padding:1rem; border-radius:8px; margin-bottom:1rem;">
+            <h4 style="color:var(--warning); margin-bottom:0.5rem;"><i class="fas fa-exclamation-triangle"></i> Quantity Warning</h4>
+            <p id="warningText" style="color:#78350f; margin:0; font-size:0.9rem;"></p>
+            <p style="color:#78350f; margin:0.5rem 0 0 0; font-size:0.85rem;"><strong>Note:</strong> You can still add this item if needed.</p>
         </div>
-        
+
         <!-- Equipment Mode -->
-        <form id="equipmentForm" style="display: none;">
+        <form id="equipmentForm">
+            <!-- Equipment preview card -->
+            <div id="equipPreviewCard" style="display:none; background:var(--bg-nav-active); border-radius:10px; padding:0.75rem; margin-bottom:1rem; display:none; align-items:center; gap:0.75rem;">
+                <div id="equipPreviewImg" style="width:52px; height:52px; border-radius:8px; overflow:hidden; flex-shrink:0; border:2px solid var(--border); background:var(--bg-card); display:flex; align-items:center; justify-content:center; font-size:1.5rem;">📦</div>
+                <div>
+                    <p id="equipPreviewName"     style="font-weight:700; margin:0; color:var(--text-primary);"></p>
+                    <p id="equipPreviewLocation" style="font-size:0.8rem; color:var(--text-secondary); margin:0;"></p>
+                </div>
+            </div>
+
             <div class="form-group">
                 <label>Select Equipment *</label>
-                <select id="equipmentSelect" required onchange="checkQuantity()" style="width: 100%; padding: 0.875rem; border: 2px solid var(--border); border-radius: 8px; font-size: 1rem;">
-                    <option value="">-- Choose equipment --</option>
+                <select id="equipmentSelect" required onchange="onEquipmentChange()" style="width:100%; padding:0.875rem; border:2px solid var(--border); border-radius:8px; font-size:1rem;">
+                    <option value="">– Choose equipment –</option>
                     {% for eq in all_equipment %}
-                    <option value="{{ eq.id }}" data-location="{{ eq.location }}" data-category="{{ eq.category }}" data-barcode="{{ eq.barcode }}">
-                        {{ eq.name }} - {{ eq.location }} (Qty: {{ eq.quantity_owned or 1 }})
+                    <option value="{{ eq.id }}"
+                            data-location="{{ eq.location or '' }}"
+                            data-category="{{ eq.category or '' }}"
+                            data-barcode="{{ eq.barcode }}"
+                            data-name="{{ eq.name|e }}"
+                            data-pic="{{ url_for('equipment.serve_equipment_picture', id=eq.id) if eq.picture else '' }}">
+                        {{ eq.name }} – {{ eq.location }} (Qty: {{ eq.quantity_owned or 1 }})
                     </option>
                     {% endfor %}
                 </select>
@@ -159,27 +189,27 @@
             </div>
             <div class="form-group">
                 <label>Assign to Event (Optional)</label>
-                <select id="eventId1" style="width: 100%; padding: 0.875rem; border: 2px solid var(--border); border-radius: 8px; font-size: 1rem;">
+                <select id="eventId1" style="width:100%; padding:0.875rem; border:2px solid var(--border); border-radius:8px; font-size:1rem;">
                     <option value="">General Pick List</option>
                     {% for event in events %}
                     <option value="{{ event.id }}" {% if current_event and current_event.id == event.id %}selected{% endif %}>
-                        {{ event.title }} - {{ event.event_date.strftime('%b %d, %Y') }}
+                        {{ event.title }} – {{ event.event_date.strftime('%b %d, %Y') }}
                     </option>
                     {% endfor %}
                 </select>
             </div>
-            <button type="submit" class="btn btn-success" style="width: 100%;"><i class="fas fa-check"></i> Add Equipment</button>
+            <button type="submit" class="btn btn-success" style="width:100%;"><i class="fas fa-check"></i> Add Equipment</button>
         </form>
-        
+
         <!-- Hired Equipment Mode -->
-        <form id="hiredForm" style="display: none;">
+        <form id="hiredForm" style="display:none;">
             <div class="form-group">
                 <label>Select Hired Equipment *</label>
-                <select id="hiredSelect" required style="width: 100%; padding: 0.875rem; border: 2px solid var(--border); border-radius: 8px; font-size: 1rem;">
-                    <option value="">-- Choose hired equipment --</option>
+                <select id="hiredSelect" required style="width:100%; padding:0.875rem; border:2px solid var(--border); border-radius:8px; font-size:1rem;">
+                    <option value="">– Choose hired equipment –</option>
                     {% for hired in hired_equipment %}
                     <option value="{{ hired.id }}" data-supplier="{{ hired.supplier }}" data-return="{{ hired.return_date.strftime('%Y-%m-%d') }}">
-                        {{ hired.name }} - {{ hired.supplier }} (Return: {{ hired.return_date.strftime('%b %d') }})
+                        {{ hired.name }} – {{ hired.supplier }} (Return: {{ hired.return_date.strftime('%b %d') }})
                     </option>
                     {% endfor %}
                 </select>
@@ -190,23 +220,23 @@
             </div>
             <div class="form-group">
                 <label>Assign to Event (Optional)</label>
-                <select id="eventId3" style="width: 100%; padding: 0.875rem; border: 2px solid var(--border); border-radius: 8px; font-size: 1rem;">
+                <select id="eventId3" style="width:100%; padding:0.875rem; border:2px solid var(--border); border-radius:8px; font-size:1rem;">
                     <option value="">General Pick List</option>
                     {% for event in events %}
                     <option value="{{ event.id }}" {% if current_event and current_event.id == event.id %}selected{% endif %}>
-                        {{ event.title }} - {{ event.event_date.strftime('%b %d, %Y') }}
+                        {{ event.title }} – {{ event.event_date.strftime('%b %d, %Y') }}
                     </option>
                     {% endfor %}
                 </select>
             </div>
-            <button type="submit" class="btn btn-success" style="width: 100%;"><i class="fas fa-check"></i> Add Hired Equipment</button>
+            <button type="submit" class="btn btn-success" style="width:100%;"><i class="fas fa-check"></i> Add Hired Equipment</button>
         </form>
-        
+
         <!-- Manual Mode -->
-        <form id="manualForm">
+        <form id="manualForm" style="display:none;">
             <div class="form-group">
                 <label>Item Name *</label>
-                <input type="text" id="itemName" required autofocus>
+                <input type="text" id="itemName" required>
             </div>
             <div class="form-group">
                 <label>Quantity</label>
@@ -214,42 +244,42 @@
             </div>
             <div class="form-group">
                 <label>Assign to Event (Optional)</label>
-                <select id="eventId2" style="width: 100%; padding: 0.875rem; border: 2px solid var(--border); border-radius: 8px; font-size: 1rem;">
+                <select id="eventId2" style="width:100%; padding:0.875rem; border:2px solid var(--border); border-radius:8px; font-size:1rem;">
                     <option value="">General Pick List</option>
                     {% for event in events %}
                     <option value="{{ event.id }}" {% if current_event and current_event.id == event.id %}selected{% endif %}>
-                        {{ event.title }} - {{ event.event_date.strftime('%b %d, %Y') }}
+                        {{ event.title }} – {{ event.event_date.strftime('%b %d, %Y') }}
                     </option>
                     {% endfor %}
                 </select>
             </div>
-            <button type="submit" class="btn btn-success" style="width: 100%;"><i class="fas fa-plus"></i> Add Item</button>
+            <button type="submit" class="btn btn-success" style="width:100%;"><i class="fas fa-plus"></i> Add Item</button>
         </form>
     </div>
 </div>
 
 <!-- Quantity Confirmation Modal -->
 <div id="confirmQuantityModal" class="modal">
-    <div class="modal-content">
+    <div class="modal-content" style="max-width:420px;">
         <span class="close" onclick="hideModal('confirmQuantityModal')">&times;</span>
-        <h2 style="color: var(--warning); margin-bottom: 1.5rem;"><i class="fas fa-exclamation-triangle"></i> Confirm Quantity</h2>
-        
-        <div style="background: #fef3c7; padding: 1.5rem; border-radius: 8px; border-left: 4px solid var(--warning); margin-bottom: 1.5rem;">
-            <p id="confirmWarningText" style="color: #78350f; margin: 0; font-size: 1rem;"></p>
+        <h2 style="color:var(--warning); margin-bottom:1.5rem;"><i class="fas fa-exclamation-triangle"></i> Confirm Quantity</h2>
+        <div style="background:#fef3c7; padding:1.5rem; border-radius:8px; border-left:4px solid var(--warning); margin-bottom:1.5rem;">
+            <p id="confirmWarningText" style="color:#78350f; margin:0; font-size:1rem;"></p>
         </div>
-        
-        <p style="color: #666; margin-bottom: 1.5rem;">
-            Do you want to add this anyway? This will over-allocate the equipment.
-        </p>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-            <button onclick="confirmAddEquipment()" class="btn btn-warning">
-                <i class="fas fa-check"></i> Add Anyway
-            </button>
-            <button onclick="hideModal('confirmQuantityModal')" class="btn btn-primary">
-                <i class="fas fa-times"></i> Cancel
-            </button>
+        <p style="color:var(--text-secondary); margin-bottom:1.5rem;">Do you want to add this anyway? This will over-allocate the equipment.</p>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+            <button onclick="confirmAddEquipment()" class="btn btn-success"><i class="fas fa-check"></i> Add Anyway</button>
+            <button onclick="hideModal('confirmQuantityModal')" class="btn btn-secondary"><i class="fas fa-times"></i> Cancel</button>
         </div>
+    </div>
+</div>
+
+<!-- Full-image viewer -->
+<div id="picViewerModal" class="modal" onclick="hideModal('picViewerModal')" style="display:none;">
+    <div style="max-width:90vw; max-height:90vh; margin:auto; margin-top:5vh; text-align:center;">
+        <img id="picViewerImg" src="" alt=""
+             style="max-width:100%; max-height:85vh; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+        <p id="picViewerCaption" style="color:#fff; margin-top:0.75rem; font-size:1rem; font-weight:600;"></p>
     </div>
 </div>
 
@@ -257,518 +287,234 @@
 
 {% block scripts %}
 <script>
-let all_equipment = {{ all_equipment_json|tojson }};
 let pendingEquipmentData = null;
+let bulkMode  = false;
+let selectedIds = new Set();
 
+// ── Mode switcher ──────────────────────────────────────────────────
 function switchMode(mode) {
-    const equipBtn = document.getElementById('equipBtn');
-    const manualBtn = document.getElementById('manualBtn');
-    const equipForm = document.getElementById('equipmentForm');
-    const manualForm = document.getElementById('manualForm');
-    
-    if (mode === 'equipment') {
-        equipBtn.style.background = 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)';
-        manualBtn.style.background = '#95a5a6';
-        equipForm.style.display = 'block';
-        manualForm.style.display = 'none';
+    const modes = { equipment: ['equipBtn','equipmentForm'], hired: ['hiredBtn','hiredForm'], manual: ['manualBtn','manualForm'] };
+    Object.entries(modes).forEach(([m, [btnId, formId]]) => {
+        const active = m === mode;
+        const btn  = document.getElementById(btnId);
+        const form = document.getElementById(formId);
+        btn.className  = active ? 'btn btn-primary' : 'btn btn-secondary';
+        form.style.display = active ? 'block' : 'none';
+        btn.style.flex = '1';
+    });
+    document.getElementById('quantityWarning').style.display = 'none';
+}
+switchMode('equipment');
+
+// ── Equipment selection preview ────────────────────────────────────
+function onEquipmentChange() {
+    checkQuantity();
+    const sel = document.getElementById('equipmentSelect');
+    const opt = sel.options[sel.selectedIndex];
+    const card = document.getElementById('equipPreviewCard');
+    if (!sel.value) { card.style.display = 'none'; return; }
+
+    document.getElementById('equipPreviewName').textContent     = opt.dataset.name || '';
+    document.getElementById('equipPreviewLocation').textContent = opt.dataset.location ? '📍 ' + opt.dataset.location : '';
+
+    const imgDiv = document.getElementById('equipPreviewImg');
+    if (opt.dataset.pic) {
+        imgDiv.innerHTML = `<img src="${opt.dataset.pic}" style="width:52px;height:52px;object-fit:cover;" alt="">`;
     } else {
-        equipBtn.style.background = '#95a5a6';
-        manualBtn.style.background = 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)';
-        equipForm.style.display = 'none';
-        manualForm.style.display = 'block';
+        imgDiv.innerHTML = '📦';
+        imgDiv.style.fontSize = '1.5rem';
     }
+    card.style.display = 'flex';
 }
 
-// Check quantity availability
+// ── Quantity check ─────────────────────────────────────────────────
 function checkQuantity() {
     const equipmentId = document.getElementById('equipmentSelect').value;
-    const quantity = parseInt(document.getElementById('equipQuantity').value) || 1;
-    
-    if (!equipmentId) {
-        document.getElementById('quantityWarning').style.display = 'none';
-        return;
-    }
-    
+    const quantity    = parseInt(document.getElementById('equipQuantity').value) || 1;
+    if (!equipmentId) { document.getElementById('quantityWarning').style.display = 'none'; return; }
     fetch(`/equipment/${equipmentId}/quantity-check`, {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({quantity: quantity})
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quantity })
     })
     .then(r => r.json())
     .then(result => {
+        const div = document.getElementById('quantityWarning');
         if (result.warning) {
-            const warningDiv = document.getElementById('quantityWarning');
-            const warningText = document.getElementById('warningText');
-            
-            warningText.innerHTML = `
-                <strong>Owned:</strong> ${result.owned} | 
-                <strong>Already Allocated:</strong> ${result.allocated} | 
-                <strong>Available:</strong> ${result.available}<br>
-                <strong>Requesting:</strong> ${result.requested} 
-                (${result.requested - result.available} more than available)
-            `;
-            
-            warningDiv.style.display = 'block';
+            document.getElementById('warningText').innerHTML =
+                `<strong>Owned:</strong> ${result.owned} | <strong>Allocated:</strong> ${result.allocated} | <strong>Available:</strong> ${result.available}<br>` +
+                `<strong>Requesting:</strong> ${result.requested} (${result.requested - result.available} over)`;
+            div.style.display = 'block';
         } else {
-            document.getElementById('quantityWarning').style.display = 'none';
+            div.style.display = 'none';
         }
     });
 }
 
-// Default to equipment mode
-switchMode('equipment');
-
+// ── Equipment form ─────────────────────────────────────────────────
 document.getElementById('equipmentForm').addEventListener('submit', function(e) {
     e.preventDefault();
-    
     const equipmentId = document.getElementById('equipmentSelect').value;
-    const quantity = parseInt(document.getElementById('equipQuantity').value);
-    
-    const data = {
-        equipment_id: equipmentId,
-        quantity: quantity,
-        event_id: document.getElementById('eventId1').value || null
-    };
-    
-    // Check quantity first
+    const quantity    = parseInt(document.getElementById('equipQuantity').value);
+    const data = { equipment_id: equipmentId, quantity, event_id: document.getElementById('eventId1').value || null };
+
     fetch(`/equipment/${equipmentId}/quantity-check`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({quantity: quantity})
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quantity })
     })
     .then(r => r.json())
     .then(result => {
         if (result.warning) {
-            // Show confirmation modal
             pendingEquipmentData = data;
-            const confirmText = document.getElementById('confirmWarningText');
-            confirmText.innerHTML = `
-                You're requesting <strong>${result.requested}</strong> items, 
-                but only <strong>${result.available}</strong> are available.<br>
-                (${result.owned} owned, ${result.allocated} already allocated)
-            `;
+            document.getElementById('confirmWarningText').innerHTML =
+                `You're requesting <strong>${result.requested}</strong>, but only <strong>${result.available}</strong> available.<br>` +
+                `(${result.owned} owned, ${result.allocated} allocated)`;
             hideModal('addItemModal');
             showModal('confirmQuantityModal');
         } else {
-            // Add without confirmation
             addEquipmentToPicklist(data);
         }
     });
 });
 
 function confirmAddEquipment() {
-    if (pendingEquipmentData) {
-        addEquipmentToPicklist(pendingEquipmentData);
-        hideModal('confirmQuantityModal');
-        pendingEquipmentData = null;
-    }
+    if (pendingEquipmentData) { addEquipmentToPicklist(pendingEquipmentData); hideModal('confirmQuantityModal'); pendingEquipmentData = null; }
 }
 
 function addEquipmentToPicklist(data) {
-    fetch('/picklist/add', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(r => r.json())
-    .then(result => {
-        if (result.success) {
-            showAlert('Equipment added to pick list!', 'success');
-            setTimeout(() => location.reload(), 500);
-        } else {
-            showAlert(result.error || 'Error adding item', 'error');
-        }
-    });
+    fetch('/picklist/add', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) { showAlert('Equipment added!', 'success'); setTimeout(() => location.reload(), 500); }
+            else showAlert(result.error || 'Error adding item', 'error');
+        });
 }
 
-document.getElementById('manualForm').addEventListener('submit', function(e) {
+// ── Hired equipment form ───────────────────────────────────────────
+document.getElementById('hiredForm').addEventListener('submit', function(e) {
     e.preventDefault();
-    
-    const data = {
-        item_name: document.getElementById('itemName').value,
-        quantity: parseInt(document.getElementById('manualQuantity').value),
-        event_id: document.getElementById('eventId2').value || null
-    };
-    
+    const sel  = document.getElementById('hiredSelect');
+    const name = sel.options[sel.selectedIndex].text;
     fetch('/picklist/add', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(r => r.json())
-    .then(result => {
-        if (result.success) {
-            showAlert('Item added to pick list!', 'success');
-            setTimeout(() => location.reload(), 500);
-        } else {
-            showAlert(result.error || 'Error adding item', 'error');
-        }
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_name: name, quantity: parseInt(document.getElementById('hiredQuantity').value), event_id: document.getElementById('eventId3').value || null, hired_equipment_id: sel.value })
+    }).then(r => r.json()).then(result => {
+        if (result.success) { showAlert('Hired equipment added!', 'success'); setTimeout(() => location.reload(), 500); }
+        else showAlert(result.error || 'Error', 'error');
     });
 });
 
+// ── Manual form ────────────────────────────────────────────────────
+document.getElementById('manualForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    fetch('/picklist/add', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_name: document.getElementById('itemName').value, quantity: parseInt(document.getElementById('manualQuantity').value), event_id: document.getElementById('eventId2').value || null })
+    }).then(r => r.json()).then(result => {
+        if (result.success) { showAlert('Item added!', 'success'); setTimeout(() => location.reload(), 500); }
+        else showAlert(result.error || 'Error', 'error');
+    });
+});
+
+// ── Toggle / Delete ────────────────────────────────────────────────
 function toggleItem(id) {
-    fetch(`/picklist/toggle/${id}`, {method: 'POST'})
-        .then(r => r.json())
-        .then(result => {
-            if (result.success) {
-                location.reload();
-            }
-        });
+    fetch(`/picklist/toggle/${id}`, { method: 'POST' }).then(r => r.json()).then(r => { if (r.success) location.reload(); });
 }
 
 function deleteItem(id) {
     if (!confirm('Remove this item?')) return;
-    
-    fetch(`/picklist/delete/${id}`, {method: 'DELETE'})
-        .then(r => r.json())
-        .then(result => {
-            if (result.success) {
-                showAlert('Item removed!', 'success');
-                location.reload();
-            }
-        });
+    fetch(`/picklist/delete/${id}`, { method: 'DELETE' }).then(r => r.json()).then(r => {
+        if (r.success) { showAlert('Item removed!', 'success'); location.reload(); }
+    });
 }
 
-
-let bulkMode = false;
-let selectedIds = new Set();
-
-function switchMode(mode) {
-    const equipBtn = document.getElementById('equipBtn');
-    const hiredBtn = document.getElementById('hiredBtn');
-    const manualBtn = document.getElementById('manualBtn');
-    const equipForm = document.getElementById('equipmentForm');
-    const hiredForm = document.getElementById('hiredForm');
-    const manualForm = document.getElementById('manualForm');
-    
-    // Reset all buttons
-    equipBtn.style.background = '#95a5a6';
-    hiredBtn.style.background = '#95a5a6';
-    manualBtn.style.background = '#95a5a6';
-    equipForm.style.display = 'none';
-    hiredForm.style.display = 'none';
-    manualForm.style.display = 'none';
-    
-    if (mode === 'equipment') {
-        equipBtn.style.background = 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)';
-        equipForm.style.display = 'block';
-    } else if (mode === 'hired') {
-        hiredBtn.style.background = 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)';
-        hiredForm.style.display = 'block';
-    } else {
-        manualBtn.style.background = 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100())';
-        manualForm.style.display = 'block';
-    }
-}
-
-// Bulk delete functions for picklist
+// ── Bulk delete ────────────────────────────────────────────────────
 function toggleBulkMode() {
     bulkMode = !bulkMode;
-    const bulkCheckboxes = document.querySelectorAll('.bulk-checkbox');
-    const checkItemCheckboxes = document.querySelectorAll('.check-item-checkbox');
-    const btn = document.getElementById('bulkModeBtn');
-    const selectAllBtn = document.getElementById('selectAllBtn');
-    const selectedCount = document.getElementById('selectedCount');
-    
+    const bulkCBs    = document.querySelectorAll('.bulk-checkbox');
+    const checkCBs   = document.querySelectorAll('.check-item-checkbox');
+    const btn        = document.getElementById('bulkModeBtn');
+    const saBtn      = document.getElementById('selectAllBtn');
+    const badge      = document.getElementById('selectedCountBadge');
+
     if (bulkMode) {
-        bulkCheckboxes.forEach(cb => cb.style.display = 'block');
-        checkItemCheckboxes.forEach(cb => cb.style.display = 'none');
+        bulkCBs.forEach(cb => cb.style.display = 'block');
+        checkCBs.forEach(cb => cb.style.display = 'none');
         btn.innerHTML = '<i class="fas fa-trash"></i> Delete Selected';
-        btn.classList.remove('btn-primary');
-        btn.classList.add('btn-danger');
-        selectAllBtn.style.display = 'inline-block';
-        selectedCount.style.display = 'inline-block';
+        btn.className = 'btn btn-danger';
+        saBtn.style.display = 'inline-block';
+        badge.style.display = 'inline-block';
         updateSelectedCount();
     } else {
-        bulkCheckboxes.forEach(cb => {
-            cb.style.display = 'none';
-            cb.checked = false;
-        });
-        checkItemCheckboxes.forEach(cb => cb.style.display = 'block');
+        bulkCBs.forEach(cb => { cb.style.display = 'none'; cb.checked = false; });
+        checkCBs.forEach(cb => cb.style.display = 'block');
         selectedIds.clear();
         btn.innerHTML = '<i class="fas fa-check-square"></i> Bulk Delete';
-        btn.classList.remove('btn-danger');
-        btn.classList.add('btn-primary');
-        selectAllBtn.style.display = 'none';
-        selectedCount.style.display = 'none';
-        
-        // Reset card backgrounds
-        document.querySelectorAll('.picklist-item').forEach(card => {
-            card.style.background = 'white';
-        });
+        btn.className = 'btn btn-primary';
+        saBtn.style.display = 'none';
+        badge.style.display = 'none';
+        document.querySelectorAll('.picklist-item').forEach(c => c.style.background = '');
     }
 }
 
 function selectAll() {
-    const checkboxes = document.querySelectorAll('.bulk-checkbox');
-    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-    
-    checkboxes.forEach(cb => {
-        cb.checked = !allChecked;
+    const cbs       = document.querySelectorAll('.bulk-checkbox');
+    const allCheck  = Array.from(cbs).every(cb => cb.checked);
+    cbs.forEach(cb => {
+        cb.checked = !allCheck;
         const card = cb.closest('.picklist-item');
-        const id = parseInt(card.dataset.id);
-        
-        if (!allChecked) {
-            selectedIds.add(id);
-            card.style.background = '#fef3c7';
-        } else {
-            selectedIds.delete(id);
-            card.style.background = 'white';
-        }
+        const id   = parseInt(card.dataset.id);
+        if (!allCheck) { selectedIds.add(id); card.style.background = '#fef3c7'; }
+        else           { selectedIds.delete(id); card.style.background = ''; }
     });
-    
     updateSelectedCount();
-    
-    const btn = document.getElementById('selectAllBtn');
-    btn.innerHTML = allChecked ? '<i class="fas fa-check-double"></i> Select All' : '<i class="fas fa-times"></i> Deselect All';
+    document.getElementById('selectAllBtn').innerHTML = allCheck
+        ? '<i class="fas fa-check-double"></i> Select All'
+        : '<i class="fas fa-times"></i> Deselect All';
 }
 
 function updateSelectedCount() {
-    const countText = document.getElementById('countText');
-    const count = selectedIds.size;
-    countText.textContent = `${count} selected`;
-    
+    const n = selectedIds.size;
+    document.getElementById('countText').textContent = `${n} selected`;
     const btn = document.getElementById('bulkModeBtn');
-    if (count > 0) {
-        btn.innerHTML = `<i class="fas fa-trash"></i> Delete ${count} Item${count > 1 ? 's' : ''}`;
-    } else {
-        btn.innerHTML = '<i class="fas fa-trash"></i> Delete Selected';
-    }
+    btn.innerHTML = n > 0 ? `<i class="fas fa-trash"></i> Delete ${n} Item${n>1?'s':''}` : '<i class="fas fa-trash"></i> Delete Selected';
 }
 
-// Handle bulk checkbox changes
 document.addEventListener('change', function(e) {
-    if (e.target.classList.contains('bulk-checkbox')) {
-        const card = e.target.closest('.picklist-item');
-        const id = parseInt(card.dataset.id);
-        
-        if (e.target.checked) {
-            selectedIds.add(id);
-            card.style.background = '#fef3c7';
-        } else {
-            selectedIds.delete(id);
-            card.style.background = 'white';
-        }
-        
-        updateSelectedCount();
-    }
+    if (!e.target.classList.contains('bulk-checkbox')) return;
+    const card = e.target.closest('.picklist-item');
+    const id   = parseInt(card.dataset.id);
+    if (e.target.checked) { selectedIds.add(id); card.style.background = '#fef3c7'; }
+    else                  { selectedIds.delete(id); card.style.background = ''; }
+    updateSelectedCount();
 });
 
-// Bulk delete execution
 document.getElementById('bulkModeBtn').addEventListener('click', function(e) {
+    if (!bulkMode) return; // handled by toggleBulkMode when not in bulk mode
+    if (selectedIds.size === 0) { showAlert('Please select at least one item.', 'error'); return; }
     e.preventDefault();
-    
-    if (bulkMode && selectedIds.size > 0) {
-        const count = selectedIds.size;
-        if (!confirm(`Delete ${count} pick list item${count > 1 ? 's' : ''}?\n\nThis action cannot be undone.`)) return;
-        
-        this.disabled = true;
-        this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
-        
-        // Delete items one by one
-        const deletePromises = Array.from(selectedIds).map(id => 
-            fetch(`/picklist/delete/${id}`, {method: 'DELETE'}).then(r => r.json())
-        );
-        
-        Promise.all(deletePromises)
-            .then(results => {
-                const successCount = results.filter(r => r.success).length;
-                showAlert(`Successfully deleted ${successCount} item(s)!`, 'success');
-                setTimeout(() => location.reload(), 1000);
-            })
-            .catch(err => {
-                showAlert('Error deleting items: ' + err.message, 'error');
-                this.disabled = false;
-                updateSelectedCount();
-            });
-    } else if (bulkMode && selectedIds.size === 0) {
-        showAlert('Please select at least one item to delete', 'error');
-    } else {
-        toggleBulkMode();
-    }
-});
-
-// Rest of existing code...
-// Check quantity availability
-function checkQuantity() {
-    const equipmentId = document.getElementById('equipmentSelect').value;
-    const quantity = parseInt(document.getElementById('equipQuantity').value) || 1;
-    
-    if (!equipmentId) {
-        document.getElementById('quantityWarning').style.display = 'none';
-        return;
-    }
-    
-    fetch(`/equipment/${equipmentId}/quantity-check`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({quantity: quantity})
-    })
-    .then(r => r.json())
-    .then(result => {
-        if (result.warning) {
-            const warningDiv = document.getElementById('quantityWarning');
-            const warningText = document.getElementById('warningText');
-            
-            warningText.innerHTML = `
-                <strong>Owned:</strong> ${result.owned} | 
-                <strong>Already Allocated:</strong> ${result.allocated} | 
-                <strong>Available:</strong> ${result.available}<br>
-                <strong>Requesting:</strong> ${result.requested} 
-                (${result.requested - result.available} more than available)
-            `;
-            
-            warningDiv.style.display = 'block';
-        } else {
-            document.getElementById('quantityWarning').style.display = 'none';
-        }
-    });
-}
-
-// Default to equipment mode
-switchMode('equipment');
-
-// Equipment form submission
-document.getElementById('equipmentForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    const equipmentId = document.getElementById('equipmentSelect').value;
-    const quantity = parseInt(document.getElementById('equipQuantity').value);
-    
-    const data = {
-        equipment_id: equipmentId,
-        quantity: quantity,
-        event_id: document.getElementById('eventId1').value || null
-    };
-    
-    // Check quantity first
-    fetch(`/equipment/${equipmentId}/quantity-check`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({quantity: quantity})
-    })
-    .then(r => r.json())
-    .then(result => {
-        if (result.warning) {
-            // Show confirmation modal
-            pendingEquipmentData = data;
-            const confirmText = document.getElementById('confirmWarningText');
-            confirmText.innerHTML = `
-                You're requesting <strong>${result.requested}</strong> items, 
-                but only <strong>${result.available}</strong> are available.<br>
-                (${result.owned} owned, ${result.allocated} already allocated)
-            `;
-            hideModal('addItemModal');
-            showModal('confirmQuantityModal');
-        } else {
-            // Add without confirmation
-            addEquipmentToPicklist(data);
-        }
+    const n = selectedIds.size;
+    if (!confirm(`Delete ${n} pick list item${n>1?'s':''}?\n\nThis cannot be undone.`)) return;
+    this.disabled = true;
+    this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting…';
+    Promise.all(Array.from(selectedIds).map(id =>
+        fetch(`/picklist/delete/${id}`, { method: 'DELETE' }).then(r => r.json())
+    )).then(results => {
+        const ok = results.filter(r => r.success).length;
+        showAlert(`Deleted ${ok} item(s)!`, 'success');
+        setTimeout(() => location.reload(), 800);
+    }).catch(err => {
+        showAlert('Error: ' + err.message, 'error');
+        this.disabled = false;
+        updateSelectedCount();
     });
 });
 
-// Hired equipment form submission
-document.getElementById('hiredForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    const hiredId = document.getElementById('hiredSelect').value;
-    const hiredName = document.getElementById('hiredSelect').options[document.getElementById('hiredSelect').selectedIndex].text;
-    
-    const data = {
-        item_name: hiredName,
-        quantity: parseInt(document.getElementById('hiredQuantity').value),
-        event_id: document.getElementById('eventId3').value || null,
-        hired_equipment_id: hiredId
-    };
-    
-    fetch('/picklist/add', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(r => r.json())
-    .then(result => {
-        if (result.success) {
-            showAlert('Hired equipment added to pick list!', 'success');
-            setTimeout(() => location.reload(), 500);
-        } else {
-            showAlert(result.error || 'Error adding item', 'error');
-        }
-    });
-});
-
-function confirmAddEquipment() {
-    if (pendingEquipmentData) {
-        addEquipmentToPicklist(pendingEquipmentData);
-        hideModal('confirmQuantityModal');
-        pendingEquipmentData = null;
-    }
+// ── Image viewer ───────────────────────────────────────────────────
+function viewEquipmentPic(url, name) {
+    document.getElementById('picViewerImg').src             = url;
+    document.getElementById('picViewerCaption').textContent = name;
+    showModal('picViewerModal');
 }
-
-function addEquipmentToPicklist(data) {
-    fetch('/picklist/add', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(r => r.json())
-    .then(result => {
-        if (result.success) {
-            showAlert('Equipment added to pick list!', 'success');
-            setTimeout(() => location.reload(), 500);
-        } else {
-            showAlert(result.error || 'Error adding item', 'error');
-        }
-    });
-}
-
-document.getElementById('manualForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    const data = {
-        item_name: document.getElementById('itemName').value,
-        quantity: parseInt(document.getElementById('manualQuantity').value),
-        event_id: document.getElementById('eventId2').value || null
-    };
-    
-    fetch('/picklist/add', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(r => r.json())
-    .then(result => {
-        if (result.success) {
-            showAlert('Item added to pick list!', 'success');
-            setTimeout(() => location.reload(), 500);
-        } else {
-            showAlert(result.error || 'Error adding item', 'error');
-        }
-    });
-});
-
-function toggleItem(id) {
-    fetch(`/picklist/toggle/${id}`, {method: 'POST'})
-        .then(r => r.json())
-        .then(result => {
-            if (result.success) {
-                location.reload();
-            }
-        });
-}
-
-function deleteItem(id) {
-    if (!confirm('Remove this item?')) return;
-    
-    fetch(`/picklist/delete/${id}`, {method: 'DELETE'})
-        .then(r => r.json())
-        .then(result => {
-            if (result.success) {
-                showAlert('Item removed!', 'success');
-                location.reload();
-            }
-        });
-}
-
 </script>
 {% endblock %}
