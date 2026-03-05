@@ -53,12 +53,15 @@ class BaseConfig:
     # Session / Remember-me
     PERMANENT_SESSION_LIFETIME = _session_lifetime
     REMEMBER_COOKIE_DURATION   = _session_lifetime
-    REMEMBER_COOKIE_SECURE     = False
-    REMEMBER_COOKIE_HTTPONLY   = True
-    REMEMBER_COOKIE_SAMESITE   = 'Lax'
+
+    # Development defaults (safe + simple)
     SESSION_COOKIE_SECURE      = False
     SESSION_COOKIE_HTTPONLY    = True
     SESSION_COOKIE_SAMESITE    = 'Lax'
+
+    REMEMBER_COOKIE_SECURE     = False
+    REMEMBER_COOKIE_HTTPONLY   = True
+    REMEMBER_COOKIE_SAMESITE   = 'Lax'
 
     # Mail
     MAIL_SERVER         = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
@@ -89,12 +92,18 @@ class BaseConfig:
 
 class DevelopmentConfig(BaseConfig):
     DEBUG = True
+    # Dev stays simple: no secure cookies, SameSite=Lax is fine.
 
 
 class ProductionConfig(BaseConfig):
     DEBUG = False
-    SESSION_COOKIE_SECURE  = True
-    REMEMBER_COOKIE_SECURE = True
+
+    # Required for Google OAuth PKCE + Cloudflare HTTPS
+    SESSION_COOKIE_SECURE      = True
+    SESSION_COOKIE_SAMESITE    = "None"
+
+    REMEMBER_COOKIE_SECURE     = True
+    REMEMBER_COOKIE_SAMESITE   = "None"
 
 
 class TestingConfig(BaseConfig):
