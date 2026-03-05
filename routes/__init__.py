@@ -2,6 +2,14 @@
 
 """routes package — register all blueprints in register_blueprints()."""
 
+def _is_mobile(ua_string):
+    """Return True if the user agent string looks like a mobile browser."""
+    ua = (ua_string or '').lower()
+    return any(t in ua for t in ('android', 'iphone', 'ipad', 'ipod', 'mobile', 'windows phone'))
+
+
+
+
 def register_blueprints(app):
     from routes.auth             import auth_bp
     from routes.two_factor_auth  import tfa_bp
