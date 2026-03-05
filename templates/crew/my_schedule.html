@@ -419,20 +419,28 @@ const NOW = new Date('{{ now.isoformat() }}');
 // Organize assignments by date
 const assignmentsByDate = {};
 const openShiftsByDate = {};
+let assignmentsProcessed = false;
 
 function processAssignments() {
+    if (assignmentsProcessed) return;
+    assignmentsProcessed = true;
+
+    // Ensure maps start empty
+    Object.keys(assignmentsByDate).forEach(k => delete assignmentsByDate[k]);
+    Object.keys(openShiftsByDate).forEach(k => delete openShiftsByDate[k]);
+
     // ---- shift assignments ----------------------------------------
     const seenShiftIds = new Set();
 
     ASSIGNMENTS.forEach(assignment => {
         if (!assignment.shift || !assignment.shift.shift_date) return;
 
-        // *** KEY FIX: skip if we've already rendered this shift ***
         if (seenShiftIds.has(assignment.shift.id)) return;
         seenShiftIds.add(assignment.shift.id);
 
-        const date = new Date(assignment.shift.shift_date);
-        const dateKey = date.toISOString().split('T')[0];
+        const rawDate = assignment.shift.shift_date;
+        const date = new Date(rawDate);
+        const dateKey = String(rawDate).split('T')[0]; // keep original calendar day
 
         if (!assignmentsByDate[dateKey]) assignmentsByDate[dateKey] = [];
 
@@ -460,12 +468,12 @@ function processAssignments() {
     CREW_ASSIGNMENTS.forEach(assignment => {
         if (!assignment.event || !assignment.event.event_date) return;
 
-        // *** KEY FIX: skip duplicate events ***
         if (seenEventIds.has(assignment.event.id)) return;
         seenEventIds.add(assignment.event.id);
 
-        const date = new Date(assignment.event.event_date);
-        const dateKey = date.toISOString().split('T')[0];
+        const rawDate = assignment.event.event_date;
+        const date = new Date(rawDate);
+        const dateKey = String(rawDate).split('T')[0]; // keep original calendar day
 
         if (!assignmentsByDate[dateKey]) assignmentsByDate[dateKey] = [];
 
@@ -492,15 +500,15 @@ function processAssignments() {
     const seenOpenIds = new Set();
 
     OPEN_SHIFTS.forEach(shift => {
-        // *** KEY FIX: skip duplicate open shifts ***
         if (seenOpenIds.has(shift.id)) return;
         seenOpenIds.add(shift.id);
 
         // Skip if user already has this shift
         if (ASSIGNMENTS.some(a => a.shift && a.shift.id === shift.id)) return;
 
-        const date = new Date(shift.shift_date);
-        const dateKey = date.toISOString().split('T')[0];
+        const rawDate = shift.shift_date;
+        const date = new Date(rawDate);
+        const dateKey = String(rawDate).split('T')[0]; // keep original calendar day
 
         if (!openShiftsByDate[dateKey]) openShiftsByDate[dateKey] = [];
 
@@ -527,8 +535,6 @@ function switchView(view) {
 }
 
 function renderSchedule() {
-    processAssignments();
-    
     const dates = Object.keys(assignmentsByDate).sort();
     
     if (dates.length === 0) {
@@ -574,7 +580,10 @@ function renderSchedule() {
             const endTimeStr = item.endTime ? item.endTime.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'}) : '';
             
             let cardHtml = `
-                <div class="event-card ${item.type === 'shift' ? 'shift' : ''} ${item.status ? 'pending' : ''}">
+                <div class="event-card 
+                    ${item.type === 'shift' ? 'shift' : ''} 
+                    ${item.status === 'pending' ? 'pending' : ''} 
+                    ${item.status === 'rejected' ? 'rejected' : ''}">
                     <div class="event-header">
                         <h4 class="event-title">${escapeHtml(item.title)}</h4>
                         <div class="event-time">

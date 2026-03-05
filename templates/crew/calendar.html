@@ -544,6 +544,14 @@
 
 <!-- TOOLBAR -->
 <div class="cal-toolbar">
+    <!-- Filter: Everyone / Only me -->
+    <div>
+        <select id="userFilterSelect" class="form-control" style="min-width: 130px; font-size:0.85rem; padding:0.35rem 0.6rem;">
+            <option value="everyone">Everyone</option>
+            <option value="me">Only me</option>
+        </select>
+    </div>
+
     <div class="view-tabs">
         <button class="view-tab active" id="tabMonth" onclick="switchView('month')">
             <i class="fas fa-calendar-alt"></i> Month
@@ -645,6 +653,7 @@ const SHIFTS_DATA = {{ shifts_data | tojson }};
 
 const CREW_USERS = {{ crew_users|map(attribute='username')|list | tojson }};
 const USERS_SET = CREW_USERS.slice().sort();
+const CURRENT_USERNAME = {{ current_user.username | tojson }};
 
 let UNAVAILABILITIES = [];
 
@@ -652,6 +661,7 @@ let UNAVAILABILITIES = [];
 // STATE
 // ============================================================
 let currentView = 'month';
+let currentUserFilter = 'everyone'; // 'everyone' | 'me'
 let currentDate = new Date();
 currentDate.setHours(0,0,0,0);
 
@@ -910,10 +920,12 @@ function renderScheduler() {
     // FIX #6 — deduplicate: a user should appear at most once per event per day,
     // regardless of how many shifts or assignments exist for that event.
     let bodyHtml = '';
-    if (USERS_SET.length === 0) {
+    const visibleUsers = currentUserFilter === 'me' ? [CURRENT_USERNAME] : USERS_SET;
+
+    if (visibleUsers.length === 0) {
         bodyHtml = `<tr><td colspan="8" style="text-align:center;padding:3rem;color:#9ca3af;">No crew members found.</td></tr>`;
     } else {
-        USERS_SET.forEach(username => {
+        visibleUsers.forEach(username => {
             bodyHtml += `<tr><td class="sched-user-label">
                 <div class="user-row-content">
                     <div class="sched-user-avatar">
@@ -1265,6 +1277,13 @@ function subscribeCalendar() {
 // ============================================================
 // INIT
 // ============================================================
+
+// Hook up filter dropdown for "Everyone" / "Only me"
+document.getElementById('userFilterSelect')?.addEventListener('change', function() {
+    currentUserFilter = this.value === 'me' ? 'me' : 'everyone';
+    render();
+});
+
 render();
 </script>
 {% endblock %}
