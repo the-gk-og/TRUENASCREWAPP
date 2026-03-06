@@ -31,8 +31,10 @@ def picklist():
         current_event=event,
         all_equipment=all_equipment,
         all_equipment_json=[e.to_dict() for e in all_equipment],
+        equipment_json=[e.to_dict() for e in all_equipment],   # ← add this
         hired_equipment=hired_equipment,
     )
+
 
 
 @picklist_bp.route('/picklist/add', methods=['POST'])
