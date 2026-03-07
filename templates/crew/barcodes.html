@@ -5,7 +5,7 @@
 {% block content %}
 <div class="page-header">
     <h1 class="page-title"><i class="fas fa-qrcode"></i> QR Code Generator</h1>
-    <p class="page-subtitle">Generate printable QR codes for your equipment. Scan in-app or with any phone camera to open the equipment page.</p>
+    <p class="page-subtitle">Generate printable QR code labels for your equipment. Choose portrait or landscape layout and set your own label dimensions in mm.</p>
 </div>
 
 <div style="display: flex; gap: 1rem; margin-bottom: 2rem;">
@@ -16,34 +16,72 @@
 
 <!-- Configuration Card -->
 <div class="card">
-    <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-cog"></i> QR Code Configuration</h3>
-    
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
-        <div>
-            <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">QR Code Size</label>
-            <select id="barcodeSize" style="width: 100%; padding: 0.75rem; border: 2px solid var(--border); border-radius: 8px; font-size: 1rem;">
-                <option value="small">Small (60x40mm) - ~24 per page</option>
-                <option value="medium" selected>Medium (80x50mm) - ~15 per page</option>
-                <option value="large">Large (100x60mm) - ~9 per page</option>
-            </select>
-        </div>
-        
-        <div>
-            <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Filter by Category</label>
-            <select id="categoryFilter" onchange="filterByCategory()" style="width: 100%; padding: 0.75rem; border: 2px solid var(--border); border-radius: 8px; font-size: 1rem;">
-                <option value="">All Categories</option>
-            </select>
+    <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-cog"></i> Label Configuration</h3>
+
+    <!-- Layout picker -->
+    <div style="margin-bottom: 1.5rem;">
+        <label style="display:block; margin-bottom:0.75rem; font-weight:600;">Label Layout</label>
+        <div style="display:flex; gap:1.25rem; flex-wrap:wrap;">
+
+            <!-- Portrait option -->
+            <label id="layoutPortraitLabel" class="layout-option selected" onclick="selectLayout('portrait')">
+                <input type="radio" name="layout" value="portrait" id="layoutPortrait" checked style="display:none;">
+                <div class="layout-preview portrait-preview">
+                    <div class="lp-name">Item Name</div>
+                    <div class="lp-qr">QR</div>
+                    <div class="lp-org">Organisation</div>
+                </div>
+                <span>Portrait</span>
+            </label>
+
+            <!-- Landscape option -->
+            <label id="layoutLandscapeLabel" class="layout-option" onclick="selectLayout('landscape')">
+                <input type="radio" name="layout" value="landscape" id="layoutLandscape" style="display:none;">
+                <div class="layout-preview landscape-preview">
+                    <div class="ll-qr">QR</div>
+                    <div class="ll-text">
+                        <div class="ll-name">Item Name</div>
+                        <div class="ll-org">Organisation</div>
+                    </div>
+                </div>
+                <span>Landscape</span>
+            </label>
+
         </div>
     </div>
-    
-    <div style="background: var(--bg-nav-active); padding: 1.5rem; border-radius: 8px; border-left: 4px solid var(--primary);">
+
+    <!-- Size inputs -->
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px,1fr)); gap:1rem; margin-bottom:1.5rem;">
+        <div>
+            <label style="display:block; margin-bottom:0.4rem; font-weight:600;">Label Width (mm)</label>
+            <input type="number" id="cardWidthMm" value="60" min="30" max="200" step="1"
+                   style="width:100%; padding:0.75rem; border:2px solid var(--border); border-radius:8px; font-size:1rem;">
+        </div>
+        <div>
+            <label style="display:block; margin-bottom:0.4rem; font-weight:600;">Label Height (mm)</label>
+            <input type="number" id="cardHeightMm" value="80" min="20" max="200" step="1"
+                   style="width:100%; padding:0.75rem; border:2px solid var(--border); border-radius:8px; font-size:1rem;">
+        </div>
+    </div>
+
+    <!-- Presets -->
+    <div style="margin-bottom:1.5rem;">
+        <span style="font-weight:600; margin-right:0.75rem;">Quick presets:</span>
+        <button class="btn btn-secondary" style="font-size:0.8rem; padding:0.4rem 0.75rem; margin-right:0.4rem;" onclick="applyPreset('portrait',60,80)">Portrait S (60×80)</button>
+        <button class="btn btn-secondary" style="font-size:0.8rem; padding:0.4rem 0.75rem; margin-right:0.4rem;" onclick="applyPreset('portrait',75,100)">Portrait M (75×100)</button>
+        <button class="btn btn-secondary" style="font-size:0.8rem; padding:0.4rem 0.75rem; margin-right:0.4rem;" onclick="applyPreset('landscape',90,55)">Landscape S (90×55)</button>
+        <button class="btn btn-secondary" style="font-size:0.8rem; padding:0.4rem 0.75rem;" onclick="applyPreset('landscape',110,65)">Landscape M (110×65)</button>
+    </div>
+
+    <!-- How-to -->
+    <div style="background: var(--bg-nav-active); padding: 1.25rem; border-radius: 8px; border-left: 4px solid var(--primary);">
         <h4 style="margin: 0 0 0.5rem 0; color: var(--primary);"><i class="fas fa-info-circle"></i> How to Use</h4>
         <ol style="margin: 0; padding-left: 1.5rem; line-height: 1.8;">
-            <li>Select equipment items using the checkboxes below</li>
-            <li>Choose your preferred QR code size from the dropdown</li>
-            <li>Click "Generate PDF" to download your printable QR code sheet</li>
-            <li>Print on A4 paper at 100% scale (no scaling)</li>
-            <li>Cut out QR codes and apply to equipment. Scanning in-app shows details; scanning with a phone camera opens the equipment page (or login)</li>
+            <li>Select equipment items below</li>
+            <li>Pick <strong>Portrait</strong> or <strong>Landscape</strong> layout and set your label size in mm</li>
+            <li>Click <strong>Generate PDF</strong> — labels are packed onto A4 pages automatically</li>
+            <li>Print at <strong>100% scale (no scaling)</strong> on A4 paper, then cut out and apply</li>
+            <li>Scanning the QR in-app shows item details; scanning with a phone camera opens the equipment page</li>
         </ol>
     </div>
 </div>
@@ -58,50 +96,44 @@
             </p>
         </div>
         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-            <button onclick="selectAll()" class="btn btn-primary">
-                <i class="fas fa-check-double"></i> Select All
-            </button>
-            <button onclick="clearAll()" class="btn btn-primary">
-                <i class="fas fa-times"></i> Clear All
-            </button>
-            <button onclick="generateBarcodePDF()" class="btn btn-success" id="generateBtn">
-                <i class="fas fa-file-pdf"></i> Generate QR PDF
+            <button onclick="selectAll()" class="btn btn-primary"><i class="fas fa-check-double"></i> Select All</button>
+            <button onclick="clearAll()" class="btn btn-primary"><i class="fas fa-times"></i> Clear All</button>
+            <button onclick="generateQRPDF()" class="btn btn-success" id="generateBtn">
+                <i class="fas fa-file-pdf"></i> Generate PDF
             </button>
         </div>
     </div>
-    
-    <!-- Search -->
-    <div class="form-group">
-        <input type="text" id="searchInput" placeholder="🔍 Search by name, barcode, or location..." style="font-size: 1rem;">
+
+    <!-- Search + category filter -->
+    <div style="display:flex; gap:0.75rem; margin-bottom:1.25rem; flex-wrap:wrap;">
+        <div class="form-group" style="flex:1; min-width:200px; margin-bottom:0;">
+            <input type="text" id="searchInput" placeholder="🔍 Search by name, barcode, or location…" style="font-size:1rem;">
+        </div>
+        <div style="min-width:160px;">
+            <select id="categoryFilter" onchange="filterByCategory()"
+                    style="width:100%; padding:0.75rem; border:2px solid var(--border); border-radius:8px; font-size:1rem;">
+                <option value="">All Categories</option>
+            </select>
+        </div>
     </div>
-    
-    <!-- Equipment Grid -->
+
+    <!-- Equipment grid -->
     <div id="equipmentGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
         {% for item in equipment %}
-        <div class="equipment-card" data-id="{{ item.id }}" data-category="{{ item.category or '' }}" style="background: var(--bg-card); border: 2px solid var(--border); border-radius: 8px; padding: 1rem; cursor: pointer; transition: all 0.2s ease;">
+        <div class="equipment-card"
+             data-id="{{ item.id }}"
+             data-category="{{ item.category or '' }}"
+             style="background: var(--bg-card); border: 2px solid var(--border); border-radius: 8px; padding: 1rem; cursor: pointer; transition: all 0.2s ease;">
             <div style="display: flex; align-items: start; gap: 0.75rem;">
-                <input type="checkbox" class="barcode-checkbox" data-id="{{ item.id }}" onclick="event.stopPropagation(); updateCount();" style="width: 24px; height: 24px; cursor: pointer; flex-shrink: 0; margin-top: 0.25rem;">
-                
+                <input type="checkbox" class="barcode-checkbox" data-id="{{ item.id }}"
+                       onclick="event.stopPropagation(); updateCount();"
+                       style="width: 24px; height: 24px; cursor: pointer; flex-shrink: 0; margin-top: 0.25rem;">
                 <div style="flex: 1; min-width: 0;" onclick="toggleCard({{ item.id }})">
                     <h4 style="margin: 0 0 0.5rem 0; color: var(--dark); word-break: break-word;">{{ item.name }}</h4>
-                    
                     <div style="display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem;">
-                        <span style="color: var(--text-secondary);">
-                            <i class="fas fa-qrcode"></i> <code>{{ item.barcode or item.id }}</code>
-                        </span>
-                        
-                        {% if item.category %}
-                        <span style="color: var(--text-secondary);">
-                            <i class="fas fa-tag"></i> {{ item.category }}
-                        </span>
-                        {% endif %}
-                        
-                        {% if item.location %}
-                        <span style="color: var(--text-secondary);">
-                            <i class="fas fa-map-marker-alt"></i> {{ item.location }}
-                        </span>
-                        {% endif %}
-                        
+                        <span style="color: var(--text-secondary);"><i class="fas fa-qrcode"></i> <code>{{ item.barcode or item.id }}</code></span>
+                        {% if item.category %}<span style="color: var(--text-secondary);"><i class="fas fa-tag"></i> {{ item.category }}</span>{% endif %}
+                        {% if item.location %}<span style="color: var(--text-secondary);"><i class="fas fa-map-marker-alt"></i> {{ item.location }}</span>{% endif %}
                         <span style="background: #e0e7ff; color: var(--primary); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; display: inline-block; width: fit-content;">
                             Qty: {{ item.quantity_owned if item.quantity_owned else 1 }}
                         </span>
@@ -111,192 +143,213 @@
         </div>
         {% endfor %}
     </div>
-    
+
     {% if not equipment %}
     <div style="text-align: center; padding: 3rem; color: var(--text-secondary);">
         <p style="font-size: 3rem; margin-bottom: 1rem;">📦</p>
-        <p>No equipment found. Add equipment first to generate QR codes.</p>
+        <p>No equipment found. Add equipment first.</p>
         <a href="{{ url_for('equipment.equipment_list') }}" class="btn btn-primary" style="margin-top: 1rem;">Go to Equipment</a>
     </div>
     {% endif %}
 </div>
 
-<!-- Preview Card -->
-<div class="card" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-left: 4px solid var(--warning);">
-    <h3 style="margin-bottom: 1rem; color: #78350f;"><i class="fas fa-eye"></i> What You'll Get</h3>
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-        <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px;">
-            <p style="margin: 0; font-weight: 600; color: var(--dark);">📄 A4 PDF Document</p>
-            <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">Ready to print on standard paper</p>
-        </div>
-        <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px;">
-            <p style="margin: 0; font-weight: 600; color: var(--dark);">📱 QR Codes</p>
-            <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">Scan in-app or with any camera</p>
-        </div>
-        <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px;">
-            <p style="margin: 0; font-weight: 600; color: var(--dark);">🏷️ Equipment Names</p>
-            <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">Clear labels above each QR code</p>
-        </div>
-        <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px;">
-            <p style="margin: 0; font-weight: 600; color: var(--dark);">🔗 Links to Equipment Page</p>
-            <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">Opens detail page when scanned outside app</p>
-        </div>
-    </div>
-</div>
+<!-- Layout preview styles -->
+<style>
+.layout-option {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.875rem 1.25rem;
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.18s;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    user-select: none;
+    min-width: 120px;
+}
+.layout-option:hover { border-color: var(--primary); color: var(--primary); }
+.layout-option.selected { border-color: var(--primary); background: #e0e7ff; color: var(--primary); }
+
+/* Portrait preview */
+.portrait-preview {
+    width: 52px; height: 68px;
+    border: 1.5px solid currentColor;
+    border-radius: 4px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: space-between;
+    padding: 4px 3px;
+    font-size: 6px; font-weight: 700;
+    color: inherit;
+}
+.lp-name { background: currentColor; color: #fff; width: 100%; text-align: center; padding: 1px 2px; border-radius: 1px; opacity:0.85; }
+.lp-qr { width: 32px; height: 32px; border: 1.5px solid currentColor; border-radius: 2px; display:flex; align-items:center; justify-content:center; font-size:8px; }
+.lp-org { opacity: 0.6; font-size: 5.5px; }
+
+/* Landscape preview */
+.landscape-preview {
+    width: 80px; height: 48px;
+    border: 1.5px solid currentColor;
+    border-radius: 4px;
+    display: flex; flex-direction: row;
+    align-items: center;
+    padding: 4px;
+    gap: 5px;
+    color: inherit;
+}
+.ll-qr { width: 30px; height: 30px; border: 1.5px solid currentColor; border-radius: 2px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:8px; }
+.ll-text { display:flex; flex-direction:column; gap:3px; }
+.ll-name { font-size:7px; font-weight:700; }
+.ll-org { font-size:5.5px; opacity:0.6; }
+</style>
 
 {% endblock %}
 
 {% block scripts %}
 <script>
 let equipmentData = {{ equipment_json|tojson }};
-let selectedIds = new Set();
+let selectedIds   = new Set();
+let currentLayout = 'portrait';
 
-// Load categories
+// ── Layout selection ─────────────────────────────────────────────────────────
+function selectLayout(layout) {
+    currentLayout = layout;
+    document.getElementById('layoutPortraitLabel').classList.toggle('selected',  layout === 'portrait');
+    document.getElementById('layoutLandscapeLabel').classList.toggle('selected', layout === 'landscape');
+    // Swap sensible defaults
+    if (layout === 'portrait') {
+        document.getElementById('cardWidthMm').value  = 60;
+        document.getElementById('cardHeightMm').value = 80;
+    } else {
+        document.getElementById('cardWidthMm').value  = 90;
+        document.getElementById('cardHeightMm').value = 55;
+    }
+}
+
+function applyPreset(layout, w, h) {
+    selectLayout(layout);
+    document.getElementById('cardWidthMm').value  = w;
+    document.getElementById('cardHeightMm').value = h;
+}
+
+// ── Categories ───────────────────────────────────────────────────────────────
 function loadCategories() {
-    const categories = new Set();
-    equipmentData.forEach(item => {
-        if (item.category) categories.add(item.category);
-    });
-    
+    const cats = new Set();
+    equipmentData.forEach(item => { if (item.category) cats.add(item.category); });
     const select = document.getElementById('categoryFilter');
-    categories.forEach(cat => {
-        const option = document.createElement('option');
-        option.value = cat;
-        option.textContent = cat;
-        select.appendChild(option);
+    cats.forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat; opt.textContent = cat;
+        select.appendChild(opt);
     });
 }
 
-// Search filter
+// ── Search ───────────────────────────────────────────────────────────────────
 document.getElementById('searchInput').addEventListener('input', function(e) {
-    const query = e.target.value.toLowerCase();
-    const cards = document.querySelectorAll('.equipment-card');
-    
-    cards.forEach(card => {
-        const text = card.textContent.toLowerCase();
-        card.style.display = text.includes(query) ? 'block' : 'none';
+    const q = e.target.value.toLowerCase();
+    document.querySelectorAll('.equipment-card').forEach(card => {
+        card.style.display = card.textContent.toLowerCase().includes(q) ? 'block' : 'none';
     });
 });
 
-// Category filter
 function filterByCategory() {
-    const category = document.getElementById('categoryFilter').value;
-    const cards = document.querySelectorAll('.equipment-card');
-    
-    cards.forEach(card => {
-        if (!category || card.dataset.category === category) {
-            card.style.display = 'block';
-        } else {
-            card.style.display = 'none';
-        }
+    const cat = document.getElementById('categoryFilter').value;
+    document.querySelectorAll('.equipment-card').forEach(card => {
+        card.style.display = (!cat || card.dataset.category === cat) ? 'block' : 'none';
     });
 }
 
-// Toggle card selection
+// ── Selection ────────────────────────────────────────────────────────────────
 function toggleCard(id) {
-    const checkbox = document.querySelector(`.barcode-checkbox[data-id="${id}"]`);
-    checkbox.checked = !checkbox.checked;
+    const cb = document.querySelector(`.barcode-checkbox[data-id="${id}"]`);
+    cb.checked = !cb.checked;
     updateCount();
 }
 
-// Update selected count
 function updateCount() {
     selectedIds.clear();
     document.querySelectorAll('.barcode-checkbox:checked').forEach(cb => {
         selectedIds.add(parseInt(cb.dataset.id));
         const card = cb.closest('.equipment-card');
         card.style.borderColor = 'var(--primary)';
-        card.style.background = '#f0f4ff';
+        card.style.background  = '#f0f4ff';
     });
-    
     document.querySelectorAll('.barcode-checkbox:not(:checked)').forEach(cb => {
         const card = cb.closest('.equipment-card');
         card.style.borderColor = 'var(--border)';
-        card.style.background = 'white';
+        card.style.background  = '';
     });
-    
     document.getElementById('selectedCount').textContent = selectedIds.size;
-    
-    const generateBtn = document.getElementById('generateBtn');
-    if (selectedIds.size > 0) {
-        generateBtn.innerHTML = `<i class="fas fa-file-pdf"></i> Generate PDF (${selectedIds.size})`;
-    } else {
-        generateBtn.innerHTML = '<i class="fas fa-file-pdf"></i> Generate PDF';
-    }
+    const btn = document.getElementById('generateBtn');
+    btn.innerHTML = selectedIds.size > 0
+        ? `<i class="fas fa-file-pdf"></i> Generate PDF (${selectedIds.size})`
+        : '<i class="fas fa-file-pdf"></i> Generate PDF';
 }
 
-// Select all
 function selectAll() {
     document.querySelectorAll('.equipment-card').forEach(card => {
-        if (card.style.display !== 'none') {
-            const checkbox = card.querySelector('.barcode-checkbox');
-            checkbox.checked = true;
-        }
+        if (card.style.display !== 'none') card.querySelector('.barcode-checkbox').checked = true;
     });
     updateCount();
 }
 
-// Clear all
 function clearAll() {
-    document.querySelectorAll('.barcode-checkbox').forEach(cb => {
-        cb.checked = false;
-    });
+    document.querySelectorAll('.barcode-checkbox').forEach(cb => cb.checked = false);
     updateCount();
 }
 
-// Generate PDF
-function generateBarcodePDF() {
+// ── Generate PDF ─────────────────────────────────────────────────────────────
+function generateQRPDF() {
     if (selectedIds.size === 0) {
         showAlert('Please select at least one equipment item', 'error');
         return;
     }
-    
-    const generateBtn = document.getElementById('generateBtn');
-    generateBtn.disabled = true;
-    generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating QR PDF...';
-    
-    const data = {
-        equipment_ids: Array.from(selectedIds),
-        size: document.getElementById('barcodeSize').value,
-        base_url: window.location.origin
+
+    const btn = document.getElementById('generateBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating…';
+
+    const payload = {
+        equipment_ids:   Array.from(selectedIds),
+        layout:          currentLayout,
+        card_width_mm:   parseFloat(document.getElementById('cardWidthMm').value)  || (currentLayout === 'portrait' ? 60 : 90),
+        card_height_mm:  parseFloat(document.getElementById('cardHeightMm').value) || (currentLayout === 'portrait' ? 80 : 55),
+        base_url:        window.location.origin,
     };
-    
+
     fetch('/equipment/generate-qrcodes', {
-        method: 'POST',
+        method:  'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
+        body:    JSON.stringify(payload),
     })
     .then(response => {
-        if (!response.ok) {
-            return response.json().then(err => {
-                throw new Error(err.error || 'Failed to generate QR codes');
-            });
-        }
+        if (!response.ok) return response.json().then(err => { throw new Error(err.error || 'Failed'); });
         return response.blob();
     })
     .then(blob => {
         const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `equipment_qrcodes_${new Date().getTime()}.pdf`;
+        const a   = document.createElement('a');
+        a.href     = url;
+        a.download = `equipment_qrcodes_${currentLayout}_${Date.now()}.pdf`;
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
-        
-        showAlert(`Successfully generated QR codes for ${selectedIds.size} items!`, 'success');
-        
-        generateBtn.disabled = false;
+        showAlert(`Generated ${selectedIds.size} QR label${selectedIds.size > 1 ? 's' : ''}!`, 'success');
+        btn.disabled = false;
         updateCount();
     })
     .catch(err => {
-        showAlert('Error generating QR codes: ' + err.message, 'error');
-        generateBtn.disabled = false;
-        generateBtn.innerHTML = '<i class="fas fa-file-pdf"></i> Generate QR PDF';
+        showAlert('Error: ' + err.message, 'error');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-file-pdf"></i> Generate PDF';
     });
 }
 
-// Initialize
+// ── Init ─────────────────────────────────────────────────────────────────────
 loadCategories();
 </script>
 {% endblock %}
