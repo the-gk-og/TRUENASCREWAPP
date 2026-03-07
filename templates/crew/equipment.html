@@ -447,13 +447,17 @@
 @keyframes dBoxIn { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
 .d-modal-header {
-  position: relative;
+  position: sticky;
+  top: 0;
   z-index: 100;
   padding: 1.25rem 1.5rem 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   background: var(--d-surface);
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--d-border);
+  margin-bottom: 0;
 }
 .d-modal-title {
   font-size: 1.15rem;
@@ -461,8 +465,6 @@
   letter-spacing: -0.01em;
 }
 .d-modal-close {
-  position: relative;
-  z-index: 101;
   width: 32px; height: 32px;
   border: none;
   border-radius: 6px;
@@ -472,7 +474,7 @@
   display: flex; align-items: center; justify-content: center;
   font-size: 1rem;
   transition: background 0.15s, color 0.15s;
-  pointer-events: auto;
+  flex-shrink: 0;
 }
 .d-modal-close:hover { background: rgba(239,68,68,0.1); color: var(--d-red); }
 
@@ -524,7 +526,7 @@
 .d-upload-area:hover { border-color: var(--d-accent); background: rgba(99,102,241,0.03); }
 .d-upload-area p { color: var(--d-muted); font-size: 0.875rem; margin-top: 0.5rem; }
 
-/* Scan modal — keep scanner content below header so X stays clickable */
+/* Scan modal */
 .d-scan-viewport {
   border-radius: 10px;
   overflow: hidden;
@@ -536,30 +538,8 @@
   min-height: 200px;
 }
 .d-scan-viewport video, .d-scan-viewport canvas { width: 100% !important; display: block; }
-/* Prevent scanner library overlays from covering modal header */
 #scanViewport > div { max-height: 100%; overflow: hidden; }
-/* Always-visible close for scan modal (above scanner library overlays) */
-.d-modal-scan-box { position: relative; }
-.d-scan-close-overlay {
-  position: fixed;
-  top: 1rem;
-  right: 1rem;
-  z-index: 9999;
-  width: 40px;
-  height: 40px;
-  border: none;
-  border-radius: 10px;
-  background: var(--d-surface);
-  color: var(--d-muted);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.25rem;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-  transition: background 0.15s, color 0.15s;
-}
-.d-scan-close-overlay:hover { background: rgba(239,68,68,0.15); color: var(--d-red); }
+
 .d-scan-reticle-wrap {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
@@ -838,29 +818,37 @@
 
 <!-- ══════════ SCAN MODAL ══════════ -->
 <div class="d-modal" id="scanModal" onclick="if(event.target === this) closeScanModal();">
-  <button type="button" class="d-scan-close-overlay" onclick="closeScanModal()" aria-label="Close scanner">✕</button>
-  <div class="d-modal-box d-modal-scan-box" style="max-width:480px;" onclick="event.stopPropagation();">
+  <div class="d-modal-box" style="max-width:480px;" onclick="event.stopPropagation();">
     <div class="d-modal-header">
-      <div class="d-modal-title">📱 QR & Barcode Scanner</div>
+      <div class="d-modal-title">📱 QR &amp; Barcode Scanner</div>
       <button type="button" class="d-modal-close" onclick="closeScanModal()" aria-label="Close">✕</button>
     </div>
     <div class="d-modal-body">
-      <div class="d-scan-viewport" id="scanViewport">
-        <div class="d-scan-reticle-wrap" id="scanReticleWrap" style="display:none;">
+
+      <!-- Camera viewport wrapper — the scanner library fills #scanViewport only,
+           so all UI controls live OUTSIDE it and can never be destroyed -->
+      <div style="position:relative;margin-bottom:0.75rem;">
+        <!-- Reticle overlay sits on top of the viewport via absolute positioning -->
+        <div id="scanReticleWrap" style="display:none;position:absolute;inset:0;z-index:10;align-items:center;justify-content:center;pointer-events:none;">
           <div class="d-scan-reticle"><div class="d-scan-line"></div></div>
         </div>
+        <!-- The scanner library targets this div — it will replace its contents -->
+        <div class="d-scan-viewport" id="scanViewport" style="min-height:240px;"></div>
       </div>
+
+      <!-- Camera control buttons — outside scanViewport, always in DOM -->
       <div style="display:flex;gap:0.5rem;margin-bottom:0.875rem;">
         <button onclick="startScan()" class="d-btn d-btn-primary" id="scanStartBtn" style="flex:1;">
           <i class="fas fa-camera"></i> Start Camera
         </button>
         <button onclick="stopScan()" class="d-btn d-btn-ghost" id="scanStopBtn" style="display:none;flex:1;">
-          <i class="fas fa-stop"></i> Stop
+          <i class="fas fa-stop"></i> Stop Camera
         </button>
       </div>
+
       <div style="display:flex;align-items:center;gap:0.75rem;margin:0.75rem 0;color:var(--d-muted);font-size:0.78rem;">
         <div style="flex:1;height:1px;background:var(--d-border);"></div>
-        OR
+        OR enter manually
         <div style="flex:1;height:1px;background:var(--d-border);"></div>
       </div>
       <div style="display:flex;gap:0.5rem;">
@@ -894,6 +882,7 @@ let pageSize     = 25;
 let photoModalId   = null;
 let photoModalType = 'item';
 let isScanning     = false;
+let html5QrCodeScanner = null;
 
 /* ── Init ── */
 document.addEventListener('DOMContentLoaded', () => {
@@ -1222,61 +1211,97 @@ function exportCSV() {
 
 /* ── Scan modal ── */
 function openScanModal() {
-  document.getElementById('scanResult').innerHTML = '';
-  document.getElementById('scanManualInput').value = '';
+  var res = document.getElementById('scanResult');
+  var inp = document.getElementById('scanManualInput');
+  if (res) res.innerHTML = '';
+  if (inp) inp.value = '';
   openModal('scanModal');
 }
-function closeScanModal() { stopScan(); closeModal('scanModal'); }
 
-let html5QrCodeScanner = null;
+function closeScanModal() {
+  // Stop camera first, then close — stopScan is always safe to call
+  stopScan();
+  closeModal('scanModal');
+}
+
+function setEl(id, prop, val) {
+  // Null-safe element style setter
+  var el = document.getElementById(id);
+  if (el) el.style[prop] = val;
+}
 
 function startScan() {
   if (isScanning) return;
-  document.getElementById('scanStartBtn').style.display = 'none';
-  document.getElementById('scanStopBtn').style.display  = 'flex';
-  document.getElementById('scanReticleWrap').style.display = 'flex';
 
-  if (!html5QrCodeScanner) {
+  setEl('scanStartBtn',    'display', 'none');
+  setEl('scanStopBtn',     'display', 'flex');
+  setEl('scanReticleWrap', 'display', 'flex');
+
+  // Always create a fresh instance targeting the viewport div
+  // (the library may have cleared it on a previous stop)
+  try {
     html5QrCodeScanner = new Html5Qrcode('scanViewport');
+  } catch(e) {
+    showToast('Scanner init failed', 'error');
+    resetScanUI();
+    return;
   }
+
   var config = {
     fps: 15,
-    qrbox: function(viewfinderWidth, viewfinderHeight) {
-      var minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-      var size = Math.floor(0.8 * minEdge);
-      return { width: size, height: size };
+    qrbox: function(w, h) {
+      var edge = Math.floor(Math.min(w, h) * 0.8);
+      return { width: edge, height: edge };
     }
   };
-  var startScanner = function() {
+
   html5QrCodeScanner.start(
     { facingMode: 'environment' },
     config,
-    (decodedText) => {
+    function(decodedText) {
       if (!decodedText) return;
-      stopScan();
-      try { navigator.vibrate && navigator.vibrate(60); } catch(e){}
-      lookupBarcode(decodedText);
+      // Stop camera, then look up — do NOT call lookupBarcode before stop
+      // because the library is still running and may fire the callback again
+      isScanning = false;
+      try {
+        html5QrCodeScanner.stop().then(function() {
+          resetScanUI();
+          try { navigator.vibrate && navigator.vibrate(60); } catch(e){}
+          lookupBarcode(decodedText);
+        }).catch(function() {
+          resetScanUI();
+          lookupBarcode(decodedText);
+        });
+      } catch(e) {
+        resetScanUI();
+        lookupBarcode(decodedText);
+      }
     }
-  ).then(() => { isScanning = true; }).catch(err => {
-    showToast('Camera unavailable', 'error');
+  ).then(function() {
+    isScanning = true;
+  }).catch(function() {
+    showToast('Camera unavailable — check permissions', 'error');
     resetScanUI();
   });
-  };
-  requestAnimationFrame(function() { startScanner(); });
 }
 
 function stopScan() {
-  if (isScanning && html5QrCodeScanner && html5QrCodeScanner.isScanning()) {
-    html5QrCodeScanner.stop().catch(() => {});
+  if (html5QrCodeScanner && isScanning) {
     isScanning = false;
+    try {
+      html5QrCodeScanner.stop().catch(function(){});
+    } catch(e) {}
   }
+  // Always reset UI regardless of scanner state
   resetScanUI();
 }
 
 function resetScanUI() {
-  document.getElementById('scanStartBtn').style.display = 'flex';
-  document.getElementById('scanStopBtn').style.display  = 'none';
-  document.getElementById('scanReticleWrap').style.display = 'none';
+  // Null-safe: these elements are always outside scanViewport now,
+  // but guard anyway in case the modal hasn't rendered yet
+  setEl('scanStartBtn',    'display', 'flex');
+  setEl('scanStopBtn',     'display', 'none');
+  setEl('scanReticleWrap', 'display', 'none');
 }
 
 function scanManualLookup() {
@@ -1332,6 +1357,7 @@ function viewImage(url, name) {
 /* ── Modal helpers ── */
 function openModal(id)  { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   var scanM = document.getElementById('scanModal');
