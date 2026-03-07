@@ -320,7 +320,6 @@
   padding: 0.875rem;
 }
 
-/* Viewport wrapper — controls live outside scanViewport so the library can't destroy them */
 .m-viewport-wrap {
   position: relative;
   margin-bottom: 0;
@@ -329,23 +328,25 @@
 .m-viewport {
   width: 100%;
   border-radius: var(--m-radius);
-  overflow: hidden;
   border: 2px solid var(--m-border);
   background: #000;
   position: relative;
   aspect-ratio: 4 / 3;
   transition: border-color 0.2s;
+  /* Do NOT use overflow:hidden — it clips the library's injected video on mobile */
 }
 .m-viewport.live  { border-color: var(--m-cyan); }
 .m-viewport.found { border-color: var(--m-green); }
 .m-viewport video, .m-viewport canvas {
   width: 100% !important; height: 100% !important;
   object-fit: cover; display: block;
+  border-radius: calc(var(--m-radius) - 2px);
 }
 
 .m-cam-idle {
-  position: absolute; inset: 0;
+  position: absolute; inset: 0; z-index: 5;
   background: var(--m-surface2);
+  border-radius: calc(var(--m-radius) - 2px);
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   gap: 0.6rem;
@@ -371,7 +372,7 @@
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  z-index: 10;
+  z-index: 15;
 }
 .m-reticle-layer.show { display: flex; }
 .m-reticle {
@@ -679,16 +680,16 @@
   <div class="m-panel" id="panelScan">
     <div class="m-scan-panel">
 
-      <!-- Viewport wrapper: reticle is a sibling of #scanViewport so the
-           library can't destroy it when it replaces scanViewport's innerHTML -->
+      <!-- Viewport wrapper: reticle and idle placeholder are siblings of #scanViewport
+           so the library can't destroy them when it replaces scanViewport's innerHTML -->
       <div class="m-viewport-wrap">
-        <div class="m-viewport" id="scanViewport">
-          <!-- Camera idle placeholder — sits inside viewport before scanning starts -->
-          <div class="m-cam-idle" id="camIdle">
-            <div class="idle-icon">📷</div>
-            <p>Tap Start Camera<br>to scan a barcode</p>
-          </div>
+        <!-- Camera idle placeholder — sibling of scanViewport, never destroyed by library -->
+        <div class="m-cam-idle" id="camIdle">
+          <div class="idle-icon">📷</div>
+          <p>Tap Start Camera<br>to scan a barcode</p>
         </div>
+        <!-- The library targets ONLY this div — it will replace its contents -->
+        <div class="m-viewport" id="scanViewport"></div>
         <!-- Reticle overlay — absolute over the viewport wrapper, never inside scanViewport -->
         <div class="m-reticle-layer" id="reticleLayer">
           <div class="m-reticle"><div class="m-scan-line"></div></div>
