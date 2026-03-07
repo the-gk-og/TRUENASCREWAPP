@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Barcode Generator - ShowWise{% endblock %}
+{% block title %}QR Code Generator - ShowWise{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1 class="page-title"><i class="fas fa-barcode"></i> Barcode Generator</h1>
-    <p class="page-subtitle">Generate printable barcodes for your equipment</p>
+    <h1 class="page-title"><i class="fas fa-qrcode"></i> QR Code Generator</h1>
+    <p class="page-subtitle">Generate printable QR codes for your equipment. Scan in-app or with any phone camera to open the equipment page.</p>
 </div>
 
 <div style="display: flex; gap: 1rem; margin-bottom: 2rem;">
@@ -16,11 +16,11 @@
 
 <!-- Configuration Card -->
 <div class="card">
-    <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-cog"></i> Barcode Configuration</h3>
+    <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-cog"></i> QR Code Configuration</h3>
     
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
         <div>
-            <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Barcode Size</label>
+            <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">QR Code Size</label>
             <select id="barcodeSize" style="width: 100%; padding: 0.75rem; border: 2px solid var(--border); border-radius: 8px; font-size: 1rem;">
                 <option value="small">Small (60x40mm) - ~24 per page</option>
                 <option value="medium" selected>Medium (80x50mm) - ~15 per page</option>
@@ -40,10 +40,10 @@
         <h4 style="margin: 0 0 0.5rem 0; color: var(--primary);"><i class="fas fa-info-circle"></i> How to Use</h4>
         <ol style="margin: 0; padding-left: 1.5rem; line-height: 1.8;">
             <li>Select equipment items using the checkboxes below</li>
-            <li>Choose your preferred barcode size from the dropdown</li>
-            <li>Click "Generate PDF" to download your printable barcode sheet</li>
+            <li>Choose your preferred QR code size from the dropdown</li>
+            <li>Click "Generate PDF" to download your printable QR code sheet</li>
             <li>Print on A4 paper at 100% scale (no scaling)</li>
-            <li>Cut out barcodes and apply to equipment</li>
+            <li>Cut out QR codes and apply to equipment. Scanning in-app shows details; scanning with a phone camera opens the equipment page (or login)</li>
         </ol>
     </div>
 </div>
@@ -65,7 +65,7 @@
                 <i class="fas fa-times"></i> Clear All
             </button>
             <button onclick="generateBarcodePDF()" class="btn btn-success" id="generateBtn">
-                <i class="fas fa-file-pdf"></i> Generate PDF
+                <i class="fas fa-file-pdf"></i> Generate QR PDF
             </button>
         </div>
     </div>
@@ -87,7 +87,7 @@
                     
                     <div style="display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem;">
                         <span style="color: var(--text-secondary);">
-                            <i class="fas fa-barcode"></i> <code>{{ item.barcode }}</code>
+                            <i class="fas fa-qrcode"></i> <code>{{ item.barcode or item.id }}</code>
                         </span>
                         
                         {% if item.category %}
@@ -115,7 +115,7 @@
     {% if not equipment %}
     <div style="text-align: center; padding: 3rem; color: var(--text-secondary);">
         <p style="font-size: 3rem; margin-bottom: 1rem;">📦</p>
-        <p>No equipment found. Add equipment first to generate barcodes.</p>
+        <p>No equipment found. Add equipment first to generate QR codes.</p>
         <a href="{{ url_for('equipment.equipment_list') }}" class="btn btn-primary" style="margin-top: 1rem;">Go to Equipment</a>
     </div>
     {% endif %}
@@ -130,16 +130,16 @@
             <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">Ready to print on standard paper</p>
         </div>
         <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px;">
-            <p style="margin: 0; font-weight: 600; color: var(--dark);">📊 Code 128 Barcodes</p>
-            <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">Industry standard format</p>
+            <p style="margin: 0; font-weight: 600; color: var(--dark);">📱 QR Codes</p>
+            <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">Scan in-app or with any camera</p>
         </div>
         <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px;">
             <p style="margin: 0; font-weight: 600; color: var(--dark);">🏷️ Equipment Names</p>
-            <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">Clear labels above each barcode</p>
+            <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">Clear labels above each QR code</p>
         </div>
         <div style="background: var(--bg-card); padding: 1rem; border-radius: 6px;">
-            <p style="margin: 0; font-weight: 600; color: var(--dark);">🔢 Barcode Numbers</p>
-            <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">For manual reference</p>
+            <p style="margin: 0; font-weight: 600; color: var(--dark);">🔗 Links to Equipment Page</p>
+            <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">Opens detail page when scanned outside app</p>
         </div>
     </div>
 </div>
@@ -253,14 +253,15 @@ function generateBarcodePDF() {
     
     const generateBtn = document.getElementById('generateBtn');
     generateBtn.disabled = true;
-    generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating PDF...';
+    generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating QR PDF...';
     
     const data = {
         equipment_ids: Array.from(selectedIds),
-        size: document.getElementById('barcodeSize').value
+        size: document.getElementById('barcodeSize').value,
+        base_url: window.location.origin
     };
     
-    fetch('/equipment/generate-barcodes', {
+    fetch('/equipment/generate-qrcodes', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(data)
@@ -268,7 +269,7 @@ function generateBarcodePDF() {
     .then(response => {
         if (!response.ok) {
             return response.json().then(err => {
-                throw new Error(err.error || 'Failed to generate barcodes');
+                throw new Error(err.error || 'Failed to generate QR codes');
             });
         }
         return response.blob();
@@ -277,21 +278,21 @@ function generateBarcodePDF() {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `equipment_barcodes_${new Date().getTime()}.pdf`;
+        a.download = `equipment_qrcodes_${new Date().getTime()}.pdf`;
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
         
-        showAlert(`Successfully generated barcodes for ${selectedIds.size} items!`, 'success');
+        showAlert(`Successfully generated QR codes for ${selectedIds.size} items!`, 'success');
         
         generateBtn.disabled = false;
         updateCount();
     })
     .catch(err => {
-        showAlert('Error generating barcodes: ' + err.message, 'error');
+        showAlert('Error generating QR codes: ' + err.message, 'error');
         generateBtn.disabled = false;
-        generateBtn.innerHTML = '<i class="fas fa-file-pdf"></i> Generate PDF';
+        generateBtn.innerHTML = '<i class="fas fa-file-pdf"></i> Generate QR PDF';
     });
 }
 
