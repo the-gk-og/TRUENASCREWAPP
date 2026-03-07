@@ -993,8 +993,8 @@
         </a>
         {% if current_user.is_admin %}
         <a href="{{ url_for('equipment.barcode_page') }}" class="nav-item {% if request.endpoint == 'equipment.barcode_page' %}active{% endif %}">
-            <i class="fas fa-barcode"></i>
-            <span>Barcode Generator</span>
+            <i class="fas fa-qrcode"></i>
+            <span>QR Code Generator</span>
         </a>
         <a href="{{ url_for('shifts.shift_management') }}" class="nav-item {% if request.endpoint == 'shifts.shift_management' %}active{% endif %}">
             <i class="fas fa-tasks"></i>
