@@ -728,14 +728,21 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
 <script>
 const ALL = {{ equipment_json | tojson }};
 let activeCategory = 'all';
 let searchQuery    = '';
 let isScanning     = false;
 let activeTab      = 'search';
-let html5QrCodeScanner = null;
+let scanStream     = null;   // MediaStream from getUserMedia
+let scanAnimFrame  = null;   // requestAnimationFrame handle
+let scanVideo      = null;   // <video> element
+let scanCanvas     = null;   // offscreen canvas for frame decoding
+let scanCtx        = null;
+let lastScanResult = null;   // debounce — last decoded string
+let lastScanTime   = 0;
 
 /* ── Init ── */
 document.addEventListener('DOMContentLoaded', () => {
@@ -853,108 +860,144 @@ function setEl(id, prop, val) {
   if (el) el.style[prop] = val;
 }
 
-/* ── Camera ── */
+/* ── Camera engine (getUserMedia + jsQR + Quagga2, works on Firefox & Chrome) ── */
+
 function startScan() {
   if (isScanning) return;
-
   setCamState('starting', 'Starting camera…');
-
   setEl('camIdle',      'display', 'none');
   setEl('reticleLayer', 'display', 'flex');
   document.getElementById('reticleLayer').classList.add('show');
   setEl('startBtn', 'display', 'none');
   setEl('stopBtn',  'display', 'flex');
   setEl('againBtn', 'display', 'none');
-
-  var viewport = document.getElementById('scanViewport');
-  if (viewport) viewport.classList.add('live');
-
+  var vp = document.getElementById('scanViewport');
+  if (vp) vp.classList.add('live');
   document.getElementById('scanResult').innerHTML = '';
 
-  try {
-    html5QrCodeScanner = new Html5Qrcode('scanViewport', { verbose: false });
-  } catch(e) {
-    toast('Scanner init failed', 'err');
-    resetCam();
+  // Build constraints — try rear camera, fall back to any
+  var constraints = {
+    video: {
+      facingMode: { ideal: 'environment' },
+      width:  { ideal: 1280 },
+      height: { ideal: 720 }
+    },
+    audio: false
+  };
+
+  navigator.mediaDevices.getUserMedia(constraints)
+    .catch(function() {
+      // facingMode ideal failed on some Firefox builds — retry with no facingMode
+      return navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    })
+    .then(function(stream) {
+      scanStream = stream;
+      isScanning = true;
+
+      // Inject a <video> element into the viewport div
+      var vpDiv = document.getElementById('scanViewport');
+      vpDiv.innerHTML = '';
+      scanVideo = document.createElement('video');
+      scanVideo.setAttribute('playsinline', '');
+      scanVideo.setAttribute('autoplay', '');
+      scanVideo.setAttribute('muted', '');
+      scanVideo.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;border-radius:10px;';
+      vpDiv.appendChild(scanVideo);
+      scanVideo.srcObject = stream;
+      scanVideo.play().catch(function(){});
+
+      // Offscreen canvas for frame sampling
+      scanCanvas = document.createElement('canvas');
+      scanCtx    = scanCanvas.getContext('2d', { willReadFrequently: true });
+
+      scanVideo.addEventListener('loadedmetadata', function() {
+        scanCanvas.width  = scanVideo.videoWidth  || 640;
+        scanCanvas.height = scanVideo.videoHeight || 480;
+        setCamState('live', 'Scanning — point at barcode or QR');
+        requestAnimationFrame(scanFrame);
+      });
+    })
+    .catch(function(err) {
+      setCamState('off', 'Camera unavailable — use manual entry');
+      resetCam();
+      toast('Camera unavailable: ' + (err.message || err), 'err');
+    });
+}
+
+function scanFrame() {
+  if (!isScanning || !scanVideo || scanVideo.readyState < 2) {
+    if (isScanning) scanAnimFrame = requestAnimationFrame(scanFrame);
     return;
   }
 
-  var config = {
-    fps: 10,
-    qrbox: function(w, h) {
-      var edge = Math.floor(Math.min(w, h) * 0.75);
-      return { width: edge, height: Math.floor(edge * 0.6) };
-    },
-    experimentalFeatures: { useBarCodeDetectorIfSupported: true }
-  };
+  // Resize canvas if video dimensions changed
+  if (scanCanvas.width !== scanVideo.videoWidth && scanVideo.videoWidth > 0) {
+    scanCanvas.width  = scanVideo.videoWidth;
+    scanCanvas.height = scanVideo.videoHeight;
+  }
 
-  var onSuccess = function(decodedText) {
-    if (!decodedText) return;
-    isScanning = false;
-    try { navigator.vibrate && navigator.vibrate([40,20,60]); } catch(e){}
-    try {
-      html5QrCodeScanner.stop().then(function() {
-        resetCam();
-        fetchBarcode(decodedText);
-      }).catch(function() {
-        resetCam();
-        fetchBarcode(decodedText);
-      });
-    } catch(e) {
-      resetCam();
-      fetchBarcode(decodedText);
-    }
-  };
+  scanCtx.drawImage(scanVideo, 0, 0, scanCanvas.width, scanCanvas.height);
 
-  // Try rear camera with exact constraint first (works on Chrome Android),
-  // fall back to ideal (works on Firefox Android), then fall back to any camera.
-  html5QrCodeScanner.start(
-    { facingMode: { exact: 'environment' } },
-    config,
-    onSuccess
-  ).then(function() {
-    isScanning = true;
-    setCamState('live', 'Scanning — point at barcode or QR');
-  }).catch(function() {
-    // exact constraint failed (common on Firefox and single-camera devices)
-    // retry with ideal — browser picks rear if available
-    html5QrCodeScanner.start(
-      { facingMode: { ideal: 'environment' } },
-      config,
-      onSuccess
-    ).then(function() {
-      isScanning = true;
-      setCamState('live', 'Scanning — point at barcode or QR');
-    }).catch(function() {
-      // last resort: let the browser pick any camera
-      html5QrCodeScanner.start(
-        { facingMode: 'user' },
-        config,
-        onSuccess
-      ).then(function() {
-        isScanning = true;
-        setCamState('live', 'Scanning (front camera)');
-      }).catch(function() {
-        setCamState('off', 'Camera unavailable — use manual entry');
-        resetCam();
-        toast('Camera unavailable — check permissions', 'err');
-      });
+  var imageData = scanCtx.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
+
+  // 1. Try jsQR first (QR codes)
+  var qrResult = null;
+  try { qrResult = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' }); } catch(e){}
+
+  if (qrResult && qrResult.data) {
+    onCodeFound(qrResult.data);
+    return; // don't schedule next frame — onCodeFound handles stop
+  }
+
+  // 2. Try Quagga2 for 1D barcodes (EAN, CODE128, etc.)
+  try {
+    Quagga.decodeSingle({
+      src: scanCanvas.toDataURL('image/png'),
+      numOfWorkers: 0,
+      decoder: { readers: ['code_128_reader','ean_reader','ean_8_reader','code_39_reader','upc_reader','upc_e_reader','codabar_reader'] },
+      locate: true
+    }, function(result) {
+      if (result && result.codeResult && result.codeResult.code) {
+        onCodeFound(result.codeResult.code);
+      } else if (isScanning) {
+        scanAnimFrame = requestAnimationFrame(scanFrame);
+      }
     });
-  });
+  } catch(e) {
+    if (isScanning) scanAnimFrame = requestAnimationFrame(scanFrame);
+  }
+}
+
+function onCodeFound(code) {
+  // Debounce — ignore same code within 2.5s
+  var now = Date.now();
+  if (code === lastScanResult && (now - lastScanTime) < 2500) {
+    if (isScanning) scanAnimFrame = requestAnimationFrame(scanFrame);
+    return;
+  }
+  lastScanResult = code;
+  lastScanTime   = now;
+
+  try { navigator.vibrate && navigator.vibrate([40,20,60]); } catch(e){}
+  stopScan();
+  fetchBarcode(code);
 }
 
 function stopScan() {
-  if (html5QrCodeScanner && isScanning) {
-    isScanning = false;
-    try {
-      html5QrCodeScanner.stop().catch(function(){});
-    } catch(e) {}
+  isScanning = false;
+  cancelAnimationFrame(scanAnimFrame);
+  if (scanStream) {
+    scanStream.getTracks().forEach(function(t) { t.stop(); });
+    scanStream = null;
   }
-  // Always reset UI regardless of scanner state
+  scanVideo  = null;
+  scanCanvas = null;
+  scanCtx    = null;
   resetCam();
 }
 
 function scanAgain() {
+  lastScanResult = null;
   document.getElementById('scanResult').innerHTML = '';
   setEl('againBtn', 'display', 'none');
   startScan();
@@ -971,8 +1014,9 @@ function resetCam() {
   var idle = document.getElementById('camIdle');
   if (idle) idle.style.display = 'flex';
 
+  // Clear the video element from the viewport
   var vp = document.getElementById('scanViewport');
-  if (vp) vp.classList.remove('live', 'found');
+  if (vp) { vp.classList.remove('live', 'found'); vp.innerHTML = ''; }
 
   setCamState('off', 'Camera off');
 }
