@@ -1,1092 +1,1086 @@
 {% extends "base.html" %}
-
-{% block title %}Pick List - ShowWise{% endblock %}
+{% block title %}Equipment — ShowWise{% endblock %}
 
 {% block content %}
 <style>
-/* ── Scoped entirely under #mpl, no dark mode forcing, no CSS var conflicts ── */
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500;600&family=Share+Tech+Mono&display=swap');
 
-/* Neutralise the card padding that base.html adds */
 .main-content { padding: 0 !important; }
 
-#mpl {
-  font-family: inherit;
-  min-height: calc(100vh - var(--topbar-height));
-  background: var(--bg-body);
-  color: var(--text-primary);
-  position: relative;
+:root {
+  /* Map mobile tokens to the base.html theme variables so light/dark
+     mode toggling works automatically. Accent colours stay vivid. */
+  --m-bg:       var(--bg-body);
+  --m-surface:  var(--bg-card);
+  --m-surface2: var(--bg-table-head);
+  --m-border:   var(--border);
+  --m-accent:   var(--primary);
+  --m-cyan:     #06b6d4;
+  --m-green:    #10b981;
+  --m-red:      #ef4444;
+  --m-text:     var(--text-primary);
+  --m-muted:    var(--text-secondary);
+  --m-mono:     'Share Tech Mono', monospace;
+  --m-display:  'Barlow Condensed', sans-serif;
+  --m-body:     'Barlow', sans-serif;
+  --m-radius:   12px;
+  --m-tap:      56px;
 }
 
-/* ── Topbar ── */
-#mpl .mp-top {
-  position: sticky;
-  top: 0;
-  z-index: 90;
-  background: var(--bg-topbar);
-  border-bottom: 2px solid var(--border);
+/* ── Shell ── */
+.m-page {
+  font-family: var(--m-body);
+  background: var(--m-bg);
+  color: var(--m-text);
+  min-height: 100vh;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+/* ── Header ── */
+.m-header {
+  background: var(--m-surface);
+  border-bottom: 2px solid var(--m-accent);
+  padding: 0.7rem 1rem;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.65rem 1rem;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 200;
 }
+.m-header-title {
+  font-family: var(--m-display);
+  font-weight: 900;
+  font-size: 1.45rem;
+  letter-spacing: 0.04em;
+  color: var(--m-accent);
+  text-transform: uppercase;
+  line-height: 1;
+}
+.m-header-sub {
+  font-size: 0.65rem;
+  color: var(--m-muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-family: var(--m-mono);
+  margin-top: 1px;
+}
+.m-item-count {
+  font-family: var(--m-mono);
+  font-size: 0.78rem;
+  color: var(--m-muted);
+  background: var(--m-surface2);
+  border: 1px solid var(--m-border);
+  border-radius: 20px;
+  padding: 0.25rem 0.7rem;
+}
+.m-item-count b { color: var(--m-cyan); }
 
-#mpl .mp-top-title {
-  font-weight: 800;
-  font-size: 1.15rem;
-  letter-spacing: 0.02em;
-  color: var(--primary);
+/* ── Tabs ── */
+.m-tabs {
+  display: flex;
+  background: var(--m-surface);
+  border-bottom: 1px solid var(--m-border);
+  position: sticky;
+  top: 60px;
+  z-index: 199;
+}
+.m-tab {
   flex: 1;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  font-family: var(--m-display);
+  font-weight: 700;
+  font-size: 0.9rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--m-muted);
+  cursor: pointer;
+  border: none;
+  background: none;
+  border-bottom: 3px solid transparent;
+  transition: all 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.m-tab.active {
+  color: var(--m-accent);
+  border-bottom-color: var(--m-accent);
+  background: rgba(245,166,35,0.04);
+}
+.m-tab:active { background: var(--m-surface2); }
+.m-tab-icon { font-size: 1rem; }
+
+/* ══ SEARCH PANEL ══ */
+.m-panel { display: none; }
+.m-panel.active { display: block; }
+
+.m-search-bar {
+  padding: 0.875rem;
+  background: var(--m-surface);
+  border-bottom: 1px solid var(--m-border);
+  display: flex;
+  gap: 0.5rem;
+}
+.m-search-input {
+  flex: 1;
+  background: var(--m-surface2);
+  border: 2px solid var(--m-border);
+  border-radius: var(--m-radius);
+  color: var(--m-text);
+  font-family: var(--m-body);
+  font-size: 1.05rem;
+  font-weight: 500;
+  padding: 0 1rem;
+  height: var(--m-tap);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  -webkit-appearance: none;
+}
+.m-search-input::placeholder { color: var(--m-muted); }
+.m-search-input:focus {
+  border-color: var(--m-cyan);
+  box-shadow: 0 0 0 3px rgba(0,212,255,0.12);
+}
+.m-clear-btn {
+  width: var(--m-tap); height: var(--m-tap);
+  background: var(--m-surface2);
+  border: 2px solid var(--m-border);
+  border-radius: var(--m-radius);
+  color: var(--m-muted);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem; cursor: pointer; flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.m-clear-btn:active { background: var(--m-border); }
+
+/* Category chips */
+.m-chips {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding: 0.6rem 0.875rem 0.75rem;
+  background: var(--m-surface);
+  border-bottom: 1px solid var(--m-border);
+  scrollbar-width: none;
+}
+.m-chips::-webkit-scrollbar { display: none; }
+.m-chip {
+  background: var(--m-surface2);
+  border: 1.5px solid var(--m-border);
+  border-radius: 20px;
+  padding: 0.25rem 0.8rem;
+  font-size: 0.75rem;
+  font-family: var(--m-display);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--m-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: all 0.12s;
+}
+.m-chip.active { background: var(--m-accent); border-color: var(--m-accent); color: #000; }
+.m-chip:active { opacity: 0.7; }
+
+/* Results meta */
+.m-meta {
+  padding: 0.4rem 0.875rem;
+  font-family: var(--m-mono);
+  font-size: 0.7rem;
+  color: var(--m-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.m-meta b { color: var(--m-cyan); }
+
+/* Item list */
+.m-list {
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.m-card {
+  background: var(--m-surface);
+  border: 1.5px solid var(--m-border);
+  border-radius: var(--m-radius);
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.7rem;
+  text-decoration: none;
+  color: var(--m-text);
+  position: relative;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.1s;
+}
+.m-card::before {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--m-border);
+  transition: background 0.12s;
+}
+.m-card.touched { background: var(--m-surface2); border-color: var(--m-cyan); }
+.m-card.touched::before { background: var(--m-cyan); }
+
+.m-thumb {
+  width: 50px; height: 50px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--m-surface2);
+  border: 1.5px solid var(--m-border);
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.3rem;
+}
+.m-thumb img { width: 100%; height: 100%; object-fit: cover; }
+
+.m-card-body { flex: 1; min-width: 0; }
+.m-card-name {
+  font-family: var(--m-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.2;
+}
+.m-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.4rem;
+  margin-top: 0.25rem;
+}
+.m-tag {
+  font-family: var(--m-mono);
+  font-size: 0.67rem;
+  padding: 0.12rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+.m-tag-cat  { color: var(--m-cyan);   border-color: rgba(6,182,212,0.3);   background: rgba(6,182,212,0.07); }
+.m-tag-loc  { color: var(--m-accent); border-color: rgba(99,102,241,0.3);  background: rgba(99,102,241,0.07); }
+.m-tag-code { color: var(--m-muted);  border-color: var(--m-border);       background: transparent; }
+
+.m-qty-wrap { text-align: right; flex-shrink: 0; }
+.m-qty-num {
+  font-family: var(--m-display);
+  font-weight: 900;
+  font-size: 1.25rem;
+  color: var(--m-accent);
+  line-height: 1;
+}
+.m-qty-lbl {
+  font-family: var(--m-mono);
+  font-size: 0.58rem;
+  color: var(--m-muted);
   text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
-#mpl .mp-count-badge {
-  font-family: monospace;
-  font-size: 0.8rem;
-  background: var(--bg-nav-active);
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  padding: 0.2rem 0.6rem;
-  border-radius: 20px;
-  white-space: nowrap;
+/* Empty state */
+.m-empty {
+  text-align: center;
+  padding: 3rem 1.5rem;
+  display: none;
 }
-
-#mpl .mp-count-badge b { color: var(--primary); }
-
-#mpl .mp-gear {
-  background: var(--primary) !important;
-  border: none !important;
-  color: #fff !important;
-  height: 38px;
-  border-radius: 8px !important;
-  padding: 0 0.9rem !important;
-  font-size: 0.82rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  display: flex; align-items: center; justify-content: center; gap: 0.4rem;
-  cursor: pointer; flex-shrink: 0;
-  white-space: nowrap;
-  box-shadow: 0 2px 8px rgba(99,102,241,0.35) !important;
-}
-
-/* ── Progress strip ── */
-#mpl .mp-prog-wrap {
-  height: 5px;
-  background: var(--bg-nav-active);
-}
-#mpl .mp-prog-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--success), var(--primary));
-  transition: width 0.35s ease;
-}
-
-/* ── Event banner ── */
-#mpl .mp-event-banner {
-  margin: 0.75rem;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-left: 4px solid var(--primary);
-  border-radius: 10px;
-  padding: 0.7rem 1rem;
-}
-#mpl .mp-event-title { font-weight: 700; font-size: 1rem; color: var(--text-primary); margin-bottom: 0.2rem; }
-#mpl .mp-event-meta  { font-size: 0.78rem; color: var(--text-secondary); display: flex; gap: 1rem; flex-wrap: wrap; }
-
-/* ── Filter tabs ── */
-#mpl .mp-ftabs {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.3rem;
-  margin: 0.75rem;
-  background: var(--bg-nav-hover);
-  border-radius: 10px;
-  padding: 0.3rem;
-}
-#mpl .mp-ftab {
-  font-weight: 700;
-  font-size: 0.8rem;
+.m-empty-icon { font-size: 2.5rem; margin-bottom: 0.75rem; }
+.m-empty h3 {
+  font-family: var(--m-display);
+  font-size: 1.3rem; font-weight: 800;
   letter-spacing: 0.05em;
-  text-transform: uppercase;
-  background: transparent !important;
-  border: none !important;
-  color: var(--text-muted) !important;
-  padding: 0.5rem;
-  border-radius: 7px;
-  cursor: pointer;
-  transition: all 0.15s;
-  text-align: center;
-  box-shadow: none !important;
+  color: var(--m-text);
+  margin-bottom: 0.4rem;
 }
-#mpl .mp-ftab.mp-on {
-  background: var(--bg-card) !important;
-  color: var(--text-primary) !important;
-  box-shadow: var(--shadow-sm) !important;
-}
-#mpl .mp-ftab.mp-on[data-f="pending"] { color: var(--warning) !important; }
-#mpl .mp-ftab.mp-on[data-f="done"]    { color: var(--success) !important; }
+.m-empty p { font-size: 0.875rem; color: var(--m-muted); }
 
-/* ── Hint ── */
-#mpl .mp-hint {
-  text-align: center;
-  font-size: 0.72rem;
-  color: var(--text-muted);
-  padding: 0 0 0.5rem;
-  letter-spacing: 0.03em;
+/* Shimmer */
+.m-shimmer {
+  height: 68px;
+  background: linear-gradient(90deg, var(--m-surface) 25%, var(--m-surface2) 50%, var(--m-surface) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite;
+  border-radius: var(--m-radius);
+  border: 1.5px solid var(--m-border);
+}
+@keyframes shimmer { 0% { background-position: 200% center; } 100% { background-position: -200% center; } }
+
+/* ══ SCAN PANEL ══ */
+.m-scan-panel {
+  padding: 0.875rem;
 }
 
-/* ── List ── */
-#mpl .mp-list {
-  padding: 0 0.75rem 7rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-/* ── Item card ── */
-#mpl .mp-item {
-  background: var(--bg-card);
-  border: 1.5px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-  display: flex;
-  align-items: stretch;
+/* Viewport wrapper — controls live outside scanViewport so the library can't destroy them */
+.m-viewport-wrap {
   position: relative;
-  transition: border-color 0.2s, opacity 0.2s;
-  -webkit-tap-highlight-color: transparent;
-  user-select: none;
-}
-#mpl .mp-item.mp-done {
-  opacity: 0.55;
-  border-color: var(--success);
-}
-#mpl .mp-item.mp-bsel {
-  border-color: var(--warning);
-  background: var(--bg-nav-active);
+  margin-bottom: 0;
 }
 
-/* Check zone — large tap target */
-#mpl .mp-chk {
-  width: 62px;
-  flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-  background: transparent;
-  border: none !important;
-  padding: 0;
-  -webkit-tap-highlight-color: transparent;
-  box-shadow: none !important;
-  outline: none;
+.m-viewport {
+  width: 100%;
+  border-radius: var(--m-radius);
+  overflow: hidden;
+  border: 2px solid var(--m-border);
+  background: #000;
+  position: relative;
+  aspect-ratio: 4 / 3;
+  transition: border-color 0.2s;
 }
-#mpl .mp-ring {
-  width: 30px; height: 30px;
-  border-radius: 50%;
-  border: 2.5px solid var(--border);
-  display: flex; align-items: center; justify-content: center;
-  transition: all 0.18s;
-}
-#mpl .mp-item.mp-done .mp-ring {
-  background: var(--success);
-  border-color: var(--success);
-}
-#mpl .mp-tick { display: none; }
-#mpl .mp-item.mp-done .mp-tick { display: block; }
-
-/* Thumbnail */
-#mpl .mp-thumb {
-  width: 50px; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  padding-right: 0.4rem;
-}
-#mpl .mp-thumb img {
-  width: 42px; height: 42px;
-  object-fit: cover; border-radius: 7px;
-  border: 1px solid var(--border); cursor: pointer;
-}
-#mpl .mp-thumb-ph {
-  width: 42px; height: 42px; border-radius: 7px;
-  background: var(--bg-nav-hover); border: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: center; font-size: 1.2rem;
+.m-viewport.live  { border-color: var(--m-cyan); }
+.m-viewport.found { border-color: var(--m-green); }
+.m-viewport video, .m-viewport canvas {
+  width: 100% !important; height: 100% !important;
+  object-fit: cover; display: block;
 }
 
-/* Item body */
-#mpl .mp-body {
-  flex: 1; padding: 0.75rem 0.25rem 0.75rem 0;
-  min-width: 0; display: flex; flex-direction: column; gap: 0.3rem;
+.m-cam-idle {
+  position: absolute; inset: 0;
+  background: var(--m-surface2);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 0.6rem;
+  pointer-events: none;
 }
-#mpl .mp-name {
-  font-weight: 700; font-size: 1rem;
-  color: var(--text-primary);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+.m-cam-idle .idle-icon { font-size: 3.5rem; }
+.m-cam-idle p {
+  font-family: var(--m-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--m-muted);
+  text-align: center;
+  padding: 0 2rem;
+  line-height: 1.6;
 }
-#mpl .mp-item.mp-done .mp-name { text-decoration: line-through; color: var(--text-muted); }
 
-#mpl .mp-chips { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
-#mpl .mp-chip  {
-  font-size: 0.7rem; font-family: monospace;
-  padding: 0.15rem 0.45rem; border-radius: 4px; font-weight: 600;
-  background: var(--bg-nav-hover); color: var(--text-secondary);
-  border: 1px solid var(--border);
-}
-#mpl .mp-chip-qty { color: var(--warning); }
-#mpl .mp-chip-loc { color: var(--primary); }
-#mpl .mp-chip-cat { color: var(--secondary); }
-
-#mpl .mp-note { font-size: 0.74rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-/* Delete zone */
-#mpl .mp-del {
-  width: 48px; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-  background: transparent; border: none !important;
-  color: var(--text-muted) !important;
-  font-size: 1rem;
-  -webkit-tap-highlight-color: transparent;
-  box-shadow: none !important; outline: none;
-  transition: color 0.15s;
-}
-#mpl .mp-del:active { color: var(--danger) !important; }
-
-/* Bulk overlay */
-#mpl .mp-bover {
-  display: none; position: absolute; inset: 0; z-index: 5;
-  align-items: center; justify-content: flex-start; padding-left: 1rem;
-  cursor: pointer;
-}
-#mpl .mp-bover.mp-vis { display: flex; }
-#mpl .mp-bdot {
-  width: 26px; height: 26px; border-radius: 50%;
-  border: 2.5px solid var(--border);
-  background: var(--bg-card);
-  display: flex; align-items: center; justify-content: center;
-  transition: all 0.15s;
-}
-#mpl .mp-item.mp-bsel .mp-bdot { background: var(--warning); border-color: var(--warning); }
-
-/* ── Empty ── */
-#mpl .mp-empty {
-  text-align: center; padding: 4rem 2rem;
-  color: var(--text-muted);
-  display: flex; flex-direction: column; align-items: center; gap: 0.75rem;
-}
-#mpl .mp-empty-icon { font-size: 3rem; }
-#mpl .mp-empty h3   { font-size: 1.2rem; font-weight: 800; color: var(--text-primary); }
-
-/* ── FAB — fixed, above everything ── */
-#mp-fab {
-  position: fixed;
-  bottom: 1.75rem;
-  right: 1.25rem;
-  z-index: 500;
-  width: 56px; height: 56px;
-  border-radius: 50%;
-  background: var(--primary) !important;
-  color: #fff !important;
-  border: none !important;
-  font-size: 1.5rem;
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 4px 20px rgba(99,102,241,0.45) !important;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition: transform 0.15s, opacity 0.15s;
-  outline: none;
-}
-#mp-fab:active { transform: scale(0.91); }
-
-/* ── Bulk toolbar ── */
-#mp-bulk-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 400;
-  background: var(--bg-topbar);
-  border-top: 2px solid var(--border);
+/* Reticle sits over the viewport via absolute positioning on the wrapper */
+.m-reticle-layer {
+  position: absolute;
+  inset: 0;
   display: none;
   align-items: center;
-  justify-content: space-between;
-  padding: 0.75rem 1rem;
-  gap: 0.75rem;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 10;
 }
-#mp-bulk-bar.mp-vis { display: flex; }
-#mp-bulk-bar .mp-binfo {
-  font-weight: 800; font-size: 1.05rem;
-  color: var(--warning); text-transform: uppercase;
+.m-reticle-layer.show { display: flex; }
+.m-reticle {
+  width: 72%;
+  height: 76px;
+  border: 2px solid var(--m-accent);
+  border-radius: 6px;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,0.5);
+  position: relative;
+  animation: reticlePulse 2s ease-in-out infinite;
 }
+@keyframes reticlePulse {
+  0%,100% { border-color: var(--m-accent); box-shadow: 0 0 0 9999px rgba(0,0,0,0.5), 0 0 14px rgba(245,166,35,0.4); }
+  50%      { border-color: var(--m-cyan);  box-shadow: 0 0 0 9999px rgba(0,0,0,0.5), 0 0 14px rgba(0,212,255,0.6); }
+}
+.m-reticle::before, .m-reticle::after {
+  content: ''; position: absolute;
+  width: 14px; height: 14px;
+}
+.m-reticle::before { top:-2px; left:-2px; border-top:3px solid var(--m-cyan); border-left:3px solid var(--m-cyan); }
+.m-reticle::after  { bottom:-2px; right:-2px; border-bottom:3px solid var(--m-cyan); border-right:3px solid var(--m-cyan); }
+.m-scan-line {
+  position: absolute; left:0; right:0; height:2px;
+  background: linear-gradient(90deg, transparent, var(--m-cyan), transparent);
+  animation: sweepLine 1.4s linear infinite;
+}
+@keyframes sweepLine { 0% { top:0; opacity:0.9; } 100% { top:100%; opacity:0.1; } }
 
-/* On desktop, offset fixed elements by the sidebar width */
-@media (min-width: 769px) {
-  #mp-bulk-bar { left: var(--sidebar-width); }
+/* Status bar */
+.m-status-bar {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.5rem 0;
+  font-family: var(--m-mono);
+  font-size: 0.7rem;
+  color: var(--m-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
+.m-status-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--m-muted);
+  flex-shrink: 0;
+}
+.m-status-dot.live  { background: var(--m-green); animation: blink 1.5s infinite; }
+.m-status-dot.found { background: var(--m-accent); }
+@keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
 
-/* ── Shared overlay backdrop ── */
-.mp-overlay {
-  display: none;
-  position: fixed; inset: 0; z-index: 600;
-  background: var(--overlay-bg);
-  backdrop-filter: blur(2px);
-  align-items: flex-end;
+/* Cam buttons */
+.m-cam-btns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-top: 0;
 }
-.mp-overlay.mp-open { display: flex; }
+.m-btn {
+  height: var(--m-tap);
+  border: none;
+  border-radius: var(--m-radius);
+  font-family: var(--m-display);
+  font-weight: 800;
+  font-size: 1rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 0.4rem;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.1s, transform 0.1s;
+}
+.m-btn:active { opacity: 0.8; transform: scale(0.97); }
+.m-btn-primary { background: var(--m-accent); color: #000; }
+.m-btn-ghost   { background: var(--m-surface2); color: var(--m-text); border: 1.5px solid var(--m-border); }
+.m-btn-red     { background: var(--m-red); color: #fff; }
+.m-btn-full    { grid-column: 1 / -1; }
 
-/* On desktop, overlays and sheets sit within the main content area only */
-@media (min-width: 769px) {
-  .mp-overlay {
-    left: var(--sidebar-width);
-  }
+/* Divider */
+.m-divider {
+  display: flex; align-items: center; gap: 0.75rem;
+  margin: 0.875rem 0;
+  font-family: var(--m-mono);
+  font-size: 0.7rem; color: var(--m-muted);
+  text-transform: uppercase; letter-spacing: 0.1em;
 }
+.m-divider::before, .m-divider::after { content:''; flex:1; height:1px; background:var(--m-border); }
 
-/* ── Bottom sheet ── */
-.mp-sheet {
-  width: 100%;
-  background: var(--bg-modal);
-  border-radius: 20px 20px 0 0;
-  border-top: 2px solid var(--border);
-  padding: 1.25rem 1rem 3rem;
-  max-height: 90vh;
-  overflow-y: auto;
-  animation: mpUp 0.25s cubic-bezier(.4,0,.2,1);
-  -webkit-overflow-scrolling: touch;
-  color: var(--text-primary);
+/* Manual input */
+.m-manual {
+  display: flex; gap: 0.5rem;
 }
-
-/* On desktop, sheets have a max-width and float right within the content area */
-@media (min-width: 769px) {
-  .mp-sheet {
-    max-width: 480px;
-    border-radius: 20px 20px 0 0;
-    margin-left: auto;
-  }
-}
-@keyframes mpUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-
-.mp-handle {
-  width: 40px; height: 4px; background: var(--border);
-  border-radius: 2px; margin: 0 auto 1.25rem;
-}
-.mp-sheet-title {
-  font-weight: 900; font-size: 1.3rem; letter-spacing: 0.03em;
-  color: var(--text-primary); margin-bottom: 1.25rem; text-transform: uppercase;
-}
-
-/* Mode tabs */
-.mp-mtabs {
-  display: grid; grid-template-columns: repeat(3,1fr);
-  gap: 0.3rem; margin-bottom: 1.25rem;
-  background: var(--bg-nav-hover); border-radius: 10px; padding: 0.3rem;
-}
-.mp-mtab {
-  font-weight: 700; font-size: 0.8rem; letter-spacing: 0.05em; text-transform: uppercase;
-  background: transparent !important; border: none !important;
-  color: var(--text-muted) !important;
-  padding: 0.5rem; border-radius: 7px; cursor: pointer;
-  transition: all 0.15s; box-shadow: none !important;
-}
-.mp-mtab.mp-on { background: var(--primary) !important; color: #fff !important; }
-
-/* Fields */
-.mp-field { margin-bottom: 1rem; }
-.mp-field label {
-  font-weight: 700; font-size: 0.75rem; letter-spacing: 0.1em;
-  text-transform: uppercase; color: var(--text-muted);
-  display: block; margin-bottom: 0.4rem;
-}
-.mp-field select,
-.mp-field input[type="text"],
-.mp-field input[type="number"] {
-  width: 100% !important;
-  background: var(--bg-input) !important;
-  border: 1.5px solid var(--border-input) !important;
-  border-radius: 10px !important;
-  color: var(--text-primary) !important;
-  font-size: 1rem !important;
-  padding: 0.75rem 1rem !important;
+.m-manual-input {
+  flex: 1;
+  background: var(--m-surface2);
+  border: 2px solid var(--m-border);
+  border-radius: var(--m-radius);
+  color: var(--m-text);
+  font-family: var(--m-mono);
+  font-size: 1rem;
+  padding: 0 1rem;
+  height: var(--m-tap);
   outline: none;
-  transition: border-color 0.15s;
-  box-shadow: none !important;
-  font-family: inherit;
-  -webkit-appearance: none; appearance: none;
+  letter-spacing: 0.04em;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
-.mp-field select:focus,
-.mp-field input:focus { border-color: var(--border-focus) !important; }
+.m-manual-input::placeholder { color: var(--m-muted); }
+.m-manual-input:focus { border-color: var(--m-cyan); box-shadow: 0 0 0 3px rgba(0,212,255,0.12); }
+.m-go-btn {
+  height: var(--m-tap); padding: 0 1.25rem;
+  background: var(--m-accent); color: #000;
+  border: none; border-radius: var(--m-radius);
+  font-family: var(--m-display); font-weight: 900;
+  font-size: 1rem; letter-spacing: 0.06em; text-transform: uppercase;
+  cursor: pointer; flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.1s, transform 0.1s;
+}
+.m-go-btn:active { opacity: 0.8; transform: scale(0.97); }
 
-/* Qty stepper */
-.mp-qty-row { display: flex; align-items: center; gap: 0.5rem; }
-.mp-qty-btn {
-  width: 48px; height: 48px;
-  border-radius: 10px !important; border: 1.5px solid var(--border) !important;
-  background: var(--bg-nav-hover) !important; color: var(--text-primary) !important;
-  font-size: 1.5rem; cursor: pointer;
+/* Result card */
+.m-result { margin-top: 0.875rem; }
+
+.m-result-card {
+  background: var(--m-surface);
+  border: 1.5px solid var(--m-accent);
+  border-radius: var(--m-radius);
+  overflow: hidden;
+  animation: resultSlide 0.22s ease;
+}
+@keyframes resultSlide { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+.m-result-photo { width:100%; max-height:180px; object-fit:cover; display:block; }
+
+.m-result-body { padding: 0.875rem; }
+.m-result-name {
+  font-family: var(--m-display);
+  font-weight: 900; font-size: 1.7rem;
+  letter-spacing: 0.02em; line-height: 1.1;
+  margin-bottom: 0.5rem;
+}
+
+.m-result-location {
+  display: flex; align-items: center; gap: 0.5rem;
+  background: rgba(99,102,241,0.08);
+  border: 1.5px solid rgba(99,102,241,0.25);
+  border-radius: 8px;
+  padding: 0.55rem 0.875rem;
+  margin-bottom: 0.875rem;
+}
+.m-result-location .rl-icon { font-size: 1.15rem; flex-shrink:0; }
+.m-result-location .rl-label {
+  font-family: var(--m-mono);
+  font-size: 0.62rem; color: var(--m-muted);
+  text-transform: uppercase; letter-spacing: 0.1em;
+}
+.m-result-location .rl-val {
+  font-family: var(--m-display);
+  font-weight: 800; font-size: 1.1rem;
+  color: var(--m-accent);
+  letter-spacing: 0.03em;
+}
+
+.m-result-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 0.4rem; margin-bottom: 0.875rem;
+}
+.m-result-field {
+  background: var(--m-surface2);
+  border: 1px solid var(--m-border);
+  border-radius: 8px; padding: 0.45rem 0.7rem;
+}
+.m-rf-label {
+  font-family: var(--m-mono); font-size: 0.6rem;
+  color: var(--m-muted); text-transform: uppercase;
+  letter-spacing: 0.1em; margin-bottom: 0.15rem;
+}
+.m-rf-val {
+  font-family: var(--m-display); font-weight: 700;
+  font-size: 0.95rem; color: var(--m-text);
+}
+.m-rf-val.accent { color: var(--m-accent); font-size: 1.2rem; }
+.m-rf-val.cyan   { color: var(--m-cyan); }
+.m-result-field.full { grid-column: 1 / -1; }
+.m-result-field.full .m-rf-val { font-family: var(--m-mono); font-size: 0.82rem; word-break: break-all; }
+
+.m-result-notes {
+  font-size: 0.82rem; color: var(--m-muted);
+  background: var(--m-surface2);
+  border: 1px solid var(--m-border);
+  border-radius: 8px; padding: 0.55rem 0.75rem;
+  margin-bottom: 0.875rem; font-style: italic; line-height: 1.5;
+}
+
+.m-result-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; }
+.m-result-actions a {
+  height: 48px;
+  border-radius: 8px;
+  font-family: var(--m-display); font-weight: 800;
+  font-size: 0.9rem; letter-spacing: 0.06em; text-transform: uppercase;
   display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0; -webkit-tap-highlight-color: transparent;
-  box-shadow: none !important; transition: background 0.15s;
-}
-.mp-qty-btn:active { background: var(--primary) !important; color: #fff !important; }
-.mp-qty-disp {
-  flex: 1; text-align: center; font-family: monospace;
-  font-size: 1.5rem; font-weight: 600; color: var(--text-primary);
-  background: var(--bg-nav-hover); border: 1.5px solid var(--border);
-  border-radius: 10px; padding: 0.5rem;
-}
-
-/* Warn */
-.mp-warn {
-  display: none;
-  background: var(--bg-nav-active);
-  border: 1px solid var(--border); border-left: 4px solid var(--warning);
-  border-radius: 8px; padding: 0.7rem 1rem; margin-bottom: 1rem;
-  font-size: 0.85rem; color: var(--warning);
-}
-.mp-warn.mp-on { display: block; }
-
-/* Equip preview */
-.mp-eprev {
-  display: none; background: var(--bg-nav-hover);
-  border: 1px solid var(--border); border-radius: 10px;
-  padding: 0.75rem; margin-bottom: 1rem;
-  align-items: center; gap: 0.75rem;
-}
-.mp-eprev.mp-on { display: flex; }
-.mp-eprev-img {
-  width: 46px; height: 46px; border-radius: 8px;
-  background: var(--bg-card); border: 1px solid var(--border);
-  flex-shrink: 0; display: flex; align-items: center;
-  justify-content: center; font-size: 1.2rem; overflow: hidden;
-}
-.mp-eprev-img img { width: 100%; height: 100%; object-fit: cover; }
-.mp-eprev-name { font-weight: 600; font-size: 0.95rem; color: var(--text-primary); }
-.mp-eprev-loc  { font-size: 0.78rem; color: var(--text-secondary); }
-
-/* Submit */
-.mp-submit {
-  width: 100%; padding: 0.95rem;
-  font-weight: 800; font-size: 1.1rem; letter-spacing: 0.06em; text-transform: uppercase;
-  background: var(--primary) !important; color: #fff !important;
-  border: none !important; border-radius: 12px !important;
-  cursor: pointer; margin-top: 0.5rem;
+  text-decoration: none;
   -webkit-tap-highlight-color: transparent;
-  transition: opacity 0.15s, transform 0.1s;
-  box-shadow: none !important; font-family: inherit;
+  transition: opacity 0.1s;
 }
-.mp-submit:active { transform: scale(0.97); opacity: 0.85; }
+.m-result-actions a:active { opacity: 0.8; }
+.m-ra-detail   { background: var(--m-cyan);   color: #000; }
+.m-ra-again    { background: var(--m-surface2); color: var(--m-text); border: 1.5px solid var(--m-border); }
 
-/* Action btns */
-.mp-btn {
-  font-weight: 700; font-size: 0.88rem; letter-spacing: 0.05em; text-transform: uppercase;
-  border: none !important; border-radius: 8px !important;
-  padding: 0.55rem 1rem !important; cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  display: inline-flex; align-items: center; gap: 0.4rem;
-  transition: opacity 0.15s; box-shadow: none !important;
+/* Not found */
+.m-not-found {
+  background: var(--m-surface);
+  border: 1.5px solid var(--m-red);
+  border-radius: var(--m-radius);
+  padding: 1.5rem; text-align: center;
+  animation: resultSlide 0.2s ease; margin-top: 0.875rem;
 }
-.mp-btn-danger { background: var(--danger) !important; color: #fff !important; }
-.mp-btn-ghost  { background: var(--bg-card) !important; color: var(--text-secondary) !important; border: 1.5px solid var(--border) !important; }
+.m-not-found .nf-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
+.m-not-found h3 {
+  font-family: var(--m-display); font-weight: 900;
+  font-size: 1.4rem; color: var(--m-red); letter-spacing: 0.05em;
+}
+.m-not-found p { font-family: var(--m-mono); font-size: 0.78rem; color: var(--m-muted); margin-top: 0.3rem; }
 
-/* Confirm sheet */
-.mp-ctitle { font-weight: 900; font-size: 1.4rem; color: var(--danger); margin-bottom: 0.75rem; text-transform: uppercase; }
-.mp-cbody  { color: var(--text-secondary); font-size: 0.95rem; margin-bottom: 1.5rem; line-height: 1.5; }
+/* Loading */
+.m-loading {
+  text-align: center; padding: 2rem;
+  color: var(--m-muted); font-family: var(--m-mono);
+  font-size: 0.82rem; letter-spacing: 0.08em; text-transform: uppercase;
+  margin-top: 0.875rem;
+}
+.m-spin { display: inline-block; font-size: 1.6rem; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* Toast */
-#mp-toasts {
-  position: fixed; top: 80px; left: 50%;
-  transform: translateX(-50%);
-  z-index: 2000;
-  display: flex; flex-direction: column; gap: 0.5rem;
-  pointer-events: none; align-items: center;
+.m-toast {
+  position: fixed; top: 68px; left: 50%;
+  transform: translateX(-50%); z-index: 600;
+  background: var(--m-surface2);
+  border: 1.5px solid var(--m-border);
+  border-radius: 999px;
+  padding: 0.55rem 1.1rem;
+  font-family: var(--m-mono); font-size: 0.8rem;
+  color: var(--m-text);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  pointer-events: none; white-space: nowrap;
+  animation: toastIn 0.2s ease;
 }
-.mp-toast {
-  font-weight: 700; font-size: 0.9rem;
-  padding: 0.55rem 1.25rem; border-radius: 30px;
-  white-space: nowrap;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-  animation: mpTIn 0.2s ease, mpTOut 0.25s ease 1.7s forwards;
-}
-.mp-toast.ok  { background: var(--success); color: #fff; }
-.mp-toast.err { background: var(--danger);  color: #fff; }
-@keyframes mpTIn  { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
-@keyframes mpTOut { from { opacity:1; } to { opacity:0; } }
-
-/* Image viewer */
-#mp-imgview {
-  display: none !important;
-  position: fixed; inset: 0; z-index: 3000;
-  background: rgba(0,0,0,0.9);
-  align-items: center; justify-content: center; flex-direction: column; gap: 0.75rem;
-}
-#mp-imgview.mp-open { display: flex !important; }
-#mp-imgview img { max-width:90vw; max-height:80vh; border-radius:12px; object-fit:contain; }
-#mp-imgview-cap { font-weight: 700; font-size: 1rem; color: #fff; }
-
-@media (min-width: 769px) {
-  #mp-imgview { left: var(--sidebar-width); }
-}
-
-/* Event sheet links */
-.mp-evlink {
-  display: block; padding: 0.85rem 1rem;
-  background: var(--bg-nav-hover) !important; color: var(--text-primary) !important;
-  border-radius: 10px; font-weight: 700; font-size: 0.95rem;
-  text-decoration: none !important; border: 1.5px solid var(--border);
-  margin-bottom: 0.5rem; transition: background 0.15s;
-}
-.mp-evlink.mp-cur { background: var(--primary) !important; color: #fff !important; border-color: var(--primary) !important; }
+@keyframes toastIn { from { opacity:0; transform: translateX(-50%) translateY(-8px); } to { opacity:1; transform: translateX(-50%) translateY(0); } }
+.m-toast.ok  { border-color: rgba(0,230,118,0.5); color: var(--m-green); }
+.m-toast.err { border-color: rgba(255,68,68,0.5);  color: var(--m-red); }
 </style>
 
-<div id="mpl">
+<div class="m-page">
 
-  <!-- Topbar -->
-  <div class="mp-top">
-    <span class="mp-top-title">
-      {% if current_event %}📋 {{ current_event.title|truncate(22,True,'…') }}{% else %}📋 PICK LIST{% endif %}
-    </span>
-    <span class="mp-count-badge"><b id="mp-checked">{{ items|selectattr('is_checked')|list|length }}</b> / {{ items|length }}</span>
-    <button class="mp-gear" onclick="mpOpenSheet('mp-evsheet')">
-      <i class="fas fa-calendar-alt"></i> Event
+  <!-- Header -->
+  <header class="m-header">
+    <div>
+      <div class="m-header-title">📦 Equipment</div>
+      <div class="m-header-sub">Mobile Quickfind</div>
+    </div>
+    <div class="m-item-count"><b id="totalBadge">{{ equipment|length }}</b> items</div>
+  </header>
+
+  <!-- Tabs -->
+  <div class="m-tabs">
+    <button class="m-tab active" id="tabSearch" onclick="switchTab('search')">
+      <span class="m-tab-icon">🔎</span> Search
+    </button>
+    <button class="m-tab" id="tabScan" onclick="switchTab('scan')">
+      <span class="m-tab-icon">📱</span> Scan
     </button>
   </div>
 
-  <!-- Progress -->
-  <div class="mp-prog-wrap">
-    <div class="mp-prog-fill" id="mp-prog"
-         style="width:{% if items %}{{ (items|selectattr('is_checked')|list|length / items|length * 100)|int }}{% else %}0{% endif %}%">
+  <!-- ── SEARCH PANEL ── -->
+  <div class="m-panel active" id="panelSearch">
+
+    <div class="m-search-bar">
+      <input type="search" id="searchInput" class="m-search-input"
+             placeholder="Name, barcode, location…"
+             autocomplete="off" autocorrect="off" spellcheck="false"
+             inputmode="search">
+      <button class="m-clear-btn" onclick="clearSearch()">✕</button>
     </div>
-  </div>
 
-  <!-- Event banner -->
-  {% if current_event %}
-  <div class="mp-event-banner">
-    <div class="mp-event-title">🎭 {{ current_event.title }}</div>
-    <div class="mp-event-meta">
-      <span>📅 {{ current_event.event_date.strftime('%d %b, %H:%M') }}</span>
-      {% if current_event.location %}<span>📍 {{ current_event.location }}</span>{% endif %}
+    <div class="m-chips" id="chipRow">
+      <button class="m-chip active" data-cat="all" onclick="setChip(this,'all')">All</button>
     </div>
-  </div>
-  {% endif %}
 
-  <!-- Filter tabs -->
-  <div class="mp-ftabs">
-    <button class="mp-ftab mp-on" data-f="all"     onclick="mpFilter('all')">All</button>
-    <button class="mp-ftab"       data-f="pending" onclick="mpFilter('pending')">Pending</button>
-    <button class="mp-ftab"       data-f="done"    onclick="mpFilter('done')">Done</button>
-  </div>
+    <div class="m-meta" id="metaStrip"></div>
 
-  <p class="mp-hint">Tap ✓ to gather · Long-press to bulk-select</p>
+    <div class="m-list" id="itemList">
+      <div class="m-shimmer"></div>
+      <div class="m-shimmer"></div>
+      <div class="m-shimmer"></div>
+      <div class="m-shimmer"></div>
+    </div>
 
-  <!-- Items -->
-  <div class="mp-list" id="mp-list">
-    {% if items %}
-      {% for item in items %}
-      <div class="mp-item {% if item.is_checked %}mp-done{% endif %}"
-           id="mp-item-{{ item.id }}"
-           data-id="{{ item.id }}"
-           data-ck="{{ 'true' if item.is_checked else 'false' }}">
+    <div class="m-empty" id="searchEmpty">
+      <div class="m-empty-icon">🔍</div>
+      <h3>Nothing found</h3>
+      <p>Try a different term, or switch to Scan.</p>
+    </div>
 
-        <!-- Bulk overlay -->
-        <div class="mp-bover" id="mp-bo-{{ item.id }}" onclick="mpBToggle({{ item.id }})">
-          <div class="mp-bdot">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M2 6l2.5 2.5 5.5-5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
+  </div><!-- /panelSearch -->
+
+  <!-- ── SCAN PANEL ── -->
+  <div class="m-panel" id="panelScan">
+    <div class="m-scan-panel">
+
+      <!-- Viewport wrapper: reticle is a sibling of #scanViewport so the
+           library can't destroy it when it replaces scanViewport's innerHTML -->
+      <div class="m-viewport-wrap">
+        <div class="m-viewport" id="scanViewport">
+          <!-- Camera idle placeholder — sits inside viewport before scanning starts -->
+          <div class="m-cam-idle" id="camIdle">
+            <div class="idle-icon">📷</div>
+            <p>Tap Start Camera<br>to scan a barcode</p>
           </div>
         </div>
-
-        <!-- Check zone -->
-        <button class="mp-chk" onclick="mpToggle({{ item.id }})" aria-label="Toggle gathered">
-          <div class="mp-ring">
-            <svg class="mp-tick" width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M2.5 7l3 3 6-6" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </div>
-        </button>
-
-        <!-- Thumb -->
-        {% if item.equipment and item.equipment.picture %}
-        <div class="mp-thumb">
-          <img src="{{ url_for('equipment.serve_equipment_picture', id=item.equipment.id) }}"
-               alt="{{ item.equipment.name }}"
-               onclick="mpViewPic('{{ url_for('equipment.serve_equipment_picture', id=item.equipment.id) }}','{{ item.equipment.name|e }}')">
-        </div>
-        {% elif item.equipment %}
-        <div class="mp-thumb"><div class="mp-thumb-ph">📦</div></div>
-        {% endif %}
-
-        <!-- Body -->
-        <div class="mp-body">
-          <div class="mp-name">
-            {% if item.equipment %}
-            <a href="{{ url_for('equipment.equipment_detail', id=item.equipment.id) }}"
-               style="color:inherit;text-decoration:none;"
-               onclick="event.stopPropagation()">{{ item.item_name }}</a>
-            {% else %}
-            {{ item.item_name }}
-            {% endif %}
-          </div>
-          <div class="mp-chips">
-            <span class="mp-chip mp-chip-qty">×{{ item.quantity }}</span>
-            {% if item.equipment and item.equipment.location %}
-            <span class="mp-chip mp-chip-loc">{{ item.equipment.location }}</span>
-            {% endif %}
-            {% if item.equipment and item.equipment.category %}
-            <span class="mp-chip mp-chip-cat">{{ item.equipment.category }}</span>
-            {% endif %}
-            {% if item.equipment %}
-            <a href="{{ url_for('equipment.equipment_detail', id=item.equipment.id) }}"
-               class="mp-chip"
-               style="color:var(--primary);text-decoration:none;cursor:pointer;"
-               onclick="event.stopPropagation()">
-              <i class="fas fa-external-link-alt" style="font-size:0.65rem;"></i> View
-            </a>
-            {% endif %}
-          </div>
-          {% if item.equipment and item.equipment.barcode %}
-          <div class="mp-note">🔖 {{ item.equipment.barcode }}</div>
-          {% endif %}
-          {% if item.equipment and item.equipment.notes %}
-          <div class="mp-note">📝 {{ item.equipment.notes|truncate(55,True,'…') }}</div>
-          {% endif %}
-        </div>
-
-        <!-- Delete -->
-        <button class="mp-del" onclick="mpDelOne({{ item.id }})" aria-label="Delete">
-          <i class="fas fa-times"></i>
-        </button>
-      </div>
-      {% endfor %}
-    {% else %}
-    <div class="mp-empty">
-      <div class="mp-empty-icon">📋</div>
-      <h3>List is empty</h3>
-      <p>Tap + to add your first item</p>
-    </div>
-    {% endif %}
-  </div>
-
-</div><!-- #mpl -->
-
-<!-- FAB -->
-<button id="mp-fab" onclick="mpOpenSheet('mp-addsheet')" aria-label="Add item">
-  <i class="fas fa-plus"></i>
-</button>
-
-<!-- Bulk toolbar -->
-<div id="mp-bulk-bar">
-  <span class="mp-binfo" id="mp-binfo">0 selected</span>
-  <div style="display:flex;gap:0.5rem;">
-    <button class="mp-btn mp-btn-ghost"  onclick="mpBCancel()">Cancel</button>
-    <button class="mp-btn mp-btn-danger" onclick="mpBDelConfirm()"><i class="fas fa-trash"></i> Delete</button>
-  </div>
-</div>
-
-<!-- Toasts -->
-<div id="mp-toasts"></div>
-
-<!-- ═══ ADD SHEET ═══ -->
-<div class="mp-overlay" id="mp-addsheet" onclick="mpOvClose(event,'mp-addsheet')">
-  <div class="mp-sheet">
-    <div class="mp-handle"></div>
-    <div class="mp-sheet-title">+ Add Item</div>
-
-    <div class="mp-mtabs">
-      <button class="mp-mtab mp-on" id="mpt-equipment" onclick="mpMode('equipment')">Equipment</button>
-      <button class="mp-mtab"       id="mpt-hired"     onclick="mpMode('hired')">Hired</button>
-      <button class="mp-mtab"       id="mpt-manual"    onclick="mpMode('manual')">Manual</button>
-    </div>
-
-    <!-- Equipment -->
-    <div id="mpf-equipment">
-      <div class="mp-eprev" id="mp-eprev">
-        <div class="mp-eprev-img" id="mp-eprev-img">📦</div>
-        <div>
-          <div class="mp-eprev-name" id="mp-eprev-name"></div>
-          <div class="mp-eprev-loc"  id="mp-eprev-loc"></div>
+        <!-- Reticle overlay — absolute over the viewport wrapper, never inside scanViewport -->
+        <div class="m-reticle-layer" id="reticleLayer">
+          <div class="m-reticle"><div class="m-scan-line"></div></div>
         </div>
       </div>
-      <div class="mp-warn" id="mp-ewarn"></div>
-      <div class="mp-field">
-        <label>Equipment *</label>
-        <select id="mp-eqsel" onchange="mpEqChange()">
-          <option value="">— choose —</option>
-          {% for eq in all_equipment %}
-          <option value="{{ eq.id }}"
-                  data-name="{{ eq.name|e }}"
-                  data-loc="{{ eq.location or '' }}"
-                  data-pic="{{ url_for('equipment.serve_equipment_picture', id=eq.id) if eq.picture else '' }}"
-                  data-qty="{{ eq.quantity_owned or 1 }}">
-            {{ eq.name }} – {{ eq.location or '?' }} ({{ eq.quantity_owned or 1 }})
-          </option>
-          {% endfor %}
-        </select>
+
+      <!-- Status -->
+      <div class="m-status-bar">
+        <div class="m-status-dot" id="camDot"></div>
+        <span id="camStatus">Camera off — tap Start to begin</span>
       </div>
-      <div class="mp-field">
-        <label>Quantity</label>
-        <div class="mp-qty-row">
-          <button type="button" class="mp-qty-btn" onclick="mpStep('mp-eqqty',-1)">−</button>
-          <div class="mp-qty-disp" id="mp-eqqty-d">1</div>
-          <input type="hidden" id="mp-eqqty" value="1">
-          <button type="button" class="mp-qty-btn" onclick="mpStep('mp-eqqty',1)">+</button>
-        </div>
+
+      <!-- Camera buttons — always in DOM, outside scanViewport -->
+      <div class="m-cam-btns">
+        <button class="m-btn m-btn-primary" id="startBtn" onclick="startScan()">▶ Start Camera</button>
+        <button class="m-btn m-btn-red"     id="stopBtn"  onclick="stopScan()" style="display:none;">■ Stop</button>
+        <button class="m-btn m-btn-ghost"   id="againBtn" onclick="scanAgain()" style="display:none;">🔄 Scan Again</button>
       </div>
-      <div class="mp-field">
-        <label>Event (optional)</label>
-        <select id="mp-eqev">
-          <option value="">General</option>
-          {% for event in events %}
-          <option value="{{ event.id }}" {% if current_event and current_event.id == event.id %}selected{% endif %}>
-            {{ event.title }} – {{ event.event_date.strftime('%d %b') }}
-          </option>
-          {% endfor %}
-        </select>
+
+      <div class="m-divider">or type manually</div>
+
+      <div class="m-manual">
+        <input type="text" id="manualInput" class="m-manual-input"
+               placeholder="Enter barcode…"
+               autocomplete="off" spellcheck="false" inputmode="text">
+        <button class="m-go-btn" onclick="manualLookup()">🔍 Go</button>
       </div>
-      <button class="mp-submit" onclick="mpSubEquip()">Add Equipment</button>
+
+      <div id="scanResult"></div>
+
     </div>
+  </div><!-- /panelScan -->
 
-    <!-- Hired -->
-    <div id="mpf-hired" style="display:none;">
-      <div class="mp-field">
-        <label>Hired Equipment *</label>
-        <select id="mp-hsel">
-          <option value="">— choose —</option>
-          {% for h in hired_equipment %}
-          <option value="{{ h.id }}" data-name="{{ h.name|e }}">
-            {{ h.name }} – {{ h.supplier }} (↩ {{ h.return_date.strftime('%d %b') }})
-          </option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="mp-field">
-        <label>Quantity</label>
-        <div class="mp-qty-row">
-          <button type="button" class="mp-qty-btn" onclick="mpStep('mp-hqty',-1)">−</button>
-          <div class="mp-qty-disp" id="mp-hqty-d">1</div>
-          <input type="hidden" id="mp-hqty" value="1">
-          <button type="button" class="mp-qty-btn" onclick="mpStep('mp-hqty',1)">+</button>
-        </div>
-      </div>
-      <div class="mp-field">
-        <label>Event (optional)</label>
-        <select id="mp-hev">
-          <option value="">General</option>
-          {% for event in events %}
-          <option value="{{ event.id }}" {% if current_event and current_event.id == event.id %}selected{% endif %}>
-            {{ event.title }} – {{ event.event_date.strftime('%d %b') }}
-          </option>
-          {% endfor %}
-        </select>
-      </div>
-      <button class="mp-submit" onclick="mpSubHired()">Add Hired</button>
-    </div>
-
-    <!-- Manual -->
-    <div id="mpf-manual" style="display:none;">
-      <div class="mp-field">
-        <label>Item Name *</label>
-        <input type="text" id="mp-mname" placeholder="e.g. Extension lead 5m" autocomplete="off">
-      </div>
-      <div class="mp-field">
-        <label>Quantity</label>
-        <div class="mp-qty-row">
-          <button type="button" class="mp-qty-btn" onclick="mpStep('mp-mqty',-1)">−</button>
-          <div class="mp-qty-disp" id="mp-mqty-d">1</div>
-          <input type="hidden" id="mp-mqty" value="1">
-          <button type="button" class="mp-qty-btn" onclick="mpStep('mp-mqty',1)">+</button>
-        </div>
-      </div>
-      <div class="mp-field">
-        <label>Event (optional)</label>
-        <select id="mp-mev">
-          <option value="">General</option>
-          {% for event in events %}
-          <option value="{{ event.id }}" {% if current_event and current_event.id == event.id %}selected{% endif %}>
-            {{ event.title }} – {{ event.event_date.strftime('%d %b') }}
-          </option>
-          {% endfor %}
-        </select>
-      </div>
-      <button class="mp-submit" onclick="mpSubManual()">Add Item</button>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ EVENT SHEET ═══ -->
-<div class="mp-overlay" id="mp-evsheet" onclick="mpOvClose(event,'mp-evsheet')">
-  <div class="mp-sheet">
-    <div class="mp-handle"></div>
-    <div class="mp-sheet-title">Select Event</div>
-    <a href="/picklist" class="mp-evlink {% if not current_event %}mp-cur{% endif %}">📋 General Pick List</a>
-    {% for event in events %}
-    <a href="/picklist?event_id={{ event.id }}"
-       class="mp-evlink {% if current_event and current_event.id == event.id %}mp-cur{% endif %}">
-      🎭 {{ event.title }}
-      <span style="font-size:0.8rem;font-weight:400;opacity:0.7;"> — {{ event.event_date.strftime('%d %b %Y') }}</span>
-    </a>
-    {% endfor %}
-  </div>
-</div>
-
-<!-- ═══ CONFIRM DELETE ═══ -->
-<div class="mp-overlay" id="mp-csheet">
-  <div class="mp-sheet" style="padding-bottom:3rem;">
-    <div class="mp-handle"></div>
-    <div class="mp-ctitle">⚠ Delete?</div>
-    <div class="mp-cbody" id="mp-cbody">This cannot be undone.</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
-      <button class="mp-submit" style="margin-top:0;background:var(--danger)!important;" id="mp-cok">Delete</button>
-      <button class="mp-submit" style="margin-top:0;background:var(--bg-nav-hover)!important;color:var(--text-primary)!important;" onclick="mpClose('mp-csheet')">Cancel</button>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ IMAGE VIEWER ═══ -->
-<div id="mp-imgview" onclick="mpClose('mp-imgview')">
-  <img id="mp-imgview-src" src="" alt="">
-  <div id="mp-imgview-cap"></div>
-</div>
+</div><!-- .m-page -->
 
 {% endblock %}
 
 {% block scripts %}
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
-(function() {
+const ALL = {{ equipment_json | tojson }};
+let activeCategory = 'all';
+let searchQuery    = '';
+let isScanning     = false;
+let activeTab      = 'search';
+let html5QrCodeScanner = null;
 
-  const TOTAL  = {{ items|length }};
-  let checked  = {{ items|selectattr('is_checked')|list|length }};
-  let bulkMode = false;
-  const bulkSel = new Set();
-  let pendingIds = [];
-  let lpTimer    = null;
+/* ── Init ── */
+document.addEventListener('DOMContentLoaded', () => {
+  buildChips();
+  renderList();
+  document.getElementById('searchInput').addEventListener('input', e => {
+    searchQuery = e.target.value.trim().toLowerCase();
+    renderList();
+  });
+  document.getElementById('manualInput').addEventListener('keypress', e => {
+    if (e.key === 'Enter') manualLookup();
+  });
+});
 
-  /* ── Sheets ── */
-  window.mpOpenSheet = id => document.getElementById(id).classList.add('mp-open');
-  window.mpClose     = id => document.getElementById(id).classList.remove('mp-open');
-  window.mpOvClose   = (e, id) => { if (e.target === e.currentTarget) mpClose(id); };
+/* ── Tabs ── */
+function switchTab(tab) {
+  activeTab = tab;
+  document.getElementById('panelSearch').classList.toggle('active', tab === 'search');
+  document.getElementById('panelScan').classList.toggle('active',   tab === 'scan');
+  document.getElementById('tabSearch').classList.toggle('active',   tab === 'search');
+  document.getElementById('tabScan').classList.toggle('active',     tab === 'scan');
+  if (tab === 'search') {
+    stopScan();
+    document.getElementById('searchInput').focus();
+  }
+}
 
-  /* ── Toast ── */
-  window.mpToast = function(msg, type='ok') {
-    const w  = document.getElementById('mp-toasts');
-    const el = document.createElement('div');
-    el.className = `mp-toast ${type}`;
-    el.textContent = msg;
-    w.appendChild(el);
-    setTimeout(() => el.remove(), 2200);
-  };
+/* ── Chips ── */
+function buildChips() {
+  const cats = [...new Set(ALL.map(e => e.category).filter(Boolean).sort())];
+  const row  = document.getElementById('chipRow');
+  cats.forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'm-chip'; btn.dataset.cat = c; btn.textContent = c;
+    btn.onclick = () => setChip(btn, c);
+    row.appendChild(btn);
+  });
+}
+function setChip(el, cat) {
+  document.querySelectorAll('.m-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  activeCategory = cat;
+  renderList();
+}
 
-  /* ── Progress ── */
-  function mpUpdateProg() {
-    const pct = TOTAL ? Math.round(checked / TOTAL * 100) : 0;
-    document.getElementById('mp-prog').style.width = pct + '%';
-    document.getElementById('mp-checked').textContent = checked;
+/* ── Render list ── */
+function renderList() {
+  const filtered = ALL.filter(item => {
+    if (activeCategory !== 'all' && (item.category||'') !== activeCategory) return false;
+    if (!searchQuery) return true;
+    return [item.name, item.barcode, item.category, item.location, item.notes]
+      .join(' ').toLowerCase().includes(searchQuery);
+  });
+
+  const list  = document.getElementById('itemList');
+  const empty = document.getElementById('searchEmpty');
+  const meta  = document.getElementById('metaStrip');
+  list.innerHTML = '';
+
+  if (filtered.length === 0) {
+    empty.style.display = 'block';
+    meta.innerHTML = ''; return;
+  }
+  empty.style.display = 'none';
+  meta.innerHTML = filtered.length < ALL.length
+    ? `Showing <b>${filtered.length}</b> of ${ALL.length}`
+    : `All <b>${ALL.length}</b> items`;
+
+  filtered.forEach(item => {
+    const a = document.createElement('a');
+    a.className = 'm-card'; a.href = `/equipment/${item.id}`;
+    a.addEventListener('touchstart', () => a.classList.add('touched'));
+    a.addEventListener('touchend',   () => setTimeout(() => a.classList.remove('touched'), 180));
+
+    const thumb = item.picture_url
+      ? `<div class="m-thumb"><img src="${item.picture_url}" alt="${esc(item.name)}" loading="lazy"></div>`
+      : `<div class="m-thumb">📦</div>`;
+    const catTag  = item.category ? `<span class="m-tag m-tag-cat">${esc(item.category)}</span>` : '';
+    const locTag  = item.location ? `<span class="m-tag m-tag-loc">📍 ${esc(item.location)}</span>` : '';
+    const codeTag = item.barcode  ? `<span class="m-tag m-tag-code">${esc(item.barcode)}</span>` : '';
+
+    a.innerHTML = `
+      ${thumb}
+      <div class="m-card-body">
+        <div class="m-card-name">${highlight(esc(item.name), searchQuery)}</div>
+        <div class="m-card-tags">${catTag}${locTag}${codeTag}</div>
+      </div>
+      <div class="m-qty-wrap">
+        <div class="m-qty-num">${item.quantity_owned||1}</div>
+        <div class="m-qty-lbl">qty</div>
+      </div>`;
+    list.appendChild(a);
+  });
+}
+
+function clearSearch() {
+  document.getElementById('searchInput').value = '';
+  searchQuery = ''; renderList();
+  document.getElementById('searchInput').focus();
+}
+
+function highlight(text, q) {
+  if (!q) return text;
+  const idx = text.toLowerCase().indexOf(q.toLowerCase());
+  if (idx < 0) return text;
+  return text.slice(0,idx)
+    + `<mark style="background:rgba(245,166,35,0.3);color:var(--m-text);border-radius:2px;">`
+    + text.slice(idx, idx+q.length) + `</mark>`
+    + text.slice(idx+q.length);
+}
+
+/* ── Null-safe element helper ── */
+function setEl(id, prop, val) {
+  var el = document.getElementById(id);
+  if (el) el.style[prop] = val;
+}
+
+/* ── Camera ── */
+function startScan() {
+  if (isScanning) return;
+
+  setCamState('starting', 'Starting camera…');
+
+  // Hide idle placeholder, show reticle
+  setEl('camIdle',      'display', 'none');
+  setEl('reticleLayer', 'display', 'flex'); // use setEl not classList so it's null-safe
+  document.getElementById('reticleLayer').classList.add('show');
+  setEl('startBtn', 'display', 'none');
+  setEl('stopBtn',  'display', 'flex');
+  setEl('againBtn', 'display', 'none');
+
+  var viewport = document.getElementById('scanViewport');
+  if (viewport) viewport.classList.add('live');
+
+  document.getElementById('scanResult').innerHTML = '';
+
+  // Always create a fresh instance — the library may have cleared the div
+  try {
+    html5QrCodeScanner = new Html5Qrcode('scanViewport');
+  } catch(e) {
+    toast('Scanner init failed', 'err');
+    resetCam();
+    return;
   }
 
-  /* ── Filter ── */
-  window.mpFilter = function(f) {
-    document.querySelectorAll('.mp-ftab').forEach(t =>
-      t.classList.toggle('mp-on', t.dataset.f === f));
-    document.querySelectorAll('.mp-item').forEach(card => {
-      const ck   = card.dataset.ck === 'true';
-      let show   = true;
-      if (f === 'pending') show = !ck;
-      if (f === 'done')    show =  ck;
-      card.style.display = show ? 'flex' : 'none';
-    });
-  };
-
-  /* ── Toggle ── */
-  window.mpToggle = async function(id) {
-    try {
-      const data = await fetch(`/picklist/toggle/${id}`, { method: 'POST' }).then(r => r.json());
-      if (!data.success) throw new Error(data.error);
-      const card = document.getElementById(`mp-item-${id}`);
-      const now  = data.is_checked;
-      card.dataset.ck = now ? 'true' : 'false';
-      card.classList.toggle('mp-done', now);
-      if (now) checked++; else checked--;
-      mpUpdateProg();
-    } catch(e) { mpToast('Error: ' + e.message, 'err'); }
-  };
-
-  /* ── Delete one ── */
-  window.mpDelOne = function(id) {
-    pendingIds = [id];
-    document.getElementById('mp-cbody').textContent = 'Remove this item? Cannot be undone.';
-    document.getElementById('mp-cok').onclick = mpExecDelete;
-    mpOpenSheet('mp-csheet');
-  };
-
-  async function mpExecDelete() {
-    mpClose('mp-csheet');
-    const ids = [...pendingIds];
-    const results = await Promise.all(
-      ids.map(id => fetch(`/picklist/delete/${id}`, { method: 'DELETE' }).then(r => r.json()))
-    );
-    const ok = results.filter(r => r.success).length;
-    if (ok > 0) {
-      mpToast(`Removed ${ok} item${ok > 1 ? 's' : ''}`);
-      ids.forEach(id => {
-        const el = document.getElementById(`mp-item-${id}`);
-        if (el) { if (el.dataset.ck === 'true') checked--; el.remove(); }
-      });
-      mpUpdateProg();
-    } else { mpToast('Error deleting', 'err'); }
-    mpBCancel();
-    pendingIds = [];
-  }
-
-  /* ── Bulk ── */
-  function mpEnterBulk(firstId) {
-    if (bulkMode) return;
-    bulkMode = true;
-    document.querySelectorAll('.mp-bover').forEach(el => el.classList.add('mp-vis'));
-    document.getElementById('mp-bulk-bar').classList.add('mp-vis');
-    document.getElementById('mp-fab').style.display = 'none';
-    mpBToggle(firstId);
-    if (navigator.vibrate) navigator.vibrate(40);
-  }
-
-  window.mpBCancel = function() {
-    bulkMode = false; bulkSel.clear();
-    document.querySelectorAll('.mp-bover').forEach(el => el.classList.remove('mp-vis'));
-    document.querySelectorAll('.mp-item').forEach(el => el.classList.remove('mp-bsel'));
-    document.getElementById('mp-bulk-bar').classList.remove('mp-vis');
-    document.getElementById('mp-fab').style.display = '';
-  };
-
-  window.mpBToggle = function(id) {
-    if (bulkSel.has(id)) {
-      bulkSel.delete(id);
-      document.getElementById(`mp-item-${id}`).classList.remove('mp-bsel');
-    } else {
-      bulkSel.add(id);
-      document.getElementById(`mp-item-${id}`).classList.add('mp-bsel');
+  var config = {
+    fps: 15,
+    qrbox: function(w, h) {
+      var edge = Math.floor(Math.min(w, h) * 0.8);
+      return { width: edge, height: edge };
     }
-    document.getElementById('mp-binfo').textContent = `${bulkSel.size} selected`;
-    if (bulkSel.size === 0) mpBCancel();
   };
 
-  window.mpBDelConfirm = function() {
-    if (!bulkSel.size) return;
-    const n = bulkSel.size;
-    pendingIds = [...bulkSel];
-    document.getElementById('mp-cbody').textContent = `Delete ${n} item${n>1?'s':''}? Cannot be undone.`;
-    document.getElementById('mp-cok').onclick = mpExecDelete;
-    mpOpenSheet('mp-csheet');
-  };
+  html5QrCodeScanner.start(
+    { facingMode: 'environment' },
+    config,
+    function(decodedText) {
+      if (!decodedText) return;
+      // Mark as not scanning immediately so stopScan won't double-call .stop()
+      isScanning = false;
+      try { navigator.vibrate && navigator.vibrate([40,20,60]); } catch(e){}
+      // Stop camera, then show result — wait for stop() promise to resolve
+      try {
+        html5QrCodeScanner.stop().then(function() {
+          resetCam();
+          fetchBarcode(decodedText);
+        }).catch(function() {
+          resetCam();
+          fetchBarcode(decodedText);
+        });
+      } catch(e) {
+        resetCam();
+        fetchBarcode(decodedText);
+      }
+    }
+  ).then(function() {
+    isScanning = true;
+    setCamState('live', 'Scanning — point at QR or barcode');
+  }).catch(function() {
+    setCamState('off', 'Camera unavailable — use manual entry');
+    resetCam();
+    toast('Camera unavailable', 'err');
+  });
+}
 
-  /* Long press */
-  const list = document.getElementById('mp-list');
-  if (list) {
-    list.addEventListener('pointerdown', e => {
-      const card = e.target.closest('.mp-item');
-      if (!card || bulkMode) return;
-      const id = parseInt(card.dataset.id);
-      lpTimer = setTimeout(() => mpEnterBulk(id), 480);
-    });
-    ['pointerup','pointercancel','pointermove'].forEach(ev =>
-      list.addEventListener(ev, () => { clearTimeout(lpTimer); lpTimer = null; })
-    );
-  }
-
-  /* ── Mode switcher ── */
-  window.mpMode = function(mode) {
-    ['equipment','hired','manual'].forEach(m => {
-      document.getElementById(`mpt-${m}`).classList.toggle('mp-on', m === mode);
-      document.getElementById(`mpf-${m}`).style.display = m === mode ? 'block' : 'none';
-    });
-  };
-
-  /* ── Qty stepper ── */
-  window.mpStep = function(inputId, delta) {
-    const inp  = document.getElementById(inputId);
-    const disp = document.getElementById(inputId + '-d');
-    const v    = Math.max(1, parseInt(inp.value) + delta);
-    inp.value = v; disp.textContent = v;
-    if (inputId === 'mp-eqqty') mpCheckQty();
-  };
-
-  /* ── Equipment change ── */
-  window.mpEqChange = function() {
-    const sel  = document.getElementById('mp-eqsel');
-    const opt  = sel.options[sel.selectedIndex];
-    const prev = document.getElementById('mp-eprev');
-    if (!sel.value) { prev.classList.remove('mp-on'); return; }
-    document.getElementById('mp-eprev-name').textContent = opt.dataset.name;
-    document.getElementById('mp-eprev-loc').textContent  = opt.dataset.loc ? '📍 ' + opt.dataset.loc : '';
-    const img = document.getElementById('mp-eprev-img');
-    img.innerHTML = opt.dataset.pic ? `<img src="${opt.dataset.pic}">` : '📦';
-    prev.classList.add('mp-on');
-    mpCheckQty();
-  };
-
-  async function mpCheckQty() {
-    const id  = document.getElementById('mp-eqsel').value;
-    const qty = parseInt(document.getElementById('mp-eqqty').value) || 1;
-    const w   = document.getElementById('mp-ewarn');
-    if (!id) { w.classList.remove('mp-on'); return; }
+function stopScan() {
+  if (html5QrCodeScanner && isScanning) {
+    isScanning = false;
     try {
-      const r = await fetch(`/equipment/${id}/quantity-check`, {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ quantity: qty })
-      }).then(r => r.json());
-      if (r.warning) {
-        w.innerHTML = `⚠ Only <b>${r.available}</b> available (owned: ${r.owned}, allocated: ${r.allocated})`;
-        w.classList.add('mp-on');
-      } else { w.classList.remove('mp-on'); }
-    } catch {}
+      html5QrCodeScanner.stop().catch(function(){});
+    } catch(e) {}
   }
+  // Always reset UI regardless of scanner state
+  resetCam();
+}
 
-  /* ── Submit helpers ── */
-  window.mpSubEquip = async function() {
-    const id  = document.getElementById('mp-eqsel').value;
-    if (!id) { mpToast('Select equipment', 'err'); return; }
-    const qty = parseInt(document.getElementById('mp-eqqty').value);
-    const ev  = document.getElementById('mp-eqev').value || null;
-    const chk = await fetch(`/equipment/${id}/quantity-check`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ quantity: qty })
-    }).then(r => r.json()).catch(() => ({ warning: false }));
-    if (chk.warning && !confirm(`Only ${chk.available} available. Add anyway?`)) return;
-    mpDoAdd({ equipment_id: id, quantity: qty, event_id: ev });
-  };
+function scanAgain() {
+  document.getElementById('scanResult').innerHTML = '';
+  setEl('againBtn', 'display', 'none');
+  startScan();
+}
 
-  window.mpSubHired = function() {
-    const sel = document.getElementById('mp-hsel');
-    if (!sel.value) { mpToast('Select hired equipment', 'err'); return; }
-    const name = sel.options[sel.selectedIndex].dataset.name || sel.options[sel.selectedIndex].text;
-    const qty  = parseInt(document.getElementById('mp-hqty').value);
-    const ev   = document.getElementById('mp-hev').value || null;
-    mpDoAdd({ item_name: name, quantity: qty, event_id: ev, hired_equipment_id: sel.value });
-  };
+function resetCam() {
+  isScanning = false;
+  setEl('startBtn', 'display', 'flex');
+  setEl('stopBtn',  'display', 'none');
 
-  window.mpSubManual = function() {
-    const name = document.getElementById('mp-mname').value.trim();
-    if (!name) { mpToast('Enter an item name', 'err'); return; }
-    const qty = parseInt(document.getElementById('mp-mqty').value);
-    const ev  = document.getElementById('mp-mev').value || null;
-    mpDoAdd({ item_name: name, quantity: qty, event_id: ev });
-  };
+  var rl = document.getElementById('reticleLayer');
+  if (rl) { rl.classList.remove('show'); rl.style.display = 'none'; }
 
-  async function mpDoAdd(payload) {
-    try {
-      const data = await fetch('/picklist/add', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(payload)
-      }).then(r => r.json());
-      if (data.success) {
-        mpClose('mp-addsheet');
-        mpToast('Item added!');
-        setTimeout(() => location.reload(), 600);
-      } else { mpToast(data.error || 'Error', 'err'); }
-    } catch { mpToast('Network error', 'err'); }
+  var idle = document.getElementById('camIdle');
+  if (idle) idle.style.display = 'flex';
+
+  var vp = document.getElementById('scanViewport');
+  if (vp) vp.classList.remove('live', 'found');
+
+  setCamState('off', 'Camera off');
+}
+
+function setCamState(state, text) {
+  var dot = document.getElementById('camDot');
+  if (dot) {
+    dot.className = 'm-status-dot' + (state==='live' ? ' live' : state==='found' ? ' found' : '');
   }
+  var status = document.getElementById('camStatus');
+  if (status) status.textContent = text;
+}
 
-  /* ── Image viewer ── */
-  window.mpViewPic = function(url, name) {
-    document.getElementById('mp-imgview-src').src = url;
-    document.getElementById('mp-imgview-cap').textContent = name;
-    mpOpenSheet('mp-imgview');
-  };
+/* ── Barcode / QR lookup ── */
+function equipmentIdFromScanInput(code) {
+  var s = (code || '').trim();
+  var m = s.match(/\/equipment\/(\d+)(?:\/view)?/);
+  return m ? parseInt(m[1], 10) : null;
+}
 
-})();
+function manualLookup() {
+  var v = document.getElementById('manualInput').value.trim();
+  if (!v) { toast('Enter a barcode or paste QR URL', 'err'); return; }
+  stopScan();
+  fetchBarcode(v);
+}
+
+function fetchBarcode(code) {
+  document.getElementById('scanResult').innerHTML =
+    `<div class="m-loading"><div class="m-spin">⚙️</div><br>Looking up…</div>`;
+  var equipmentId = equipmentIdFromScanInput(code);
+  var url = equipmentId != null
+    ? `/equipment/${equipmentId}/json`
+    : `/equipment/barcode/${encodeURIComponent(code)}`;
+  fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) { showNotFound(code); }
+      else             { showResult(data); }
+    })
+    .catch(function() {
+      document.getElementById('scanResult').innerHTML = '';
+      toast('Network error', 'err');
+    });
+}
+
+function showNotFound(code) {
+  document.getElementById('scanResult').innerHTML = `
+    <div class="m-not-found">
+      <div class="nf-icon">❌</div>
+      <h3>NOT FOUND</h3>
+      <p>Barcode: ${esc(code)}</p>
+      <button class="m-btn m-btn-ghost m-btn-full" onclick="scanAgain()" style="margin-top:0.875rem;">
+        🔄 Try Again
+      </button>
+    </div>`;
+  toast('No item matched that barcode', 'err');
+}
+
+function showResult(item) {
+  var photo = item.picture_url
+    ? `<img src="${item.picture_url}" class="m-result-photo" alt="${esc(item.name)}">` : '';
+  var locHtml = item.location
+    ? `<div class="m-result-location">
+        <span class="rl-icon">📍</span>
+        <div>
+          <div class="rl-label">Storage Location</div>
+          <div class="rl-val">${esc(item.location)}</div>
+        </div>
+      </div>`
+    : `<div class="m-result-location" style="opacity:0.35;">
+        <span class="rl-icon">📍</span>
+        <div><div class="rl-label">Location</div><div class="rl-val" style="color:var(--m-muted)">Not set</div></div>
+      </div>`;
+  var notes = item.notes
+    ? `<div class="m-result-notes">💬 ${esc(item.notes)}</div>` : '';
+
+  document.getElementById('scanResult').innerHTML = `
+    <div class="m-result-card">
+      ${photo}
+      <div class="m-result-body">
+        <div class="m-result-name">${esc(item.name)}</div>
+        ${locHtml}
+        <div class="m-result-grid">
+          <div class="m-result-field">
+            <div class="m-rf-label">Qty Owned</div>
+            <div class="m-rf-val accent">${item.quantity_owned||1}</div>
+          </div>
+          <div class="m-result-field">
+            <div class="m-rf-label">Category</div>
+            <div class="m-rf-val cyan">${esc(item.category||'—')}</div>
+          </div>
+          <div class="m-result-field full">
+            <div class="m-rf-label">Barcode</div>
+            <div class="m-rf-val">${esc(item.barcode)}</div>
+          </div>
+        </div>
+        ${notes}
+        <div class="m-result-actions">
+          <a href="/equipment/${item.id}" class="m-ra-detail">📄 Details</a>
+          <a href="javascript:void(0)" onclick="scanAgain()" class="m-ra-again">🔄 Again</a>
+        </div>
+      </div>
+    </div>`;
+
+  var vp = document.getElementById('scanViewport');
+  if (vp) vp.classList.add('found');
+  setEl('againBtn', 'display', 'flex');
+  setCamState('found', 'Found: ' + item.name);
+  toast('✓ ' + item.name, 'ok');
+}
+
+/* ── Toast ── */
+var _toastTimer;
+function toast(msg, type) {
+  type = type || '';
+  var ex = document.getElementById('mToast');
+  if (ex) ex.remove();
+  clearTimeout(_toastTimer);
+  var t = document.createElement('div');
+  t.id = 'mToast';
+  t.className = 'm-toast ' + type;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  _toastTimer = setTimeout(function() { var el = document.getElementById('mToast'); if(el) el.remove(); }, 2800);
+}
+
+function esc(s) {
+  var d = document.createElement('div');
+  d.appendChild(document.createTextNode(s||''));
+  return d.innerHTML;
+}
 </script>
 {% endblock %}
