@@ -5,19 +5,21 @@
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500;600&family=Share+Tech+Mono&display=swap');
 
-.main-content { padding: 0 !important; background: #0a0c0f !important; }
+.main-content { padding: 0 !important; }
 
 :root {
-  --m-bg:       #0a0c0f;
-  --m-surface:  #141820;
-  --m-surface2: #1c2230;
-  --m-border:   #2a3040;
-  --m-accent:   #f5a623;
-  --m-cyan:     #00d4ff;
-  --m-green:    #00e676;
-  --m-red:      #ff4444;
-  --m-text:     #e8ecf0;
-  --m-muted:    #6b7a8d;
+  /* Map mobile tokens to the base.html theme variables so light/dark
+     mode toggling works automatically. Accent colours stay vivid. */
+  --m-bg:       var(--bg-body);
+  --m-surface:  var(--bg-card);
+  --m-surface2: var(--bg-table-head);
+  --m-border:   var(--border);
+  --m-accent:   var(--primary);
+  --m-cyan:     #06b6d4;
+  --m-green:    #10b981;
+  --m-red:      #ef4444;
+  --m-text:     var(--text-primary);
+  --m-muted:    var(--text-secondary);
   --m-mono:     'Share Tech Mono', monospace;
   --m-display:  'Barlow Condensed', sans-serif;
   --m-body:     'Barlow', sans-serif;
@@ -266,9 +268,9 @@
   border: 1px solid;
   white-space: nowrap;
 }
-.m-tag-cat  { color: var(--m-cyan);   border-color: rgba(0,212,255,0.3);  background: rgba(0,212,255,0.07); }
-.m-tag-loc  { color: var(--m-accent); border-color: rgba(245,166,35,0.3); background: rgba(245,166,35,0.07); }
-.m-tag-code { color: var(--m-muted);  border-color: var(--m-border);      background: transparent; }
+.m-tag-cat  { color: var(--m-cyan);   border-color: rgba(6,182,212,0.3);   background: rgba(6,182,212,0.07); }
+.m-tag-loc  { color: var(--m-accent); border-color: rgba(99,102,241,0.3);  background: rgba(99,102,241,0.07); }
+.m-tag-code { color: var(--m-muted);  border-color: var(--m-border);       background: transparent; }
 
 .m-qty-wrap { text-align: right; flex-shrink: 0; }
 .m-qty-num {
@@ -318,6 +320,12 @@
   padding: 0.875rem;
 }
 
+/* Viewport wrapper — controls live outside scanViewport so the library can't destroy them */
+.m-viewport-wrap {
+  position: relative;
+  margin-bottom: 0;
+}
+
 .m-viewport {
   width: 100%;
   border-radius: var(--m-radius);
@@ -337,10 +345,11 @@
 
 .m-cam-idle {
   position: absolute; inset: 0;
-  background: #000;
+  background: var(--m-surface2);
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   gap: 0.6rem;
+  pointer-events: none;
 }
 .m-cam-idle .idle-icon { font-size: 3.5rem; }
 .m-cam-idle p {
@@ -354,10 +363,15 @@
   line-height: 1.6;
 }
 
+/* Reticle sits over the viewport via absolute positioning on the wrapper */
 .m-reticle-layer {
-  position: absolute; inset: 0;
-  display: none; align-items: center; justify-content: center;
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
   pointer-events: none;
+  z-index: 10;
 }
 .m-reticle-layer.show { display: flex; }
 .m-reticle {
@@ -499,8 +513,8 @@
 
 .m-result-location {
   display: flex; align-items: center; gap: 0.5rem;
-  background: rgba(245,166,35,0.1);
-  border: 1.5px solid rgba(245,166,35,0.35);
+  background: rgba(99,102,241,0.08);
+  border: 1.5px solid rgba(99,102,241,0.25);
   border-radius: 8px;
   padding: 0.55rem 0.875rem;
   margin-bottom: 0.875rem;
@@ -589,7 +603,6 @@
 .m-spin { display: inline-block; font-size: 1.6rem; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-
 /* Toast */
 .m-toast {
   position: fixed; top: 68px; left: 50%;
@@ -666,12 +679,17 @@
   <div class="m-panel" id="panelScan">
     <div class="m-scan-panel">
 
-      <!-- Viewport -->
-      <div class="m-viewport" id="scanViewport">
-        <div class="m-cam-idle" id="camIdle">
-          <div class="idle-icon">📷</div>
-          <p>Tap Start Camera<br>to scan a barcode</p>
+      <!-- Viewport wrapper: reticle is a sibling of #scanViewport so the
+           library can't destroy it when it replaces scanViewport's innerHTML -->
+      <div class="m-viewport-wrap">
+        <div class="m-viewport" id="scanViewport">
+          <!-- Camera idle placeholder — sits inside viewport before scanning starts -->
+          <div class="m-cam-idle" id="camIdle">
+            <div class="idle-icon">📷</div>
+            <p>Tap Start Camera<br>to scan a barcode</p>
+          </div>
         </div>
+        <!-- Reticle overlay — absolute over the viewport wrapper, never inside scanViewport -->
         <div class="m-reticle-layer" id="reticleLayer">
           <div class="m-reticle"><div class="m-scan-line"></div></div>
         </div>
@@ -683,7 +701,7 @@
         <span id="camStatus">Camera off — tap Start to begin</span>
       </div>
 
-      <!-- Camera buttons -->
+      <!-- Camera buttons — always in DOM, outside scanViewport -->
       <div class="m-cam-btns">
         <button class="m-btn m-btn-primary" id="startBtn" onclick="startScan()">▶ Start Camera</button>
         <button class="m-btn m-btn-red"     id="stopBtn"  onclick="stopScan()" style="display:none;">■ Stop</button>
@@ -716,6 +734,7 @@ let activeCategory = 'all';
 let searchQuery    = '';
 let isScanning     = false;
 let activeTab      = 'search';
+let html5QrCodeScanner = null;
 
 /* ── Init ── */
 document.addEventListener('DOMContentLoaded', () => {
@@ -827,77 +846,133 @@ function highlight(text, q) {
     + text.slice(idx+q.length);
 }
 
+/* ── Null-safe element helper ── */
+function setEl(id, prop, val) {
+  var el = document.getElementById(id);
+  if (el) el.style[prop] = val;
+}
+
 /* ── Camera ── */
-let html5QrCodeScanner = null;
 function startScan() {
   if (isScanning) return;
+
   setCamState('starting', 'Starting camera…');
-  document.getElementById('camIdle').style.display = 'none';
+
+  // Hide idle placeholder, show reticle
+  setEl('camIdle',      'display', 'none');
+  setEl('reticleLayer', 'display', 'flex'); // use setEl not classList so it's null-safe
   document.getElementById('reticleLayer').classList.add('show');
-  document.getElementById('startBtn').style.display = 'none';
-  document.getElementById('stopBtn').style.display  = 'flex';
-  document.getElementById('againBtn').style.display = 'none';
-  document.getElementById('scanViewport').classList.add('live');
+  setEl('startBtn', 'display', 'none');
+  setEl('stopBtn',  'display', 'flex');
+  setEl('againBtn', 'display', 'none');
+
+  var viewport = document.getElementById('scanViewport');
+  if (viewport) viewport.classList.add('live');
+
   document.getElementById('scanResult').innerHTML = '';
 
-  if (!html5QrCodeScanner) html5QrCodeScanner = new Html5Qrcode('scanViewport');
+  // Always create a fresh instance — the library may have cleared the div
+  try {
+    html5QrCodeScanner = new Html5Qrcode('scanViewport');
+  } catch(e) {
+    toast('Scanner init failed', 'err');
+    resetCam();
+    return;
+  }
+
   var config = {
     fps: 15,
-    qrbox: function(viewfinderWidth, viewfinderHeight) {
-      var minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-      var size = Math.floor(0.8 * minEdge);
-      return { width: size, height: size };
+    qrbox: function(w, h) {
+      var edge = Math.floor(Math.min(w, h) * 0.8);
+      return { width: edge, height: edge };
     }
   };
+
   html5QrCodeScanner.start(
     { facingMode: 'environment' },
     config,
-    (decodedText) => {
+    function(decodedText) {
       if (!decodedText) return;
+      // Mark as not scanning immediately so stopScan won't double-call .stop()
+      isScanning = false;
       try { navigator.vibrate && navigator.vibrate([40,20,60]); } catch(e){}
-      stopScan();
-      fetchBarcode(decodedText);
+      // Stop camera, then show result — wait for stop() promise to resolve
+      try {
+        html5QrCodeScanner.stop().then(function() {
+          resetCam();
+          fetchBarcode(decodedText);
+        }).catch(function() {
+          resetCam();
+          fetchBarcode(decodedText);
+        });
+      } catch(e) {
+        resetCam();
+        fetchBarcode(decodedText);
+      }
     }
-  ).then(() => { isScanning = true; setCamState('live', 'Scanning — point at QR or barcode'); })
-   .catch(() => { setCamState('off','Camera unavailable — use manual entry'); resetCam(); toast('Camera unavailable','err'); });
+  ).then(function() {
+    isScanning = true;
+    setCamState('live', 'Scanning — point at QR or barcode');
+  }).catch(function() {
+    setCamState('off', 'Camera unavailable — use manual entry');
+    resetCam();
+    toast('Camera unavailable', 'err');
+  });
 }
 
 function stopScan() {
-  if (isScanning && html5QrCodeScanner && html5QrCodeScanner.isScanning()) {
-    html5QrCodeScanner.stop().catch(() => {});
+  if (html5QrCodeScanner && isScanning) {
     isScanning = false;
+    try {
+      html5QrCodeScanner.stop().catch(function(){});
+    } catch(e) {}
   }
+  // Always reset UI regardless of scanner state
   resetCam();
 }
+
 function scanAgain() {
   document.getElementById('scanResult').innerHTML = '';
-  document.getElementById('againBtn').style.display = 'none';
+  setEl('againBtn', 'display', 'none');
   startScan();
 }
+
 function resetCam() {
-  document.getElementById('startBtn').style.display = 'flex';
-  document.getElementById('stopBtn').style.display  = 'none';
-  document.getElementById('reticleLayer').classList.remove('show');
-  document.getElementById('camIdle').style.display  = 'flex';
-  document.getElementById('scanViewport').classList.remove('live','found');
+  isScanning = false;
+  setEl('startBtn', 'display', 'flex');
+  setEl('stopBtn',  'display', 'none');
+
+  var rl = document.getElementById('reticleLayer');
+  if (rl) { rl.classList.remove('show'); rl.style.display = 'none'; }
+
+  var idle = document.getElementById('camIdle');
+  if (idle) idle.style.display = 'flex';
+
+  var vp = document.getElementById('scanViewport');
+  if (vp) vp.classList.remove('live', 'found');
+
   setCamState('off', 'Camera off');
 }
+
 function setCamState(state, text) {
-  const dot = document.getElementById('camDot');
-  dot.className = 'm-status-dot' + (state==='live' ? ' live' : state==='found' ? ' found' : '');
-  document.getElementById('camStatus').textContent = text;
+  var dot = document.getElementById('camDot');
+  if (dot) {
+    dot.className = 'm-status-dot' + (state==='live' ? ' live' : state==='found' ? ' found' : '');
+  }
+  var status = document.getElementById('camStatus');
+  if (status) status.textContent = text;
 }
 
 /* ── Barcode / QR lookup ── */
 function equipmentIdFromScanInput(code) {
-  const s = (code || '').trim();
-  const m = s.match(/\/equipment\/(\d+)(?:\/view)?/);
+  var s = (code || '').trim();
+  var m = s.match(/\/equipment\/(\d+)(?:\/view)?/);
   return m ? parseInt(m[1], 10) : null;
 }
 
 function manualLookup() {
-  const v = document.getElementById('manualInput').value.trim();
-  if (!v) { toast('Enter a barcode or paste QR URL','err'); return; }
+  var v = document.getElementById('manualInput').value.trim();
+  if (!v) { toast('Enter a barcode or paste QR URL', 'err'); return; }
   stopScan();
   fetchBarcode(v);
 }
@@ -905,15 +980,20 @@ function manualLookup() {
 function fetchBarcode(code) {
   document.getElementById('scanResult').innerHTML =
     `<div class="m-loading"><div class="m-spin">⚙️</div><br>Looking up…</div>`;
-  const equipmentId = equipmentIdFromScanInput(code);
-  const url = equipmentId != null ? `/equipment/${equipmentId}/json` : `/equipment/barcode/${encodeURIComponent(code)}`;
+  var equipmentId = equipmentIdFromScanInput(code);
+  var url = equipmentId != null
+    ? `/equipment/${equipmentId}/json`
+    : `/equipment/barcode/${encodeURIComponent(code)}`;
   fetch(url)
-    .then(r => r.json())
-    .then(data => {
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
       if (data.error) { showNotFound(code); }
       else             { showResult(data); }
     })
-    .catch(() => { document.getElementById('scanResult').innerHTML=''; toast('Network error','err'); });
+    .catch(function() {
+      document.getElementById('scanResult').innerHTML = '';
+      toast('Network error', 'err');
+    });
 }
 
 function showNotFound(code) {
@@ -930,9 +1010,9 @@ function showNotFound(code) {
 }
 
 function showResult(item) {
-  const photo = item.picture_url
-    ? `<img src="${item.picture_url}" class="m-result-photo" alt="${esc(item.name)}">`  : '';
-  const locHtml = item.location
+  var photo = item.picture_url
+    ? `<img src="${item.picture_url}" class="m-result-photo" alt="${esc(item.name)}">` : '';
+  var locHtml = item.location
     ? `<div class="m-result-location">
         <span class="rl-icon">📍</span>
         <div>
@@ -944,7 +1024,7 @@ function showResult(item) {
         <span class="rl-icon">📍</span>
         <div><div class="rl-label">Location</div><div class="rl-val" style="color:var(--m-muted)">Not set</div></div>
       </div>`;
-  const notes = item.notes
+  var notes = item.notes
     ? `<div class="m-result-notes">💬 ${esc(item.notes)}</div>` : '';
 
   document.getElementById('scanResult').innerHTML = `
@@ -975,27 +1055,30 @@ function showResult(item) {
       </div>
     </div>`;
 
-  document.getElementById('scanViewport').classList.add('found');
-  document.getElementById('againBtn').style.display = 'flex';
-  setCamState('found', `Found: ${item.name}`);
-  toast(`✓ ${item.name}`, 'ok');
+  var vp = document.getElementById('scanViewport');
+  if (vp) vp.classList.add('found');
+  setEl('againBtn', 'display', 'flex');
+  setCamState('found', 'Found: ' + item.name);
+  toast('✓ ' + item.name, 'ok');
 }
 
 /* ── Toast ── */
-let _toastTimer;
-function toast(msg, type='') {
-  const ex = document.getElementById('mToast');
+var _toastTimer;
+function toast(msg, type) {
+  type = type || '';
+  var ex = document.getElementById('mToast');
   if (ex) ex.remove();
   clearTimeout(_toastTimer);
-  const t = document.createElement('div');
-  t.id = 'mToast'; t.className = `m-toast ${type}`;
+  var t = document.createElement('div');
+  t.id = 'mToast';
+  t.className = 'm-toast ' + type;
   t.textContent = msg;
   document.body.appendChild(t);
-  _toastTimer = setTimeout(() => t?.remove(), 2800);
+  _toastTimer = setTimeout(function() { var el = document.getElementById('mToast'); if(el) el.remove(); }, 2800);
 }
 
 function esc(s) {
-  const d = document.createElement('div');
+  var d = document.createElement('div');
   d.appendChild(document.createTextNode(s||''));
   return d.innerHTML;
 }
