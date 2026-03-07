@@ -377,19 +377,22 @@ def barcode_page():
 @login_required
 @crew_required
 def generate_barcodes():
-    """Generate PDF of QR codes linking to public equipment view. Scannable in-app or externally."""
+    """Generate PDF of QR equipment tags (portrait or landscape) in custom mm sizes."""
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
     try:
         import tempfile
         import qrcode
         from reportlab.lib.pagesizes import A4
-        from reportlab.pdfgen import canvas
+        from reportlab.pdfgen import canvas as rl_canvas
         from reportlab.lib.units import mm
+        from reportlab.lib import colors
 
         data          = request.json
         equipment_ids = data.get('equipment_ids', [])
-        qr_size       = data.get('size', 'medium')
+        layout        = data.get('layout', 'portrait')
+        card_w_mm     = float(data.get('card_width_mm',  60 if layout == 'portrait' else 90))
+        card_h_mm     = float(data.get('card_height_mm', 80 if layout == 'portrait' else 55))
         base_url      = (data.get('base_url') or request.url_root or '').rstrip('/')
 
         if not equipment_ids:
@@ -399,73 +402,228 @@ def generate_barcodes():
         if not items:
             return jsonify({'error': 'No equipment found'}), 404
 
+        # Org name
+        from flask import current_app
+        try:
+            from utils import get_organization
+            org = get_organization() or {}
+        except Exception:
+            org = {}
+        org_name = current_app.config.get('ORG_NAME') or org.get('name', 'ShowWise')
+
+        card_w = card_w_mm * mm
+        card_h = card_h_mm * mm
+        gap    = 4 * mm
+        margin = 8 * mm
+        pw, ph = A4
+
+        cols = max(1, int((pw - 2 * margin + gap) / (card_w + gap)))
+        rows = max(1, int((ph - 2 * margin + gap) / (card_h + gap)))
+
         pdf_buffer = io.BytesIO()
-        c          = canvas.Canvas(pdf_buffer, pagesize=A4)
-        pw, ph     = A4
+        c = rl_canvas.Canvas(pdf_buffer, pagesize=A4)
 
-        sizes = {
-            'small':  (60*mm, 40*mm, 8),
-            'medium': (80*mm, 50*mm, 10),
-            'large':  (100*mm, 60*mm, 12),
-        }
-        qr_width, qr_height, font_size = sizes.get(qr_size, sizes['medium'])
+        BLACK    = colors.black
+        WHITE    = colors.white
+        MID_GREY = colors.HexColor('#666666')
 
-        margin    = 10*mm
-        x_spacing = qr_width + 5*mm
-        y_spacing = qr_height + 5*mm
-        cols      = int((pw - 2*margin) / x_spacing)
-        x_start   = margin
-        y_start   = ph - margin - qr_height
-        cx, cy, n = x_start, y_start, 0
+        def _truncate(text, max_chars):
+            return text[:max_chars] + ('…' if len(text) > max_chars else '')
+
+        def _centred_string(text, font, size, cx, y, width):
+            c.setFont(font, size)
+            tw = c.stringWidth(text, font, size)
+            c.drawString(cx + (width - tw) / 2, y, text)
+
+        # ── PORTRAIT ────────────────────────────────────────────────────────
+        #
+        #  ┌──────────────────────┐
+        #  │                      │
+        #  │     Item Name        │  ← bold, centred, top
+        #  │                      │
+        #  │  ┌────────────────┐  │
+        #  │  │                │  │
+        #  │  │    QR CODE     │  │  ← large, centred, rounded bg
+        #  │  │                │  │
+        #  │  └────────────────┘  │
+        #  │                      │
+        #  │      # ASSET-001     │  ← centred asset number
+        #  │                      │
+        #  ├──────────────────────┤  ← thin divider
+        #  │     Organisation     │  ← small grey footer
+        #  └──────────────────────┘
+        #
+        def _draw_portrait(cx, cy, item, qr_path):
+            pad      = 3   * mm
+            footer_h = 6.5 * mm
+            name_h   = 8   * mm
+            asset_h  = 6   * mm
+            border_r = 4   * mm
+
+            # Card outline — thick enough to feel like a tag
+            c.setStrokeColor(BLACK)
+            c.setLineWidth(1.2)
+            c.roundRect(cx, cy, card_w, card_h, border_r, stroke=1, fill=0)
+
+            # ── Item name (top, bold, centred) ──
+            name_str  = _truncate(item.name, 26)
+            name_size = max(8, min(13, int(card_w / 5.5)))
+            c.setFillColor(BLACK)
+            _centred_string(name_str, 'Helvetica-Bold', name_size,
+                            cx, cy + card_h - pad - name_h + 2 * mm, card_w)
+
+            # ── QR code (centred, with rounded light-grey background) ──
+            body_h   = card_h - name_h - footer_h - asset_h - 2 * pad
+            qr_size  = min(card_w - 6 * pad, body_h - 2 * pad)
+            qr_x     = cx + (card_w - qr_size) / 2
+            qr_y     = cy + footer_h + asset_h + (body_h - qr_size) / 2 + pad * 0.5
+
+            # Rounded grey background behind QR
+            bg_pad = 2 * mm
+            c.setFillColor(colors.HexColor('#eeeeee'))
+            c.roundRect(qr_x - bg_pad, qr_y - bg_pad,
+                        qr_size + 2 * bg_pad, qr_size + 2 * bg_pad,
+                        3 * mm, stroke=0, fill=1)
+
+            c.drawImage(qr_path, qr_x, qr_y,
+                        width=qr_size, height=qr_size,
+                        preserveAspectRatio=True, mask='auto')
+
+            # ── Asset number (centred, under QR) ──
+            asset_str  = _truncate(item.barcode or f'ID-{item.id}', 24)
+            asset_label = f'# {asset_str}'
+            asset_y     = cy + footer_h + pad * 0.8
+            c.setFillColor(MID_GREY)
+            _centred_string(asset_label, 'Helvetica', 7,
+                            cx, asset_y, card_w)
+
+            # ── Divider above footer ──
+            c.setStrokeColor(colors.HexColor('#cccccc'))
+            c.setLineWidth(0.5)
+            c.line(cx + pad, cy + footer_h - 0.8 * mm,
+                   cx + card_w - pad, cy + footer_h - 0.8 * mm)
+
+            # ── Organisation footer (centred, grey) ──
+            c.setFillColor(MID_GREY)
+            _centred_string(org_name, 'Helvetica', 6.5,
+                            cx, cy + 2 * mm, card_w)
+
+        # ── LANDSCAPE ───────────────────────────────────────────────────────
+        #
+        #  ┌──────────────────────────────────────┐
+        #  │        │   Item Name (bold)           │
+        #  │   QR   │                              │
+        #  │        │   # ASSET-001 (centred-ish)  │
+        #  ├────────┴─────────────────────────────┤
+        #  │              Organisation             │
+        #  └──────────────────────────────────────┘
+        #
+        def _draw_landscape(cx, cy, item, qr_path):
+            pad      = 2.5 * mm
+            footer_h = 5.5 * mm
+            border_r = 4   * mm
+
+            body_h = card_h - footer_h
+
+            # Card outline
+            c.setStrokeColor(BLACK)
+            c.setLineWidth(1.2)
+            c.roundRect(cx, cy, card_w, card_h, border_r, stroke=1, fill=0)
+
+            # ── QR with rounded grey background (left) ──
+            qr_size = body_h - 2 * pad
+            qr_x    = cx + pad
+            qr_y    = cy + footer_h + (body_h - qr_size) / 2
+
+            bg_pad = 1.5 * mm
+            c.setFillColor(colors.HexColor('#eeeeee'))
+            c.roundRect(qr_x - bg_pad, qr_y - bg_pad,
+                        qr_size + 2 * bg_pad, qr_size + 2 * bg_pad,
+                        2.5 * mm, stroke=0, fill=1)
+
+            c.drawImage(qr_path, qr_x, qr_y,
+                        width=qr_size, height=qr_size,
+                        preserveAspectRatio=True, mask='auto')
+
+            # ── Text block (right of QR) ──
+            text_x  = cx + qr_size + 3 * pad
+            text_w  = card_w - (qr_size + 4 * pad)
+            mid_y   = cy + footer_h + body_h / 2
+
+            # Item name — bold, centred in text column
+            name_str  = _truncate(item.name, 24)
+            name_size = max(8, min(12, int(text_w / 6)))
+            c.setFillColor(BLACK)
+            _centred_string(name_str, 'Helvetica-Bold', name_size,
+                            text_x, mid_y + 2 * mm, text_w)
+
+            # Asset number — centred in text column, below name
+            asset_str   = _truncate(item.barcode or f'ID-{item.id}', 20)
+            asset_label = f'# {asset_str}'
+            c.setFillColor(MID_GREY)
+            _centred_string(asset_label, 'Helvetica', 7,
+                            text_x, mid_y - 4 * mm, text_w)
+
+            # ── Divider above footer ──
+            c.setStrokeColor(colors.HexColor('#cccccc'))
+            c.setLineWidth(0.5)
+            c.line(cx + pad, cy + footer_h - 0.5 * mm,
+                   cx + card_w - pad, cy + footer_h - 0.5 * mm)
+
+            # ── Organisation footer ──
+            c.setFillColor(MID_GREY)
+            _centred_string(org_name, 'Helvetica', 6.5,
+                            cx, cy + 1.5 * mm, card_w)
+
+        # ── Paginate and render ───────────────────────────────────────────────
+        col_idx = 0
+        row_idx = 0
 
         for item in items:
             try:
                 url = f"{base_url}/equipment/{item.id}/view"
-                qr = qrcode.QRCode(version=1, box_size=10, border=2)
+                qr  = qrcode.QRCode(version=1, box_size=10, border=2,
+                                    error_correction=qrcode.constants.ERROR_CORRECT_M)
                 qr.add_data(url)
                 qr.make(fit=True)
                 img = qr.make_image(fill_color='black', back_color='white')
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
                     img.save(tmp.name)
-                    img_path = tmp.name
+                    qr_path = tmp.name
 
-                c.drawImage(img_path, cx, cy,
-                            width=qr_width - 5*mm, height=qr_height - 20*mm,
-                            preserveAspectRatio=True, mask='auto')
-                c.setFont('Helvetica-Bold', font_size)
-                tw = c.stringWidth(item.name[:30] + ('…' if len(item.name) > 30 else ''), 'Helvetica-Bold', font_size)
-                name_display = item.name[:30] + ('…' if len(item.name) > 30 else '')
-                c.drawString(cx + (qr_width - tw)/2, cy + qr_height - 15*mm, name_display)
-                c.setFont('Helvetica', font_size-2)
-                ref = (item.barcode or str(item.id)) or ''
-                code_display = (ref[:20] + ('…' if len(ref) > 20 else '')) or str(item.id)
-                nw = c.stringWidth(code_display, 'Helvetica', font_size-2)
-                c.drawString(cx + (qr_width - nw)/2, cy - 5*mm, code_display)
+                cx = margin + col_idx * (card_w + gap)
+                cy = ph - margin - card_h - row_idx * (card_h + gap)
+
+                if layout == 'landscape':
+                    _draw_landscape(cx, cy, item, qr_path)
+                else:
+                    _draw_portrait(cx, cy, item, qr_path)
+
                 try:
-                    os.remove(img_path)
+                    os.remove(qr_path)
                 except Exception:
                     pass
-            except Exception as exc:
-                print(f"QR error for {item.id}: {exc}")
 
-            n  += 1
-            cx += x_spacing
-            if n % cols == 0:
-                cx  = x_start
-                cy -= y_spacing
-                if cy < margin:
+            except Exception as exc:
+                print(f"QR tag error for item {item.id}: {exc}")
+
+            col_idx += 1
+            if col_idx >= cols:
+                col_idx = 0
+                row_idx += 1
+                if row_idx >= rows:
                     c.showPage()
-                    cy = y_start
+                    row_idx = 0
 
         c.save()
         pdf_buffer.seek(0)
-        filename = f"equipment_qrcodes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        filename = f"equipment_tags_{layout}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         return send_file(pdf_buffer, mimetype='application/pdf',
                          as_attachment=True, download_name=filename)
+
     except Exception as exc:
         import traceback; traceback.print_exc()
         return jsonify({'error': str(exc)}), 500
-
 
 @equipment_bp.route('/equipment/<int:id>/quantity-check', methods=['POST'])
 @login_required
