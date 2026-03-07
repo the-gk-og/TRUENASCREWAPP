@@ -58,7 +58,45 @@ def equipment_list():
 @crew_required
 def equipment_detail(id):
     eq = Equipment.query.get_or_404(id)
-    return render_template('crew/equipment_detail.html', item=eq)
+    from flask import current_app
+    from utils import get_organization
+    org = get_organization() or {}
+    org_name = current_app.config.get('ORG_NAME') or org.get('name', 'ShowWise')
+    return render_template('crew/equipment_detail.html', item=eq, organisation_name=org_name)
+
+
+# ---------------------------------------------------------------------------
+# Public equipment view (for QR scan from outside app; no login, no sidebar)
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/equipment/<int:id>/view')
+def equipment_view_public(id):
+    if current_user.is_authenticated:
+        return redirect(url_for('equipment.equipment_detail', id=id))
+    eq = Equipment.query.get_or_404(id)
+    from flask import current_app
+    from utils import get_organization
+    org = get_organization() or {}
+    org_name = current_app.config.get('ORG_NAME') or org.get('name', 'ShowWise')
+    login_url = url_for('auth.login', next=request.url)
+    return render_template(
+        'crew/equipment_detail_public.html',
+        item=eq,
+        organisation_name=org_name,
+        login_url=login_url,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Equipment by ID (JSON) for in-app scanner when QR contains equipment URL
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/equipment/<int:id>/json')
+@login_required
+@crew_required
+def equipment_by_id_json(id):
+    eq = Equipment.query.get_or_404(id)
+    return jsonify(eq.to_dict())
 
 
 # ---------------------------------------------------------------------------
@@ -178,7 +216,6 @@ def delete_equipment_picture(id):
 
 
 @equipment_bp.route('/equipment/<int:id>/picture/view')
-@login_required
 def serve_equipment_picture(id):
     eq = Equipment.query.get_or_404(id)
     if not eq.picture:
@@ -239,7 +276,6 @@ def delete_equipment_location_picture(id):
 
 
 @equipment_bp.route('/equipment/<int:id>/location-picture/view')
-@login_required
 def serve_equipment_location_picture(id):
     eq = Equipment.query.get_or_404(id)
     if not eq.location_picture:
@@ -337,22 +373,24 @@ def barcode_page():
 
 
 @equipment_bp.route('/equipment/generate-barcodes', methods=['POST'])
+@equipment_bp.route('/equipment/generate-qrcodes', methods=['POST'])
 @login_required
 @crew_required
 def generate_barcodes():
+    """Generate PDF of QR codes linking to public equipment view. Scannable in-app or externally."""
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
     try:
         import tempfile
+        import qrcode
         from reportlab.lib.pagesizes import A4
         from reportlab.pdfgen import canvas
         from reportlab.lib.units import mm
-        from barcode import Code128
-        from barcode.writer import ImageWriter
 
         data          = request.json
         equipment_ids = data.get('equipment_ids', [])
-        barcode_size  = data.get('size', 'medium')
+        qr_size       = data.get('size', 'medium')
+        base_url      = (data.get('base_url') or request.url_root or '').rstrip('/')
 
         if not equipment_ids:
             return jsonify({'error': 'No equipment selected'}), 400
@@ -370,41 +408,45 @@ def generate_barcodes():
             'medium': (80*mm, 50*mm, 10),
             'large':  (100*mm, 60*mm, 12),
         }
-        barcode_width, barcode_height, font_size = sizes.get(barcode_size, sizes['medium'])
+        qr_width, qr_height, font_size = sizes.get(qr_size, sizes['medium'])
 
         margin    = 10*mm
-        x_spacing = barcode_width + 5*mm
-        y_spacing = barcode_height + 5*mm
+        x_spacing = qr_width + 5*mm
+        y_spacing = qr_height + 5*mm
         cols      = int((pw - 2*margin) / x_spacing)
         x_start   = margin
-        y_start   = ph - margin - barcode_height
+        y_start   = ph - margin - qr_height
         cx, cy, n = x_start, y_start, 0
 
         for item in items:
-            if not item.barcode:
-                continue
             try:
-                code128 = Code128(item.barcode, writer=ImageWriter())
+                url = f"{base_url}/equipment/{item.id}/view"
+                qr = qrcode.QRCode(version=1, box_size=10, border=2)
+                qr.add_data(url)
+                qr.make(fit=True)
+                img = qr.make_image(fill_color='black', back_color='white')
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
-                    bc_path = tmp.name[:-4]
-                code128.save(bc_path)
-                img_path = bc_path + '.png'
+                    img.save(tmp.name)
+                    img_path = tmp.name
 
                 c.drawImage(img_path, cx, cy,
-                            width=barcode_width, height=barcode_height-20*mm,
+                            width=qr_width - 5*mm, height=qr_height - 20*mm,
                             preserveAspectRatio=True, mask='auto')
                 c.setFont('Helvetica-Bold', font_size)
-                tw = c.stringWidth(item.name, 'Helvetica-Bold', font_size)
-                c.drawString(cx + (barcode_width-tw)/2, cy + barcode_height - 15*mm, item.name)
+                tw = c.stringWidth(item.name[:30] + ('…' if len(item.name) > 30 else ''), 'Helvetica-Bold', font_size)
+                name_display = item.name[:30] + ('…' if len(item.name) > 30 else '')
+                c.drawString(cx + (qr_width - tw)/2, cy + qr_height - 15*mm, name_display)
                 c.setFont('Helvetica', font_size-2)
-                nw = c.stringWidth(item.barcode, 'Helvetica', font_size-2)
-                c.drawString(cx + (barcode_width-nw)/2, cy - 5*mm, item.barcode)
+                ref = (item.barcode or str(item.id)) or ''
+                code_display = (ref[:20] + ('…' if len(ref) > 20 else '')) or str(item.id)
+                nw = c.stringWidth(code_display, 'Helvetica', font_size-2)
+                c.drawString(cx + (qr_width - nw)/2, cy - 5*mm, code_display)
                 try:
                     os.remove(img_path)
                 except Exception:
                     pass
             except Exception as exc:
-                print(f"Barcode error for {item.id}: {exc}")
+                print(f"QR error for {item.id}: {exc}")
 
             n  += 1
             cx += x_spacing
@@ -417,7 +459,7 @@ def generate_barcodes():
 
         c.save()
         pdf_buffer.seek(0)
-        filename = f"equipment_barcodes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        filename = f"equipment_qrcodes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         return send_file(pdf_buffer, mimetype='application/pdf',
                          as_attachment=True, download_name=filename)
     except Exception as exc:

@@ -1,0 +1,105 @@
+{% extends "base_standalone.html" %}
+
+{% block title %}{{ item.name }} — {{ organisation_name or 'ShowWise' }}{% endblock %}
+
+{% block head %}
+<style>
+:root {
+    --bg-card: #fff;
+    --border: #e5e7eb;
+    --text-primary: #1f2937;
+    --text-secondary: #6b7280;
+    --text-muted: #9ca3af;
+    --bg-nav-active: #f3f4f6;
+}
+.detail-hero { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem; }
+@media (max-width: 700px) { .detail-hero { grid-template-columns: 1fr; } }
+.photo-card { background: var(--bg-card); border: 2px solid var(--border); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; }
+.photo-card-header { padding: 0.75rem 1rem; font-weight: 700; font-size: 0.9rem; text-transform: uppercase; border-bottom: 2px solid var(--border); }
+.photo-card-header.item-header { background: #e0e7ff; color: #3730a3; }
+.photo-card-header.loc-header { background: #fef3c7; color: #92400e; }
+.photo-card-body { flex: 1; min-height: 220px; padding: 1rem; display: flex; align-items: center; justify-content: center; }
+.photo-card-body img { max-width: 100%; max-height: 260px; border-radius: 10px; object-fit: contain; }
+.photo-placeholder { text-align: center; color: var(--text-muted); }
+.photo-placeholder .ph-icon { font-size: 3.5rem; margin-bottom: 0.5rem; }
+.info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+.info-chip { background: var(--bg-nav-active); border: 2px solid var(--border); border-radius: 12px; padding: 1rem; }
+.info-chip .label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.35rem; }
+.info-chip .value { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); word-break: break-word; }
+.info-chip .value.barcode-val { font-family: monospace; font-size: 1rem; background: var(--bg-card); padding: 0.35rem 0.6rem; border-radius: 6px; display: inline-block; }
+.info-chip .value.loc-val { background: #fef3c7; color: #92400e; padding: 0.3rem 0.75rem; border-radius: 20px; display: inline-block; font-size: 1rem; }
+.info-chip .value.qty-val { background: #e0e7ff; color: #3730a3; padding: 0.3rem 0.75rem; border-radius: 20px; display: inline-block; font-size: 1rem; }
+.registered-badge { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem; }
+.registered-badge strong { color: var(--text-primary); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<p class="registered-badge">Registered to <strong>{{ organisation_name or 'ShowWise' }}</strong></p>
+
+<div style="margin-bottom:1.5rem;">
+    <h1 style="margin:0; font-size:1.75rem;">{{ item.name }}</h1>
+    {% if item.category %}
+    <span style="background:#e0e7ff; color:#3730a3; padding:0.3rem 0.9rem; border-radius:20px; font-size:0.85rem; font-weight:600; margin-top:0.5rem; display:inline-block;">{{ item.category }}</span>
+    {% endif %}
+</div>
+
+<div class="detail-hero">
+    <div class="photo-card">
+        <div class="photo-card-header item-header"><i class="fas fa-camera"></i> Equipment Photo</div>
+        <div class="photo-card-body">
+            {% if item.picture %}
+            <img src="{{ url_for('equipment.serve_equipment_picture', id=item.id) }}" alt="{{ item.name }}">
+            {% else %}
+            <div class="photo-placeholder"><div class="ph-icon">📦</div><p>No photo</p></div>
+            {% endif %}
+        </div>
+    </div>
+    <div class="photo-card">
+        <div class="photo-card-header loc-header"><i class="fas fa-map-marker-alt"></i> Storage Location Photo</div>
+        <div class="photo-card-body">
+            {% if item.location_picture %}
+            <img src="{{ url_for('equipment.serve_equipment_location_picture', id=item.id) }}" alt="Storage location">
+            {% else %}
+            <div class="photo-placeholder"><div class="ph-icon">📍</div><p>No location photo</p></div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="info-grid">
+    <div class="info-chip">
+        <div class="label"><i class="fas fa-barcode"></i> Barcode</div>
+        <div class="value barcode-val">{{ item.barcode }}</div>
+    </div>
+    <div class="info-chip">
+        <div class="label"><i class="fas fa-layer-group"></i> Quantity Owned</div>
+        <div class="value qty-val">{{ item.quantity_owned or 1 }}</div>
+    </div>
+    {% if item.category %}
+    <div class="info-chip">
+        <div class="label"><i class="fas fa-tag"></i> Category</div>
+        <div class="value">{{ item.category }}</div>
+    </div>
+    {% endif %}
+    {% if item.location %}
+    <div class="info-chip">
+        <div class="label"><i class="fas fa-map-marker-alt"></i> Storage Location</div>
+        <div class="value loc-val">{{ item.location }}</div>
+    </div>
+    {% endif %}
+    <div class="info-chip">
+        <div class="label"><i class="fas fa-calendar-alt"></i> Added</div>
+        <div class="value" style="font-size:0.95rem;">{{ item.created_at.strftime('%d %b %Y') if item.created_at else '—' }}</div>
+    </div>
+</div>
+
+{% if item.notes %}
+<div style="margin-bottom:1.5rem; padding:1rem; background:var(--bg-nav-active); border-left:4px solid #6366f1; border-radius:8px;">
+    <h3 style="margin-bottom:0.5rem; font-size:1rem;"><i class="fas fa-sticky-note"></i> Notes</h3>
+    <p style="margin:0; white-space:pre-wrap; color:var(--text-secondary); font-size:0.95rem;">{{ item.notes }}</p>
+</div>
+{% endif %}
+
+{% endblock %}
