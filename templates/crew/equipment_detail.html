@@ -144,6 +144,10 @@
     <span style="color:var(--text-primary); font-weight:600;">{{ item.name }}</span>
 </div>
 
+{% if organisation_name %}
+<p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:1rem;">Registered to <strong style="color:var(--text-primary);">{{ organisation_name }}</strong></p>
+{% endif %}
+
 <!-- Page header -->
 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.5rem;">
     <div>

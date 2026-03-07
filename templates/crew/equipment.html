@@ -433,6 +433,7 @@
 @keyframes dModalIn { from { opacity: 0; } to { opacity: 1; } }
 
 .d-modal-box {
+  position: relative;
   background: var(--d-surface);
   border: 1px solid var(--d-border);
   border-radius: 16px;
@@ -446,10 +447,13 @@
 @keyframes dBoxIn { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
 .d-modal-header {
+  position: relative;
+  z-index: 100;
   padding: 1.25rem 1.5rem 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  background: var(--d-surface);
 }
 .d-modal-title {
   font-size: 1.15rem;
@@ -457,6 +461,8 @@
   letter-spacing: -0.01em;
 }
 .d-modal-close {
+  position: relative;
+  z-index: 101;
   width: 32px; height: 32px;
   border: none;
   border-radius: 6px;
@@ -466,6 +472,7 @@
   display: flex; align-items: center; justify-content: center;
   font-size: 1rem;
   transition: background 0.15s, color 0.15s;
+  pointer-events: auto;
 }
 .d-modal-close:hover { background: rgba(239,68,68,0.1); color: var(--d-red); }
 
@@ -517,17 +524,42 @@
 .d-upload-area:hover { border-color: var(--d-accent); background: rgba(99,102,241,0.03); }
 .d-upload-area p { color: var(--d-muted); font-size: 0.875rem; margin-top: 0.5rem; }
 
-/* Scan modal */
+/* Scan modal — keep scanner content below header so X stays clickable */
 .d-scan-viewport {
   border-radius: 10px;
   overflow: hidden;
   border: 2px solid var(--d-border);
   background: #000;
   position: relative;
+  z-index: 1;
   margin-bottom: 0.875rem;
   min-height: 200px;
 }
 .d-scan-viewport video, .d-scan-viewport canvas { width: 100% !important; display: block; }
+/* Prevent scanner library overlays from covering modal header */
+#scanViewport > div { max-height: 100%; overflow: hidden; }
+/* Always-visible close for scan modal (above scanner library overlays) */
+.d-modal-scan-box { position: relative; }
+.d-scan-close-overlay {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 9999;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 10px;
+  background: var(--d-surface);
+  color: var(--d-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  transition: background 0.15s, color 0.15s;
+}
+.d-scan-close-overlay:hover { background: rgba(239,68,68,0.15); color: var(--d-red); }
 .d-scan-reticle-wrap {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
@@ -620,7 +652,7 @@
         <i class="fas fa-file-download"></i> Export
       </button>
       <a href="{{ url_for('equipment.barcode_page') }}" class="d-btn d-btn-amber">
-        <i class="fas fa-qrcode"></i> Barcodes
+        <i class="fas fa-qrcode"></i> QR Codes
       </a>
       <button onclick="openAddModal()" class="d-btn d-btn-primary">
         <i class="fas fa-plus"></i> Add Item
@@ -805,11 +837,12 @@
 {% endif %}
 
 <!-- ══════════ SCAN MODAL ══════════ -->
-<div class="d-modal" id="scanModal">
-  <div class="d-modal-box" style="max-width:480px;">
+<div class="d-modal" id="scanModal" onclick="if(event.target === this) closeScanModal();">
+  <button type="button" class="d-scan-close-overlay" onclick="closeScanModal()" aria-label="Close scanner">✕</button>
+  <div class="d-modal-box d-modal-scan-box" style="max-width:480px;" onclick="event.stopPropagation();">
     <div class="d-modal-header">
-      <div class="d-modal-title">📱 Barcode Scanner</div>
-      <button class="d-modal-close" onclick="closeScanModal()">✕</button>
+      <div class="d-modal-title">📱 QR & Barcode Scanner</div>
+      <button type="button" class="d-modal-close" onclick="closeScanModal()" aria-label="Close">✕</button>
     </div>
     <div class="d-modal-body">
       <div class="d-scan-viewport" id="scanViewport">
@@ -831,7 +864,7 @@
         <div style="flex:1;height:1px;background:var(--d-border);"></div>
       </div>
       <div style="display:flex;gap:0.5rem;">
-        <input type="text" id="scanManualInput" class="d-form-input" placeholder="Type barcode…"
+        <input type="text" id="scanManualInput" class="d-form-input" placeholder="Type barcode or paste QR URL…"
                style="flex:1;" onkeypress="if(event.key==='Enter')scanManualLookup()">
         <button onclick="scanManualLookup()" class="d-btn d-btn-primary">Look Up</button>
       </div>
@@ -848,7 +881,7 @@
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 /* ── Data ── */
 let allEquipment = {{ equipment_json | tojson }};
@@ -1195,33 +1228,48 @@ function openScanModal() {
 }
 function closeScanModal() { stopScan(); closeModal('scanModal'); }
 
+let html5QrCodeScanner = null;
+
 function startScan() {
   if (isScanning) return;
   document.getElementById('scanStartBtn').style.display = 'none';
   document.getElementById('scanStopBtn').style.display  = 'flex';
   document.getElementById('scanReticleWrap').style.display = 'flex';
 
-  Quagga.init({
-    inputStream: { name:'Live', type:'LiveStream', target: document.getElementById('scanViewport'),
-      constraints: { facingMode:'environment', width:640, height:320 } },
-    decoder: { readers:['code_128_reader','ean_reader','code_39_reader','upc_reader'] },
-    locate: true,
-  }, err => {
-    if (err) { showToast('Camera unavailable', 'error'); resetScanUI(); return; }
-    isScanning = true;
-    Quagga.start();
+  if (!html5QrCodeScanner) {
+    html5QrCodeScanner = new Html5Qrcode('scanViewport');
+  }
+  var config = {
+    fps: 15,
+    qrbox: function(viewfinderWidth, viewfinderHeight) {
+      var minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+      var size = Math.floor(0.8 * minEdge);
+      return { width: size, height: size };
+    }
+  };
+  var startScanner = function() {
+  html5QrCodeScanner.start(
+    { facingMode: 'environment' },
+    config,
+    (decodedText) => {
+      if (!decodedText) return;
+      stopScan();
+      try { navigator.vibrate && navigator.vibrate(60); } catch(e){}
+      lookupBarcode(decodedText);
+    }
+  ).then(() => { isScanning = true; }).catch(err => {
+    showToast('Camera unavailable', 'error');
+    resetScanUI();
   });
-  Quagga.onDetected(result => {
-    const code = result?.codeResult?.code;
-    if (!code) return;
-    stopScan();
-    try { navigator.vibrate && navigator.vibrate(60); } catch(e){}
-    lookupBarcode(code);
-  });
+  };
+  requestAnimationFrame(function() { startScanner(); });
 }
 
 function stopScan() {
-  if (isScanning) { Quagga.stop(); Quagga.offDetected(); isScanning = false; }
+  if (isScanning && html5QrCodeScanner && html5QrCodeScanner.isScanning()) {
+    html5QrCodeScanner.stop().catch(() => {});
+    isScanning = false;
+  }
   resetScanUI();
 }
 
@@ -1233,20 +1281,30 @@ function resetScanUI() {
 
 function scanManualLookup() {
   const v = document.getElementById('scanManualInput').value.trim();
-  if (!v) { showToast('Enter a barcode', 'error'); return; }
+  if (!v) { showToast('Enter a barcode or paste QR URL', 'error'); return; }
   lookupBarcode(v);
+}
+
+function equipmentIdFromScanInput(code) {
+  const s = (code || '').trim();
+  const m = s.match(/\/equipment\/(\d+)(?:\/view)?(?:\?|$)/);
+  return m ? parseInt(m[1], 10) : null;
 }
 
 function lookupBarcode(code) {
   document.getElementById('scanResult').innerHTML = `<div style="text-align:center;padding:1rem;color:var(--d-muted);"><i class="fas fa-spinner fa-spin"></i> Looking up…</div>`;
-  fetch(`/equipment/barcode/${encodeURIComponent(code)}`)
+  const equipmentId = equipmentIdFromScanInput(code);
+  const url = equipmentId != null
+    ? `/equipment/${equipmentId}/json`
+    : `/equipment/barcode/${encodeURIComponent(code)}`;
+  fetch(url)
     .then(r => r.json())
     .then(data => {
       if (data.error) {
         document.getElementById('scanResult').innerHTML = `
           <div class="d-scan-result" style="border-color:var(--d-red);">
             <div style="color:var(--d-red);font-weight:700;font-size:1.1rem;">❌ Not Found</div>
-            <p style="color:var(--d-muted);font-size:0.85rem;margin-top:0.3rem;">Barcode: <code>${esc(code)}</code></p>
+            <p style="color:var(--d-muted);font-size:0.85rem;margin-top:0.3rem;">Scanned: <code>${esc(code)}</code></p>
           </div>`;
       } else {
         document.getElementById('scanResult').innerHTML = `
@@ -1274,7 +1332,15 @@ function viewImage(url, name) {
 /* ── Modal helpers ── */
 function openModal(id)  { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
-document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.d-modal.open').forEach(m => m.classList.remove('open')); });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  var scanM = document.getElementById('scanModal');
+  if (scanM && scanM.classList.contains('open')) {
+    closeScanModal();
+    return;
+  }
+  document.querySelectorAll('.d-modal.open').forEach(m => m.classList.remove('open'));
+});
 
 /* ── Toast ── */
 let toastTimer;
