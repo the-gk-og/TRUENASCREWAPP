@@ -859,9 +859,8 @@ function startScan() {
 
   setCamState('starting', 'Starting camera…');
 
-  // Hide idle placeholder, show reticle
   setEl('camIdle',      'display', 'none');
-  setEl('reticleLayer', 'display', 'flex'); // use setEl not classList so it's null-safe
+  setEl('reticleLayer', 'display', 'flex');
   document.getElementById('reticleLayer').classList.add('show');
   setEl('startBtn', 'display', 'none');
   setEl('stopBtn',  'display', 'flex');
@@ -872,9 +871,8 @@ function startScan() {
 
   document.getElementById('scanResult').innerHTML = '';
 
-  // Always create a fresh instance — the library may have cleared the div
   try {
-    html5QrCodeScanner = new Html5Qrcode('scanViewport');
+    html5QrCodeScanner = new Html5Qrcode('scanViewport', { verbose: false });
   } catch(e) {
     toast('Scanner init failed', 'err');
     resetCam();
@@ -882,42 +880,66 @@ function startScan() {
   }
 
   var config = {
-    fps: 15,
+    fps: 10,
     qrbox: function(w, h) {
-      var edge = Math.floor(Math.min(w, h) * 0.8);
-      return { width: edge, height: edge };
+      var edge = Math.floor(Math.min(w, h) * 0.75);
+      return { width: edge, height: Math.floor(edge * 0.6) };
+    },
+    experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+  };
+
+  var onSuccess = function(decodedText) {
+    if (!decodedText) return;
+    isScanning = false;
+    try { navigator.vibrate && navigator.vibrate([40,20,60]); } catch(e){}
+    try {
+      html5QrCodeScanner.stop().then(function() {
+        resetCam();
+        fetchBarcode(decodedText);
+      }).catch(function() {
+        resetCam();
+        fetchBarcode(decodedText);
+      });
+    } catch(e) {
+      resetCam();
+      fetchBarcode(decodedText);
     }
   };
 
+  // Try rear camera with exact constraint first (works on Chrome Android),
+  // fall back to ideal (works on Firefox Android), then fall back to any camera.
   html5QrCodeScanner.start(
-    { facingMode: 'environment' },
+    { facingMode: { exact: 'environment' } },
     config,
-    function(decodedText) {
-      if (!decodedText) return;
-      // Mark as not scanning immediately so stopScan won't double-call .stop()
-      isScanning = false;
-      try { navigator.vibrate && navigator.vibrate([40,20,60]); } catch(e){}
-      // Stop camera, then show result — wait for stop() promise to resolve
-      try {
-        html5QrCodeScanner.stop().then(function() {
-          resetCam();
-          fetchBarcode(decodedText);
-        }).catch(function() {
-          resetCam();
-          fetchBarcode(decodedText);
-        });
-      } catch(e) {
-        resetCam();
-        fetchBarcode(decodedText);
-      }
-    }
+    onSuccess
   ).then(function() {
     isScanning = true;
-    setCamState('live', 'Scanning — point at QR or barcode');
+    setCamState('live', 'Scanning — point at barcode or QR');
   }).catch(function() {
-    setCamState('off', 'Camera unavailable — use manual entry');
-    resetCam();
-    toast('Camera unavailable', 'err');
+    // exact constraint failed (common on Firefox and single-camera devices)
+    // retry with ideal — browser picks rear if available
+    html5QrCodeScanner.start(
+      { facingMode: { ideal: 'environment' } },
+      config,
+      onSuccess
+    ).then(function() {
+      isScanning = true;
+      setCamState('live', 'Scanning — point at barcode or QR');
+    }).catch(function() {
+      // last resort: let the browser pick any camera
+      html5QrCodeScanner.start(
+        { facingMode: 'user' },
+        config,
+        onSuccess
+      ).then(function() {
+        isScanning = true;
+        setCamState('live', 'Scanning (front camera)');
+      }).catch(function() {
+        setCamState('off', 'Camera unavailable — use manual entry');
+        resetCam();
+        toast('Camera unavailable — check permissions', 'err');
+      });
+    });
   });
 }
 
