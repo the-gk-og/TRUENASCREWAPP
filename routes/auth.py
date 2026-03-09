@@ -16,7 +16,7 @@ from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from extensions import db
-from models import User, TwoFactorAuth, InviteCode
+from models import User, TwoFactorAuth, InviteCode, EmailOTP
 from utils import get_organization, generate_invite_code, log_security_event
 from constants import DEFAULT_ORG
 from config import SESSION_DURATION
@@ -55,13 +55,21 @@ def login():
         user = User.query.filter_by(username=username).first()
 
         if user and check_password_hash(user.password_hash, password):
+            # --- TOTP 2FA check ---
             tfa = TwoFactorAuth.query.filter_by(user_id=user.id).first()
-
             if tfa and tfa.enabled:
                 session['pending_2fa_user_id'] = user.id
                 session['pending_2fa_remember'] = remember
                 return redirect(url_for('tfa.totp_verify_page'))
 
+            # --- Email OTP check ---
+            email_otp_rec = EmailOTP.query.filter_by(user_id=user.id, enabled=True).first()
+            if email_otp_rec:
+                session['pending_2fa_user_id'] = user.id
+                session['pending_2fa_remember'] = remember
+                return redirect(url_for('email_otp.email_otp_verify_page'))
+
+            # --- Forced 2FA setup check ---
             if getattr(user, 'force_2fa_setup', False) and (not tfa or not tfa.enabled):
                 login_user(user, remember=remember)
                 session['force_2fa_setup'] = True
@@ -295,3 +303,4 @@ def session_info():
         'is_permanent': session.permanent,
         'logged_in':    current_user.is_authenticated,
     })
+    

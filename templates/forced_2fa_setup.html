@@ -3,7 +3,7 @@
 
 {% block content %}
 <div style="max-width: 600px; margin: 2rem auto;">
-    <div class="card" style="border: 2px solid var(--warning); background: linear-gradient(135deg, #fff 0%, #fef9ec 100%);">
+    <div class="card" style="border: 2px solid var(--warning); background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-table-head) 100%);">
         <div style="text-align: center; padding: 1rem 0 1.5rem;">
             <div style="font-size: 3rem; margin-bottom: 0.75rem;">🔐</div>
             <h2 style="color: #92400e; margin-bottom: 0.5rem;">Two-Factor Authentication Required</h2>
@@ -13,82 +13,157 @@
         <div style="background: #fef3c7; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; border-left: 4px solid var(--warning);">
             <p style="margin: 0; color: #78350f; font-size: 0.95rem;">
                 <i class="fas fa-info-circle"></i>
-                <strong>What you need to do:</strong> Install an authenticator app (Google Authenticator, Authy, or Microsoft Authenticator), then scan the QR code below to link your account.
+                <strong>What you need to do:</strong> Set up two-factor authentication to protect your account.
+                You can use an authenticator app (recommended) or receive codes by email.
             </p>
         </div>
 
+        <!-- ==================== TOTP SECTION ==================== -->
+
         <!-- Step 1: QR Code -->
         <div id="step1Section">
-            <h3 style="margin-bottom: 1rem; color: var(--dark);"><span style="background: var(--primary); color: white; border-radius: 50%; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.85rem; margin-right: 0.5rem;">1</span> Scan QR Code</h3>
-            <p style="color: #6b7280; margin-bottom: 1.5rem;">Open your authenticator app and scan this QR code:</p>
-            
+            <h3 style="margin-bottom: 1rem; color: var(--text-primary);">
+                <span style="background: var(--primary); color: white; border-radius: 50%; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.85rem; margin-right: 0.5rem;">1</span>
+                Scan QR Code
+            </h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Open your authenticator app (Google Authenticator, Authy, etc.) and scan this QR code:</p>
+
             <div style="text-align: center; margin: 1.5rem 0;" id="qrContainer">
-                <div style="width: 200px; height: 200px; background: #f3f4f6; border-radius: 8px; margin: 0 auto; display: flex; align-items: center; justify-content: center;">
-                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: #9ca3af;"></i>
+                <div style="width: 200px; height: 200px; background: var(--bg-table-head); border-radius: 8px; margin: 0 auto; display: flex; align-items: center; justify-content: center;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: var(--text-muted);"></i>
                 </div>
             </div>
-            
-            <div style="background: #f9fafb; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;" id="secretContainer" style="display:none;">
-                <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 0.5rem;">Or enter this key manually:</p>
+
+            <div id="secretContainer" style="background: var(--bg-table-head); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; display: none;">
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Or enter this key manually in your app:</p>
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <code id="secretKey" style="font-size: 1rem; letter-spacing: 2px; flex: 1;"></code>
+                    <code id="secretKey" style="font-size: 1rem; letter-spacing: 2px; flex: 1; color: var(--text-primary);"></code>
                     <button onclick="copySecret()" class="btn btn-primary" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;"><i class="fas fa-copy"></i></button>
                 </div>
             </div>
 
-            <button onclick="goToStep2()" class="btn btn-primary" style="width: 100%;">
+            <button onclick="goToStep2()" class="btn btn-primary" style="width: 100%; margin-bottom: 0.75rem;">
                 <i class="fas fa-arrow-right"></i> I've scanned the code — Next
             </button>
+
+            <div style="text-align: center;">
+                <button type="button" onclick="showEmailFallback()"
+                        style="background:none;border:none;cursor:pointer;color:var(--text-secondary);font-size:0.875rem;text-decoration:underline;padding:0.25rem;">
+                    I can't use an authenticator app
+                </button>
+            </div>
         </div>
 
-        <!-- Step 2: Verify -->
+        <!-- Step 2: Verify TOTP -->
         <div id="step2Section" style="display: none;">
-            <h3 style="margin-bottom: 1rem; color: var(--dark);"><span style="background: var(--primary); color: white; border-radius: 50%; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.85rem; margin-right: 0.5rem;">2</span> Verify Code</h3>
-            <p style="color: #6b7280; margin-bottom: 1.5rem;">Enter the 6-digit code from your authenticator app:</p>
+            <h3 style="margin-bottom: 1rem; color: var(--text-primary);">
+                <span style="background: var(--primary); color: white; border-radius: 50%; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.85rem; margin-right: 0.5rem;">2</span>
+                Verify Code
+            </h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Enter the 6-digit code from your authenticator app:</p>
 
             <div class="form-group">
-                <input type="text" id="verifyCode" placeholder="000000" maxlength="6" 
+                <input type="text" id="verifyCode" placeholder="000000" maxlength="6"
                        pattern="[0-9]{6}" inputmode="numeric"
                        style="text-align: center; font-size: 2rem; letter-spacing: 10px; font-family: monospace; padding: 1rem;">
             </div>
 
             <div style="display: flex; gap: 1rem;">
-                <button onclick="goToStep1()" class="btn btn-primary" style="flex: 1;"><i class="fas fa-arrow-left"></i> Back</button>
-                <button onclick="verifyCode()" class="btn btn-success" style="flex: 2;"><i class="fas fa-check"></i> Verify & Enable</button>
+                <button onclick="goToStep1()" class="btn btn-secondary" style="flex: 1;"><i class="fas fa-arrow-left"></i> Back</button>
+                <button onclick="verifyTotpCode()" class="btn btn-success" style="flex: 2;"><i class="fas fa-check"></i> Verify & Enable</button>
             </div>
         </div>
 
-        <!-- Step 3: Backup codes -->
+        <!-- Step 3: TOTP Backup codes -->
         <div id="step3Section" style="display: none;">
             <div style="text-align: center; margin-bottom: 1.5rem;">
                 <i class="fas fa-check-circle" style="font-size: 3rem; color: var(--success);"></i>
-                <h3 style="color: var(--success); margin-top: 0.5rem;">2FA Enabled Successfully!</h3>
+                <h3 style="color: var(--success); margin-top: 0.5rem;">Authenticator App Enabled!</h3>
             </div>
 
             <div style="background: #fef3c7; border: 2px solid #fbbf24; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">
                 <p style="color: #78350f; font-weight: 600; margin-bottom: 0.5rem;"><i class="fas fa-exclamation-triangle"></i> Save your backup codes!</p>
-                <p style="color: #92400e; font-size: 0.9rem; margin: 0;">These can only be shown once. Store them somewhere safe — you can use them if you lose access to your authenticator app.</p>
+                <p style="color: #92400e; font-size: 0.9rem; margin: 0;">These can only be shown once. Store them somewhere safe — use them if you lose access to your authenticator app.</p>
             </div>
 
-            <div id="backupCodesGrid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; font-family: monospace; font-size: 1rem; margin-bottom: 1.5rem; background: #f9fafb; padding: 1rem; border-radius: 8px;"></div>
+            <div id="backupCodesGrid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; font-family: monospace; font-size: 1rem; margin-bottom: 1.5rem; background: var(--bg-table-head); padding: 1rem; border-radius: 8px;"></div>
 
             <div style="display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
                 <button onclick="downloadCodes()" class="btn btn-primary"><i class="fas fa-download"></i> Download</button>
                 <button onclick="copyCodes()" class="btn btn-primary"><i class="fas fa-copy"></i> Copy All</button>
             </div>
 
-            <button onclick="finishSetup()" class="btn btn-success" style="width: 100%;">
+            <button onclick="finishTotpSetup()" class="btn btn-success" style="width: 100%;">
                 <i class="fas fa-check"></i> I've saved my codes — Continue
             </button>
         </div>
+
+        <!-- ==================== EMAIL OTP FALLBACK SECTION ==================== -->
+        <div id="emailFallbackSection" style="display: none;">
+            <div style="text-align: center; padding: 1rem 0 1.5rem;">
+                <div style="font-size: 2.5rem; margin-bottom: 0.75rem;">📧</div>
+                <h3 style="color: var(--text-primary); margin-bottom: 0.5rem;">Use Email Instead</h3>
+            </div>
+
+            <div style="background: #fef3c7; border-left: 4px solid var(--warning); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">
+                <p style="margin: 0; color: #78350f; font-size: 0.9rem;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>Less secure than an authenticator app.</strong>
+                    Only use this if you genuinely cannot install an authenticator app.
+                </p>
+            </div>
+
+            <!-- Email step 1: request code -->
+            <div id="emailFallbackStep1">
+                <p style="color: var(--text-secondary); margin-bottom: 1.25rem; font-size: 0.9rem;">
+                    We'll send a 6-digit code to your account's email address each time you log in.
+                    Click below to receive a verification code and confirm setup.
+                </p>
+                <button onclick="requestForcedEmailOtp()" class="btn btn-primary" style="width: 100%; margin-bottom: 0.75rem;" id="sendForcedOtpBtn">
+                    <i class="fas fa-paper-plane"></i> Send Verification Code
+                </button>
+                <div style="text-align: center;">
+                    <button type="button" onclick="backToTOTP()"
+                            style="background:none;border:none;cursor:pointer;color:var(--primary);font-size:0.875rem;">
+                        <i class="fas fa-arrow-left"></i> Back to authenticator setup
+                    </button>
+                </div>
+            </div>
+
+            <!-- Email step 2: enter code -->
+            <div id="emailFallbackStep2" style="display: none;">
+                <div style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 1rem; border-radius: 8px; margin-bottom: 1.25rem; font-size: 0.9rem; color: #166534;">
+                    <i class="fas fa-check-circle"></i> Code sent! Check your inbox (and spam folder).
+                </div>
+
+                <div class="form-group">
+                    <label style="color: var(--text-primary);">Enter 6-digit code</label>
+                    <input type="text" id="forcedEmailOtpCode" maxlength="6" inputmode="numeric"
+                           placeholder="000000"
+                           style="text-align: center; font-size: 2rem; letter-spacing: 10px; font-family: monospace; padding: 1rem;"
+                           oninput="this.value=this.value.replace(/\D/g,'')">
+                </div>
+
+                <div style="display: flex; gap: 1rem;">
+                    <button onclick="verifyForcedEmailOtp()" class="btn btn-success" style="flex: 2;" id="verifyForcedBtn">
+                        <i class="fas fa-check"></i> Verify & Enable
+                    </button>
+                    <button onclick="requestForcedEmailOtp()" class="btn btn-secondary" style="flex: 1;" id="forcedResendBtn">
+                        <i class="fas fa-redo"></i> Resend
+                    </button>
+                </div>
+                <div id="forcedEmailMsg" style="margin-top: 0.75rem; font-size: 0.875rem; color: var(--text-secondary);"></div>
+            </div>
+        </div>
+
     </div>
 </div>
 
 <script>
-let secretKey = '';
+let secretKey   = '';
 let backupCodes = [];
 
-// Load setup data on page load
+// ---- Load TOTP setup data on page load ----
 window.addEventListener('DOMContentLoaded', () => {
     fetch('/api/2fa/setup', {
         method: 'POST',
@@ -100,28 +175,29 @@ window.addEventListener('DOMContentLoaded', () => {
             secretKey = d.secret;
             document.getElementById('secretKey').textContent = d.secret;
             document.getElementById('secretContainer').style.display = 'block';
-            document.getElementById('qrContainer').innerHTML = `<img src="${d.qr_code}" alt="QR Code" style="max-width:220px;border-radius:8px;border:2px solid #e5e7eb;padding:0.75rem;">`;
+            document.getElementById('qrContainer').innerHTML =
+                `<img src="${d.qr_code}" alt="QR Code"
+                      style="max-width:220px;border-radius:8px;border:2px solid var(--border);padding:0.75rem;">`;
         }
     });
 });
 
+// ---- TOTP navigation ----
 function goToStep2() {
     document.getElementById('step1Section').style.display = 'none';
     document.getElementById('step2Section').style.display = 'block';
     document.getElementById('verifyCode').focus();
 }
-
 function goToStep1() {
     document.getElementById('step2Section').style.display = 'none';
     document.getElementById('step1Section').style.display = 'block';
 }
-
 function copySecret() {
     navigator.clipboard.writeText(secretKey);
     showAlert('Secret copied!');
 }
 
-function verifyCode() {
+function verifyTotpCode() {
     const code = document.getElementById('verifyCode').value.trim();
     if (code.length !== 6) { showAlert('Enter a 6-digit code', 'error'); return; }
 
@@ -135,7 +211,10 @@ function verifyCode() {
         if (d.success) {
             backupCodes = d.backup_codes;
             document.getElementById('backupCodesGrid').innerHTML =
-                backupCodes.map(c => `<div style="padding:0.4rem 0.75rem;background:var(--bg-card);border-radius:4px;text-align:center;border:1px solid var(--border);">${c}</div>`).join('');
+                backupCodes.map(c =>
+                    `<div style="padding:0.4rem 0.75rem;background:var(--bg-card);border-radius:4px;
+                                 text-align:center;border:1px solid var(--border);">${c}</div>`
+                ).join('');
             document.getElementById('step2Section').style.display = 'none';
             document.getElementById('step3Section').style.display = 'block';
         } else {
@@ -147,19 +226,16 @@ function verifyCode() {
 }
 
 function downloadCodes() {
-    const blob = new Blob([backupCodes.join('\n')], { type: 'text/plain' });
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
+    a.href = URL.createObjectURL(new Blob([backupCodes.join('\n')], { type: 'text/plain' }));
     a.download = 'showwise-backup-codes.txt';
     a.click();
 }
-
 function copyCodes() {
     navigator.clipboard.writeText(backupCodes.join('\n'));
     showAlert('Backup codes copied!');
 }
-
-function finishSetup() {
+function finishTotpSetup() {
     fetch('/api/2fa/complete-forced-setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
@@ -172,6 +248,85 @@ function finishSetup() {
             showAlert(d.error || 'Error completing setup', 'error');
         }
     });
+}
+
+// ---- Email OTP fallback ----
+function showEmailFallback() {
+    document.getElementById('step1Section').style.display = 'none';
+    document.getElementById('emailFallbackSection').style.display = 'block';
+}
+function backToTOTP() {
+    document.getElementById('emailFallbackSection').style.display = 'none';
+    document.getElementById('step1Section').style.display = 'block';
+}
+
+async function requestForcedEmailOtp() {
+    const sendBtn   = document.getElementById('sendForcedOtpBtn');
+    const resendBtn = document.getElementById('forcedResendBtn');
+    const activeBtn = document.getElementById('emailFallbackStep2').style.display === 'none'
+        ? sendBtn : resendBtn;
+
+    if (activeBtn) {
+        activeBtn.disabled = true;
+        activeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+    }
+
+    try {
+        const res  = await fetch('/api/2fa/email-otp/send-forced', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('emailFallbackStep1').style.display = 'none';
+            document.getElementById('emailFallbackStep2').style.display = 'block';
+            document.getElementById('forcedEmailOtpCode').focus();
+            if (resendBtn) {
+                resendBtn.disabled = true;
+                setTimeout(() => { resendBtn.disabled = false; resendBtn.innerHTML = '<i class="fas fa-redo"></i> Resend'; }, 60000);
+            }
+        } else {
+            showAlert(data.error || 'Failed to send code — contact your administrator', 'error');
+            if (activeBtn) {
+                activeBtn.disabled = false;
+                activeBtn.innerHTML = activeBtn === sendBtn
+                    ? '<i class="fas fa-paper-plane"></i> Send Verification Code'
+                    : '<i class="fas fa-redo"></i> Resend';
+            }
+        }
+    } catch {
+        showAlert('Network error', 'error');
+        if (activeBtn) { activeBtn.disabled = false; }
+    }
+}
+
+async function verifyForcedEmailOtp() {
+    const code = document.getElementById('forcedEmailOtpCode').value.trim();
+    if (code.length !== 6) { showAlert('Enter the full 6-digit code', 'error'); return; }
+
+    const btn = document.getElementById('verifyForcedBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
+
+    try {
+        const res  = await fetch('/api/2fa/email-otp/verify-forced', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code }),
+        });
+        const data = await res.json();
+        if (data.success) {
+            showAlert('Email OTP enabled! Redirecting...', 'success');
+            setTimeout(() => { window.location.href = data.redirect; }, 1200);
+        } else {
+            showAlert(data.error || 'Invalid code', 'error');
+            document.getElementById('forcedEmailOtpCode').value = '';
+            document.getElementById('forcedEmailOtpCode').focus();
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-check"></i> Verify & Enable';
+        }
+    } catch {
+        showAlert('Network error', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check"></i> Verify & Enable';
+    }
 }
 </script>
 {% endblock %}
