@@ -10,14 +10,37 @@ Usage:
     python Migration_scripts/migrate_email_otp.py
 """
 
+import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# ── Locate repo root and load .env before importing the app ──────────────────
+ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(ROOT))
 
-from app import app, db
+env_path = ROOT / ".env"
+if env_path.exists():
+    with open(env_path) as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if not _line or _line.startswith("#") or "=" not in _line:
+                continue
+            _key, _, _val = _line.partition("=")
+            # Strip optional surrounding quotes from value
+            _val = _val.strip().strip('"').strip("'")
+            os.environ.setdefault(_key.strip(), _val)
+    print(f"  · Loaded environment from {env_path}")
+else:
+    print(f"  · No .env file found at {env_path} — relying on existing environment")
+
+# ── Now safe to import the app ────────────────────────────────────────────────
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import OperationalError
+
+from app import create_app
+from extensions import db
+
+app = create_app()
 
 
 # ---------------------------------------------------------------------------
@@ -76,11 +99,9 @@ def create_email_otp_table(engine):
 
 # ---------------------------------------------------------------------------
 # Step 2 — verify every expected column is present
-#           (defensive: catches partial migrations)
 # ---------------------------------------------------------------------------
 
 EMAIL_OTP_COLUMNS = [
-    ("id",         "INTEGER PRIMARY KEY AUTOINCREMENT"),
     ("user_id",    'INTEGER NOT NULL REFERENCES "user"(id)'),
     ("enabled",    "BOOLEAN NOT NULL DEFAULT 0"),
     ("otp_code",   "VARCHAR(8)"),
@@ -95,14 +116,6 @@ def verify_email_otp_columns(engine):
     print("\n── Step 2: Verify email_otp columns ─────────────────────────────")
     with engine.begin() as conn:
         for col_name, col_def in EMAIL_OTP_COLUMNS:
-            if col_name == "id":
-                # Primary key — can't ALTER TABLE ADD COLUMN for it,
-                # and it must exist if the table was just created.
-                if _column_exists(engine, "email_otp", "id"):
-                    print("  · Column id already present — skipped")
-                else:
-                    print("  ⚠ Column id missing — this should not happen; recreate the table.")
-                continue
             if not _column_exists(engine, "email_otp", col_name):
                 _add_column(conn, "email_otp", f'"{col_name}" {col_def}', col_name)
             else:
@@ -110,15 +123,13 @@ def verify_email_otp_columns(engine):
 
 
 # ---------------------------------------------------------------------------
-# Step 3 — ensure the User table has columns added alongside EmailOTP
-#           (force_2fa_setup and skip_2fa_for_oauth were introduced at the
-#            same time as email OTP, so include them here as a safety net)
+# Step 3 — ensure User table has columns added alongside EmailOTP
 # ---------------------------------------------------------------------------
 
 USER_EXTRA_COLUMNS = [
-    ("force_2fa_setup",    "BOOLEAN DEFAULT 0"),
-    ("skip_2fa_for_oauth", "BOOLEAN DEFAULT 0"),
-    ("profile_picture",    "VARCHAR(300)"),
+    ("force_2fa_setup",       "BOOLEAN DEFAULT 0"),
+    ("skip_2fa_for_oauth",    "BOOLEAN DEFAULT 0"),
+    ("profile_picture",       "VARCHAR(300)"),
     ("password_reset_token",  "VARCHAR(100)"),
     ("password_reset_expiry", "DATETIME"),
 ]
@@ -151,8 +162,6 @@ def run():
         verify_email_otp_columns(engine)
         verify_user_columns(engine)
 
-        # Final sanity check via SQLAlchemy create_all
-        # (creates any other missing tables without touching existing ones)
         print("\n── Step 4: SQLAlchemy create_all safety pass ────────────────────")
         try:
             db.create_all()
