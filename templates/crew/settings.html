@@ -18,9 +18,11 @@
     <button class="settings-tab" onclick="switchTab('2fa')" id="tab-2fa">
         <i class="fas fa-mobile-alt"></i> Two-Factor Auth
         {% if tfa and tfa.enabled %}
-        <span class="tab-badge success">On</span>
+        <span class="tab-badge success">TOTP On</span>
+        {% elif email_otp and email_otp.enabled %}
+        <span class="tab-badge warning">Email OTP</span>
         {% else %}
-        <span class="tab-badge warning">Off</span>
+        <span class="tab-badge danger">Off</span>
         {% endif %}
     </button>
     <button class="settings-tab" onclick="switchTab('discord')" id="tab-discord">
@@ -82,30 +84,30 @@
         <div class="card-header">
             <h3 class="card-title"><i class="fas fa-image"></i> Profile Picture</h3>
         </div>
-        
+
         <div style="display: flex; gap: 2rem; align-items: flex-start; margin-bottom: 1.5rem;">
             <div style="flex-shrink: 0;">
-                <img 
-                    id="profilePreview" 
-                    src="{% if current_user.profile_picture %}/profile/picture/{{ current_user.username }}{% else %}https://via.placeholder.com/120/6366f1/ffffff?text={{ current_user.username[:1] }}{% endif %}" 
+                <img
+                    id="profilePreview"
+                    src="{% if current_user.profile_picture %}/profile/picture/{{ current_user.username }}{% else %}https://via.placeholder.com/120/6366f1/ffffff?text={{ current_user.username[:1] }}{% endif %}"
                     alt="Profile Picture"
                     style="width: 120px; height: 120px; border-radius: 50%; border: 3px solid var(--primary); object-fit: cover;"
                 >
             </div>
-            
+
             <div style="flex-grow: 1;">
                 <form id="profilePictureForm" style="max-width: 400px;">
                     <div class="form-group">
                         <label for="profilePictureInput"><i class="fas fa-upload"></i> Upload New Picture</label>
-                        <input 
-                            type="file" 
-                            id="profilePictureInput" 
+                        <input
+                            type="file"
+                            id="profilePictureInput"
                             accept="image/png,image/jpeg,image/gif,image/webp"
                             style="padding: 0.5rem; border: 2px dashed var(--border); border-radius: 8px; width: 100%; cursor: pointer;"
                         >
                         <small style="color: var(--text-secondary); display: block; margin-top: 0.5rem;">PNG, JPG, GIF, or WebP max 16MB</small>
                     </div>
-                    
+
                     <div style="display: flex; gap: 1rem;">
                         <button type="submit" class="btn btn-success" id="uploadPictureBtn">
                             <i class="fas fa-check"></i> Upload
@@ -117,18 +119,16 @@
                         {% endif %}
                     </div>
                 </form>
-                
-                <div id="pictureMessage" style="margin-top: 1rem; display: none; padding: 0.75rem; border-radius: 8px;" class="message"></div>
             </div>
         </div>
     </div>
 
-    <!-- Account Info - Editable -->
+    <!-- Account Info -->
     <div class="card">
         <div class="card-header">
             <h3 class="card-title"><i class="fas fa-user-circle"></i> Account Information</h3>
         </div>
-        
+
         <div id="accountInfoView" style="display: grid; gap: 0.75rem; max-width: 400px;">
             <div style="display: flex; justify-content: space-between; padding: 0.75rem; background: var(--bg-table-head); border-radius: 8px;">
                 <span style="color: var(--text-secondary);">Username</span>
@@ -150,28 +150,26 @@
                 <i class="fas fa-edit"></i> Edit Information
             </button>
         </div>
-        
+
         <form id="accountInfoForm" style="display: none; margin-top: 1.5rem;">
             <div style="background: var(--bg-nav-active); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--primary); margin-bottom: 1.5rem;">
                 <p style="margin: 0; color: var(--text-primary); font-size: 0.95rem;">
                     <i class="fas fa-info-circle"></i> <strong>Note:</strong> Leave fields blank to keep current values.
                 </p>
             </div>
-            
+
             <div class="form-group">
                 <label for="editUsername"><i class="fas fa-user"></i> Username</label>
                 <input type="text" id="editUsername" placeholder="Enter new username (min 3 chars, leave blank to keep)" minlength="3">
                 <small style="color: var(--text-secondary);">Minimum 3 characters</small>
             </div>
-            
+
             <div class="form-group">
                 <label for="editEmail"><i class="fas fa-envelope"></i> Email Address</label>
                 <input type="email" id="editEmail" placeholder="Enter email (leave blank to remove)">
                 <small style="color: var(--text-secondary);">Used for notifications and password reset</small>
             </div>
-            
-            <div id="accountInfoMessage" style="margin-bottom: 1rem; display: none; padding: 0.75rem; border-radius: 8px;" class="message"></div>
-            
+
             <div style="display: flex; gap: 1rem;">
                 <button type="submit" class="btn btn-success" id="saveAccountBtn">
                     <i class="fas fa-check"></i> Save Changes
@@ -187,7 +185,6 @@
 <!-- ==================== APPEARANCE TAB ==================== -->
 <div class="tab-panel" id="panel-appearance">
 
-    <!-- Dark Mode -->
     <div class="card">
         <div class="card-header">
             <h3 class="card-title"><i class="fas fa-moon"></i> Display Theme</h3>
@@ -231,18 +228,15 @@
         </div>
     </div>
 
-    <!-- Colour Vision / Colorblind Modes -->
     <div class="card">
         <div class="card-header">
             <h3 class="card-title"><i class="fas fa-eye"></i> Colour Vision Mode</h3>
         </div>
         <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
             Adjust the colour palette to improve visibility for different types of colour vision deficiency.
-            Changes take effect immediately across all pages.
         </p>
 
         <div class="cb-grid">
-
             <div class="cb-card" id="cbcard-none" onclick="applyCb('none')">
                 <div class="cb-card-preview">
                     <span class="cbp-dot" style="background:#6366f1"></span>
@@ -251,10 +245,7 @@
                     <span class="cbp-dot" style="background:#f59e0b"></span>
                     <span class="cbp-dot" style="background:#ec4899"></span>
                 </div>
-                <div class="cb-card-label">
-                    <strong>Default</strong>
-                    <span>Standard colour palette</span>
-                </div>
+                <div class="cb-card-label"><strong>Default</strong><span>Standard colour palette</span></div>
                 <div class="cb-card-check" id="cbcheck-none"><i class="fas fa-check-circle"></i></div>
             </div>
 
@@ -266,10 +257,7 @@
                     <span class="cbp-dot" style="background:#ffcc00"></span>
                     <span class="cbp-dot" style="background:#e6aa00"></span>
                 </div>
-                <div class="cb-card-label">
-                    <strong>Deuteranopia</strong>
-                    <span>Red-green (green-blind) — most common type</span>
-                </div>
+                <div class="cb-card-label"><strong>Deuteranopia</strong><span>Red-green (green-blind) — most common type</span></div>
                 <div class="cb-card-check" id="cbcheck-deuteranopia"><i class="fas fa-check-circle"></i></div>
             </div>
 
@@ -281,10 +269,7 @@
                     <span class="cbp-dot" style="background:#ee9900"></span>
                     <span class="cbp-dot" style="background:#ee7733"></span>
                 </div>
-                <div class="cb-card-label">
-                    <strong>Protanopia</strong>
-                    <span>Red-blind — red tones appear darker</span>
-                </div>
+                <div class="cb-card-label"><strong>Protanopia</strong><span>Red-blind — red tones appear darker</span></div>
                 <div class="cb-card-check" id="cbcheck-protanopia"><i class="fas fa-check-circle"></i></div>
             </div>
 
@@ -296,10 +281,7 @@
                     <span class="cbp-dot" style="background:#dd5500"></span>
                     <span class="cbp-dot" style="background:#00aa44"></span>
                 </div>
-                <div class="cb-card-label">
-                    <strong>Tritanopia</strong>
-                    <span>Blue-yellow blind — blue tones altered</span>
-                </div>
+                <div class="cb-card-label"><strong>Tritanopia</strong><span>Blue-yellow blind — blue tones altered</span></div>
                 <div class="cb-card-check" id="cbcheck-tritanopia"><i class="fas fa-check-circle"></i></div>
             </div>
 
@@ -311,13 +293,9 @@
                     <span class="cbp-dot" style="background:#ffcc44"></span>
                     <span class="cbp-dot" style="background:#ffffff"></span>
                 </div>
-                <div class="cb-card-label">
-                    <strong>High Contrast</strong>
-                    <span>Maximum legibility for low vision</span>
-                </div>
+                <div class="cb-card-label"><strong>High Contrast</strong><span>Maximum legibility for low vision</span></div>
                 <div class="cb-card-check" id="cbcheck-high-contrast"><i class="fas fa-check-circle"></i></div>
             </div>
-
         </div>
 
         <div class="cb-info-box" id="cbInfoBox" style="display:none;">
@@ -325,46 +303,52 @@
             <span id="cbInfoText"></span>
         </div>
     </div>
-
 </div>
 
 <!-- ==================== 2FA TAB ==================== -->
 <div class="tab-panel" id="panel-2fa">
+
+    <!-- TOTP / Authenticator App -->
     <div class="card">
         <div class="card-header">
-            <h3 class="card-title"><i class="fas fa-shield-alt"></i> Two-Factor Authentication</h3>
+            <h3 class="card-title"><i class="fas fa-mobile-alt"></i> Authenticator App (TOTP)</h3>
             {% if tfa and tfa.enabled %}
-            <span style="color: var(--success); font-weight: 600;"><i class="fas fa-check-circle"></i> Enabled</span>
+            <span style="color:var(--success);font-weight:600;"><i class="fas fa-check-circle"></i> Enabled</span>
             {% else %}
-            <span style="color: var(--warning); font-weight: 600;"><i class="fas fa-exclamation-triangle"></i> Disabled</span>
+            <span style="color:var(--text-muted);font-weight:600;"><i class="fas fa-circle"></i> Disabled</span>
             {% endif %}
         </div>
 
         {% if not tfa or not tfa.enabled %}
-        <p style="margin-bottom: 1.5rem;">2FA adds an extra layer of security. You'll need a code from your authenticator app each time you log in.</p>
-        <ul style="margin-bottom: 1.5rem; padding-left: 1.5rem; line-height: 1.9;">
-            <li>Install an authenticator app (Google Authenticator, Authy, Microsoft Authenticator)</li>
-            <li>Scan the QR code shown after clicking Set Up</li>
-            <li>Save your backup codes in a secure location</li>
-        </ul>
-        <button onclick="startSetup2FA()" class="btn btn-primary">
-            <i class="fas fa-qrcode"></i> Set Up 2FA
-        </button>
+            {% if email_otp and email_otp.enabled %}
+            <div class="alert alert-info" style="margin-bottom:1.25rem;">
+                <i class="fas fa-info-circle"></i>
+                You're currently using <strong>Email OTP</strong>. Disable it first to switch to an authenticator app.
+            </div>
+            {% else %}
+            <p style="margin-bottom:1.25rem;color:var(--text-secondary);">
+                Use an authenticator app (Google Authenticator, Authy, Microsoft Authenticator) for the most secure 2FA experience.
+            </p>
+            <button onclick="startSetup2FA()" class="btn btn-primary">
+                <i class="fas fa-qrcode"></i> Set Up Authenticator App
+            </button>
+            {% endif %}
         {% else %}
-        <div style="background: #ecfdf5; border: 2px solid #10b981; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem;">
-            <i class="fas fa-check-circle" style="color: #10b981;"></i>
-            Your account is protected with 2FA.
+        <div style="background:#ecfdf5;border:2px solid #10b981;padding:1rem;border-radius:8px;margin-bottom:1.25rem;">
+            <i class="fas fa-check-circle" style="color:#10b981;"></i>
+            Your account is protected with an authenticator app.
         </div>
 
-        <div style="background: var(--bg-table-head); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; margin-bottom: 1.5rem;">
-            <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+        <!-- Skip 2FA for OAuth toggle -->
+        <div style="background:var(--bg-table-head);border:1px solid var(--border);border-radius:10px;padding:1.25rem;margin-bottom:1.25rem;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;">
                 <div>
-                    <h4 style="margin: 0 0 0.25rem; color: var(--text-primary); font-size: 0.95rem;">
-                        <i class="fab fa-google" style="color: #4285f4; margin-right: 0.4rem;"></i>
+                    <h4 style="margin:0 0 0.25rem;color:var(--text-primary);font-size:0.95rem;">
+                        <i class="fab fa-google" style="color:#4285f4;margin-right:0.4rem;"></i>
                         Skip 2FA when signing in with Google
                     </h4>
-                    <p style="margin: 0; color: var(--text-secondary); font-size: 0.85rem;">
-                        When enabled, signing in with your linked Google account will bypass the TOTP prompt.
+                    <p style="margin:0;color:var(--text-secondary);font-size:0.85rem;">
+                        Google sign-in will bypass the TOTP prompt when enabled.
                     </p>
                 </div>
                 <label class="toggle-switch" title="Toggle 2FA bypass for Google OAuth">
@@ -374,14 +358,89 @@
                     <span class="toggle-slider"></span>
                 </label>
             </div>
-            <p id="skip2faOauthStatus" style="margin: 0.75rem 0 0; font-size: 0.82rem; color: var(--text-muted);"></p>
+            <p id="skip2faOauthStatus" style="margin:0.75rem 0 0;font-size:0.82rem;color:var(--text-muted);"></p>
         </div>
 
         <button onclick="showDisable2FA()" class="btn btn-danger">
-            <i class="fas fa-times-circle"></i> Disable 2FA
+            <i class="fas fa-times-circle"></i> Disable Authenticator App
         </button>
         {% endif %}
     </div>
+
+    <!-- Email OTP (Fallback) -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-envelope-open-text"></i> Email OTP
+                <span style="font-size:0.72rem;background:#fef3c7;color:#92400e;padding:0.2rem 0.6rem;border-radius:20px;font-weight:600;margin-left:0.5rem;vertical-align:middle;">Fallback</span>
+            </h3>
+            {% if email_otp and email_otp.enabled %}
+            <span style="color:var(--success);font-weight:600;"><i class="fas fa-check-circle"></i> Enabled</span>
+            {% else %}
+            <span style="color:var(--text-muted);font-weight:600;"><i class="fas fa-circle"></i> Disabled</span>
+            {% endif %}
+        </div>
+
+        <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1.25rem;">
+            Receive a one-time 6-digit code by email at each login.
+            Use this only if you can't install an authenticator app —
+            <strong>TOTP is more secure and preferred.</strong>
+        </p>
+
+        {% if tfa and tfa.enabled %}
+        <div class="alert alert-info" style="margin-bottom:0;">
+            <i class="fas fa-info-circle"></i>
+            You're using an authenticator app for 2FA. Disable it first to switch to email OTP.
+        </div>
+
+        {% elif not current_user.email %}
+        <div class="alert alert-error" style="margin-bottom:0;">
+            <i class="fas fa-exclamation-triangle"></i>
+            You need an email address to use email OTP.
+            Add one under <strong>Security → Account Information → Edit</strong>.
+        </div>
+
+        {% elif email_otp and email_otp.enabled %}
+        <div style="background:#ecfdf5;border:2px solid #10b981;padding:1rem;border-radius:8px;margin-bottom:1.25rem;">
+            <i class="fas fa-check-circle" style="color:#10b981;"></i>
+            Email OTP is active. A code will be sent to <strong>{{ current_user.email }}</strong> at each login.
+        </div>
+        <button onclick="showModal('disableEmailOtpModal')" class="btn btn-danger">
+            <i class="fas fa-times-circle"></i> Disable Email OTP
+        </button>
+
+        {% else %}
+        <!-- Setup flow -->
+        <div id="emailOtpSetupStep1">
+            <button onclick="startEmailOtpSetup()" class="btn btn-primary" id="startEmailOtpBtn">
+                <i class="fas fa-envelope"></i> Enable Email OTP
+            </button>
+        </div>
+
+        <div id="emailOtpSetupStep2" style="display:none;margin-top:1.25rem;">
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i>
+                A 6-digit code has been sent to <strong>{{ current_user.email }}</strong>. Enter it below to confirm.
+            </div>
+            <div class="form-group">
+                <label>Verification Code</label>
+                <input type="text" id="emailOtpSetupCode" maxlength="6" inputmode="numeric"
+                       placeholder="000000"
+                       style="text-align:center;font-size:1.5rem;letter-spacing:8px;font-family:monospace;"
+                       oninput="this.value=this.value.replace(/\D/g,'')">
+            </div>
+            <div style="display:flex;gap:0.75rem;">
+                <button onclick="verifyEmailOtpSetup()" class="btn btn-success" style="flex:2;">
+                    <i class="fas fa-check"></i> Verify & Enable
+                </button>
+                <button onclick="resendEmailOtpSetup()" class="btn btn-secondary" style="flex:1;" id="emailOtpResendBtn">
+                    <i class="fas fa-redo"></i> Resend
+                </button>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
 </div>
 
 <!-- ==================== DISCORD TAB ==================== -->
@@ -464,7 +523,7 @@
 
 <!-- ==================== MODALS ==================== -->
 
-<!-- 2FA Setup Modal -->
+<!-- 2FA Setup Modal (TOTP) -->
 <div id="setup2faModal" class="modal">
     <div class="modal-content">
         <span class="close" onclick="hideModal('setup2faModal')">&times;</span>
@@ -512,19 +571,43 @@
     </div>
 </div>
 
-<!-- Disable 2FA Modal -->
+<!-- Disable TOTP Modal -->
 <div id="disable2faModal" class="modal">
     <div class="modal-content">
         <span class="close" onclick="hideModal('disable2faModal')">&times;</span>
-        <h2 style="margin-bottom: 1rem; color: var(--danger);"><i class="fas fa-exclamation-triangle"></i> Disable 2FA</h2>
+        <h2 style="margin-bottom: 1rem; color: var(--danger);"><i class="fas fa-exclamation-triangle"></i> Disable Authenticator App</h2>
         <div class="alert alert-error"><i class="fas fa-exclamation-triangle"></i> Warning: Disabling 2FA will make your account less secure.</div>
         <div class="form-group" style="margin-top: 1rem;">
             <label>Enter your password to confirm:</label>
             <input type="password" id="disablePassword" placeholder="Your current password">
         </div>
         <div style="display: flex; gap: 1rem;">
-            <button onclick="hideModal('disable2faModal')" class="btn btn-primary" style="flex: 1;">Cancel</button>
+            <button onclick="hideModal('disable2faModal')" class="btn btn-secondary" style="flex: 1;">Cancel</button>
             <button onclick="disable2FA()" class="btn btn-danger" style="flex: 1;"><i class="fas fa-times"></i> Disable 2FA</button>
+        </div>
+    </div>
+</div>
+
+<!-- Disable Email OTP Modal -->
+<div id="disableEmailOtpModal" class="modal">
+    <div class="modal-content" style="max-width:480px;">
+        <span class="close" onclick="hideModal('disableEmailOtpModal')">&times;</span>
+        <h2 style="margin-bottom:1rem;color:var(--danger);">
+            <i class="fas fa-exclamation-triangle"></i> Disable Email OTP
+        </h2>
+        <div class="alert alert-error">
+            <i class="fas fa-exclamation-triangle"></i>
+            Your account will have <strong>no 2FA protection</strong> after this.
+        </div>
+        <div class="form-group" style="margin-top:1rem;">
+            <label>Enter your password to confirm</label>
+            <input type="password" id="disableEmailOtpPassword" placeholder="Your current password">
+        </div>
+        <div style="display:flex;gap:1rem;">
+            <button onclick="hideModal('disableEmailOtpModal')" class="btn btn-secondary" style="flex:1;">Cancel</button>
+            <button onclick="disableEmailOtp()" class="btn btn-danger" style="flex:1;">
+                <i class="fas fa-times"></i> Disable Email OTP
+            </button>
         </div>
     </div>
 </div>
@@ -537,13 +620,12 @@
         <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">You will stop receiving Discord notifications and won't be able to use Discord bot commands.</p>
         <div style="display: flex; gap: 1rem;">
             <button onclick="unlinkDiscord()" class="btn btn-danger" style="flex: 1;"><i class="fas fa-unlink"></i> Unlink</button>
-            <button onclick="hideModal('unlinkDiscordModal')" class="btn btn-primary" style="flex: 1;">Cancel</button>
+            <button onclick="hideModal('unlinkDiscordModal')" class="btn btn-secondary" style="flex: 1;">Cancel</button>
         </div>
     </div>
 </div>
 
 <style>
-/* ---- Tabs ---- */
 .settings-tab {
     padding: 0.85rem 1.5rem;
     border: none; background: none; cursor: pointer;
@@ -561,11 +643,11 @@
 }
 .tab-badge.success { background: #d1fae5; color: #065f46; }
 .tab-badge.warning { background: #fef3c7; color: #78350f; }
+.tab-badge.danger  { background: #fee2e2; color: #7f1d1d; }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; animation: fadeIn 0.2s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 
-/* ---- Toggle switch ---- */
 .toggle-switch {
     position: relative; display: inline-block;
     width: 52px; height: 28px; flex-shrink: 0; cursor: pointer;
@@ -584,7 +666,6 @@
 .toggle-switch input:checked + .toggle-slider { background: var(--success); }
 .toggle-switch input:checked + .toggle-slider::before { transform: translateX(24px); }
 
-/* ---- Appearance tab: theme rows ---- */
 .appearance-option-row {
     display: flex; align-items: center; gap: 1.25rem;
     padding: 1rem; border-radius: 10px;
@@ -594,81 +675,50 @@
 }
 .appearance-option-row:hover { border-color: var(--primary); background: var(--bg-nav-hover); }
 .appearance-option-row.selected { border-color: var(--primary); background: var(--bg-nav-active); }
-
 .appearance-preview {
     width: 90px; height: 56px; border-radius: 8px;
-    overflow: hidden; flex-shrink: 0;
-    border: 1px solid var(--border);
+    overflow: hidden; flex-shrink: 0; border: 1px solid var(--border);
 }
 .appearance-preview .prev-topbar { height: 12px; }
 .appearance-preview .prev-body { display: flex; height: 44px; }
 .appearance-preview .prev-sidebar { width: 22px; }
 .appearance-preview .prev-content { flex: 1; display: flex; flex-direction: column; gap: 3px; padding: 3px; }
 .appearance-preview .prev-card { flex: 1; border-radius: 2px; }
-
 .theme-preview-light { background: #f9fafb; }
 .theme-preview-light .prev-topbar { background: #ffffff; border-bottom: 1px solid #e5e7eb; }
 .theme-preview-light .prev-sidebar { background: #ffffff; border-right: 1px solid #e5e7eb; }
 .theme-preview-light .prev-card { background: #ffffff; border: 1px solid #e5e7eb; }
-
 .theme-preview-dark { background: #0f1117; }
 .theme-preview-dark .prev-topbar { background: #1a1d27; border-bottom: 1px solid #2d3148; }
 .theme-preview-dark .prev-sidebar { background: #1a1d27; border-right: 1px solid #2d3148; }
 .theme-preview-dark .prev-card { background: #1e2130; border: 1px solid #2d3148; }
-
 .appearance-option-info { flex: 1; }
 .appearance-option-info strong { display: block; font-size: 0.95rem; color: var(--text-primary); margin-bottom: 0.2rem; }
 .appearance-option-info span { font-size: 0.85rem; color: var(--text-secondary); }
-
 .appearance-radio { font-size: 1.3rem; color: var(--border); transition: color 0.2s; flex-shrink: 0; }
 .appearance-option-row.selected .appearance-radio { color: var(--primary); }
 
-/* ---- Colorblind mode cards ---- */
-.cb-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 0.75rem;
-    margin-bottom: 1.5rem;
-}
-
-/* Responsive: single column on smaller screens */
-@media (max-width: 600px) {
-    .cb-grid {
-        grid-template-columns: 1fr;
-    }
-}
-
+.cb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
+@media (max-width: 600px) { .cb-grid { grid-template-columns: 1fr; } }
 .cb-card {
     display: flex; align-items: center; gap: 1rem;
-    padding: 0.9rem 1rem;
-    border: 2px solid var(--border); border-radius: 10px;
-    cursor: pointer; transition: border-color 0.2s, background 0.2s;
-    position: relative;
+    padding: 0.9rem 1rem; border: 2px solid var(--border); border-radius: 10px;
+    cursor: pointer; transition: border-color 0.2s, background 0.2s; position: relative;
 }
 .cb-card:hover { border-color: var(--primary); background: var(--bg-nav-hover); }
 .cb-card.selected { border-color: var(--primary); background: var(--bg-nav-active); }
-.cb-card-preview {
-    display: flex; gap: 4px; align-items: center; flex-shrink: 0;
-}
-.cbp-dot {
-    display: inline-block;
-    width: 14px; height: 14px; border-radius: 50%;
-}
+.cb-card-preview { display: flex; gap: 4px; align-items: center; flex-shrink: 0; }
+.cbp-dot { display: inline-block; width: 14px; height: 14px; border-radius: 50%; }
 .cb-card-label { flex: 1; }
 .cb-card-label strong { display: block; font-size: 0.9rem; color: var(--text-primary); margin-bottom: 0.15rem; }
 .cb-card-label span { font-size: 0.78rem; color: var(--text-secondary); }
 .cb-card-check { font-size: 1.2rem; color: var(--border); transition: color 0.2s; flex-shrink: 0; }
 .cb-card.selected .cb-card-check { color: var(--primary); }
-
-/* ---- Info box ---- */
 .cb-info-box {
     display: flex; align-items: flex-start; gap: 0.75rem;
-    padding: 0.875rem 1rem;
-    background: var(--bg-nav-active);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    font-size: 0.875rem;
-    color: var(--text-primary);
+    padding: 0.875rem 1rem; background: var(--bg-nav-active);
+    border: 1px solid var(--border); border-radius: 8px;
+    font-size: 0.875rem; color: var(--text-primary);
 }
 .cb-info-box i { color: var(--primary); margin-top: 2px; flex-shrink: 0; }
 </style>
@@ -690,55 +740,6 @@ window.addEventListener('DOMContentLoaded', () => {
     const hash = location.hash.replace('#', '');
     if (hash && document.getElementById('tab-' + hash)) switchTab(hash);
     syncAppearanceUI();
-});
-
-// ---- Appearance tab: sync UI to current stored prefs ----
-function syncAppearanceUI() {
-    const theme = localStorage.getItem('showwise-theme') || 'light';
-    const cb    = localStorage.getItem('showwise-colorblind') || 'none';
-
-    // Theme rows
-    document.getElementById('theme-light-row')?.classList.toggle('selected', theme === 'light');
-    document.getElementById('theme-dark-row')?.classList.toggle('selected', theme === 'dark');
-
-    // CB cards
-    document.querySelectorAll('.cb-card').forEach(el => {
-        el.classList.toggle('selected', el.id === 'cbcard-' + cb);
-    });
-}
-
-// ---- Apply theme from appearance tab ----
-function applyTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('showwise-theme', theme);
-    syncAppearanceUI();
-}
-
-// ---- Apply colorblind mode from appearance tab ----
-const CB_INFO = {
-    none:          'Standard colour palette — no adjustments applied.',
-    deuteranopia:  'Deuteranopia mode adjusts greens and reds to use blue-teal and orange tones that are distinguishable for people with green-blind colour deficiency.',
-    protanopia:    'Protanopia mode replaces red-dependent colours with blue and orange alternatives suitable for those with red-blind colour deficiency.',
-    tritanopia:    'Tritanopia mode adjusts blue and yellow tones, replacing them with pink and green alternatives for those with blue-yellow colour deficiency.',
-    'high-contrast': 'High Contrast mode maximises foreground/background contrast ratios, adds visible focus outlines, and improves legibility for users with low vision.',
-};
-
-function applyCb(mode) {
-    // Call the global setColorblind function defined in base.html
-    setColorblind(mode);
-    syncAppearanceUI();
-
-    // Show info box
-    const box  = document.getElementById('cbInfoBox');
-    const text = document.getElementById('cbInfoText');
-    if (box && text) {
-        text.textContent = CB_INFO[mode] || '';
-        box.style.display = mode === 'none' ? 'none' : 'flex';
-    }
-}
-
-// Sync CB info box on load
-document.addEventListener('DOMContentLoaded', () => {
     const cb = localStorage.getItem('showwise-colorblind') || 'none';
     const box  = document.getElementById('cbInfoBox');
     const text = document.getElementById('cbInfoText');
@@ -747,6 +748,39 @@ document.addEventListener('DOMContentLoaded', () => {
         box.style.display = 'flex';
     }
 });
+
+// ---- Appearance ----
+function syncAppearanceUI() {
+    const theme = localStorage.getItem('showwise-theme') || 'light';
+    const cb    = localStorage.getItem('showwise-colorblind') || 'none';
+    document.getElementById('theme-light-row')?.classList.toggle('selected', theme === 'light');
+    document.getElementById('theme-dark-row')?.classList.toggle('selected', theme === 'dark');
+    document.querySelectorAll('.cb-card').forEach(el => {
+        el.classList.toggle('selected', el.id === 'cbcard-' + cb);
+    });
+}
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('showwise-theme', theme);
+    syncAppearanceUI();
+}
+const CB_INFO = {
+    none:           'Standard colour palette — no adjustments applied.',
+    deuteranopia:   'Adjusts greens and reds to blue-teal and orange tones for green-blind colour deficiency.',
+    protanopia:     'Replaces red-dependent colours with blue and orange alternatives for red-blind colour deficiency.',
+    tritanopia:     'Adjusts blue and yellow tones, replacing them with pink and green for blue-yellow colour deficiency.',
+    'high-contrast':'Maximises foreground/background contrast ratios and adds visible focus outlines for low vision.',
+};
+function applyCb(mode) {
+    setColorblind(mode);
+    syncAppearanceUI();
+    const box  = document.getElementById('cbInfoBox');
+    const text = document.getElementById('cbInfoText');
+    if (box && text) {
+        text.textContent = CB_INFO[mode] || '';
+        box.style.display = mode === 'none' ? 'none' : 'flex';
+    }
+}
 
 // ---- Password strength ----
 document.getElementById('newPassword').addEventListener('input', function() {
@@ -767,7 +801,6 @@ document.getElementById('newPassword').addEventListener('input', function() {
     txt.textContent = pw.length ? labels[idx] + ' password' : '';
     txt.style.color = colors[idx];
 });
-
 document.getElementById('confirmPassword').addEventListener('input', function() {
     const match = document.getElementById('newPassword').value === this.value;
     const el = document.getElementById('matchText');
@@ -800,32 +833,7 @@ document.getElementById('changePasswordForm').addEventListener('submit', functio
     });
 });
 
-// ---- Skip 2FA for OAuth ----
-function toggleSkip2faOauth(enabled) {
-    const statusEl = document.getElementById('skip2faOauthStatus');
-    if (statusEl) { statusEl.textContent = 'Saving...'; statusEl.style.color = 'var(--text-muted)'; }
-    fetch('/api/settings/skip-2fa-oauth', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ enabled })
-    }).then(r => r.json()).then(d => {
-        if (d.success) {
-            showAlert(enabled ? 'Google sign-in will now skip the 2FA prompt.' : '2FA will be required even when signing in with Google.', 'success');
-            if (statusEl) {
-                statusEl.textContent = enabled ? '✓ Google sign-in bypasses 2FA prompt.' : '2FA prompt is required for all login methods.';
-                statusEl.style.color = enabled ? 'var(--success)' : 'var(--text-muted)';
-            }
-        } else {
-            showAlert(d.error || 'Failed to update setting', 'error');
-            document.getElementById('skip2faOauthToggle').checked = !enabled;
-        }
-    }).catch(() => {
-        showAlert('Network error', 'error');
-        document.getElementById('skip2faOauthToggle').checked = !enabled;
-    });
-}
-
-// ---- 2FA setup ----
+// ---- TOTP 2FA ----
 let currentSecret = '', backupCodesData = [];
 
 function startSetup2FA() {
@@ -874,6 +882,105 @@ function disable2FA() {
     });
 }
 
+// ---- Skip 2FA for OAuth toggle ----
+function toggleSkip2faOauth(enabled) {
+    const statusEl = document.getElementById('skip2faOauthStatus');
+    if (statusEl) { statusEl.textContent = 'Saving...'; statusEl.style.color = 'var(--text-muted)'; }
+    fetch('/api/settings/skip-2fa-oauth', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ enabled })
+    }).then(r => r.json()).then(d => {
+        if (d.success) {
+            showAlert(enabled ? 'Google sign-in will skip the 2FA prompt.' : '2FA required for all login methods.', 'success');
+            if (statusEl) {
+                statusEl.textContent = enabled ? '✓ Google sign-in bypasses 2FA prompt.' : '2FA prompt is required for all login methods.';
+                statusEl.style.color = enabled ? 'var(--success)' : 'var(--text-muted)';
+            }
+        } else {
+            showAlert(d.error || 'Failed to update setting', 'error');
+            document.getElementById('skip2faOauthToggle').checked = !enabled;
+        }
+    }).catch(() => {
+        showAlert('Network error', 'error');
+        document.getElementById('skip2faOauthToggle').checked = !enabled;
+    });
+}
+
+// ---- Email OTP Setup ----
+async function startEmailOtpSetup() {
+    const btn = document.getElementById('startEmailOtpBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending code...';
+    try {
+        const res  = await fetch('/api/2fa/email-otp/send-setup', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('emailOtpSetupStep1').style.display = 'none';
+            document.getElementById('emailOtpSetupStep2').style.display = 'block';
+            document.getElementById('emailOtpSetupCode').focus();
+            showAlert('Code sent to your email!', 'success');
+        } else {
+            showAlert(data.error || 'Failed to send code', 'error');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-envelope"></i> Enable Email OTP';
+        }
+    } catch {
+        showAlert('Network error', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-envelope"></i> Enable Email OTP';
+    }
+}
+async function resendEmailOtpSetup() {
+    const btn = document.getElementById('emailOtpResendBtn');
+    btn.disabled = true;
+    const res  = await fetch('/api/2fa/email-otp/send-setup', { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+        showAlert('New code sent!', 'success');
+        document.getElementById('emailOtpSetupCode').value = '';
+        document.getElementById('emailOtpSetupCode').focus();
+        setTimeout(() => { btn.disabled = false; }, 30000);
+    } else {
+        showAlert(data.error || 'Failed to resend', 'error');
+        btn.disabled = false;
+    }
+}
+async function verifyEmailOtpSetup() {
+    const code = document.getElementById('emailOtpSetupCode').value.trim();
+    if (code.length !== 6) { showAlert('Enter the full 6-digit code', 'error'); return; }
+    const res  = await fetch('/api/2fa/email-otp/verify-setup', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ code }),
+    });
+    const data = await res.json();
+    if (data.success) {
+        showAlert('Email OTP enabled!', 'success');
+        setTimeout(() => location.reload(), 1200);
+    } else {
+        showAlert(data.error || 'Invalid code', 'error');
+        document.getElementById('emailOtpSetupCode').value = '';
+        document.getElementById('emailOtpSetupCode').focus();
+    }
+}
+async function disableEmailOtp() {
+    const pw = document.getElementById('disableEmailOtpPassword').value;
+    if (!pw) { showAlert('Enter your password', 'error'); return; }
+    const res  = await fetch('/api/2fa/email-otp/disable', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ password: pw }),
+    });
+    const data = await res.json();
+    if (data.success) {
+        showAlert('Email OTP disabled', 'success');
+        setTimeout(() => location.reload(), 1000);
+    } else {
+        showAlert(data.error || 'Failed', 'error');
+    }
+}
+
 // ---- Discord / Google unlink ----
 function unlinkDiscord() {
     fetch('/settings/link-discord', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({discord_id: null, discord_username: null}) })
@@ -912,10 +1019,9 @@ document.getElementById('profilePictureForm').addEventListener('submit', async f
             fileInput.value = '';
             setTimeout(() => location.reload(), 1500);
         } else showAlert(data.error || 'Upload failed', 'error');
-    } catch (err) { showAlert('Network error', 'error'); }
+    } catch { showAlert('Network error', 'error'); }
     finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Upload'; }
 });
-
 document.getElementById('deletePictureBtn')?.addEventListener('click', async function() {
     if (!confirm('Remove your profile picture?')) return;
     try {
@@ -923,7 +1029,7 @@ document.getElementById('deletePictureBtn')?.addEventListener('click', async fun
         const data = await response.json();
         if (response.ok) { showAlert('✓ Profile picture removed', 'success'); setTimeout(() => location.reload(), 1000); }
         else showAlert(data.error || 'Failed to remove picture', 'error');
-    } catch (err) { showAlert('Network error', 'error'); }
+    } catch { showAlert('Network error', 'error'); }
 });
 
 // ---- Account info editing ----
@@ -933,7 +1039,6 @@ function toggleAccountEdit() {
     view.style.display = view.style.display === 'none' ? 'grid' : 'none';
     form.style.display = form.style.display === 'none' ? 'block' : 'none';
 }
-
 document.getElementById('accountInfoForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     const username = document.getElementById('editUsername').value.trim();
@@ -956,7 +1061,7 @@ document.getElementById('accountInfoForm').addEventListener('submit', async func
             if (email) document.getElementById('emailDisplay').textContent = email;
             setTimeout(() => location.reload(), 1500);
         } else showAlert(data.error || 'Update failed', 'error');
-    } catch (err) { showAlert('Network error', 'error'); }
+    } catch { showAlert('Network error', 'error'); }
     finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Save Changes'; }
 });
 </script>

@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Email Verification - {{ organization.name }}</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <style>
+    :root {
+      --primary: {{ organization.primary_color or '#6366f1' }};
+      --primary-dark: #4f46e5;
+      --secondary: {{ organization.secondary_color or '#898989' }};
+      --dark: #1f2937;
+      --light: #f9fafb;
+      --border: #e5e7eb;
+      --success: #10b981;
+      --danger: #ef4444;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .bg-circle {
+      position: absolute;
+      width: 400px; height: 400px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 50%;
+      animation: float 20s infinite;
+      pointer-events: none;
+    }
+    .bg-circle-1 { top: -80px; left: -60px; }
+    .bg-circle-2 { bottom: -100px; right: -60px; animation-delay: 3s; }
+    @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(20px)} }
+
+    .card {
+      background: white;
+      padding: 2.75rem 2.5rem;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      width: 100%;
+      max-width: 420px;
+      margin: 2rem;
+      position: relative;
+      z-index: 10;
+      animation: slideUp 0.4s ease;
+    }
+    @keyframes slideUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+
+    .header { text-align: center; margin-bottom: 1.75rem; }
+    .header .icon {
+      width: 64px; height: 64px;
+      background: linear-gradient(135deg, var(--primary), #a855f7);
+      border-radius: 16px;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 1rem;
+      font-size: 1.75rem;
+    }
+    .header h1 { font-size: 1.5rem; color: var(--dark); margin-bottom: 0.35rem; }
+    .header p { color: #6b7280; font-size: 0.9rem; line-height: 1.5; }
+    .header .email-hint {
+      display: inline-block;
+      margin-top: 0.5rem;
+      background: #f5f3ff;
+      color: var(--primary);
+      padding: 0.3rem 0.75rem;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .form-group { margin-bottom: 1.25rem; }
+    label { display: block; margin-bottom: 0.4rem; font-weight: 600; color: var(--dark); font-size: 0.88rem; }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 0.8rem;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      font-size: 1.6rem;
+      text-align: center;
+      letter-spacing: 10px;
+      font-family: monospace;
+      font-weight: 700;
+      color: var(--dark);
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    input[type="text"]:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+    }
+
+    .btn {
+      width: 100%;
+      padding: 0.8rem;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+      text-decoration: none;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary), #a855f7);
+      color: white;
+      box-shadow: 0 4px 12px rgba(99,102,241,0.3);
+      margin-bottom: 0.75rem;
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(99,102,241,0.4); }
+    .btn-primary:disabled { opacity: 0.65; transform: none; cursor: not-allowed; }
+
+    .btn-ghost {
+      background: none;
+      color: var(--primary);
+      border: 2px solid var(--border);
+      margin-bottom: 0;
+    }
+    .btn-ghost:hover { border-color: var(--primary); background: #f5f3ff; }
+    .btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .alert {
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      margin-bottom: 1.1rem;
+      font-size: 0.875rem;
+      display: flex; gap: 0.6rem; align-items: flex-start;
+    }
+    .alert-error   { background: #fef2f2; color: #7f1d1d; border-left: 4px solid var(--danger); }
+    .alert-success { background: #f0fdf4; color: #166534; border-left: 4px solid var(--success); }
+    .alert-info    { background: #f0f9ff; color: #164e63; border-left: 4px solid #0ea5e9; }
+
+    .timer {
+      text-align: center;
+      color: #9ca3af;
+      font-size: 0.82rem;
+      margin-bottom: 1rem;
+    }
+    .timer span { font-weight: 700; color: var(--primary); }
+
+    .back-link { text-align: center; margin-top: 1.25rem; }
+    .back-link a { color: #6b7280; text-decoration: none; font-size: 0.875rem; }
+    .back-link a:hover { color: var(--primary); }
+
+    .divider {
+      display: flex; align-items: center; gap: 0.75rem;
+      color: #d1d5db; font-size: 0.8rem; margin: 1rem 0;
+    }
+    .divider::before, .divider::after { content:''; flex:1; height:1px; background:#e5e7eb; }
+  </style>
+</head>
+<body>
+  <div class="bg-circle bg-circle-1"></div>
+  <div class="bg-circle bg-circle-2"></div>
+
+  <div class="card">
+    <div class="header">
+      <div class="icon">📧</div>
+      <h1>Check Your Email</h1>
+      <p>We'll send a 6-digit code to your email address.</p>
+      <span class="email-hint">{{ masked_email }}</span>
+    </div>
+
+    <div id="errorAlert"   class="alert alert-error"   style="display:none;"></div>
+    <div id="successAlert" class="alert alert-success" style="display:none;"></div>
+
+    <!-- Step 1: request code -->
+    <div id="stepRequest">
+      <button class="btn btn-primary" id="sendBtn" onclick="sendCode()">
+        <i class="fas fa-paper-plane"></i> Send Login Code
+      </button>
+    </div>
+
+    <!-- Step 2: enter code (hidden until code sent) -->
+    <div id="stepVerify" style="display:none;">
+      <div class="timer" id="timerRow">
+        Code expires in <span id="timerDisplay">10:00</span>
+      </div>
+
+      <div class="form-group">
+        <label for="otpInput">Enter 6-digit code</label>
+        <input type="text" id="otpInput" maxlength="6" inputmode="numeric"
+               pattern="[0-9]{6}" placeholder="——————"
+               oninput="this.value=this.value.replace(/\D/g,'')"
+               onkeydown="if(event.key==='Enter')verifyCode()">
+      </div>
+
+      <button class="btn btn-primary" id="verifyBtn" onclick="verifyCode()">
+        <i class="fas fa-lock-open"></i> Verify & Sign In
+      </button>
+
+      <div class="divider">or</div>
+
+      <button class="btn btn-ghost" id="resendBtn" onclick="resendCode()" disabled>
+        <i class="fas fa-redo"></i> Resend Code <span id="resendCountdown"></span>
+      </button>
+    </div>
+
+    <div class="back-link">
+      <a href="{{ url_for('tfa.totp_verify_page') }}">
+        <i class="fas fa-arrow-left"></i> Use authenticator app instead
+      </a>
+      &nbsp;·&nbsp;
+      <a href="{{ url_for('auth.login') }}">Back to login</a>
+    </div>
+  </div>
+
+  <script>
+    let countdownInterval = null;
+    let resendInterval    = null;
+    const OTP_EXPIRY_SECS = {{ 10 * 60 }};  // 10 minutes in seconds
+    let remaining = OTP_EXPIRY_SECS;
+    let resendRemaining = 60;
+
+    function showAlert(msg, type) {
+      ['errorAlert','successAlert'].forEach(id => {
+        document.getElementById(id).style.display = 'none';
+        document.getElementById(id).textContent = '';
+      });
+      const id = type === 'error' ? 'errorAlert' : 'successAlert';
+      const el = document.getElementById(id);
+      el.innerHTML = `<i class="fas fa-${type === 'error' ? 'exclamation-circle' : 'check-circle'}"></i> ${msg}`;
+      el.style.display = 'flex';
+    }
+
+    function startCountdown() {
+      remaining = OTP_EXPIRY_SECS;
+      clearInterval(countdownInterval);
+      countdownInterval = setInterval(() => {
+        remaining--;
+        const m = Math.floor(remaining / 60).toString().padStart(2,'0');
+        const s = (remaining % 60).toString().padStart(2,'0');
+        document.getElementById('timerDisplay').textContent = `${m}:${s}`;
+        if (remaining <= 0) {
+          clearInterval(countdownInterval);
+          document.getElementById('timerDisplay').textContent = 'expired';
+          showAlert('Your code has expired. Please request a new one.', 'error');
+        }
+      }, 1000);
+    }
+
+    function startResendCooldown() {
+      resendRemaining = 60;
+      const btn = document.getElementById('resendBtn');
+      btn.disabled = true;
+      clearInterval(resendInterval);
+      resendInterval = setInterval(() => {
+        resendRemaining--;
+        document.getElementById('resendCountdown').textContent =
+          resendRemaining > 0 ? `(${resendRemaining}s)` : '';
+        if (resendRemaining <= 0) {
+          clearInterval(resendInterval);
+          btn.disabled = false;
+          document.getElementById('resendCountdown').textContent = '';
+        }
+      }, 1000);
+    }
+
+    async function sendCode() {
+      const btn = document.getElementById('sendBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+
+      try {
+        const res  = await fetch('/api/2fa/email-otp/send', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('stepRequest').style.display = 'none';
+          document.getElementById('stepVerify').style.display  = 'block';
+          document.getElementById('otpInput').focus();
+          startCountdown();
+          startResendCooldown();
+          showAlert('Code sent! Check your inbox (and spam folder).', 'success');
+        } else {
+          showAlert(data.error || 'Failed to send code.', 'error');
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Login Code';
+        }
+      } catch {
+        showAlert('Network error — please try again.', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Login Code';
+      }
+    }
+
+    async function resendCode() {
+      document.getElementById('resendBtn').disabled = true;
+      const res  = await fetch('/api/2fa/email-otp/send', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        startCountdown();
+        startResendCooldown();
+        showAlert('New code sent!', 'success');
+        document.getElementById('otpInput').value = '';
+        document.getElementById('otpInput').focus();
+      } else {
+        showAlert(data.error || 'Could not resend.', 'error');
+        document.getElementById('resendBtn').disabled = false;
+      }
+    }
+
+    async function verifyCode() {
+      const code = document.getElementById('otpInput').value.trim();
+      if (code.length !== 6) { showAlert('Enter the full 6-digit code.', 'error'); return; }
+
+      const btn = document.getElementById('verifyBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
+
+      try {
+        const res  = await fetch('/api/2fa/email-otp/verify-login', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ code }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          clearInterval(countdownInterval);
+          window.location.href = data.redirect;
+        } else {
+          showAlert(data.error || 'Invalid code.', 'error');
+          document.getElementById('otpInput').value = '';
+          document.getElementById('otpInput').focus();
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fas fa-lock-open"></i> Verify & Sign In';
+        }
+      } catch {
+        showAlert('Network error.', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-lock-open"></i> Verify & Sign In';
+      }
+    }
+  </script>
+</body>
+</html>
