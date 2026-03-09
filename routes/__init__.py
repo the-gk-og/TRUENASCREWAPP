@@ -28,6 +28,8 @@ def register_blueprints(app):
     from routes.rocketchat       import rocketchat_bp
     from routes.todos            import todos_bp
     from routes.hired_equipment  import hired_equipment_bp
+    from routes.email_otp import email_otp_bp
+
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(tfa_bp)
@@ -46,3 +48,4 @@ def register_blueprints(app):
     app.register_blueprint(rocketchat_bp)
     app.register_blueprint(todos_bp)
     app.register_blueprint(hired_equipment_bp)
+    app.register_blueprint(email_otp_bp)
