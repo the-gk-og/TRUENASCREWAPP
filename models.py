@@ -424,3 +424,20 @@ class RecurringUnavailability(db.Model):
     created_at      = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at      = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     user = db.relationship('User', backref='recurring_unavailabilities')
+
+class EmailOTP(db.Model):
+    """Stores active email-based OTP codes for 2FA.
+    
+    A user may have either TOTP *or* Email OTP enabled — not both simultaneously.
+    The 'enabled' flag marks whether email OTP is the user's chosen 2FA method.
+    """
+    id         = db.Column(db.Integer, primary_key=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey('user.id'), unique=True, nullable=False)
+    enabled    = db.Column(db.Boolean, default=False)
+    # Transient OTP fields — reset after each use
+    otp_code   = db.Column(db.String(8), nullable=True)
+    otp_expiry = db.Column(db.DateTime, nullable=True)
+    otp_used   = db.Column(db.Boolean, default=True)   # True = no active code
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    user = db.relationship('User', backref='email_otp')
