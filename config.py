@@ -73,7 +73,7 @@ class BaseConfig:
 
     # Organisation
     ORGANIZATION_SLUG = os.environ.get('ORGANIZATION_SLUG', '')
-    MAIN_SERVER_URL   = os.environ.get('MAIN_SERVER_URL', 'https://sfx-crew.com')
+    MAIN_SERVER_URL   = os.environ.get('MAIN_SERVER_URL', 'https://showwise.app')
     SIGNUP_BASE_URL   = os.environ.get('SIGNUP_BASE_URL', os.environ.get('MAIN_SERVER_URL', ''))
 
     # Discord
