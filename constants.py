@@ -11,7 +11,7 @@ DEFAULT_ORG = {
     'primary_color':   '#6366f1',
     'secondary_color': '#ec4899',
     'logo':            '',
-    'website':         'https://sfx-crew.com',
+    'website':         'https://showwise.app',
 }
 
 ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
