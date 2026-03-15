@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Reminder: {{ event_title }}</title>
+  <title>Password Changed</title>
 </head>
 <body style="margin:0;padding:0;background:#f3f4f6;font-family:'Segoe UI',Arial,sans-serif;">
 
@@ -14,28 +14,18 @@
                style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;
                       overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
 
-          <!-- Header — colour changes based on reminder_type -->
-          {% if reminder_type == 'today' %}
+          <!-- Header -->
           <tr>
-            <td style="background:linear-gradient(135deg,#dc2626 0%,#ef4444 100%);
-          {% elif reminder_type == 'tomorrow' %}
-          <tr>
-            <td style="background:linear-gradient(135deg,#d97706 0%,#f59e0b 100%);
-          {% else %}
-          <tr>
-            <td style="background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);
-          {% endif %}
+            <td style="background:linear-gradient(135deg,#059669 0%,#10b981 100%);
                        padding:40px 48px 36px;text-align:center;">
+              <img src="{{ static_url }}/icon1.png"
+                   alt="Showwise"
+                   width="64" height="64"
+                   style="display:block;margin:0 auto 16px;border-radius:14px;" />
               <p style="margin:0 0 8px;font-size:12px;letter-spacing:3px;text-transform:uppercase;
-                         color:rgba(255,255,255,0.7);font-weight:600;">ShowWise Reminder</p>
+                         color:rgba(255,255,255,0.7);font-weight:600;">ShowWise</p>
               <h1 style="margin:0;font-size:28px;font-weight:800;color:#ffffff;">
-                {% if reminder_type == 'today' %}
-                  🚨 EVENT TODAY
-                {% elif reminder_type == 'tomorrow' %}
-                  ⏰ Event Tomorrow
-                {% else %}
-                  📅 Event in 1 Week
-                {% endif %}
+                ✅ Password Changed
               </h1>
             </td>
           </tr>
@@ -47,46 +37,30 @@
               <p style="margin:0 0 20px;font-size:16px;color:#374151;line-height:1.6;">
                 Hi <strong>{{ username }}</strong>,
               </p>
-              <p style="margin:0 0 28px;font-size:15px;color:#4b5563;line-height:1.75;">
-                {% if reminder_type == 'today' %}
-                  Your event is happening <strong>TODAY</strong>! Make sure you're prepared.
-                {% elif reminder_type == 'tomorrow' %}
-                  Your event is <strong>tomorrow</strong>! Time to get ready.
-                {% else %}
-                  Your event is coming up in <strong>one week</strong>. Start preparing!
-                {% endif %}
+              <p style="margin:0 0 24px;font-size:15px;color:#4b5563;line-height:1.75;">
+                Your ShowWise password has been successfully changed.
               </p>
 
-              <!-- Event details card -->
+              <!-- Info row -->
               <table width="100%" cellpadding="0" cellspacing="0"
-                     style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;
-                            margin:0 0 28px;overflow:hidden;">
+                     style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;margin:0 0 24px;">
                 <tr>
-                  <td style="padding:20px;">
-                    <p style="margin:0 0 14px;font-size:18px;font-weight:700;color:#1f2937;">
-                      {{ event_title }}
+                  <td style="padding:16px 20px;">
+                    <p style="margin:0;font-size:13px;color:#166534;line-height:1.5;">
+                      🕐 Changed at: <strong>{{ changed_at }}</strong>
                     </p>
-                    <table width="100%" cellpadding="0" cellspacing="0">
-                      <tr>
-                        <td style="padding:5px 0;width:110px;font-size:13px;color:#9ca3af;font-weight:600;
-                                   text-transform:uppercase;letter-spacing:0.5px;">📅 Date</td>
-                        <td style="padding:5px 0;font-size:14px;color:#1f2937;font-weight:500;">
-                          {{ event_date }}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style="padding:5px 0;font-size:13px;color:#9ca3af;font-weight:600;
-                                   text-transform:uppercase;letter-spacing:0.5px;">📍 Location</td>
-                        <td style="padding:5px 0;font-size:14px;color:#1f2937;">{{ event_location }}</td>
-                      </tr>
-                      <tr>
-                        <td style="padding:5px 0;font-size:13px;color:#9ca3af;font-weight:600;
-                                   text-transform:uppercase;letter-spacing:0.5px;">👤 Role</td>
-                        <td style="padding:5px 0;font-size:14px;color:#1f2937;font-weight:600;">
-                          {{ role }}
-                        </td>
-                      </tr>
-                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Security alert -->
+              <table width="100%" cellpadding="0" cellspacing="0"
+                     style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;margin:0 0 24px;">
+                <tr>
+                  <td style="padding:16px 20px;">
+                    <p style="margin:0;font-size:13px;color:#b91c1c;line-height:1.5;">
+                      🚨 <strong>Not you?</strong> Contact your administrator immediately if you did not make this change.
+                    </p>
                   </td>
                 </tr>
               </table>
@@ -96,8 +70,12 @@
 
           <!-- Footer -->
           <tr>
-            <td style="background:#f9fafb;border-top:1px solid #f0f0f0;padding:22px 48px;text-align:center;">
-              <p style="margin:0;font-size:12px;color:#d1d5db;">
+            <td style="background:#1a1f2e;border-top:1px solid #2d3347;padding:28px 48px;text-align:center;">
+              <img src="{{ static_url }}/icon2.png"
+                   alt="Showwise"
+                   width="36" height="36"
+                   style="display:block;margin:0 auto 12px;opacity:0.7;" />
+              <p style="margin:0;font-size:12px;color:#4b5563;">
                 &copy; {{ org_name }} &middot; Powered by ShowWise
               </p>
             </td>
