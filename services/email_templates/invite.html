@@ -18,6 +18,10 @@
           <tr>
             <td style="background:linear-gradient(135deg,{{ primary_color }} 0%,#a855f7 100%);
                        padding:44px 48px 40px;text-align:center;">
+              <img src="{{ static_url }}/icon1.png"
+                   alt="Showwise"
+                   width="72" height="72"
+                   style="display:block;margin:0 auto 18px;border-radius:16px;" />
               <p style="margin:0 0 10px;font-size:12px;letter-spacing:3px;text-transform:uppercase;
                          color:rgba(255,255,255,0.7);font-weight:600;">
                 Production Crew Management
@@ -149,15 +153,19 @@
 
           <!-- Footer -->
           <tr>
-            <td style="background:#f9fafb;border-top:1px solid #f0f0f0;
-                       padding:22px 48px;text-align:center;">
-              <p style="margin:0 0 6px;font-size:12px;color:#9ca3af;">
-                ⏰ &nbsp;This invite expires <strong>{{ expires_str }}</strong>
+            <td style="background:#1a1f2e;border-top:1px solid #2d3347;
+                       padding:28px 48px;text-align:center;">
+              <img src="{{ static_url }}/icon2.png"
+                   alt="Showwise"
+                   width="36" height="36"
+                   style="display:block;margin:0 auto 12px;opacity:0.7;" />
+              <p style="margin:0 0 6px;font-size:12px;color:#6b7280;">
+                ⏰ &nbsp;This invite expires <strong style="color:#9ca3af;">{{ expires_str }}</strong>
               </p>
-              <p style="margin:0 0 4px;font-size:12px;color:#d1d5db;">
+              <p style="margin:0 0 4px;font-size:12px;color:#4b5563;">
                 This is a single-use invite — please don't forward it to others.
               </p>
-              <p style="margin:0;font-size:12px;color:#d1d5db;">
+              <p style="margin:0;font-size:12px;color:#4b5563;">
                 &copy; {{ org_name }} &middot; Powered by ShowWise
               </p>
             </td>

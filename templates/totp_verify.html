@@ -3,7 +3,28 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- ── PRIMARY META ── -->
   <title>Two-Factor Authentication - {{ organization.name }}</title>
+  <meta name="description" content="Two-factor authentication for {{ organization.name }} on ShowWise.">
+  <meta name="author"      content="ShowWise">
+  <meta name="robots"      content="noindex, nofollow">
+  <!-- ── OPEN GRAPH ── -->
+  <meta property="og:type"        content="website">
+  <meta property="og:site_name"   content="ShowWise">
+  <meta property="og:title"       content="Two-Factor Authentication - ShowWise">
+  <meta property="og:description" content="Secure two-factor authentication for ShowWise.">
+  <meta property="og:image"       content="https://showwise.app/static/og-image.png">
+  <meta property="og:locale"      content="en_AU">
+  <!-- ── TWITTER CARD ── -->
+  <meta name="twitter:card"        content="summary_large_image">
+  <meta name="twitter:site"        content="@showwiseapp">
+  <meta name="twitter:title"       content="Two-Factor Authentication - ShowWise">
+  <meta name="twitter:description" content="Secure two-factor authentication for ShowWise.">
+  <meta name="twitter:image"       content="https://showwise.app/static/og-image.png">
+  <!-- ── FAVICON / THEME ── -->
+  <link rel="icon"             type="image/png" href="/static/icon.png">
+  <link rel="apple-touch-icon"                  href="/static/icon.png">
+  <meta name="theme-color"     content="#6366f1">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <style>
     :root {
@@ -34,8 +55,7 @@
 
     .background-animation {
       position: absolute;
-      width: 400px;
-      height: 400px;
+      width: 400px; height: 400px;
       background: rgba(255, 255, 255, 0.1);
       border-radius: 50%;
       animation: float 20s infinite;

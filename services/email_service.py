@@ -220,12 +220,12 @@ def send_html_email(
 
 
 def _org_defaults(org: Optional[dict] = None) -> dict:
-    """Return safe org context values, falling back to env / defaults."""
     if org is None:
         org = {}
     return {
         "org_name":      org.get("name", os.getenv("ORG_NAME", "ShowWise")),
         "primary_color": org.get("primary_color", "#6366f1"),
+        "static_url":    org.get("static_url", os.getenv("STATIC_URL", "/static")),
     }
 
 
