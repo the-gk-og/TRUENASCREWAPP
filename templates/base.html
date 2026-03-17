@@ -3,7 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- ── PRIMARY META ── -->
     <title>{% block title %}ShowWise{% endblock %}</title>
+    <meta name="description"        content="{% block meta_description %}ShowWise — Production Management for Theatre & Events{% endblock %}">
+    <meta name="author"             content="ShowWise">
+    <meta name="robots"             content="noindex, nofollow">
+    <!-- ── OPEN GRAPH ── -->
+    <meta property="og:type"         content="website">
+    <meta property="og:site_name"    content="ShowWise">
+    <meta property="og:url"          content="https://showwise.app{{ request.path }}">
+    <meta property="og:title"        content="{% block og_title %}ShowWise — Production Management{% endblock %}">
+    <meta property="og:description"  content="{% block og_description %}Professional production management for theatres, schools, studios, and event teams.{% endblock %}">
+    <meta property="og:image"        content="{% block og_image %}https://showwise.app/static/og-image.png{% endblock %}">
+    <meta property="og:image:width"  content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:locale"       content="en_AU">
+    <!-- ── TWITTER CARD ── -->
+    <meta name="twitter:card"        content="summary_large_image">
+    <meta name="twitter:site"        content="@showwiseapp">
+    <meta name="twitter:title"       content="{% block twitter_title %}ShowWise — Production Management{% endblock %}">
+    <meta name="twitter:description" content="{% block twitter_description %}Professional production management for theatres, schools, studios, and event teams.{% endblock %}">
+    <meta name="twitter:image"       content="{% block twitter_image %}https://showwise.app/static/og-image.png{% endblock %}">
+    <!-- ── FAVICON / THEME ── -->
+  <link rel="icon" type="image/png" href="/static/favicon/favicon-96x96.png" sizes="96x96" />
+  <link rel="icon" type="image/svg+xml" href="/static/favicon/favicon.svg" />
+  <link rel="shortcut icon" href="/static/favicon/favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/favicon/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-title" content="ShowWise" />
+  <link rel="manifest" href="/static/favicon/site.webmanifest" />
+  <meta name="theme-color" content="#1c252a">
+    <!-- ── FONTS & ICONS ── -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 
@@ -310,65 +339,89 @@
         }
         
         .sidebar-header {
-            padding: 1.5rem 1rem;
+            padding: 1.25rem 1.25rem 1rem;
             border-bottom: 1px solid var(--border);
             display: flex;
             align-items: center;
-            gap: 0.75rem;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-            color: white;
+            gap: 0;
+            background: var(--bg-sidebar);
         }
-        
+
+        .sidebar-logo-wrap {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            text-decoration: none;
+        }
+
+        .sidebar-logo-wrap img {
+            height: 36px;
+            width: auto;
+            display: block;
+        }
+
+        .sidebar-wordmark {
+            font-size: 1.2rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--text-primary);
+            line-height: 1;
+        }
+
         .sidebar-header h1 {
             font-size: 1.25rem;
             font-weight: 700;
         }
         
         .sidebar-nav {
-            padding: 1rem 0;
+            padding: 0.75rem 0.75rem;
         }
         
         .nav-section {
-            margin-bottom: 1.5rem;
+            margin-bottom: 1.25rem;
         }
         
         .nav-section-title {
-            padding: 0.5rem 1rem;
-            font-size: 0.75rem;
-            font-weight: 600;
+            padding: 0.4rem 0.6rem;
+            font-size: 0.68rem;
+            font-weight: 700;
             text-transform: uppercase;
             color: var(--text-muted);
-            letter-spacing: 0.05em;
+            letter-spacing: 0.07em;
         }
         
         .nav-item {
             display: flex;
             align-items: center;
-            gap: 0.75rem;
-            padding: 0.75rem 1rem;
-            color: var(--text-primary);
+            gap: 0.7rem;
+            padding: 0.6rem 0.75rem;
+            color: var(--text-secondary);
             text-decoration: none;
-            transition: all 0.2s ease;
-            border-left: 3px solid transparent;
+            transition: all 0.15s ease;
+            border-radius: 8px;
+            border-left: none;
+            font-size: 0.9rem;
+            margin-bottom: 1px;
         }
         
         .nav-item:hover {
             background: var(--bg-nav-hover);
-            border-left-color: var(--primary);
-            color: var(--primary);
+            border-left-color: transparent;
+            color: var(--text-primary);
         }
         
         .nav-item.active {
             background: var(--bg-nav-active);
-            border-left-color: var(--primary);
+            border-left-color: transparent;
             color: var(--text-nav-active);
             font-weight: 600;
         }
         
         .nav-item i {
-            width: 20px;
+            width: 18px;
             text-align: center;
-            font-size: 1.1rem;
+            font-size: 0.95rem;
+            opacity: 0.85;
         }
         
         /* ============================================================
@@ -936,7 +989,10 @@
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
-        <img src="/static/logo.png" alt="ShowWise" style="height: 40px; margin-right: 10px; vertical-align: middle;">
+            <a href="/" class="sidebar-logo-wrap">
+                <img src="/static/logo.png" alt="ShowWise logo">
+                <span class="sidebar-wordmark">ShowWise</span>
+            </a>
         </div>
         
         <nav class="sidebar-nav">

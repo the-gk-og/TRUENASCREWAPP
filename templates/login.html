@@ -3,7 +3,32 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- ── PRIMARY META ── -->
   <title>Login - {{ organization.name }}</title>
+  <meta name="description" content="Log in to {{ organization.name }} on ShowWise.">
+  <meta name="author"      content="ShowWise">
+  <meta name="robots"      content="noindex, nofollow">
+  <!-- ── OPEN GRAPH ── -->
+  <meta property="og:type"        content="website">
+  <meta property="og:site_name"   content="ShowWise">
+  <meta property="og:title"       content="Login - {{ organization.name }}">
+  <meta property="og:description" content="Log in to {{ organization.name }} on ShowWise.">
+  <meta property="og:image"       content="https://showwise.app/static/og-image.png">
+  <meta property="og:locale"      content="en_AU">
+  <!-- ── TWITTER CARD ── -->
+  <meta name="twitter:card"        content="summary_large_image">
+  <meta name="twitter:site"        content="@showwiseapp">
+  <meta name="twitter:title"       content="Login - {{ organization.name }}">
+  <meta name="twitter:description" content="Log in to {{ organization.name }} on ShowWise.">
+  <meta name="twitter:image"       content="https://showwise.app/static/og-image.png">
+  <!-- ── FAVICON / THEME ── -->
+  <link rel="icon" type="image/png" href="/static/favicon/favicon-96x96.png" sizes="96x96" />
+  <link rel="icon" type="image/svg+xml" href="/static/favicon/favicon.svg" />
+  <link rel="shortcut icon" href="/static/favicon/favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/favicon/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-title" content="ShowWise" />
+  <link rel="manifest" href="/static/favicon/site.webmanifest" />
+  <meta name="theme-color" content="#1c252a">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <style>
     :root {
