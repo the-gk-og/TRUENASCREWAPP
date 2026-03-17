@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <!-- ── PRIMARY META ── -->
+  <!-- ── PRIMARY META ── -->
   <title>Email Verification - {{ organization.name }}</title>
   <meta name="description" content="Email verification for {{ organization.name }} on ShowWise.">
   <meta name="author"      content="ShowWise">
@@ -241,6 +242,7 @@
   <script>
     let countdownInterval = null;
     let resendInterval    = null;
+    const OTP_EXPIRY_SECS = {{ 10 * 60 }};
     const OTP_EXPIRY_SECS = {{ 10 * 60 }};
     let remaining = OTP_EXPIRY_SECS;
     let resendRemaining = 60;
