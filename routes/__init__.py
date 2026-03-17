@@ -1,13 +1,10 @@
 """routes package — register all blueprints in register_blueprints()."""
 
-"""routes package — register all blueprints in register_blueprints()."""
 
 def _is_mobile(ua_string):
     """Return True if the user agent string looks like a mobile browser."""
     ua = (ua_string or '').lower()
     return any(t in ua for t in ('android', 'iphone', 'ipad', 'ipod', 'mobile', 'windows phone'))
-
-
 
 
 def register_blueprints(app):
@@ -28,8 +25,7 @@ def register_blueprints(app):
     from routes.rocketchat       import rocketchat_bp
     from routes.todos            import todos_bp
     from routes.hired_equipment  import hired_equipment_bp
-    from routes.email_otp import email_otp_bp
-
+    from routes.email_otp        import email_otp_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(tfa_bp)

@@ -35,7 +35,7 @@ def create_app(config_name: str | None = None):
     mail.init_app(app)
     init_email_service(app, mail)
 
-    # --- NEW: Authlib OAuth (Google PKCE) ---
+    # --- Authlib OAuth (Google PKCE) ---
     oauth.init_app(app)
     oauth.register(
         name="google",
@@ -47,7 +47,6 @@ def create_app(config_name: str | None = None):
             "code_challenge_method": "S256",
         },
     )
-    # ----------------------------------------
 
     # User loader
     from models import User
@@ -67,20 +66,19 @@ def create_app(config_name: str | None = None):
             ORG_SLUG=app.config.get('ORGANIZATION_SLUG', ''),
         )
 
-    # Kill switch & error handlers
+    # ---------------------------------------------------------------------------
+    # Kill-switch check
+    # Reads the in-memory flag kept fresh by the background ping scheduler.
+    # Zero network cost per request.
+    # ---------------------------------------------------------------------------
     @app.before_request
     def check_service_status():
         if request.path.startswith('/static'):
             return
-        try:
-            from backend_integration import get_backend_client
-            backend = get_backend_client()
-            if backend:
-                enabled, reason = backend.check_kill_switch()
-                if enabled:
-                    return render_template('suspended.html', reason=reason), 503
-        except Exception:
-            pass
+        from routes.backend import get_kill_switch_state
+        enabled, reason = get_kill_switch_state()
+        if enabled:
+            return render_template('suspended.html', reason=reason), 503
 
     @app.errorhandler(404)
     def not_found(e):
@@ -95,23 +93,28 @@ def create_app(config_name: str | None = None):
         os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], sub), exist_ok=True)
     os.makedirs('backups', exist_ok=True)
 
-    # Register all blueprints (OAuth now ready)
+    # Register all blueprints
     register_blueprints(app)
 
-    # Backend client
+    # Backend client + ping scheduler
     with app.app_context():
         try:
-            from backend_integration import init_backend_client
+            from routes.backend import init_backend_client, start_ping_scheduler
             backend = init_backend_client(app)
             if backend:
                 backend.log_info('Application starting', 'system', {'version': '1.0.0'})
+
+                # Org config — cached internally; CONFIG_REFRESH env var controls TTL
                 org_config = backend.get_organization()
                 if org_config:
                     app.config['ORG_NAME']      = org_config.get('name')
                     app.config['ORG_LOGO']      = org_config.get('logo')
                     app.config['PRIMARY_COLOR'] = org_config.get('primary_color')
                     print(f"✓ Loaded config for: {org_config.get('name')}")
-                _start_heartbeat(app, backend)
+
+                # Start kill-switch ping scheduler (replaces old heartbeat)
+                start_ping_scheduler(app, backend)
+
         except Exception as exc:
             print(f"⚠️  Backend init error: {exc}")
 
@@ -125,29 +128,6 @@ def create_app(config_name: str | None = None):
             pass
 
     return app
-
-
-def _start_heartbeat(app, backend):
-    from apscheduler.schedulers.background import BackgroundScheduler
-
-    def send_heartbeat():
-        with app.app_context():
-            from models import User, Event
-            try:
-                metadata = {
-                    'users':        User.query.count(),
-                    'events':       Event.query.count(),
-                    'organization': os.getenv('ORGANIZATION_SLUG', 'Unknown'),
-                }
-            except Exception:
-                metadata = {}
-            backend.send_heartbeat('online', metadata)
-
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(send_heartbeat, 'interval', minutes=5)
-    scheduler.start()
-    atexit.register(lambda: scheduler.shutdown())
-    print("✓ Uptime tracking enabled")
 
 
 def init_db(app):

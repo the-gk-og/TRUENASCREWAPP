@@ -1,278 +1,318 @@
 """
 ShowWise Backend Integration Module
+====================================
+Handles all communication with the ShowWise Backend:
+  - Organisation configuration loading (cached, refresh interval from env)
+  - Kill-switch licence-key model (file-backed, auto-renewal)
+  - Centralised logging
+  - Chat messaging (kept for compatibility)
 
-This module handles all communication with the ShowWise Backend:
-- Organization configuration loading
-- Centralized logging
-- Uptime heartbeat pings
-- Kill switch checking
-- Chat messaging
+Key env vars
+------------
+BACKEND_URL          Base URL of the backend  (e.g. https://backend.example.com)
+BACKEND_API_KEY      Your API key
+ORG_SLUG             Your organisation slug
+PING_INTERVAL        Seconds between kill-switch pings          (default 300)
+CONFIG_REFRESH       Seconds between org-config cache refreshes (default 3600)
+LICENSE_KEY_FILE     Path to persist the licence key            (default .license_key)
 
 Author: ShowWise Team
-Version: 1.0.0
+Version: 2.0.0
 """
 
 import os
-import requests
-from datetime import datetime
-from functools import wraps
-from typing import Dict, Any, Optional, List
+import json
+import time
 import logging
+import requests
+from datetime import datetime, timezone
+from functools import wraps
+from pathlib import Path
+from typing import Dict, Any, Optional, Tuple
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Defaults / env helpers
+# ---------------------------------------------------------------------------
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+PING_INTERVAL    = _env_int("PING_INTERVAL",   300)   # seconds
+CONFIG_REFRESH   = _env_int("CONFIG_REFRESH", 3600)   # seconds
+LICENSE_KEY_FILE = os.getenv("LICENSE_KEY_FILE", ".license_key")
+
+
+# ---------------------------------------------------------------------------
+# ShowWiseBackend
+# ---------------------------------------------------------------------------
 
 class ShowWiseBackend:
     """
-    ShowWise Backend Integration Client
-    
-    This class provides all methods needed to integrate with ShowWise Backend.
+    Lightweight backend client.
+
+    Kill-switch model
+    -----------------
+    The backend issues a signed key + UTC expiry timestamp.  The instance
+    stores this to disk so it survives process restarts.
+
+    On every ping the backend returns:
+      { "kill_switch_enabled": bool,
+        "reason": str,
+        "new_key": str | null,
+        "new_expiry": int | null }   <- UNIX timestamp (UTC)
+
+    A new key is issued when the remaining TTL is <= 2 x PING_INTERVAL.
+
+    If the backend cannot be reached the instance uses the cached key: if the
+    key is still valid the service stays up; if it has expired the kill switch
+    triggers (fail-closed on expired licence).
     """
-    
+
     def __init__(self, backend_url: str, api_key: str, org_slug: str):
-        """
-        Initialize the backend client
-        
-        Args:
-            backend_url: Base URL of the backend (e.g., http://localhost:5001)
-            api_key: Your API key from the backend dashboard
-            org_slug: Your organization slug identifier
-        """
-        self.backend_url = backend_url.rstrip('/')
-        self.api_key = api_key
-        self.org_slug = org_slug
-        self.timeout = 5  # seconds
-        
-        # Cache for organization data
-        self._org_cache = None
-        self._org_cache_time = None
-        self._cache_duration = 300  # 5 minutes
-        
-        logger.info(f"ShowWise Backend client initialized for {org_slug}")
-    
-    def _make_request(self, method: str, endpoint: str, 
-                     data: Optional[Dict] = None,
-                     use_api_key: bool = True) -> Optional[Dict]:
-        """
-        Make HTTP request to backend
-        
-        Args:
-            method: HTTP method (GET, POST, etc.)
-            endpoint: API endpoint path
-            data: JSON data to send
-            use_api_key: Whether to include API key header
-            
-        Returns:
-            Response JSON or None on error
-        """
-        url = f"{self.backend_url}{endpoint}"
-        headers = {'Content-Type': 'application/json'}
-        
+        self.backend_url      = backend_url.rstrip("/")
+        self.api_key          = api_key
+        self.org_slug         = org_slug
+        self.timeout          = 8
+
+        # --- org config cache ---
+        self._org_cache:      Optional[Dict] = None
+        self._org_cache_at:   float          = 0.0   # time.time()
+
+        # --- licence key state ---
+        self._license_key:    Optional[str]  = None
+        self._license_expiry: Optional[int]  = None  # UNIX timestamp UTC
+        self._last_ping_at:   float          = 0.0
+
+        self._load_license_from_file()
+        logger.info("ShowWise backend client initialised for %s", org_slug)
+
+    # ------------------------------------------------------------------
+    # HTTP helper
+    # ------------------------------------------------------------------
+
+    def _request(self, method: str, endpoint: str,
+                 data: Optional[Dict] = None,
+                 use_api_key: bool = True) -> Optional[Dict]:
+        url     = f"{self.backend_url}{endpoint}"
+        headers = {"Content-Type": "application/json"}
         if use_api_key and self.api_key:
-            headers['X-API-Key'] = self.api_key
-        
+            headers["X-API-Key"] = self.api_key
         try:
-            response = requests.request(
-                method=method,
-                url=url,
-                json=data,
-                headers=headers,
-                timeout=self.timeout
-            )
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                logger.warning(f"Backend request failed: {response.status_code}")
-                return None
-                
+            resp = requests.request(method, url, json=data,
+                                    headers=headers, timeout=self.timeout)
+            if resp.status_code == 200:
+                return resp.json()
+            logger.warning("Backend %s %s -> %s", method, endpoint, resp.status_code)
         except requests.exceptions.Timeout:
-            logger.error(f"Backend request timeout: {endpoint}")
-            return None
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Backend request error: {e}")
-            return None
-    
-    # ==================== ORGANIZATION API ====================
-    
-    def get_organization(self, force_refresh: bool = False) -> Optional[Dict]:
-        """
-        Get organization configuration from backend
-        
-        Args:
-            force_refresh: Force refresh cache
-            
-        Returns:
-            Organization configuration dict or None
-        """
-        # Check cache
-        if not force_refresh and self._org_cache:
-            if self._org_cache_time:
-                age = (datetime.now() - self._org_cache_time).total_seconds()
-                if age < self._cache_duration:
-                    return self._org_cache
-        
-        # Fetch from backend
-        result = self._make_request('GET', f'/api/organizations/{self.org_slug}', use_api_key=False)
-        
-        if result and result.get('success'):
-            self._org_cache = result.get('organization')
-            self._org_cache_time = datetime.now()
-            logger.info(f"Organization config loaded: {self._org_cache.get('name')}")
-            return self._org_cache
-        
-        logger.error("Failed to load organization config")
+            logger.error("Backend timeout: %s", endpoint)
+        except requests.exceptions.RequestException as exc:
+            logger.error("Backend request error: %s", exc)
         return None
-    
-    # ==================== LOGGING API ====================
-    
-    def log(self, message: str, level: str = 'info', 
-            log_type: str = 'instance', metadata: Optional[Dict] = None) -> bool:
+
+    # ------------------------------------------------------------------
+    # Organisation config (cached)
+    # ------------------------------------------------------------------
+
+    def get_organization(self, force: bool = False) -> Optional[Dict]:
         """
-        Send log entry to backend
-        
-        Args:
-            message: Log message
-            level: Log level (info, warning, error, critical)
-            log_type: Log type (api, auth, system, user, instance, chat)
-            metadata: Additional metadata dict
-            
-        Returns:
-            True if logged successfully
+        Return the org config dict.  Results are cached for CONFIG_REFRESH
+        seconds (env var).  Pass force=True to bypass the cache.
         """
-        data = {
-            'type': log_type,
-            'org_slug': self.org_slug,
-            'message': message,
-            'level': level,
-            'metadata': metadata or {}
+        now = time.time()
+        if not force and self._org_cache and (now - self._org_cache_at) < CONFIG_REFRESH:
+            return self._org_cache
+
+        result = self._request("GET", f"/api/organizations/{self.org_slug}",
+                               use_api_key=False)
+        if result and result.get("success"):
+            self._org_cache    = result.get("organization")
+            self._org_cache_at = now
+            logger.info("Org config refreshed for %s", self.org_slug)
+            return self._org_cache
+
+        logger.warning("Could not refresh org config; using cached copy")
+        return self._org_cache   # might be None on first boot if backend unreachable
+
+    # ------------------------------------------------------------------
+    # Kill-switch / licence key
+    # ------------------------------------------------------------------
+
+    def check_kill_switch(self) -> Tuple[bool, str]:
+        """
+        Ping the backend to check the kill switch.
+
+        - Sends the current licence key so the backend can validate it.
+        - If the TTL is <= 2 x PING_INTERVAL, the backend returns a new key.
+        - The new key is persisted to disk immediately.
+        - If the backend is unreachable we fall back to the cached key:
+            * valid key  -> allow (False = not suspended)
+            * expired    -> kill switch triggers (fail-closed)
+        """
+        now = int(time.time())
+
+        payload = {
+            "org_slug":      self.org_slug,
+            "license_key":   self._license_key,
+            "ping_interval": PING_INTERVAL,
         }
-        
-        result = self._make_request('POST', '/api/log', data=data)
-        return result is not None and result.get('success', False)
-    
-    def log_info(self, message: str, log_type: str = 'instance', metadata: Optional[Dict] = None):
-        """Log info level message"""
-        self.log(message, 'info', log_type, metadata)
-    
-    def log_warning(self, message: str, log_type: str = 'instance', metadata: Optional[Dict] = None):
-        """Log warning level message"""
-        self.log(message, 'warning', log_type, metadata)
-    
-    def log_error(self, message: str, log_type: str = 'instance', metadata: Optional[Dict] = None):
-        """Log error level message"""
-        self.log(message, 'error', log_type, metadata)
-    
-    def log_critical(self, message: str, log_type: str = 'instance', metadata: Optional[Dict] = None):
-        """Log critical level message"""
-        self.log(message, 'critical', log_type, metadata)
-    
-    # ==================== UPTIME API ====================
-    
-    def send_heartbeat(self, status: str = 'online', metadata: Optional[Dict] = None) -> bool:
-        """
-        Send uptime heartbeat ping
-        
-        Args:
-            status: Instance status (online, degraded, maintenance)
-            metadata: Additional metadata (server stats, version, etc.)
-            
-        Returns:
-            True if ping sent successfully
-        """
-        data = {
-            'org_slug': self.org_slug,
-            'status': status,
-            'metadata': metadata or {}
-        }
-        
-        result = self._make_request('POST', '/api/uptime/ping', data=data)
-        
-        if result and result.get('success'):
-            logger.debug("Heartbeat sent successfully")
-            return True
-        
-        logger.warning("Failed to send heartbeat")
-        return False
-    
-    # ==================== KILL SWITCH API ====================
-    
-    def check_kill_switch(self) -> tuple:
-        """
-        Check if kill switch is enabled
-        
-        Returns:
-            Tuple of (is_enabled, reason)
-        """
-        result = self._make_request('GET', f'/api/kill-switch/{self.org_slug}', use_api_key=False)
-        
-        if result and result.get('success'):
-            enabled = result.get('kill_switch_enabled', False)
-            reason = result.get('reason', 'Service suspended')
-            
+        result = self._request("POST", "/api/kill-switch/ping", data=payload)
+
+        if result and result.get("success") is not False:
+            enabled = bool(result.get("kill_switch_enabled", False))
+            reason  = result.get("reason", "")
+
+            # Store any newly issued key
+            new_key    = result.get("new_key")
+            new_expiry = result.get("new_expiry")
+            if new_key and new_expiry:
+                self._license_key    = new_key
+                self._license_expiry = int(new_expiry)
+                self._save_license_to_file()
+                logger.info(
+                    "Licence key renewed, expires %s",
+                    datetime.utcfromtimestamp(self._license_expiry).isoformat(),
+                )
+
+            self._last_ping_at = time.time()
+
             if enabled:
-                logger.warning(f"Kill switch is ENABLED: {reason}")
-            
+                logger.warning("Kill switch ENABLED: %s", reason)
             return enabled, reason
-        
-        # If backend is unreachable, allow access (fail open)
-        logger.warning("Could not check kill switch - allowing access")
-        return False, ''
 
-# ==================== FLASK DECORATORS ====================
+        # ---- backend unreachable ----
+        logger.warning("Kill-switch ping failed — using cached licence key")
 
-def log_route(log_type: str = 'api'):
-    """
-    Decorator to automatically log route access
-    
-    Usage:
-        @app.route('/my-route')
-        @log_route('api')
-        def my_route():
-            return 'Hello'
-    """
+        if self._license_expiry and now < self._license_expiry:
+            logger.info("Cached key still valid, allowing access")
+            return False, ""
+
+        if self._license_expiry:
+            logger.error("Cached licence key EXPIRED — triggering kill switch")
+            return True, "Service licence could not be verified (key expired)"
+
+        # No key at all -> fail open (first-run grace)
+        logger.warning("No licence key on file — allowing access (first-run grace)")
+        return False, ""
+
+    # ------------------------------------------------------------------
+    # Licence key persistence
+    # ------------------------------------------------------------------
+
+    def _save_license_to_file(self):
+        try:
+            data = {
+                "license_key":    self._license_key,
+                "license_expiry": self._license_expiry,
+                "org_slug":       self.org_slug,
+                "saved_at":       int(time.time()),
+            }
+            Path(LICENSE_KEY_FILE).write_text(json.dumps(data))
+        except Exception as exc:
+            logger.error("Could not save licence key: %s", exc)
+
+    def _load_license_from_file(self):
+        try:
+            raw  = Path(LICENSE_KEY_FILE).read_text()
+            data = json.loads(raw)
+            if data.get("org_slug") == self.org_slug:
+                self._license_key    = data.get("license_key")
+                self._license_expiry = data.get("license_expiry")
+                logger.info(
+                    "Loaded licence key from %s (expires %s)",
+                    LICENSE_KEY_FILE,
+                    datetime.utcfromtimestamp(self._license_expiry).isoformat()
+                    if self._license_expiry else "unknown",
+                )
+        except FileNotFoundError:
+            logger.info("No licence key file found at %s", LICENSE_KEY_FILE)
+        except Exception as exc:
+            logger.warning("Could not load licence key file: %s", exc)
+
+    # ------------------------------------------------------------------
+    # Logging
+    # ------------------------------------------------------------------
+
+    def log(self, message: str, level: str = "info",
+            log_type: str = "instance", metadata: Optional[Dict] = None) -> bool:
+        result = self._request("POST", "/api/log", data={
+            "type":     log_type,
+            "org_slug": self.org_slug,
+            "message":  message,
+            "level":    level,
+            "metadata": metadata or {},
+        })
+        return bool(result and result.get("success"))
+
+    def log_info    (self, msg, log_type="instance", metadata=None): self.log(msg, "info",     log_type, metadata)
+    def log_warning (self, msg, log_type="instance", metadata=None): self.log(msg, "warning",  log_type, metadata)
+    def log_error   (self, msg, log_type="instance", metadata=None): self.log(msg, "error",    log_type, metadata)
+    def log_critical(self, msg, log_type="instance", metadata=None): self.log(msg, "critical", log_type, metadata)
+
+    # ------------------------------------------------------------------
+    # Uptime heartbeat — no-op, uptime tracking moved to instatus
+    # Kept so existing call-sites don't break.
+    # ------------------------------------------------------------------
+
+    def send_heartbeat(self, status: str = "online",
+                       metadata: Optional[Dict] = None) -> bool:
+        """No-op: uptime tracking has been moved to instatus."""
+        return True
+
+
+# ---------------------------------------------------------------------------
+# Flask route decorator
+# ---------------------------------------------------------------------------
+
+def log_route(log_type: str = "api"):
     def decorator(f):
         @wraps(f)
-        def decorated_function(*args, **kwargs):
+        def wrapped(*args, **kwargs):
             backend = get_backend_client()
             if backend:
                 from flask import request
                 backend.log_info(
                     f"{request.method} {request.path}",
                     log_type=log_type,
-                    metadata={'ip': request.remote_addr}
+                    metadata={"ip": request.remote_addr},
                 )
             return f(*args, **kwargs)
-        return decorated_function
+        return wrapped
     return decorator
 
 
-# ==================== GLOBAL CLIENT INSTANCE ====================
+# ---------------------------------------------------------------------------
+# Global singleton
+# ---------------------------------------------------------------------------
 
-_backend_client = None
+_backend_client: Optional[ShowWiseBackend] = None
 
-def init_backend_client(app):
-    """
-    Initialize backend client from Flask app config
-    
-    Call this in your app factory or after app creation:
-        backend = init_backend_client(app)
-    """
+
+def init_backend_client(app) -> Optional[ShowWiseBackend]:
     global _backend_client
-    
-    backend_url = app.config.get('BACKEND_URL') or os.getenv('BACKEND_URL')
-    api_key = app.config.get('BACKEND_API_KEY') or os.getenv('BACKEND_API_KEY')
-    org_slug = app.config.get('ORG_SLUG') or os.getenv('ORG_SLUG')
-    
-    if not all([backend_url, org_slug]):
-        logger.error("Backend configuration incomplete - integration disabled")
+
+    backend_url = app.config.get("BACKEND_URL") or os.getenv("BACKEND_URL")
+    api_key     = app.config.get("BACKEND_API_KEY") or os.getenv("BACKEND_API_KEY")
+    org_slug    = (
+        app.config.get("ORG_SLUG")
+        or os.getenv("ORG_SLUG")
+        or app.config.get("ORGANIZATION_SLUG")
+        or os.getenv("ORGANIZATION_SLUG")
+    )
+
+    if not backend_url or not org_slug:
+        logger.warning("Backend integration disabled (BACKEND_URL / ORG_SLUG not set)")
         return None
-    
-    _backend_client = ShowWiseBackend(backend_url, api_key, org_slug)
+
+    _backend_client = ShowWiseBackend(backend_url, api_key or "", org_slug)
     return _backend_client
 
+
 def get_backend_client() -> Optional[ShowWiseBackend]:
-    """Get the global backend client instance"""
     return _backend_client
