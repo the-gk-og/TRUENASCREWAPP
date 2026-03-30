@@ -15,7 +15,7 @@ calendar_bp = Blueprint('calendar', __name__)
 def calendar():
     events     = Event.query.order_by(Event.event_date).all()
     crew_users = User.query.filter_by(user_role='crew').order_by(User.username).all()
-    shifts      = Shift.query.all()
+    shifts      = Shift.query.all()  # Include all shifts (archived and active) for display
     shifts_data = []
     for shift in shifts:
         assignments = ShiftAssignment.query.filter_by(shift_id=shift.id).all()
@@ -29,11 +29,13 @@ def calendar():
             'id': shift.id,
             'event_id': shift.event_id,
             'shift_date': shift.shift_date.isoformat(),
+            'shift_end_date': shift.shift_end_date.isoformat(),
             'title': shift.title,
             'role': shift.role,
             'positions_needed': shift.positions_needed,
             'assigned_count': assigned_cnt,
             'is_open': shift.is_open,
+            'is_archived': shift.is_archived,
             'assigned_users': assigned_users,
         })
     return render_template('/crew/calendar.html', events=events, now=datetime.now(),

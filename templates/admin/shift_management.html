@@ -219,6 +219,69 @@
         background: var(--bg-card);
     }
 
+    .search-dropdown {
+        position: relative;
+        width: 100%;
+    }
+
+    .search-dropdown input {
+        width: 100%;
+        padding: 0.6rem 1rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--bg-card);
+    }
+
+    .search-results {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-top: none;
+        border-radius: 0 0 6px 6px;
+        max-height: 250px;
+        overflow-y: auto;
+        z-index: 10;
+        display: none;
+    }
+
+    .search-results.active {
+        display: block;
+    }
+
+    .search-result-item {
+        padding: 0.75rem 1rem;
+        cursor: pointer;
+        border-bottom: 1px solid var(--border);
+        transition: background 0.2s;
+    }
+
+    .search-result-item:hover {
+        background: var(--bg-nav-hover);
+    }
+
+    .search-result-item.selected {
+        background: var(--primary);
+        color: white;
+    }
+
+    .filter-checkbox {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.6rem 1rem;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        cursor: pointer;
+    }
+
+    .filter-checkbox input {
+        cursor: pointer;
+    }
+
     .stats-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -315,6 +378,10 @@
             <option value="open">Open</option>
             <option value="full">Full</option>
         </select>
+        <label class="filter-checkbox">
+            <input type="checkbox" id="archivedFilter" onchange="filterShifts()">
+            <span>Show Archived</span>
+        </label>
     </div>
 
     <!-- Shifts List -->
@@ -332,14 +399,11 @@
             <form class="modal-form" id="addShiftForm">
                 <div class="form-group">
                     <label>Event *</label>
-                    <select id="eventSelect" required onchange="updateShiftDefaults()">
-                        <option value="">Select an event</option>
-                        {% for event in events %}
-                        <option value="{{ event.id }}" data-title="{{ event.title }}" data-location="{{ event.location }}" data-date="{{ event.event_date.isoformat() }}">
-                            {{ event.title }} - {{ event.event_date.strftime('%b %d, %Y') }}
-                        </option>
-                        {% endfor %}
-                    </select>
+                    <div class="search-dropdown" id="eventSearchContainer">
+                        <input type="text" id="eventSearch" placeholder="Search events by name or date..." autocomplete="off">
+                        <input type="hidden" id="eventSelect" required>
+                        <div class="search-results" id="eventSearchResults"></div>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label>Shift Title *</label>
@@ -476,24 +540,24 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function updateShiftDefaults() {
-    const eventSelect = document.getElementById('eventSelect');
-    const option = eventSelect.options[eventSelect.selectedIndex];
+    const eventId = document.getElementById('eventSelect').value;
     
-    if (option.value) {
-        const eventDate = new Date(option.getAttribute('data-date'));
-        const eventLocation = option.getAttribute('data-location');
-        
-        // Set start time to event time
-        document.getElementById('shiftStartTime').value = formatDateTimeLocal(eventDate);
-        
-        // Set end time to 1 hour after start
-        const endTime = new Date(eventDate);
-        endTime.setHours(endTime.getHours() + 1);
-        document.getElementById('shiftEndTime').value = formatDateTimeLocal(endTime);
-        
-        // Set location to event location
-        if (eventLocation) {
-            document.getElementById('shiftLocation').value = eventLocation;
+    if (eventId) {
+        const event = allEvents.find(e => e.id == eventId);
+        if (event) {
+            const eventDate = new Date(event.event_date);
+            
+            // Set start time to event time
+            document.getElementById('shiftStartTime').value = formatDateTimeLocal(eventDate);
+            
+            // Set end time to 1 hour after start
+            const endTime = new Date(eventDate);
+            endTime.setHours(endTime.getHours() + 1);
+            document.getElementById('shiftEndTime').value = formatDateTimeLocal(endTime);
+            
+            // Set location to event location
+            if (event.location) {
+                document.getElementById('shiftLocation').value = event.location;
         }
     }
 }
@@ -509,6 +573,13 @@ function formatDateTimeLocal(date) {
 
 function showModal(modalId) {
     document.getElementById(modalId).style.display = 'block';
+    
+    // Clear event search when opening add shift modal
+    if (modalId === 'addShiftModal') {
+        document.getElementById('eventSearch').value = '';
+        document.getElementById('eventSelect').value = '';
+        document.getElementById('eventSearchResults').classList.remove('active');
+    }
 }
 
 function hideModal(modalId) {
@@ -517,7 +588,7 @@ function hideModal(modalId) {
 
 async function refreshShifts() {
     try {
-        const response = await fetch('/api/shifts');
+        const response = await fetch('/api/shifts?include_archived=true');
         shiftsData = await response.json();
         renderShifts();
         updateStats();
@@ -534,6 +605,7 @@ function filterShifts() {
 function renderShifts() {
     const eventFilterValue = document.getElementById('eventFilter').value;
     const statusFilterValue = document.getElementById('statusFilter').value;
+    const showArchived = document.getElementById('archivedFilter').checked;
     
     let filtered = shiftsData;
     
@@ -545,6 +617,10 @@ function renderShifts() {
         filtered = filtered.filter(s => s.is_open);
     } else if (statusFilterValue === 'full') {
         filtered = filtered.filter(s => s.assignments_count >= s.positions_needed);
+    }
+    
+    if (!showArchived) {
+        filtered = filtered.filter(s => !s.is_archived);
     }
     
     const container = document.getElementById('shiftsContainer');
@@ -618,6 +694,9 @@ function renderShifts() {
             <div class="shift-actions" style="margin-top: 1rem;">
                 <button onclick="openAssignModal(${shift.id})" class="btn btn-primary"><i class="fas fa-user-plus"></i> Assign Crew</button>
                 <button onclick="openEditModal(${shift.id})" class="btn btn-primary"><i class="fas fa-edit"></i> Edit</button>
+                <button onclick="toggleArchiveShift(${shift.id}, ${shift.is_archived})" class="btn" style="${shift.is_archived ? 'background: #dbeafe; color: #1e40af;' : 'background: #fef3c7; color: #78350f;'}">
+                    <i class="fas fa-${shift.is_archived ? 'undo' : 'archive'}"></i> ${shift.is_archived ? 'Unarchive' : 'Archive'}
+                </button>
             </div>
         </div>
     `).join('');
@@ -809,5 +888,85 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+
+// Searchable event dropdown
+const allEvents = {{ events|tojson }};
+
+function initEventSearch() {
+    const searchInput = document.getElementById('eventSearch');
+    const searchResults = document.getElementById('eventSearchResults');
+    const eventSelect = document.getElementById('eventSelect');
+    
+    if (!searchInput) return;
+    
+    searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase();
+        
+        if (query.length === 0) {
+            searchResults.classList.remove('active');
+            return;
+        }
+        
+        const filtered = allEvents.filter(event => 
+            event.title.toLowerCase().includes(query) ||
+            event.event_date.includes(query)
+        );
+        
+        searchResults.innerHTML = filtered.map(event => {
+            const date = new Date(event.event_date).toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'});
+            return `
+                <div class="search-result-item" onclick="selectEvent(${event.id}, '${escapeHtml(event.title)} - ${date}', '${event.title}', '${event.location}', '${event.event_date}')">
+                    <strong>${escapeHtml(event.title)}</strong>
+                    <br>
+                    <small style="color: var(--text-secondary);">${date}</small>
+                </div>
+            `;
+        }).join('');
+        
+        searchResults.classList.add('active');
+    });
+    
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('#eventSearchContainer')) {
+            searchResults.classList.remove('active');
+        }
+    });
+}
+
+function selectEvent(eventId, displayText, title, location, date) {
+    document.getElementById('eventSelect').value = eventId;
+    document.getElementById('eventSearch').value = displayText;
+    document.getElementById('eventSearchResults').classList.remove('active');
+    updateShiftDefaults();
+}
+
+async function toggleArchiveShift(shiftId, currentArchiveStatus) {
+    const action = currentArchiveStatus ? 'Unarchive' : 'Archive';
+    if (!confirm(`${action} this shift?`)) return;
+    
+    try {
+        const response = await fetch(`/shifts/${shiftId}/archive`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            refreshShifts();
+            alert(`Shift ${result.is_archived ? 'archived' : 'unarchived'} successfully!`);
+        } else {
+            alert('Failed to update shift archive status');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error updating shift');
+    }
+}
+
+// Initialize search on page load
+document.addEventListener('DOMContentLoaded', () => {
+    initEventSearch();
+    refreshShifts();
+});
 </script>
 {% endblock %}

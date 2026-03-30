@@ -320,7 +320,7 @@ def my_schedule():
 
     all_open = (
         Shift.query
-        .filter_by(is_open=True)
+        .filter_by(is_open=True, is_archived=False)
         .all()
     )
 

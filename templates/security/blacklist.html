@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}IP Blacklist{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <h1 class="mb-4">🚫 IP Blacklist</h1>
+        </div>
+    </div>
+
+    <!-- Add to Blacklist -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0">Add IP to Blacklist</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="{{ url_for('security.add_blacklist') }}" class="form-inline">
+                        <input type="text" name="ip_address" class="form-control mr-2" placeholder="IP Address (e.g., 192.168.1.1)" required>
+                        <input type="text" name="reason" class="form-control mr-2" placeholder="Reason" required>
+                        <select name="duration" class="form-control mr-2">
+                            <option value="permanent">Permanent</option>
+                            <option value="7days">7 Days</option>
+                            <option value="30days">30 Days</option>
+                            <option value="90days">90 Days</option>
+                        </select>
+                        <button type="submit" class="btn btn-danger">🚫 Blacklist</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Blacklist -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Active Blacklist ({{ active|length }} IPs)</h5>
+                </div>
+                <div class="card-body">
+                    {% if active %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>IP Address</th>
+                                        <th>Reason</th>
+                                        <th>Blocked By</th>
+                                        <th>Created</th>
+                                        <th>Expires</th>
+                                        <th>Status</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for entry in active %}
+                                    <tr>
+                                        <td><code>{{ entry.ip_address }}</code></td>
+                                        <td>{{ entry.reason }}</td>
+                                        <td>{{ entry.blocked_by }}</td>
+                                        <td>{{ entry.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                        <td>
+                                            {% if entry.expires_at %}
+                                                {% if entry.expires_at > now %}
+                                                    {{ entry.expires_at.strftime('%Y-%m-%d %H:%M') }}
+                                                {% else %}
+                                                    <span class="badge badge-success">Expired</span>
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="badge badge-danger">PERMANENT</span>
+                                            {% endif %}
+                                        </td>
+                                        <td><span class="badge badge-danger">BLOCKED</span></td>
+                                        <td>
+                                            <form method="post" action="{{ url_for('security.remove_blacklist', ip_address=entry.ip_address) }}" style="display: inline;">
+                                                <button type="submit" class="btn btn-sm btn-warning" onclick="return confirm('Remove from blacklist?')">Remove</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-success">No IPs currently blacklisted.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% set now = now() %}
+{% endblock %}

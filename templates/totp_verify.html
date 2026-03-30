@@ -175,6 +175,7 @@
       </div>
 
       <form onsubmit="verifyTOTP(event)">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="form-group">
           <label for="totpCode">Authentication Code</label>
           <input
@@ -207,6 +208,7 @@
       </div>
 
       <form onsubmit="verifyBackupCode(event)">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="form-group">
           <label for="backupCode">Backup Code</label>
           <input

@@ -11,7 +11,7 @@ from flask_login import login_required, current_user
 
 from extensions import db
 from models import (
-    Event, StagePlan, StagePlanDesign, StagePlanTemplate, StagePlanObject,
+    Event, StagePlan, StagePlanDesign, StagePlanTemplate, StagePlanObject, StagePlanCollection,
 )
 from decorators import crew_required
 
@@ -266,9 +266,10 @@ def delete_stage_object(id):
 def stageplans():
     event_id = request.args.get('event_id')
     event    = Event.query.get(event_id) if event_id else None
-    plans    = StagePlan.query.filter_by(event_id=event_id).all() if event_id else StagePlan.query.all()
+    plans    = StagePlan.query.filter_by(event_id=event_id, is_archived=False).all() if event_id else StagePlan.query.filter_by(is_archived=False).all()
+    collections = StagePlanCollection.query.filter_by(event_id=event_id, is_archived=False).all() if event_id else []
     events   = Event.query.order_by(Event.event_date.desc()).all()
-    return render_template('/crew/stageplans.html', plans=plans, events=events, current_event=event)
+    return render_template('/crew/stageplans.html', plans=plans, events=events, current_event=event, collections=collections)
 
 
 @stage_designer_bp.route('/stageplans/upload', methods=['POST'])
@@ -283,8 +284,10 @@ def upload_stageplan():
         return jsonify({'error': 'No file selected'}), 400
     filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{secure_filename(file.filename)}"
     file.save(os.path.join(UPLOAD_FOLDER, filename))
+    collection_id = request.form.get('collection_id')
     plan = StagePlan(title=request.form.get('title', filename), filename=filename,
-                     uploaded_by=current_user.username, event_id=request.form.get('event_id'))
+                     uploaded_by=current_user.username, event_id=request.form.get('event_id'),
+                     collection_id=collection_id if collection_id else None)
     db.session.add(plan)
     db.session.commit()
     return jsonify({'success': True, 'id': plan.id})
@@ -308,3 +311,118 @@ def delete_stageplan(id):
     db.session.delete(plan)
     db.session.commit()
     return jsonify({'success': True})
+
+
+# ---------------------------------------------------------------------------
+# Stage Plan Collections (Multiple Plans per Event)
+# ---------------------------------------------------------------------------
+
+@stage_designer_bp.route('/stage-collections/create', methods=['POST'])
+@login_required
+@crew_required
+def create_stage_collection():
+    """Create a new stage plan collection."""
+    data = request.json
+    event_id = data.get('event_id')
+    name = data.get('name', '')
+    
+    if not event_id or not name:
+        return jsonify({'error': 'Event ID and name are required'}), 400
+    
+    Event.query.get_or_404(event_id)
+    
+    collection = StagePlanCollection(
+        name=name,
+        event_id=event_id,
+        created_by=current_user.username
+    )
+    db.session.add(collection)
+    db.session.commit()
+    
+    return jsonify({'success': True, 'id': collection.id, 'name': collection.name})
+
+
+@stage_designer_bp.route('/stage-collections/<int:collection_id>/add-plan', methods=['POST'])
+@login_required
+@crew_required
+def add_plan_to_collection(collection_id):
+    """Add an existing stage plan to a collection."""
+    collection = StagePlanCollection.query.get_or_404(collection_id)
+    data = request.json
+    plan_id = data.get('plan_id')
+    
+    if not plan_id:
+        return jsonify({'error': 'Plan ID is required'}), 400
+    
+    plan = StagePlan.query.get_or_404(plan_id)
+    plan.collection_id = collection_id
+    db.session.commit()
+    
+    return jsonify({'success': True})
+
+
+@stage_designer_bp.route('/stage-collections/<int:collection_id>/plans', methods=['GET'])
+@login_required
+@crew_required
+def get_collection_plans(collection_id):
+    """Get all plans in a collection."""
+    collection = StagePlanCollection.query.get_or_404(collection_id)
+    plans = StagePlan.query.filter_by(collection_id=collection_id, is_archived=False).all()
+    
+    return jsonify({
+        'success': True,
+        'collection': {
+            'id': collection.id,
+            'name': collection.name,
+            'event_id': collection.event_id,
+            'created_by': collection.created_by,
+        },
+        'plans': [
+            {
+                'id': plan.id,
+                'title': plan.title,
+                'filename': plan.filename,
+                'uploaded_by': plan.uploaded_by,
+                'created_at': plan.created_at.isoformat(),
+            }
+            for plan in plans
+        ]
+    })
+
+
+@stage_designer_bp.route('/stage-collections/<int:collection_id>/delete', methods=['DELETE'])
+@login_required
+@crew_required
+def delete_stage_collection(collection_id):
+    """Delete a stage plan collection."""
+    collection = StagePlanCollection.query.get_or_404(collection_id)
+    db.session.delete(collection)
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@stage_designer_bp.route('/stage-collections/<int:collection_id>/archive', methods=['PUT'])
+@login_required
+@crew_required
+def archive_stage_collection(collection_id):
+    """Archive a stage plan collection and its plans."""
+    collection = StagePlanCollection.query.get_or_404(collection_id)
+    collection.is_archived = not collection.is_archived
+    
+    # Also archive plans in this collection
+    for plan in collection.plans:
+        plan.is_archived = collection.is_archived
+    
+    db.session.commit()
+    return jsonify({'success': True, 'is_archived': collection.is_archived})
+
+
+@stage_designer_bp.route('/stageplans/<int:plan_id>/archive', methods=['PUT'])
+@login_required
+@crew_required
+def archive_stage_plan(plan_id):
+    """Archive a single stage plan."""
+    plan = StagePlan.query.get_or_404(plan_id)
+    plan.is_archived = not plan.is_archived
+    db.session.commit()
+    return jsonify({'success': True, 'is_archived': plan.is_archived})

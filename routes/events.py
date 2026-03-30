@@ -416,3 +416,172 @@ def export_event_pdf(event_id):
     except Exception as exc:
         import traceback; traceback.print_exc()
         return jsonify({'error': str(exc)}), 500
+
+
+# ---------------------------------------------------------------------------
+# CSV Export/Import
+# ---------------------------------------------------------------------------
+
+@events_bp.route('/events/<int:event_id>/export-csv/<export_type>')
+@login_required
+@crew_required
+def export_event_csv(event_id, export_type):
+    """Export event data to CSV."""
+    from services.csv_service import CSVExportService
+    
+    Event.query.get_or_404(event_id)
+    
+    try:
+        if export_type == 'event_schedule':
+            csv_data = CSVExportService.export_event_schedule(event_id)
+            filename = f"event_schedule_{event_id}.csv"
+        elif export_type == 'cast_schedule':
+            csv_data = CSVExportService.export_cast_schedule(event_id)
+            filename = f"cast_schedule_{event_id}.csv"
+        elif export_type == 'crew_run_list':
+            csv_data = CSVExportService.export_crew_run_list(event_id)
+            filename = f"crew_run_list_{event_id}.csv"
+        elif export_type == 'cast_run_list':
+            csv_data = CSVExportService.export_cast_run_list(event_id)
+            filename = f"cast_run_list_{event_id}.csv"
+        else:
+            return jsonify({'error': 'Invalid export type'}), 400
+        
+        return send_file(
+            io.BytesIO(csv_data.encode()),
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as exc:
+        import traceback; traceback.print_exc()
+        return jsonify({'error': str(exc)}), 500
+
+
+@events_bp.route('/events/download-csv-template/<template_type>')
+@login_required
+@crew_required
+def download_csv_template(template_type):
+    """Download CSV template for importing data."""
+    templates = {
+        'event_schedule': 'Title,Scheduled Time,Description\nExample Item,2024-03-27T10:00:00,Optional description',
+        'cast_schedule': 'Title,Scheduled Time,Description\nExample Item,2024-03-27T10:00:00,Optional description',
+        'crew_run_list': 'Order,Title,Description,Duration,Cue Type,Notes\n1,Example,Description,5 mins,Cue,Notes',
+        'cast_run_list': 'Order,Title,Description,Duration,Type,Cast Involved,Notes\n1,Example,Description,5 mins,Type,Cast Names,Notes',
+        'picklist': 'Item Name,Quantity,Equipment ID\nExample Item,1,',
+    }
+    
+    if template_type not in templates:
+        return jsonify({'error': 'Invalid template type'}), 400
+    
+    csv_data = templates[template_type]
+    return send_file(
+        io.BytesIO(csv_data.encode()),
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=f"{template_type}_template.csv"
+    )
+
+
+@events_bp.route('/events/<int:event_id>/import-csv', methods=['POST'])
+@login_required
+@crew_required
+def import_event_csv(event_id):
+    """Import event data from CSV."""
+    from services.csv_service import CSVImportService
+    
+    Event.query.get_or_404(event_id)
+    
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    
+    file = request.files['file']
+    import_type = request.form.get('import_type', '')
+    
+    if not file or file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+    
+    try:
+        content = file.read().decode('utf-8')
+        
+        if import_type == 'event_schedule':
+            count = CSVImportService.import_event_schedule(event_id, content)
+        elif import_type == 'cast_schedule':
+            count = CSVImportService.import_cast_schedule(event_id, content)
+        elif import_type == 'crew_run_list':
+            count = CSVImportService.import_crew_run_list(event_id, content)
+        elif import_type == 'cast_run_list':
+            count = CSVImportService.import_cast_run_list(event_id, content)
+        elif import_type == 'picklist':
+            picklist_id = request.form.get('picklist_id')
+            count = CSVImportService.import_picklist(event_id, content, picklist_id)
+        else:
+            return jsonify({'error': 'Invalid import type'}), 400
+        
+        return jsonify({'success': True, 'count': count, 'message': f'Successfully imported {count} items'})
+    except Exception as exc:
+        import traceback; traceback.print_exc()
+        return jsonify({'error': str(exc)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Archiving
+# ---------------------------------------------------------------------------
+
+@events_bp.route('/events/<int:event_id>/auto-archive', methods=['POST'])
+@login_required
+@crew_required
+def auto_archive_event_items(event_id):
+    """Auto-archive stage plans and picklists after event ends."""
+    from models import StagePlan, Picklist
+    
+    event = Event.query.get_or_404(event_id)
+    now = datetime.utcnow()
+    
+    # Archive stage plans and picklists if event has ended
+    if event.event_end_date and event.event_end_date < now:
+        stage_plans = StagePlan.query.filter_by(event_id=event_id, is_archived=False).all()
+        picklists = Picklist.query.filter_by(event_id=event_id, is_archived=False).all()
+        
+        for plan in stage_plans:
+            plan.is_archived = True
+        for picklist in picklists:
+            picklist.is_archived = True
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'archived_stage_plans': len(stage_plans),
+            'archived_picklists': len(picklists)
+        })
+    
+    return jsonify({'success': False, 'message': 'Event has not ended yet'})
+
+
+@events_bp.route('/events/stageplans/<int:plan_id>/archive', methods=['PUT'])
+@login_required
+@crew_required
+def archive_stage_plan(plan_id):
+    """Manually archive a stage plan."""
+    from models import StagePlan
+    
+    plan = StagePlan.query.get_or_404(plan_id)
+    plan.is_archived = not plan.is_archived
+    db.session.commit()
+    
+    return jsonify({'success': True, 'is_archived': plan.is_archived})
+
+
+@events_bp.route('/events/picklists/<int:picklist_id>/archive', methods=['PUT'])
+@login_required
+@crew_required
+def archive_picklist(picklist_id):
+    """Manually archive a picklist."""
+    from models import Picklist
+    
+    picklist = Picklist.query.get_or_404(picklist_id)
+    picklist.is_archived = not picklist.is_archived
+    db.session.commit()
+    
+    return jsonify({'success': True, 'is_archived': picklist.is_archived})

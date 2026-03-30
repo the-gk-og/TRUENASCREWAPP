@@ -28,6 +28,13 @@ class User(UserMixin, db.Model):
     profile_picture       = db.Column(db.String(300), nullable=True)
     password_reset_token  = db.Column(db.String(100), nullable=True)
     password_reset_expiry = db.Column(db.DateTime, nullable=True)
+    
+    # Security: Account lockout after failed login attempts
+    failed_login_attempts = db.Column(db.Integer, default=0)
+    locked_until          = db.Column(db.DateTime, nullable=True)
+    last_login_attempt    = db.Column(db.DateTime, nullable=True)
+    email_verified        = db.Column(db.Boolean, default=False)
+    email_verification_token = db.Column(db.String(200), nullable=True)
 
 
 class TwoFactorAuth(db.Model):
@@ -195,6 +202,18 @@ class EventNote(db.Model):
     event = db.relationship('Event', backref=db.backref('notes', cascade='all, delete-orphan'))
 
 
+class Picklist(db.Model):
+    """Groups multiple picklist items for an event."""
+    id          = db.Column(db.Integer, primary_key=True)
+    name        = db.Column(db.String(200), nullable=False)
+    event_id    = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
+    created_by  = db.Column(db.String(80))
+    created_at  = db.Column(db.DateTime, default=datetime.utcnow)
+    is_archived = db.Column(db.Boolean, default=False)
+    items       = db.relationship('PickListItem', backref='picklist', lazy=True, cascade='all, delete-orphan')
+    event       = db.relationship('Event', backref='picklists')
+
+
 class PickListItem(db.Model):
     id           = db.Column(db.Integer, primary_key=True)
     item_name    = db.Column(db.String(200), nullable=False)
@@ -203,17 +222,33 @@ class PickListItem(db.Model):
     added_by     = db.Column(db.String(80))
     created_at   = db.Column(db.DateTime, default=datetime.utcnow)
     event_id     = db.Column(db.Integer, db.ForeignKey('event.id'))
+    picklist_id  = db.Column(db.Integer, db.ForeignKey('picklist.id'), nullable=True)
     equipment_id = db.Column(db.Integer, db.ForeignKey('equipment.id'), nullable=True)
+    is_archived  = db.Column(db.Boolean, default=False)
     equipment    = db.relationship('Equipment', backref='pick_list_items')
 
 
-class StagePlan(db.Model):
+class StagePlanCollection(db.Model):
+    """Groups multiple stage plans for an event."""
     id          = db.Column(db.Integer, primary_key=True)
-    title       = db.Column(db.String(200), nullable=False)
-    filename    = db.Column(db.String(300), nullable=False)
-    uploaded_by = db.Column(db.String(80))
+    name        = db.Column(db.String(200), nullable=False)
+    event_id    = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
+    created_by  = db.Column(db.String(80))
     created_at  = db.Column(db.DateTime, default=datetime.utcnow)
-    event_id    = db.Column(db.Integer, db.ForeignKey('event.id'))
+    is_archived = db.Column(db.Boolean, default=False)
+    plans       = db.relationship('StagePlan', backref='collection', lazy=True)
+    event       = db.relationship('Event', backref='stage_plan_collections')
+
+
+class StagePlan(db.Model):
+    id                = db.Column(db.Integer, primary_key=True)
+    title             = db.Column(db.String(200), nullable=False)
+    filename          = db.Column(db.String(300), nullable=False)
+    uploaded_by       = db.Column(db.String(80))
+    created_at        = db.Column(db.DateTime, default=datetime.utcnow)
+    event_id          = db.Column(db.Integer, db.ForeignKey('event.id'))
+    collection_id     = db.Column(db.Integer, db.ForeignKey('stage_plan_collection.id'), nullable=True)
+    is_archived       = db.Column(db.Boolean, default=False)
 
 
 class Shift(db.Model):
@@ -227,6 +262,7 @@ class Shift(db.Model):
     positions_needed = db.Column(db.Integer, default=1)
     role             = db.Column(db.String(100))
     is_open          = db.Column(db.Boolean, default=True)
+    is_archived      = db.Column(db.Boolean, default=False)
     created_by       = db.Column(db.String(80), nullable=False)
     created_at       = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at       = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

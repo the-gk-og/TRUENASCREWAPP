@@ -297,7 +297,10 @@
       btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
 
       try {
-        const res  = await fetch('/api/2fa/email-otp/send', { method: 'POST' });
+        const res  = await fetch('/api/2fa/email-otp/send', { 
+          method: 'POST',
+          headers: { 'X-CSRFToken': '{{ csrf_token() }}' }
+        });
         const data = await res.json();
         if (data.success) {
           document.getElementById('stepRequest').style.display = 'none';
@@ -320,7 +323,10 @@
 
     async function resendCode() {
       document.getElementById('resendBtn').disabled = true;
-      const res  = await fetch('/api/2fa/email-otp/send', { method: 'POST' });
+      const res  = await fetch('/api/2fa/email-otp/send', { 
+        method: 'POST',
+        headers: { 'X-CSRFToken': '{{ csrf_token() }}' }
+      });
       const data = await res.json();
       if (data.success) {
         startCountdown();
@@ -345,7 +351,10 @@
       try {
         const res  = await fetch('/api/2fa/email-otp/verify-login', {
           method: 'POST',
-          headers: {'Content-Type': 'application/json'},
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+          },
           body: JSON.stringify({ code }),
         });
         const data = await res.json();

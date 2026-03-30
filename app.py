@@ -10,7 +10,7 @@ import atexit
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import get_config
-from extensions import db, login_manager, mail, oauth
+from extensions import db, security_db, login_manager, mail, oauth, csrf, limiter
 from routes import register_blueprints
 from services.email_service import init_email_service
 
@@ -29,11 +29,28 @@ def create_app(config_name: str | None = None):
     # Trust proxy headers (Cloudflare / nginx / tunnels)
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
-    # Initialise extensions
+    # Initialise main database
     db.init_app(app)
+    
+    # Initialise separate security database (shared across instances)
+    # Security database uses its own isolated connection
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import scoped_session, sessionmaker
+    
+    security_db_uri = app.config.get('SECURITY_DATABASE_URI', 'sqlite:///security.db')
+    security_engine = create_engine(security_db_uri, echo=False)
+    security_db.metadata.bind = security_engine
+    security_db.session = scoped_session(sessionmaker(bind=security_engine))
+    
     login_manager.init_app(app)
     mail.init_app(app)
     init_email_service(app, mail)
+
+    # Initialize CSRF protection
+    csrf.init_app(app)
+    
+    # Initialize Rate Limiter
+    limiter.init_app(app)
 
     # --- NEW: Authlib OAuth (Google PKCE) ---
     oauth.init_app(app)
@@ -59,13 +76,106 @@ def create_app(config_name: str | None = None):
     @app.context_processor
     def inject_globals():
         from models import User as _User
+        from datetime import datetime
         def get_user_by_username(username):
             return _User.query.filter_by(username=username).first()
         return dict(
             get_user_by_username=get_user_by_username,
             app=app,
             ORG_SLUG=app.config.get('ORGANIZATION_SLUG', ''),
+            now=datetime.utcnow,  # Add now() function for templates
         )
+
+    # ========================================================================
+    # SECURITY: IP Blacklist & Threat Detection Middleware
+    # ========================================================================
+    @app.before_request
+    def security_check():
+        """
+        Main security middleware:
+        1. Extract Cloudflare client IP
+        2. Check IP blacklist
+        3. Detect threats (BurpSuite, SQLi, XSS, etc.)
+        4. Log all requests
+        5. Quarantine suspicious IPs
+        """
+        if request.path.startswith('/static') or request.path.startswith('/security'):
+            return
+
+        from services.security_service import SecurityService
+
+        try:
+            # Get client IP (Cloudflare-aware)
+            client_ip = SecurityService.get_client_ip()
+
+            # Check if blacklisted
+            is_blacklisted, blacklist_record = SecurityService.is_ip_blacklisted(client_ip)
+            if is_blacklisted:
+                SecurityService.log_security_event(
+                    event_type='blacklisted_access_attempt',
+                    ip_address=client_ip,
+                    severity='high',
+                    description=f'Blacklisted IP attempted access to {request.path}'
+                )
+                return render_template('security/blocked.html', 
+                    reason=blacklist_record.reason), 403
+
+            # Detect threats
+            query_params = dict(request.args)
+            body = request.get_data(as_text=True)[:500]  # First 500 chars
+            threats = SecurityService.detect_threats(
+                ip_address=client_ip,
+                user_agent=request.headers.get('User-Agent'),
+                path=request.path,
+                query_params=query_params,
+                body=body
+            )
+
+            # Handle critical threats
+            if threats:
+                threat_level = 'critical' if 'burpsuite' in threats else 'high'
+                
+                # Quarantine immediately
+                SecurityService.quarantine_ip(
+                    ip_address=client_ip,
+                    threat_details=threats,
+                    threat_level=threat_level
+                )
+
+                # Log security event
+                SecurityService.log_security_event(
+                    event_type='threat_detected',
+                    ip_address=client_ip,
+                    severity=threat_level,
+                    description=f'Threats detected: {", ".join(threats)} on path {request.path}'
+                )
+
+                # Block BurpSuite and other scanners immediately
+                if 'burpsuite' in threats:
+                    return render_template('security/blocked.html',
+                        reason='Security scanning tools are not permitted'), 403
+
+                # For other threats, log and let through (but quarantined)
+                SecurityService.log_request(
+                    ip_address=client_ip,
+                    request_method=request.method,
+                    request_path=request.path,
+                    response_status=200,
+                    threat_flags=threats
+                )
+            else:
+                # Normal request - log it
+                SecurityService.log_request(
+                    ip_address=client_ip,
+                    request_method=request.method,
+                    request_path=request.path,
+                    response_status=200
+                )
+
+        except Exception as e:
+            print(f"⚠️  Security check error: {e}")
+            # Don't block on security errors
+            pass
 
     # Kill switch & error handlers
     @app.before_request
@@ -81,6 +191,44 @@ def create_app(config_name: str | None = None):
                     return render_template('suspended.html', reason=reason), 503
         except Exception:
             pass
+
+    # =============================================================================
+    # SECURITY: Response Headers (Prevent common attacks)
+    # =============================================================================
+    @app.after_request
+    def set_security_headers(response):
+        """Add security headers to prevent clickjacking, MIME sniffing, XSS, etc."""
+        # Prevent clickjacking attacks
+        response.headers['X-Frame-Options'] = 'DENY'
+        
+        # Prevent MIME type sniffing
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        
+        # Enable XSS filter in browsers
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        
+        # Force HTTPS (production only)
+        if not app.debug:
+            response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains; preload'
+        
+        # Content Security Policy - restrictive defaults
+        response.headers['Content-Security-Policy'] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "img-src 'self' data: https:; "
+            "font-src 'self' https://cdn.jsdelivr.net; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none';"
+        )
+        
+        # Referrer policy
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        
+        # Prevent browsers from opening potentially dangerous files
+        response.headers['X-Permitted-Cross-Domain-Policies'] = 'none'
+        
+        return response
 
     @app.errorhandler(404)
     def not_found(e):
@@ -158,6 +306,7 @@ def init_db(app):
 
     with app.app_context():
         db.create_all()
+        security_db.metadata.create_all(security_db.metadata.bind)
         if not User.query.filter_by(username='admin').first():
             chars    = string.ascii_letters + string.digits + string.punctuation
             safe     = ''.join(c for c in chars if c not in 'l1LO0|`~')

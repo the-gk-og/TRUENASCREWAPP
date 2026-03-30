@@ -15,9 +15,13 @@ from flask import (
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from extensions import db
+from extensions import db, csrf, limiter
 from models import User, TwoFactorAuth, InviteCode, EmailOTP
 from utils import get_organization, generate_invite_code, log_security_event
+from utils_security import (
+    is_account_locked, record_failed_login, record_successful_login,
+    log_audit_action, sanitize_input
+)
 from constants import DEFAULT_ORG
 from config import SESSION_DURATION
 from services.email_service import (
@@ -41,6 +45,7 @@ def index():
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
+@limiter.limit("10 per minute")  # 10 login attempts per minute max
 def login():
     if current_user.is_authenticated:
         if current_user.is_cast:
@@ -48,13 +53,40 @@ def login():
         return redirect(url_for('crew.dashboard'))
 
     if request.method == 'POST':
-        username = request.form.get('username')
+        username = sanitize_input(request.form.get('username', ''))
         password = request.form.get('password')
         remember = request.form.get('remember', 'off') == 'on'
 
         user = User.query.filter_by(username=username).first()
 
+        # Check if account is locked
+        if user and is_account_locked(user):
+            db.session.commit()
+            flash(f'Account locked due to too many failed login attempts. Try again in {30} minutes.', 'danger')
+            return render_template(
+                'login.html',
+                organization=get_organization() or DEFAULT_ORG,
+                SESSION_DURATION=SESSION_DURATION,
+                now=datetime.now(),
+                google_oauth_enabled=bool(GOOGLE_CLIENT_ID),
+            )
+
+        # Verify password
         if user and check_password_hash(user.password_hash, password):
+            # Successful login - clear lockout
+            record_successful_login(user)
+            db.session.commit()
+            
+            # Log audit action
+            log_audit_action(
+                username=user.username,
+                action='user_login',
+                resource_type='user',
+                resource_id=str(user.id),
+                ip_address=request.remote_addr,
+                user_agent=request.headers.get('User-Agent')
+            )
+
             # --- TOTP 2FA check ---
             tfa = TwoFactorAuth.query.filter_by(user_id=user.id).first()
             if tfa and tfa.enabled:
@@ -81,7 +113,23 @@ def login():
 
             return redirect(url_for('cast.cast_events') if user.is_cast else url_for('crew.dashboard'))
 
-        flash('Invalid username or password')
+        # Failed login - record attempt and potentially lock
+        if user:
+            is_locked, message = record_failed_login(user)
+            db.session.commit()
+            
+            # Log failed login attempt
+            log_audit_action(
+                username=username,
+                action='login_failed',
+                resource_type='user',
+                ip_address=request.remote_addr,
+                user_agent=request.headers.get('User-Agent')
+            )
+            
+            flash(message, 'danger')
+        else:
+            flash('Invalid username or password', 'danger')
 
     org = get_organization() or DEFAULT_ORG
     return render_template(
@@ -101,6 +149,7 @@ def logout():
 
 
 @auth_bp.route('/signup', methods=['GET', 'POST'])
+@limiter.limit("5 per hour")  # Max 5 signup attempts per hour
 def signup():
     if current_user.is_authenticated:
         return redirect(url_for('crew.dashboard'))

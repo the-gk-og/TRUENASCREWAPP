@@ -19,7 +19,7 @@ def shift_management():
         flash('Admin access required', 'error')
         return redirect(url_for('calendar.calendar'))
     events = Event.query.order_by(Event.event_date).all()
-    shifts = Shift.query.join(Event).order_by(Event.event_date, Shift.shift_date).all()
+    shifts = Shift.query.filter_by(is_archived=False).join(Event).order_by(Event.event_date, Shift.shift_date).all()
     users  = User.query.filter_by(user_role='crew').all()
     return render_template('/admin/shift_management.html', events=events, shifts=shifts, users=users)
 
@@ -28,8 +28,18 @@ def shift_management():
 @login_required
 def get_shifts():
     event_id = request.args.get('event_id', type=int)
-    shifts   = Shift.query.filter_by(event_id=event_id).all() if event_id else Shift.query.all()
-    result   = []
+    include_archived = request.args.get('include_archived', 'false').lower() == 'true'
+    
+    if event_id:
+        shifts = Shift.query.filter_by(event_id=event_id)
+    else:
+        shifts = Shift.query
+    
+    if not include_archived:
+        shifts = shifts.filter_by(is_archived=False)
+    
+    shifts = shifts.all()
+    result = []
     for shift in shifts:
         sd = {
             'id': shift.id, 'event_id': shift.event_id, 'title': shift.title,
@@ -38,6 +48,7 @@ def get_shifts():
             'shift_end_date': shift.shift_end_date.isoformat(),
             'location': shift.location, 'positions_needed': shift.positions_needed,
             'role': shift.role, 'is_open': shift.is_open,
+            'is_archived': shift.is_archived,
             'event_title': shift.event.title if shift.event else '',
             'created_by': shift.created_by,
             'assignments_count': len(shift.assignments), 'assignments': [],
@@ -334,3 +345,112 @@ def delete_shift_task(task_id):
     except Exception as exc:
         db.session.rollback()
         return jsonify({'error': str(exc)}), 400
+
+
+# ---------------------------------------------------------------------------
+# Archiving
+# ---------------------------------------------------------------------------
+
+@shifts_bp.route('/shifts/<int:shift_id>/archive', methods=['PUT'])
+@login_required
+def archive_shift(shift_id):
+    """Manually archive or unarchive a shift."""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    shift = Shift.query.get_or_404(shift_id)
+    shift.is_archived = not shift.is_archived
+    db.session.commit()
+    
+    return jsonify({'success': True, 'is_archived': shift.is_archived})
+
+
+@shifts_bp.route('/shifts/auto-archive', methods=['POST'])
+@login_required
+def auto_archive_completed_shifts():
+    """Auto-archive all shifts that have ended."""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    now = datetime.utcnow()
+    # Find all non-archived shifts that have ended
+    completed_shifts = Shift.query.filter(
+        Shift.shift_end_date < now,
+        Shift.is_archived == False
+    ).all()
+    
+    count = 0
+    for shift in completed_shifts:
+        shift.is_archived = True
+        count += 1
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'archived_count': count,
+        'message': f'Archived {count} completed shift(s)'
+    })
+
+
+@shifts_bp.route('/shifts/event/<int:event_id>/auto-archive', methods=['POST'])
+@login_required
+def auto_archive_event_shifts(event_id):
+    """Auto-archive all completed shifts for a specific event."""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    Event.query.get_or_404(event_id)
+    now = datetime.utcnow()
+    
+    # Find all non-archived shifts for this event that have ended
+    completed_shifts = Shift.query.filter(
+        Shift.event_id == event_id,
+        Shift.shift_end_date < now,
+        Shift.is_archived == False
+    ).all()
+    
+    count = 0
+    for shift in completed_shifts:
+        shift.is_archived = True
+        count += 1
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'archived_count': count,
+        'message': f'Archived {count} completed shift(s) for this event'
+    })
+
+
+@shifts_bp.route('/api/shifts/archived', methods=['GET'])
+@login_required
+def get_archived_shifts():
+    """Get all archived shifts (admin only)."""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    event_id = request.args.get('event_id', type=int)
+    
+    if event_id:
+        shifts = Shift.query.filter_by(event_id=event_id, is_archived=True).all()
+    else:
+        shifts = Shift.query.filter_by(is_archived=True).all()
+    
+    result = []
+    for shift in shifts:
+        sd = {
+            'id': shift.id, 'event_id': shift.event_id, 'title': shift.title,
+            'description': shift.description,
+            'shift_date': shift.shift_date.isoformat(),
+            'shift_end_date': shift.shift_end_date.isoformat(),
+            'location': shift.location, 'positions_needed': shift.positions_needed,
+            'role': shift.role, 'is_open': shift.is_open,
+            'is_archived': True,
+            'event_title': shift.event.title if shift.event else '',
+            'created_by': shift.created_by,
+            'assignments_count': len(shift.assignments),
+        }
+        result.append(sd)
+    return jsonify(result)

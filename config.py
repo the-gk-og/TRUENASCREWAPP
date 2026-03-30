@@ -40,10 +40,22 @@ _session_lifetime = parse_duration(SESSION_DURATION)
 class BaseConfig:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'your-secret-key-change-this')
 
-    # Database
+    # Main application database
+    # Defaults to SQLite (overridden in Production)
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         'DATABASE_URL', 'sqlite:///production_crew.db'
     )
+    
+    # Separate security database (shared across instances in production)
+    # Defaults: File-based SQLite for development/beta testing
+    #          Override in production with PostgreSQL URL
+    # This design allows:
+    #   - Local testing without database server (dev/beta)
+    #   - Production deployment with centralized security DB (shared across instances)
+    SECURITY_DATABASE_URI = os.environ.get(
+        'SECURITY_DATABASE_URL', 'sqlite:///security.db'
+    )
+    
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # Uploads
@@ -91,12 +103,60 @@ class BaseConfig:
 
 
 class DevelopmentConfig(BaseConfig):
+    """
+    Development Configuration
+    - Local SQLite for both main and security databases
+    - Perfect for local development with instant setup
+    """
     DEBUG = True
     # Dev stays simple: no secure cookies, SameSite=Lax is fine.
 
 
+class BetaConfig(BaseConfig):
+    """
+    Beta/Testing Configuration
+    - File-based SQLite for easy testing without database server
+    - Can be deployed easily to staging/UAT environments
+    - Great for testing new features before production rollout
+    - Use: FLASK_ENV=beta python app.py
+    """
+    DEBUG = True
+    
+    # Always use separate file-based SQLite unless explicitly overridden
+    SQLALCHEMY_DATABASE_URI = os.environ.get(
+        'DATABASE_URL', 'sqlite:///beta_crew.db'
+    )
+    SECURITY_DATABASE_URI = os.environ.get(
+        'SECURITY_DATABASE_URL', 'sqlite:///beta_security.db'
+    )
+    
+    # No secure cookies for easier testing across different machines
+    SESSION_COOKIE_SECURE = False
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    REMEMBER_COOKIE_SECURE = False
+    REMEMBER_COOKIE_SAMESITE = 'Lax'
+
+
 class ProductionConfig(BaseConfig):
+    """
+    Production Configuration
+    - Requires PostgreSQL (or other server) for main database
+    - Requires server-based security database (shared across instances)
+    - All secure cookie settings enabled for HTTPS/Cloudflare
+    """
     DEBUG = False
+    
+    # Production REQUIRES explicit database URLs (cannot use defaults)
+    # Set DATABASE_URL and SECURITY_DATABASE_URL to PostgreSQL (or other server) URLs
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
+    SECURITY_DATABASE_URI = os.environ.get('SECURITY_DATABASE_URL')
+    
+    if not SQLALCHEMY_DATABASE_URI or not SECURITY_DATABASE_URI:
+        raise ValueError(
+            "PRODUCTION REQUIRES: DATABASE_URL and SECURITY_DATABASE_URL env vars. "
+            "Set these to PostgreSQL (or other server) database URLs.\n"
+            "Cannot use file-based SQLite in production."
+        )
 
     # Required for Google OAuth PKCE + Cloudflare HTTPS
     SESSION_COOKIE_SECURE      = True
@@ -107,19 +167,33 @@ class ProductionConfig(BaseConfig):
 
 
 class TestingConfig(BaseConfig):
+    """
+    Testing Configuration (Unit Tests)
+    - In-memory databases for fast, isolated tests
+    - No I/O overhead or data persistence
+    """
     TESTING = True
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
+    SECURITY_DATABASE_URI = 'sqlite:///:memory:'
     WTF_CSRF_ENABLED = False
 
 
+# Configuration mapping: FLASK_ENV -> Config class
+# Usage:
+#   FLASK_ENV=development  -> Local development (file-based SQLite)
+#   FLASK_ENV=beta         -> Beta/UAT testing (separate file-based SQLite)
+#   FLASK_ENV=production   -> Production (requires PostgreSQL URLs)
+#   FLASK_ENV=testing      -> Unit tests (in-memory SQLite)
 config_map = {
-    'development': DevelopmentConfig,
-    'production':  ProductionConfig,
-    'testing':     TestingConfig,
-    'default':     DevelopmentConfig,
+    'development': DevelopmentConfig,  # Local dev with default SQLite
+    'beta':        BetaConfig,         # Beta testing with separate SQLite DBs
+    'production':  ProductionConfig,   # Production with PostgreSQL
+    'testing':     TestingConfig,      # Unit tests with in-memory DBs
+    'default':     DevelopmentConfig,  # Fallback to development
 }
 
 
 def get_config():
+    """Get configuration class based on FLASK_ENV environment variable."""
     env = os.environ.get('FLASK_ENV', 'default')
     return config_map.get(env, DevelopmentConfig)

@@ -288,6 +288,8 @@
     {% endwith %}
 
     <form id="loginForm" method="POST" action="{{ url_for('auth.login') }}">
+      <!-- CSRF Token Protection -->
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       {{ form.hidden_tag() if form is defined }}
 
       <div class="form-group">

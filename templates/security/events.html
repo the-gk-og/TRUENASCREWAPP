@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}Security Events{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <h1 class="mb-4">🔔 Security Events</h1>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-body">
+                    <form method="get" class="form-inline">
+                        <div class="form-group mr-3">
+                            <label class="mr-2">Event Type:</label>
+                            <select name="type" class="form-control">
+                                <option value="all">All</option>
+                                <option value="threat_detected" {% if current_type == 'threat_detected' %}selected{% endif %}>Threat Detected</option>
+                                <option value="burp_detected" {% if current_type == 'burp_detected' %}selected{% endif %}>BurpSuite Detected</option>
+                                <option value="blacklisted_access_attempt" {% if current_type == 'blacklisted_access_attempt' %}selected{% endif %}>Blacklist Access</option>
+                                <option value="ip_approved" {% if current_type == 'ip_approved' %}selected{% endif %}>IP Approved</option>
+                                <option value="ip_blacklisted" {% if current_type == 'ip_blacklisted' %}selected{% endif %}>IP Blacklisted</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group mr-3">
+                            <label class="mr-2">Severity:</label>
+                            <select name="severity" class="form-control">
+                                <option value="all">All</option>
+                                <option value="critical" {% if current_severity == 'critical' %}selected{% endif %}>Critical</option>
+                                <option value="high" {% if current_severity == 'high' %}selected{% endif %}>High</option>
+                                <option value="medium" {% if current_severity == 'medium' %}selected{% endif %}>Medium</option>
+                                <option value="low" {% if current_severity == 'low' %}selected{% endif %}>Low</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group mr-3">
+                            <label class="mr-2">Acknowledge Status:</label>
+                            <select name="acknowledged" class="form-control">
+                                <option value="all">All</option>
+                                <option value="unacknowledged" {% if current_acknowledged == 'unacknowledged' %}selected{% endif %}>Unacknowledged</option>
+                                <option value="acknowledged" {% if current_acknowledged == 'acknowledged' %}selected{% endif %}>Acknowledged</option>
+                            </select>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">Filter</button>
+                        <a href="{{ url_for('security.events') }}" class="btn btn-secondary ml-2">Reset</a>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Events List -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Total: {{ events|length }} Events</h5>
+                </div>
+                <div class="card-body">
+                    {% if events %}
+                        <div class="list-group">
+                            {% for event in events %}
+                            <div class="list-group-item {% if event.severity == 'critical' %}list-group-item-danger{% elif event.severity == 'high' %}list-group-item-warning{% elif event.severity == 'medium' %}list-group-item-info{% endif %}">
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <h6 class="mb-1">{{ event.event_type }}</h6>
+                                        <p class="mb-2">{{ event.description }}</p>
+                                        <small class="text-muted">
+                                            IP: <code>{{ event.ip_address }}</code> 
+                                            {% if event.affected_resource %} | Resource: <code>{{ event.affected_resource }}</code>{% endif %}
+                                        </small>
+                                    </div>
+                                    <div class="col-md-4 text-right">
+                                        <div>
+                                            <span class="badge badge-{{ 'danger' if event.severity == 'critical' else 'warning' if event.severity == 'high' else 'info' }}">
+                                                {{ event.severity.upper() }}
+                                            </span>
+                                            {% if event.is_acknowledged %}
+                                            <span class="badge badge-success">ACKNOWLEDGED</span>
+                                            {% else %}
+                                            <span class="badge badge-warning">PENDING</span>
+                                            {% endif %}
+                                        </div>
+                                        <small>{{ event.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</small>
+
+                                        {% if not event.is_acknowledged %}
+                                        <br>
+                                        <form method="post" action="{{ url_for('security.acknowledge_event', event_id=event.id) }}" style="display: inline;">
+                                            <button type="submit" class="btn btn-sm btn-success mt-2">✓ Acknowledge</button>
+                                        </form>
+                                        {% else %}
+                                        <br>
+                                        <small class="text-muted">Acknowledged by {{ event.acknowledged_by }} at {{ event.acknowledged_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="alert alert-success">No security events matching current filters.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

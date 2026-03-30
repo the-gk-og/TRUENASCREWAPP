@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block title %}Security Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <h1 class="mb-4">🔒 Security Dashboard</h1>
+        </div>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-danger text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-0">Blacklisted IPs</h6>
+                            <h2>{{ blacklist_count }}</h2>
+                        </div>
+                        <div style="font-size: 2.5rem;">🚫</div>
+                    </div>
+                </div>
+                <a href="{{ url_for('security.blacklist') }}" class="card-footer text-white text-decoration-none">
+                    View Blacklist →
+                </a>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-0">Quarantined IPs</h6>
+                            <h2>{{ quarantine_count }}</h2>
+                        </div>
+                        <div style="font-size: 2.5rem;">⚠️</div>
+                    </div>
+                </div>
+                <a href="{{ url_for('security.quarantine_list') }}" class="card-footer text-white text-decoration-none">
+                    Review Queue →
+                </a>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-0">Unacknowledged Events</h6>
+                            <h2>{{ critical_events }}</h2>
+                        </div>
+                        <div style="font-size: 2.5rem;">🔔</div>
+                    </div>
+                </div>
+                <a href="{{ url_for('security.events') }}" class="card-footer text-white text-decoration-none">
+                    View Events →
+                </a>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card bg-secondary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-0">View All Logs</h6>
+                            <p class="mb-0">Security Activity</p>
+                        </div>
+                        <div style="font-size: 2.5rem;">📋</div>
+                    </div>
+                </div>
+                <a href="{{ url_for('security.logs') }}" class="card-footer text-white text-decoration-none">
+                    View Logs →
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- High Risk IPs -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0">🔴 High-Risk IPs (Pending Review)</h5>
+                </div>
+                <div class="card-body">
+                    {% if high_risk_ips %}
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>IP Address</th>
+                                        <th>Threat Level</th>
+                                        <th>Requests</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for ip in high_risk_ips %}
+                                    <tr>
+                                        <td><code>{{ ip.ip_address }}</code></td>
+                                        <td>
+                                            <span class="badge badge-{{ 'danger' if ip.threat_level == 'critical' else 'warning' }}">
+                                                {{ ip.threat_level.upper() }}
+                                            </span>
+                                        </td>
+                                        <td>{{ ip.request_count }}</td>
+                                        <td>
+                                            <a href="{{ url_for('security.quarantine_detail', ip_address=ip.ip_address) }}" 
+                                               class="btn btn-sm btn-primary">Review</a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No high-risk IPs at this time.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Security Events -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">📊 Recent Security Events</h5>
+                </div>
+                <div class="card-body">
+                    {% if recent_events %}
+                        <div class="list-group list-group-flush">
+                            {% for event in recent_events[:5] %}
+                            <div class="list-group-item {{ 'list-group-item-danger' if event.severity == 'critical' else 'list-group-item-warning' if event.severity == 'high' else '' }}">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <strong>{{ event.event_type }}</strong>
+                                        <br>
+                                        <small class="text-muted">{{ event.ip_address }}</small>
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="badge badge-{{ 'danger' if event.severity == 'critical' else 'warning' }}">
+                                            {{ event.severity.upper() }}
+                                        </span>
+                                        <br>
+                                        <small>{{ event.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No security events yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <!-- Request Activity with Threats -->
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0">🚨 Recent Threat-Flagged Requests</h5>
+                </div>
+                <div class="card-body">
+                    {% if recent_logs %}
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>IP</th>
+                                        <th>Method</th>
+                                        <th>Path</th>
+                                        <th>Status</th>
+                                        <th>Threat Flags</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for log in recent_logs %}
+                                    {% if log.threat_flags %}
+                                    <tr class="table-danger">
+                                        <td>{{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                                        <td><code>{{ log.ip_address }}</code></td>
+                                        <td><span class="badge badge-secondary">{{ log.request_method }}</span></td>
+                                        <td><code style="font-size: 0.85rem;">{{ log.request_path[:50] }}</code></td>
+                                        <td>{{ log.response_status }}</td>
+                                        <td>
+                                            {% for flag in log.threat_flags.split(',') %}
+                                            <span class="badge badge-danger">{{ flag.strip() }}</span>
+                                            {% endfor %}
+                                        </td>
+                                    </tr>
+                                    {% endif %}
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No threat-flagged requests detected.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Auto-refresh every 30 seconds
+setInterval(function() {
+    location.reload();
+}, 30000);
+</script>
+{% endblock %}

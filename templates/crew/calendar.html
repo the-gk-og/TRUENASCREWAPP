@@ -300,6 +300,22 @@
     margin-bottom: 2px;
 }
 .sched-event-block:hover { opacity: 0.8; }
+.sched-event-block.archived {
+    opacity: 0.5;
+    text-decoration: line-through;
+    background: #d1d5db !important;
+    color: #6b7280 !important;
+}
+.sched-event-block.archived:hover {
+    opacity: 0.6;
+}
+
+.month-event-pill.archived {
+    opacity: 0.5;
+    text-decoration: line-through;
+    background: #d1d5db !important;
+    color: #6b7280 !important;
+}
 
 .event-tooltip {
     position: fixed;
@@ -719,6 +735,27 @@ function shiftsForEventOnDay(eventId, day) {
     return SHIFTS_DATA.filter(s => s.event_id === eventId && s.shift_date.startsWith(dayStr));
 }
 
+/**
+ * Check if a shift is archived or has ended.
+ */
+function isShiftArchivedOrEnded(shift) {
+    if (shift.is_archived) return true;
+    const shiftEnd = parseLocalDate(shift.shift_end_date);
+    const now = new Date();
+    return shiftEnd && shiftEnd < now;
+}
+
+/**
+ * Check if an event has any non-archived, non-ended shifts.
+ * Returns true if all shifts are archived/ended or no shifts exist causing archive status.
+ */
+function isEventAllShiftsArchivedOrEnded(eventId) {
+    const eventShifts = shiftsForEvent(eventId);
+    if (eventShifts.length === 0) return false; // Event with no shifts is not archived
+    // If all shifts are archived/ended, event should appear archived
+    return eventShifts.every(shift => isShiftArchivedOrEnded(shift));
+}
+
 // ============================================================
 // NAVIGATION
 // ============================================================
@@ -805,7 +842,8 @@ function renderMonth() {
                 total += eventShifts.length;
                 eventShifts.forEach(shift => {
                     if (shown < maxShow) {
-                        pillsHtml += `<div class="month-event-pill ${eventColors[e.id]}" onclick="showEventQuick(${e.id})" title="${shift.role}: ${shift.assigned_count}/${shift.positions_needed} assigned">
+                        const archivedClass = isShiftArchivedOrEnded(shift) ? ' archived' : '';
+                        pillsHtml += `<div class="month-event-pill ${eventColors[e.id]}${archivedClass}" onclick="showEventQuick(${e.id})" title="${shift.role}: ${shift.assigned_count}/${shift.positions_needed} assigned">
                             <strong>${shift.role}</strong> ${shift.assigned_count}/${shift.positions_needed}
                         </div>`;
                         shown++;
@@ -974,7 +1012,8 @@ function renderScheduler() {
                     if (seenEventIds.has(e.id)) return; // deduplicate
                     seenEventIds.add(e.id);
                     const role = e.crewRoles[username] || 'Crew';
-                    cellContent += `<span class="sched-event-block ${eventColors[e.id]}" onclick="showEventQuick(${e.id})" title="${e.title} · ${role}">
+                    const archivedClass = isEventAllShiftsArchivedOrEnded(e.id) ? ' archived' : '';
+                    cellContent += `<span class="sched-event-block ${eventColors[e.id]}${archivedClass}" onclick="showEventQuick(${e.id})" title="${e.title} · ${role}">
                         ${e.title.substring(0,14)}${e.title.length>14?'…':''}
                     </span>`;
                 });

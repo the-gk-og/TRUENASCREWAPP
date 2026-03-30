@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Access Blocked - Security{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h2 class="mb-0">🚫 Access Blocked</h2>
+                </div>
+                <div class="card-body">
+                    <p class="lead mb-4">Your IP address has been blocked from accessing this application.</p>
+
+                    <div class="alert alert-danger">
+                        <h5>Reason:</h5>
+                        <p>{{ reason }}</p>
+                    </div>
+
+                    <p><strong>What happened?</strong></p>
+                    <ul>
+                        <li>Your IP address was detected attempting to use unauthorized security testing tools (like BurpSuite)</li>
+                        <li>Or your IP displayed other suspicious behavior that violated our security policies</li>
+                        <li>As a protective measure, we've temporarily blocked access</li>
+                    </ul>
+
+                    <p><strong>What should you do?</strong></p>
+                    <ol>
+                        <li>If you believe this is an error, contact your administrator</li>
+                        <li>Provide your IP address: <code>{{ request.remote_addr }}</code></li>
+                        <li>Include details about what you were trying to do</li>
+                        <li>We'll review and unlock your access if appropriate</li>
+                    </ol>
+
+                    <hr>
+
+                    <p class="text-muted small">
+                        <strong>Technical Note:</strong> This application is protected with enterprise-grade security monitoring. 
+                        Automated security tools and unauthorized access attempts are detected and blocked automatically. 
+                        If you need legitimate access, please use approved methods only.
+                    </p>
+
+                    <div class="mt-4">
+                        <p><strong>Support Contact Information Available in Terms of Service</strong></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Logs for {{ ip_address }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <h1 class="mb-2">📋 Request Logs for IP</h1>
+            <h3><code>{{ ip_address }}</code></h3>
+        </div>
+    </div>
+
+    <!-- IP Status -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">IP Status</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            {% if quarantine %}
+                            <p><strong>⚠️ Quarantine Status:</strong> 
+                                <span class="badge badge-{{ 'warning' if quarantine.status == 'pending' else 'success' if quarantine.status == 'approved' else 'danger' }}">
+                                    {{ quarantine.status.upper() }}
+                                </span>
+                            </p>
+                            <p><strong>Threat Level:</strong> 
+                                <span class="badge badge-{{ 'danger' if quarantine.threat_level == 'critical' else 'warning' }}">
+                                    {{ quarantine.threat_level.upper() }}
+                                </span>
+                            </p>
+                            <p><a href="{{ url_for('security.quarantine_detail', ip_address=ip_address) }}" class="btn btn-sm btn-warning">View Quarantine Details</a></p>
+                            {% else %}
+                            <p class="text-muted">Not in quarantine.</p>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            {% if blacklist %}
+                            <p><strong>🚫 Blacklist Status:</strong> <span class="badge badge-danger">BLACKLISTED</span></p>
+                            <p><strong>Reason:</strong> {{ blacklist.reason }}</p>
+                            <p><strong>Blocked By:</strong> {{ blacklist.blocked_by }}</p>
+                            <p><a href="{{ url_for('security.blacklist') }}" class="btn btn-sm btn-danger">View Blacklist</a></p>
+                            {% else %}
+                            <p class="text-muted">Not blacklisted.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Request Logs -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Total: {{ logs|length }} Requests</h5>
+                </div>
+                <div class="card-body">
+                    {% if logs %}
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Method</th>
+                                        <th>Path</th>
+                                        <th>Status</th>
+                                        <th>User Agent</th>
+                                        <th>Threats</th>
+                                        <th>User</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for log in logs %}
+                                    <tr {% if log.threat_flags %}class="table-danger"{% endif %}>
+                                        <td><small>{{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</small></td>
+                                        <td><span class="badge badge-secondary">{{ log.request_method }}</span></td>
+                                        <td>
+                                            <code style="font-size: 0.75rem;">{{ log.request_path }}</code>
+                                        </td>
+                                        <td>
+                                            <span class="badge badge-{{ 'success' if log.response_status < 300 else 'warning' if log.response_status < 400 else 'danger' }}">
+                                                {{ log.response_status }}
+                                            </span>
+                                        </td>
+                                        <td><small>{{ log.user_agent[:40] }}...</small></td>
+                                        <td>
+                                            {% if log.threat_flags %}
+                                                {% for flag in log.threat_flags.split(',') %}
+                                                <span class="badge badge-danger">{{ flag.strip() }}</span>
+                                                {% endfor %}
+                                            {% else %}
+                                                <small class="text-muted">-</small>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if log.user %}
+                                            <small>{{ log.user.username }}</small>
+                                            {% else %}
+                                            <small class="text-muted">-</small>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-success">No logs for this IP.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Back Links -->
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <a href="{{ url_for('security.logs') }}" class="btn btn-secondary">← Back to Logs</a>
+            <a href="{{ url_for('security.dashboard') }}" class="btn btn-primary">Back to Dashboard</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
