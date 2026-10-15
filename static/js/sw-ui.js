@@ -353,6 +353,7 @@
           if (wrap.hidden) return;
           if (f.type === 'checkbox') out[f.name] = input.checked;
           else if (f.type === 'number') out[f.name] = input.value === '' ? null : Number(input.value);
+          else if (f.type === 'file') out[f.name] = input.files[0] || null;
           else if (f.type === 'days') out[f.name] = [...input.querySelectorAll('input:checked')].map((c) => c.value).join(',');
           else out[f.name] = input.value;
         });
@@ -603,13 +604,22 @@
     ], { title: `${verb} recurring event` });
   };
 
-  /** Accept / decline a shift (the person it belongs to, or an admin). */
+  /** Accept / decline a shift (the person it belongs to, or an admin).
+   *  Declining asks for an optional reason, which is included in the email to the admins. */
   SW.respondShift = async function (assignmentId, status) {
-    try {
-      await SW.api('POST', `/shifts/assignment/${assignmentId}/respond`, { status });
+    const send = async (extra) => {
+      await SW.api('POST', `/shifts/assignment/${assignmentId}/respond`, Object.assign({ status }, extra));
       SW.toast(status === 'rejected' ? 'Shift declined' : 'Shift accepted');
       SW.reloadSoon();
-    } catch (e) { SW.toast(e.message, 'error'); }
+    };
+    if (status !== 'rejected') { try { await send({}); } catch (e) { SW.toast(e.message, 'error'); } return; }
+    await SW.form({
+      title: "Can't make this shift?",
+      fields: [{ type: 'info', text: 'The admins will be emailed so they can find cover.' },
+        { name: 'reason', label: 'Reason (optional)', type: 'textarea', rows: 2, maxLength: 500, placeholder: 'e.g. exam that day' }],
+      submitText: 'Decline shift', danger: true,
+      onSubmit: (v) => send({ reason: v.reason }),
+    });
   };
 
   /** Run an async action with an error toast. */

@@ -244,6 +244,7 @@ class ShiftAssignment(db.Model):
     notes        = db.Column(db.Text)
     assigned_at  = db.Column(db.DateTime, default=datetime.utcnow)
     responded_at = db.Column(db.DateTime, nullable=True)
+    decline_reason = db.Column(db.String(500), nullable=True)
     updated_at   = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     user = db.relationship('User', backref='shift_assignments')
 
@@ -442,3 +443,11 @@ class EmailOTP(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     user = db.relationship('User', backref='email_otp')
+
+
+class AppSetting(db.Model):
+    """Simple key/value store for admin-configurable settings (JSON-encoded values)."""
+    key        = db.Column(db.String(100), primary_key=True)
+    value      = db.Column(db.Text, nullable=False, default='null')
+    updated_by = db.Column(db.String(80))
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

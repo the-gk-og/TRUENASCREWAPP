@@ -93,6 +93,7 @@
           <div class="sw-shift-time">{{ fmt_range(x.s.shift_date, x.s.shift_end_date) }}</div>
           <div class="sw-shift-meta">{% if x.s.role %}<span class="sw-chip plain">{{ x.s.role }}</span>{% endif %}{{ status_chip(x.a.status) }}</div>
           {% if x.a.notes %}<div class="md-content" style="margin-top:.3rem;font-size:.88rem">{{ x.a.notes|md }}</div>{% endif %}
+          {% if x.a.status == 'rejected' and x.a.decline_reason %}<div class="sw-muted" style="font-size:.85rem;margin-top:.25rem">Reason: {{ x.a.decline_reason }}</div>{% endif %}
         </div>
         {% if can_manage %}
         <div class="sw-shift-btns">

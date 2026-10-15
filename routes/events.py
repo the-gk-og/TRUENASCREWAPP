@@ -694,6 +694,8 @@ def edit_team_shift(aid):
         if status != a.status:
             a.status = status
             a.responded_at = datetime.utcnow()
+            if status != 'rejected':
+                a.decline_reason = None
         if 'notes' in data:
             a.notes = str(data.get('notes') or '').strip()
         ca = CrewAssignment.query.filter_by(event_id=event.id, crew_member=a.user.username).first()
