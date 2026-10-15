@@ -1,882 +1,285 @@
 {% extends "base.html" %}
-
 {% block title %}{{ event.title }} - ShowWise{% endblock %}
+{% block head_extra %}<link rel="stylesheet" href="{{ url_for('static', filename='css/events.css') }}">{% endblock %}
+
+{% macro status_chip(s) -%}
+  {%- if s in ('accepted','confirmed') %}<span class="sw-chip ok">Confirmed</span>
+  {%- elif s == 'rejected' %}<span class="sw-chip bad">Declined</span>
+  {%- else %}<span class="sw-chip warn">Awaiting response</span>{% endif -%}
+{%- endmacro %}
 
 {% block content %}
-<style>
-.sortable-ghost {
-    opacity: 0.4;
-}
+<a class="sw-back" href="{{ url_for('calendar.calendar') }}">← Calendar</a>
+<a class="sw-back" href="{{ url_for('events.events_list') }}" style="margin-left:1rem">All events</a>
 
-.run-item:hover {
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    transition: box-shadow 0.2s ease;
-}
-</style>
+<div class="sw-page-head">
+  <div>
+    <h1>{{ event.title }}</h1>
+    <div class="sw-chips">
+      <span class="sw-chip"><i class="fas fa-clock"></i>{{ fmt_range(event.event_date, end, event.all_day) }}</span>
+      {% if event.location %}<span class="sw-chip plain"><i class="fas fa-map-marker-alt"></i>{{ event.location }}</span>{% endif %}
+      {% if is_series %}<span class="sw-chip plain"><i class="fas fa-redo"></i>Repeats · {{ series_count }} events</span>{% endif %}
+      {% if on_team %}<span class="sw-chip ok">You're on this event</span>{% endif %}
+    </div>
+  </div>
+  <div class="sw-actions-bar">
+    {% if can_edit %}<button class="btn btn-primary" data-act="edit-event"><i class="fas fa-edit"></i>Edit</button>{% endif %}
+    {% if can_manage %}<button class="btn btn-secondary" data-act="duplicate"><i class="fas fa-copy"></i>Duplicate</button>{% endif %}
+    <a class="btn btn-secondary" href="{{ url_for('events.export_event_pdf', event_id=event.id) }}"><i class="fas fa-file-pdf"></i>PDF</a>
+    {% if can_manage %}<button class="btn btn-danger" data-act="delete-event"><i class="fas fa-trash"></i>Delete</button>{% endif %}
+  </div>
+</div>
 
+{% if on_team %}
+<div class="card sw-mine">
+  <div class="sw-card-head"><h3><i class="fas fa-user-check"></i> Your shifts</h3></div>
+  {% for x in my_shifts %}
+    <div class="sw-shift st-{{ x.a.status }}">
+      <div class="sw-shift-main">
+        <div class="sw-shift-time">{{ fmt_range(x.s.shift_date, x.s.shift_end_date) }}</div>
+        <div class="sw-shift-meta">{% if x.s.role %}<span class="sw-chip plain">{{ x.s.role }}</span>{% endif %}{{ status_chip(x.a.status) }}</div>
+        {% if x.a.notes %}<div class="md-content" style="margin-top:.3rem">{{ x.a.notes|md }}</div>{% endif %}
+      </div>
+      <div class="sw-shift-btns">
+        {% if x.a.status != 'accepted' and x.a.status != 'confirmed' %}<button class="btn btn-success btn-sm" data-act="respond" data-id="{{ x.a.id }}" data-status="accepted">Accept</button>{% endif %}
+        {% if x.a.status != 'rejected' %}<button class="btn btn-ghost btn-sm" data-act="respond" data-id="{{ x.a.id }}" data-status="rejected">Can't make it</button>{% endif %}
+      </div>
+    </div>
+  {% else %}
+    <p class="sw-muted">You're on the crew for this event. Shift times haven't been set yet.</p>
+  {% endfor %}
+  <div style="margin-top:.75rem"><button class="btn btn-ghost btn-sm" data-act="leave-self">Leave this event</button></div>
+</div>
+{% elif not can_manage %}
+<div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
+  <span>You're not on this event yet.</span>
+  <button class="btn btn-primary btn-sm" data-act="join"><i class="fas fa-hand-paper"></i>Join this event</button>
+</div>
+{% endif %}
 
-<div class="card">
-    <a href="{{ url_for('calendar.calendar') }}" style="color: #667eea; text-decoration: none; margin-bottom: 1rem; display: inline-block;">
-        ← Back to Calendar
-    </a>
-    
-    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem;">
-        <h1 style="margin: 0;">{{ event.title }}</h1>
-        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-            {% if current_user.is_admin %}
-            <button onclick="showModal('editEventModal')" class="btn btn-primary" style="padding: 0.5rem 1rem; white-space: nowrap;">
-                <i class="fas fa-edit"></i> Edit
-            </button>
-            {% endif %}
-            <button onclick="exportPDF()" class="btn btn-success" style="padding: 0.5rem 1rem; white-space: nowrap;">
-                <i class="fas fa-file-pdf"></i> Export PDF
-            </button>
+{% if event.description %}
+<div class="card"><div class="md-content">{{ event.description|md }}</div></div>
+{% endif %}
+
+<div class="sw-layout">
+<div>
+
+  <!-- TEAM & SHIFTS -->
+  <div class="card">
+    <div class="sw-card-head">
+      <h3><i class="fas fa-users"></i> Team &amp; shifts ({{ team|length }})</h3>
+      {% if can_manage %}
+      <div class="sw-actions-bar">
+        <button class="btn btn-sm btn-primary" data-act="add-person"><i class="fas fa-user-plus"></i>Add person</button>
+        <button class="btn btn-sm btn-ghost" data-act="add-all">Add all crew</button>
+      </div>
+      {% endif %}
+    </div>
+    {% for p in team %}
+    <div class="sw-person {{ 'me' if p.user.id == current_user.id }}">
+      <div class="sw-person-head">
+        <div class="sw-person-name"><span class="sw-avatar">{{ p.user.username[0]|upper }}</span>{{ p.user.username }}
+          {% if p.crew and p.crew.role and not p.shifts %}<span class="sw-chip plain">{{ p.crew.role }}</span>{% endif %}</div>
+        {% if can_manage %}
+        <div class="sw-shift-btns">
+          <button class="btn btn-sm btn-ghost" data-act="add-shift" data-user="{{ p.user.id }}"><i class="fas fa-plus"></i>Shift</button>
+          <button class="btn btn-sm btn-ghost" data-act="remove-person" data-user="{{ p.user.id }}" data-name="{{ p.user.username }}" title="Remove from event"><i class="fas fa-user-minus"></i></button>
         </div>
-    </div>
-    
-    <div style="background: linear-gradient(135deg, #e8f4f8 0%, #d1e7f4 100%); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid var(--primary);">
-        <p style="color: #666; margin: 0.5rem 0; word-break: break-word;">
-            📅 <strong>Start:</strong> {{ event.event_date.strftime('%B %d, %Y at %I:%M %p') }}
-        </p>
-        {% if event.event_end_date %}
-        <p style="color: #666; margin: 0.5rem 0; word-break: break-word;">
-            🏁 <strong>End:</strong> {{ event.event_end_date.strftime('%B %d, %Y at %I:%M %p') }}
-        </p>
-        <p style="color: #666; margin: 0.5rem 0;">
-            ⏱️ <strong>Duration:</strong> 
-            <span style="background: #e0e7ff; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.9rem;">
-                {{ ((event.event_end_date - event.event_date).total_seconds() / 3600)|round(1) }} hours
-            </span>
-        </p>
         {% endif %}
-        {% if event.location %}
-        <p style="color: #666; margin: 0.5rem 0; word-break: break-word;">
-            📍 <strong>Location:</strong> {{ event.location }}
-        </p>
+      </div>
+      {% for x in p.shifts %}
+      <div class="sw-shift st-{{ x.a.status }}">
+        <div class="sw-shift-main">
+          <div class="sw-shift-time">{{ fmt_range(x.s.shift_date, x.s.shift_end_date) }}</div>
+          <div class="sw-shift-meta">{% if x.s.role %}<span class="sw-chip plain">{{ x.s.role }}</span>{% endif %}{{ status_chip(x.a.status) }}</div>
+          {% if x.a.notes %}<div class="md-content" style="margin-top:.3rem;font-size:.88rem">{{ x.a.notes|md }}</div>{% endif %}
+        </div>
+        {% if can_manage %}
+        <div class="sw-shift-btns">
+          <button class="btn btn-sm btn-ghost btn-icon" data-act="edit-shift" data-id="{{ x.a.id }}" title="Edit shift"><i class="fas fa-pen"></i></button>
+          <button class="btn btn-sm btn-ghost btn-icon" data-act="del-shift" data-id="{{ x.a.id }}" title="Delete shift"><i class="fas fa-trash"></i></button>
+        </div>
         {% endif %}
+      </div>
+      {% else %}<div class="sw-noshift">No shift times set yet.</div>{% endfor %}
     </div>
-    
-    {% if event.description %}
-    <div style="background: #f8f9fa; padding: 1rem; border-radius: 6px; margin-top: 1rem; word-break: break-word;">
-        <p style="margin: 0;">{{ event.description }}</p>
-    </div>
-    {% endif %}
-</div>
+    {% else %}
+    <div class="sw-empty">Nobody is on this event yet.{% if can_manage %} Use “Add person” to give someone a shift.{% endif %}</div>
+    {% endfor %}
+  </div>
 
-
-
-<!-- EVENT NOTES SECTION -->
-<div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
-        <h3>📝 Event Notes</h3>
-        <button onclick="showModal('addNoteModal')" class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
-            + Add Note
-        </button>
-    </div>
-    
-    <div id="notesList">
-        {% if event.notes %}
-            {% for note in event.notes|sort(attribute='created_at', reverse=True) %}
-            <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--warning); margin-bottom: 0.75rem;">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
-                    <div style="flex: 1; min-width: 0;">
-                        <p style="margin: 0.25rem 0; color: #555; font-size: 0.85rem;">
-                            <strong>{{ note.created_by }}</strong> • {{ note.created_at.strftime('%b %d, %Y at %I:%M %p') }}
-                        </p>
-                        <p id="note-content-{{ note.id }}" style="margin: 0.5rem 0; color: #333; word-break: break-word;">{{ note.content }}</p>
-                        <div id="note-edit-{{ note.id }}" style="display: none; margin: 0.5rem 0;">
-                            <textarea id="note-textarea-{{ note.id }}" style="width: 100%; padding: 0.5rem; border: 2px solid var(--border); border-radius: 6px; min-height: 80px; font-family: inherit;">{{ note.content }}</textarea>
-                        </div>
-                    </div>
-                    <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
-                        <button onclick="editNoteToggle({{ note.id }})" id="edit-btn-{{ note.id }}" class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button onclick="saveNoteEdit({{ note.id }})" id="save-btn-{{ note.id }}" style="display: none; padding: 0.4rem 0.8rem; font-size: 0.8rem;" class="btn btn-success">
-                            <i class="fas fa-save"></i>
-                        </button>
-                        <button onclick="deleteNote({{ note.id }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-            {% endfor %}
-        {% else %}
-        <p style="color: #666; text-align: center; padding: 1rem;">No notes yet. Add one to get started!</p>
-        {% endif %}
-    </div>
-</div>
-
-<!-- EVENT SCHEDULE SECTION -->
-<div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
-        <h3>📋 Event Schedule</h3>
-        <button onclick="showModal('addScheduleModal')" class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
-            + Add Schedule
-        </button>
-    </div>
-    
+  <!-- SCHEDULE -->
+  <div class="card">
+    <div class="sw-card-head"><h3><i class="fas fa-clock"></i> Schedule ({{ schedules|length }})</h3>
+      {% if can_manage %}<button class="btn btn-sm btn-primary" data-act="add-sched"><i class="fas fa-plus"></i>Add item</button>{% endif %}</div>
     {% if schedules %}
-    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-        {% for schedule in schedules|sort(attribute='scheduled_time') %}
-        <div style="background: linear-gradient(135deg, #e8f4f8 0%, #d1e7f4 100%); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--primary);">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
-                <div style="flex: 1; min-width: 200px;">
-                    <h4 style="margin: 0 0 0.5rem 0; color: var(--primary);">{{ schedule.title }}</h4>
-                    <p style="margin: 0.25rem 0; color: #555; font-size: 0.9rem;">
-                        <i class="fas fa-clock"></i> {{ schedule.scheduled_time.strftime('%I:%M %p') }}
-                    </p>
-                    {% if schedule.description %}
-                    <p style="margin: 0.25rem 0; color: #555; font-size: 0.9rem;">
-                        {{ schedule.description }}
-                    </p>
-                    {% endif %}
-                </div>
-                <button onclick="deleteSchedule({{ schedule.id }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; white-space: nowrap;">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>
+    <div class="sw-timeline">
+      {% for s in schedules %}
+      <div class="sw-tl-item">
+        <div class="sw-tl-time">{{ fmt_range(s.scheduled_time, None) }}
+          {% if can_manage %}<span class="sw-tl-btns">
+            <button class="btn btn-ghost btn-icon" data-act="edit-sched" data-id="{{ s.id }}" title="Edit"><i class="fas fa-pen"></i></button>
+            <button class="btn btn-ghost btn-icon" data-act="del-sched" data-id="{{ s.id }}" title="Delete"><i class="fas fa-trash"></i></button></span>{% endif %}</div>
+        <div class="sw-tl-title">{{ s.title }}</div>
+        {% if s.description %}<div class="sw-tl-body md-content">{{ s.description|md }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}<div class="sw-empty">No schedule items.</div>{% endif %}
+  </div>
+
+  <!-- RUN LIST -->
+  <div class="card">
+    <div class="sw-card-head"><h3><i class="fas fa-list-ol"></i> Run list ({{ run_items|length }})</h3>
+      {% if can_manage %}<button class="btn btn-sm btn-primary" data-act="add-run"><i class="fas fa-plus"></i>Add item</button>{% endif %}</div>
+    <div id="runList">
+    {% for r in run_items %}
+      <div class="sw-run" data-id="{{ r.id }}">
+        {% if can_manage %}<span class="handle" title="Drag to reorder"><i class="fas fa-grip-vertical"></i></span>{% endif %}
+        <span class="num">{{ loop.index }}</span>
+        <div class="sw-run-main">
+          <div class="sw-run-title">{{ r.title }}</div>
+          <div class="sw-run-meta">
+            {% if r.duration %}<span class="sw-chip plain"><i class="fas fa-hourglass-half"></i>{{ r.duration }}</span>{% endif %}
+            {% if r.cue_type %}<span class="sw-chip">{{ r.cue_type }}</span>{% endif %}
+          </div>
+          {% if r.description %}<div class="md-content" style="margin-top:.3rem;font-size:.9rem">{{ r.description|md }}</div>{% endif %}
+          {% if r.notes %}<div class="sw-muted" style="margin-top:.3rem;font-size:.85rem;white-space:pre-line">{{ r.notes }}</div>{% endif %}
         </div>
-        {% endfor %}
+        {% if can_manage %}<div class="sw-shift-btns">
+          <button class="btn btn-ghost btn-icon" data-act="edit-run" data-id="{{ r.id }}" title="Edit"><i class="fas fa-pen"></i></button>
+          <button class="btn btn-ghost btn-icon" data-act="del-run" data-id="{{ r.id }}" title="Delete"><i class="fas fa-trash"></i></button></div>{% endif %}
+      </div>
+    {% endfor %}
     </div>
-    {% else %}
-    <p style="color: #666; text-align: center; padding: 1rem;">No schedule items yet.</p>
-    {% endif %}
+    {% if not run_items %}<div class="sw-empty">No run list items.</div>{% endif %}
+  </div>
+
+  <!-- NOTES -->
+  <div class="card">
+    <div class="sw-card-head"><h3><i class="fas fa-sticky-note"></i> Notes ({{ notes|length }})</h3>
+      <button class="btn btn-sm btn-primary" data-act="add-note"><i class="fas fa-plus"></i>Add note</button></div>
+    {% for n in notes %}
+    <div class="sw-note">
+      <div class="sw-note-head"><span><strong>{{ n.created_by }}</strong> · {{ n.created_at.strftime('%d %b %Y, %I:%M %p') }}</span>
+        {% if can_manage or n.created_by == current_user.username %}<span class="sw-shift-btns">
+          <button class="btn btn-ghost btn-icon" data-act="edit-note" data-id="{{ n.id }}" title="Edit"><i class="fas fa-pen"></i></button>
+          <button class="btn btn-ghost btn-icon" data-act="del-note" data-id="{{ n.id }}" title="Delete"><i class="fas fa-trash"></i></button></span>{% endif %}</div>
+      <div class="md-content">{{ n.content|md }}</div>
+    </div>
+    {% else %}<div class="sw-empty">No notes yet.</div>{% endfor %}
+  </div>
 </div>
 
-<!-- CREW RUN LIST -->
-<div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
-        <h3><i class="fas fa-list-ol"></i>Run List</h3>
-        <button onclick="showModal('addCrewRunModal')" class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
-            + Add Item
-        </button>
+<div>
+  <div class="card">
+    <div class="sw-card-head"><h3>Quick links</h3></div>
+    <div style="display:grid;gap:.6rem">
+      <a class="btn btn-secondary" href="{{ url_for('picklist.picklist', event_id=event.id) }}"><i class="fas fa-list-check"></i>Pick list ({{ event.pick_list_items|length }})</a>
+      <a class="btn btn-secondary" href="{{ url_for('stage_designer.stageplans', event_id=event.id) }}"><i class="fas fa-image"></i>Stage plans ({{ event.stage_plans|length }})</a>
+      <a class="btn btn-secondary" href="{{ url_for('hired_equipment.hired_equipment_list') }}"><i class="fas fa-handshake"></i>Hired equipment ({{ hired|length }})</a>
     </div>
-    
-    <p style="color: #666; font-size: 0.9rem; margin-bottom: 1rem;">show running order</p>
-    
-    {% if event.crew_run_items %}
-    <div id="crewRunList" style="display: flex; flex-direction: column; gap: 0.75rem;">
-        {% for item in event.crew_run_items %}
-        <div class="run-item" data-id="{{ item.id }}" style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); padding: 1rem; border-radius: 8px; border-left: 4px solid {% if item.cue_type == 'Lighting' %}#f59e0b{% elif item.cue_type == 'Sound' %}#6366f1{% elif item.cue_type == 'Props' %}#10b981{% else %}#6b7280{% endif %}; cursor: move;">
-            <div style="display: flex; align-items: start; gap: 1rem;">
-                <div style="display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0;">
-                    <i class="fas fa-grip-vertical" style="color: #9ca3af; cursor: grab;"></i>
-                    <span style="background: #e5e7eb; color: var(--dark); padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem; font-weight: 700; min-width: 40px; text-align: center;">
-                        {{ item.order_number }}
-                    </span>
-                </div>
-                
-                <div style="flex: 1; min-width: 0;">
-                    <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.5rem;">
-                        <h4 style="margin: 0; color: var(--dark);">{{ item.title }}</h4>
-                        {% if item.cue_type %}
-                        <span style="background: {% if item.cue_type == 'Lighting' %}#fef3c7{% elif item.cue_type == 'Sound' %}#e0e7ff{% elif item.cue_type == 'Props' %}#dcfce7{% else %}#f3f4f6{% endif %}; 
-                                     color: {% if item.cue_type == 'Lighting' %}#78350f{% elif item.cue_type == 'Sound' %}#3730a3{% elif item.cue_type == 'Props' %}#065f46{% else %}#374151{% endif %}; 
-                                     padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600;">
-                            {{ item.cue_type }}
-                        </span>
-                        {% endif %}
-                        {% if item.duration %}
-                        <span style="background: #f3f4f6; color: #6b7280; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem;">
-                            <i class="fas fa-clock"></i> {{ item.duration }}
-                        </span>
-                        {% endif %}
-                    </div>
-                    
-                    {% if item.description %}
-                    <p style="margin: 0.5rem 0; color: #6b7280; font-size: 0.9rem;">{{ item.description }}</p>
-                    {% endif %}
-                    
-                    {% if item.notes %}
-                    <p style="margin: 0.5rem 0; color: #9ca3af; font-size: 0.85rem; font-style: italic;">
-                        <i class="fas fa-sticky-note"></i> {{ item.notes }}
-                    </p>
-                    {% endif %}
-                </div>
-                
-                <div style="display: flex; gap: 0.25rem; flex-shrink: 0;">
-                    <button onclick="editCrewRunItem({{ item.id }})" class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button onclick="deleteCrewRunItem({{ item.id }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    
-    <div style="background: #f0f9ff; padding: 1rem; border-radius: 6px; margin-top: 1rem; border-left: 3px solid var(--primary);">
-        <p style="margin: 0; color: #1e40af; font-size: 0.85rem;">
-            <i class="fas fa-info-circle"></i> <strong>Tip:</strong> Drag and drop items to reorder the run list
-        </p>
-    </div>
-    {% else %}
-    <p style="color: #666; text-align: center; padding: 2rem;">No run list items yet.</p>
-    {% endif %}
+  </div>
+  <div class="card">
+    <div class="sw-card-head"><h3>Details</h3></div>
+    <dl class="sw-detail-grid">
+      <dt>Starts</dt><dd>{{ event.event_date.strftime('%a %d %b %Y') }}{% if not event.all_day %}, {{ event.event_date.strftime('%I:%M %p').lstrip('0') }}{% endif %}</dd>
+      <dt>Ends</dt><dd>{{ end.strftime('%a %d %b %Y') }}{% if not event.all_day %}, {{ end.strftime('%I:%M %p').lstrip('0') }}{% endif %}</dd>
+      {% if event.created_by %}<dt>Created by</dt><dd>{{ event.created_by }}</dd>{% endif %}
+    </dl>
+  </div>
+</div>
 </div>
 
-<!-- Add Crew Run Item Modal -->
-<div id="addCrewRunModal" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="hideModal('addCrewRunModal')">&times;</span>
-        <h2 id="crewRunModalTitle"><i class="fas fa-plus"></i> Add Run Item</h2>
-        <form id="addCrewRunForm">
-            <input type="hidden" id="crewRunItemId">
-            
-            <div class="form-group">
-                <label>Title (act name)</label>
-                <input type="text" id="crewRunTitle" required placeholder="Enter cue or step title">
-            </div>
-            
-
-            
-            <div class="form-group">
-                <label>Duration</label>
-                <input type="text" id="crewRunDuration" placeholder="e.g., 5 min, 30 sec">
-            </div>
-            
-            <div class="form-group">
-                <label>Description</label>
-                <textarea id="crewRunDescription" rows="3" placeholder="Detailed instructions..."></textarea>
-            </div>
-            
-            <div class="form-group">
-                <label>Notes</label>
-                <textarea id="crewRunNotes" rows="2" placeholder="Additional notes or warnings..."></textarea>
-            </div>
-            
-            <button type="submit" class="btn btn-success" style="width: 100%;">
-                <i class="fas fa-check"></i> <span id="crewRunSubmitText">Add Item</span>
-            </button>
-        </form>
-    </div>
-</div>
-
-
-
-<!-- CREW ASSIGNMENTS -->
-
-<div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
-        <h3>👥 Crew ({{ event.crew_assignments|length }})</h3>
-        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-            {% if current_user.is_admin %}
-            <button onclick="addAllCrew()" class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
-                <i class="fas fa-users"></i> Add All Crew
-            </button>
-            {% endif %}
-            <button onclick="showModal('addCrewModal')" class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
-                <i class="fas fa-plus"></i> Add Crew
-            </button>
-        </div>
-    </div>
-    
-    {% if event.crew_assignments %}
-    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-        {% for assignment in event.crew_assignments %}
-        <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; border-left: 4px solid var(--primary);">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
-                <div style="display: flex; align-items: center; gap: 1rem; flex: 1; min-width: 200px;">
-                    {% set user = get_user_by_username(assignment.crew_member) %}
-                    {% if user and user.profile_picture %}
-                    <div id="avatar-{{ loop.index0 }}" style="width: 48px; height: 48px; min-width: 48px; min-height: 48px; border-radius: 50%; border: 2px solid var(--primary); overflow: hidden;">
-                        <img src="/profile/picture/{{ assignment.crew_member }}" alt="{{ assignment.crew_member }}" style="width: 100%; height: 100%; object-fit: cover;" onerror="document.getElementById('avatar-{{ loop.index0 }}').innerHTML='<div style=\\\"width:100%;height:100%;background:linear-gradient(135deg,var(--primary),var(--secondary));color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;\\\">{{ assignment.crew_member[0].upper() }}</div>'">
-                    </div>
-                    {% else %}
-                    <div style="width: 48px; height: 48px; min-width: 48px; min-height: 48px; border-radius: 50%; background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1rem;">
-                        {{ assignment.crew_member[0].upper() }}
-                    </div>
-                    {% endif %}
-                    <div>
-                        <h4 style="margin: 0 0 0.25rem 0;">{{ assignment.crew_member }}</h4>
-                        <p style="margin: 0.25rem 0; color: #666; font-size: 0.9rem;">{{ assignment.role or 'Crew Member' }}</p>
-                        {% if user and user.email %}
-                        <p style="margin: 0.25rem 0; color: #999; font-size: 0.8rem;"><i class="fas fa-envelope"></i> {{ user.email }}</p>
-                        <span style="background: #d1fae5; color: #065f46; padding: 0.25rem 0.5rem; border-radius: 20px; font-size: 0.75rem; display: inline-block; margin-top: 0.25rem;">
-                            <i class="fas fa-check-circle"></i> Notified
-                        </span>
-                        {% else %}
-                        <span style="background: #fee2e2; color: #991b1b; padding: 0.25rem 0.5rem; border-radius: 20px; font-size: 0.75rem; display: inline-block; margin-top: 0.25rem;">
-                            <i class="fas fa-exclamation-circle"></i> No Email
-                        </span>
-                        {% endif %}
-                    </div>
-                </div>
-                <button onclick="removeCrew({{ assignment.id }})" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; white-space: nowrap;">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <p style="color: #666; text-align: center; padding: 1rem;">No crew assigned yet.</p>
-    {% endif %}
-</div>
-
-<!-- SHIFTS SECTION -->
-<div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
-        <h3>📅 Shifts ({{ shifts_data|length }})</h3>
-        {% if current_user.is_admin %}
-        <a href="{{ url_for('shifts.shift_management') }}" class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.9rem; text-decoration: none;">
-            <i class="fas fa-plus"></i> Manage Shifts
-        </a>
-        {% endif %}
-    </div>
-    
-    {% if shifts_data %}
-    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-        {% for shift in shifts_data %}
-        <div style="background: #f0f9ff; padding: 1rem; border-radius: 8px; border-left: 4px solid #0284c7;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
-                <div style="flex: 1; min-width: 200px;">
-                    <h4 style="margin: 0 0 0.5rem 0;">{{ shift.role }}</h4>
-                    <p style="margin: 0.25rem 0; color: #666; font-size: 0.9rem;">
-                        <i class="fas fa-calendar"></i> {{ shift.shift_date.split('T')[0] }}
-                        {% if shift.shift_end_date %}
-                        – {{ shift.shift_end_date.split('T')[0] }}
-                        {% endif %}
-                    </p>
-                    {% if shift.location %}
-                    <p style="margin: 0.25rem 0; color: #666; font-size: 0.9rem;">
-                        <i class="fas fa-map-marker-alt"></i> {{ shift.location }}
-                    </p>
-                    {% endif %}
-                    <div style="margin-top: 0.75rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
-                        <span style="background: #e0e7ff; color: #3730a3; padding: 0.4rem 0.8rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600;">
-                            <i class="fas fa-users"></i> {{ shift.assigned_count }}/{{ shift.positions_needed }} Assigned
-                        </span>
-                        {% if shift.is_open %}
-                        <span style="background: #dcfce7; color: #166534; padding: 0.4rem 0.8rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600;">
-                            <i class="fas fa-unlock"></i> Open to Claim
-                        </span>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-            {% if shift.assignments %}
-            <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #cbd5e1;">
-                <p style="margin: 0 0 0.5rem 0; font-size: 0.85rem; color: #666;"><strong>Assignment Status:</strong></p>
-                <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
-                    {% for assignment in shift.assignments %}
-                    <span style="background: {% if assignment.status == 'confirmed' %}#d1fae5{% elif assignment.status == 'accepted' %}#bfdbfe{% else %}#feca57{% endif %}; color: {% if assignment.status == 'confirmed' %}#065f46{% elif assignment.status == 'accepted' %}#1e40af{% else %}#7c2d12{% endif %}; padding: 0.25rem 0.6rem; border-radius: 12px; font-size: 0.8rem;">
-                        {{ assignment.username }} - <strong>{{ assignment.status }}</strong>
-                    </span>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
-        </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <p style="color: #666; text-align: center; padding: 1rem;">No shifts created for this event yet.</p>
-    {% endif %}
-</div>
-
-
-
-<!-- QUICK LINKS -->
-<div class="card">
-    <h3 style="margin-bottom: 1rem;">Quick Links</h3>
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem;">
-        <a href="{{ url_for('picklist.picklist', event_id=event.id) }}" class="btn btn-primary">
-            📋 Pick List ({{ event.pick_list_items|length }})
-        </a>
-        <a href="{{ url_for('stage_designer.stageplans', event_id=event.id) }}" class="btn btn-primary">
-            🎨 Stage Plans ({{ event.stage_plans|length }})
-        </a>
-    </div>
-</div>
-
-<!-- ADD NOTE MODAL -->
-<div id="addNoteModal" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="hideModal('addNoteModal')">&times;</span>
-        <h2>Add Event Note</h2>
-        <form id="addNoteForm">
-            <div class="form-group">
-                <label>Note Content *</label>
-                <textarea id="noteContent" required placeholder="Add important notes about this event..." style="min-height: 120px;"></textarea>
-            </div>
-            <button type="submit" class="btn btn-success" style="width: 100%;"><i class="fas fa-plus"></i> Add Note</button>
-        </form>
-    </div>
-</div>
-
-<!-- EDIT EVENT MODAL -->
-<div id="editEventModal" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="hideModal('editEventModal')">&times;</span>
-        <h2>Edit Event</h2>
-        <form id="editEventForm">
-            <div class="form-group">
-                <label>Event Title *</label>
-                <input type="text" id="editTitle" value="{{ event.title }}" required>
-            </div>
-            <div class="form-group">
-                <label>Start Date & Time *</label>
-                <input type="datetime-local" id="editDate" value="{{ event.event_date.strftime('%Y-%m-%dT%H:%M') }}" required>
-            </div>
-            <div class="form-group">
-                <label>End Date & Time</label>
-                <input type="datetime-local" id="editEndDate" 
-                       value="{% if event.event_end_date %}{{ event.event_end_date.strftime('%Y-%m-%dT%H:%M') }}{% endif %}">
-                <small style="color: #666; display: block; margin-top: 0.25rem;">Leave blank to use 3-hour default</small>
-            </div>
-            <div class="form-group">
-                <label>Location</label>
-                <input type="text" id="editLocation" value="{{ event.location or '' }}" placeholder="e.g., Main Auditorium">
-            </div>
-            <div class="form-group">
-                <label>Description</label>
-                <textarea id="editDescription" placeholder="Event details...">{{ event.description or '' }}</textarea>
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
-                <button type="submit" class="btn btn-success">Save Changes</button>
-                <button type="button" onclick="deleteEventConfirm()" class="btn btn-danger">Delete Event</button>
-            </div>
-            <button type="button" onclick="hideModal('editEventModal')" class="btn btn-primary" style="width: 100%;">Cancel</button>
-        </form>
-    </div>
-</div>
-
-
-<!-- ADD SCHEDULE MODAL -->
-<div id="addScheduleModal" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="hideModal('addScheduleModal')">&times;</span>
-        <h2>Add Schedule Item</h2>
-        <form id="addScheduleForm">
-            <div class="form-group">
-                <label>Schedule Title * (e.g., Sound Check, Rehearsal, Performance)</label>
-                <input type="text" id="scheduleTitle" placeholder="e.g., Sound Check" required>
-            </div>
-            <div class="form-group">
-                <label>Time * (Date and Time)</label>
-                <input type="datetime-local" id="scheduleTime" required>
-            </div>
-            <div class="form-group">
-                <label>Description (Optional)</label>
-                <textarea id="scheduleDescription" placeholder="Optional notes..." style="min-height: 80px;"></textarea>
-            </div>
-            <div style="display: flex; gap: 1rem;">
-                <button type="submit" class="btn btn-success" style="flex: 1;">
-                    <i class="fas fa-plus"></i> Add Schedule
-                </button>
-                <button type="button" onclick="hideModal('addScheduleModal')" class="btn btn-primary" style="flex: 1;">
-                    Cancel
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- ADD CREW MODAL -->
-<div id="addCrewModal" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="hideModal('addCrewModal')">&times;</span>
-        <h2>Add Crew Member</h2>
-        <form id="addCrewForm">
-            <div class="form-group">
-                <label>Crew Member *</label>
-                <select id="crewMember" required>
-                    <option value="">-- Select member --</option>
-                    {% for user in all_users %}
-                    <option value="{{ user.username }}">
-                        {{ user.username }}{% if user.email %} ({{ user.email }}){% endif %}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Role / Position</label>
-                <input type="text" id="crewRole" placeholder="e.g., Stage Manager">
-            </div>
-            <button type="submit" class="btn btn-success" style="width: 100%;">Add to Crew</button>
-        </form>
-    </div>
-</div>
-
+<script type="application/json" id="page-data">{{ page_data|tojson }}</script>
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/sw-ui.js') }}"></script>
 <script>
-// Export to PDF
-function exportPDF() {
-    window.location.href = '/events/{{ event.id }}/export-pdf';
+const D = JSON.parse(document.getElementById('page-data').textContent);
+const EV = D.event;
+const RANGE = { id: EV.id, start: EV.event_date, end: EV.event_end_date };
+const done = (msg) => { SW.toast(msg); SW.reloadSoon(); };
+
+async function removeWith(path, what) {
+  if (!(await SW.confirm(`Delete ${what}?`, { danger: true, okText: 'Delete' }))) return;
+  if (await SW.run(() => SW.api('DELETE', path))) done('Deleted');
 }
 
-// Add Note
-document.getElementById('addNoteForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const data = {
-        content: document.getElementById('noteContent').value
-    };
-    fetch('/events/{{ event.id }}/notes/add', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(r => r.json())
-    .then(result => {
-        if (result.success) {
-            showAlert('Note added!', 'success');
-            setTimeout(() => location.reload(), 500);
-        }
+const actions = {
+  async 'edit-event'() {
+    const r = await SW.eventForm({ event: EV });
+    if (r) done('Event saved');
+  },
+  async duplicate() {
+    const r = await SW.form({
+      title: 'Duplicate event', values: { event_date: SW.addHours(EV.event_date, 24 * 7) },
+      fields: [{ type: 'info', text: 'Copies the details, schedule and run list (not the team).' },
+        { name: 'event_date', label: 'New start', type: 'datetime', required: true }],
+      submitText: 'Duplicate',
+      onSubmit: (v) => SW.api('POST', `/events/${EV.id}/duplicate`, v),
     });
-});
-
-// Edit Note Toggle
-function editNoteToggle(noteId) {
-    const content = document.getElementById(`note-content-${noteId}`);
-    const editDiv = document.getElementById(`note-edit-${noteId}`);
-    const editBtn = document.getElementById(`edit-btn-${noteId}`);
-    const saveBtn = document.getElementById(`save-btn-${noteId}`);
-    
-    if (editDiv.style.display === 'none') {
-        content.style.display = 'none';
-        editDiv.style.display = 'block';
-        editBtn.style.display = 'none';
-        saveBtn.style.display = 'inline-block';
-    } else {
-        content.style.display = 'block';
-        editDiv.style.display = 'none';
-        editBtn.style.display = 'inline-block';
-        saveBtn.style.display = 'none';
+    if (r && r.id) location.href = '/events/' + r.id;
+  },
+  async 'delete-event'() {
+    let scope = 'this';
+    if (EV.is_recurring) { scope = await SW.seriesScope('Delete', EV.series_count); if (!scope) return; }
+    else if (!(await SW.confirm('Delete this event? Its team, shifts, notes, pick list and stage plans are removed too.', { danger: true, okText: 'Delete event' }))) return;
+    if (await SW.run(() => SW.api('DELETE', `/events/${EV.id}?scope=${scope}`))) {
+      SW.toast('Event deleted'); setTimeout(() => location.href = '/calendar', 400);
     }
-}
+  },
+  async join() { if (await SW.run(() => SW.api('POST', `/events/${EV.id}/join`))) done('You joined this event'); },
+  async 'leave-self'() {
+    if (!(await SW.confirm('Leave this event? Your shifts for it will be removed.', { okText: 'Leave', danger: true }))) return;
+    if (await SW.run(() => SW.api('DELETE', `/events/${EV.id}/team/${D.me}`))) done('You left the event');
+  },
+  respond(b) { SW.respondShift(b.dataset.id, b.dataset.status); },
 
-// Save Note Edit
-function saveNoteEdit(noteId) {
-    const newContent = document.getElementById(`note-textarea-${noteId}`).value;
-    const data = { content: newContent };
-    
-    fetch(`/events/notes/${noteId}/edit`, {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(r => r.json())
-    .then(result => {
-        if (result.success) {
-            showAlert('Note updated!', 'success');
-            setTimeout(() => location.reload(), 500);
-        }
-    });
-}
+  async 'add-person'() { if (await SW.shiftForm({ event: RANGE, users: D.users })) done('Shift added'); },
+  async 'add-shift'(b) { if (await SW.shiftForm({ event: RANGE, users: D.users, user_id: b.dataset.user })) done('Shift added'); },
+  async 'edit-shift'(b) { if (await SW.shiftForm({ event: RANGE, shift: D.assignments[b.dataset.id] })) done('Shift saved'); },
+  'del-shift'(b) { return removeWith(`/events/shift-assignments/${b.dataset.id}`, 'this shift'); },
+  async 'remove-person'(b) {
+    if (!(await SW.confirm(`Remove ${b.dataset.name} and all of their shifts from this event?`, { danger: true, okText: 'Remove' }))) return;
+    if (await SW.run(() => SW.api('DELETE', `/events/${EV.id}/team/${b.dataset.user}`))) done('Removed');
+  },
+  async 'add-all'() {
+    if (!(await SW.confirm('Add every crew member who is not on this event yet, using the event times? They will be asked to accept.', { okText: 'Add everyone' }))) return;
+    const r = await SW.run(() => SW.api('POST', `/events/${EV.id}/team/add-all`));
+    if (r) done(`${r.added} added`);
+  },
 
-// Delete Note
-function deleteNote(noteId) {
-    if (!confirm('Delete this note?')) return;
-    fetch(`/events/notes/${noteId}/delete`, {method: 'DELETE'})
-        .then(r => r.json())
-        .then(result => {
-            if (result.success) {
-                showAlert('Note deleted!', 'success');
-                location.reload();
-            }
-        });
-}
+  async 'add-sched'() { if (await SW.scheduleForm({ eventId: EV.id, defaultTime: EV.event_date })) done('Added'); },
+  async 'edit-sched'(b) { if (await SW.scheduleForm({ eventId: EV.id, item: D.schedules[b.dataset.id] })) done('Saved'); },
+  'del-sched'(b) { return removeWith(`/events/schedule/${b.dataset.id}/delete`, 'this schedule item'); },
 
-// Edit event
-document.getElementById('editEventForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    const data = {
-        title: document.getElementById('editTitle').value,
-        event_date: document.getElementById('editDate').value,
-        location: document.getElementById('editLocation').value,
-        description: document.getElementById('editDescription').value
-    };
-    fetch('/events/{{ event.id }}/edit', {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    }).then(r => r.json()).then(result => {
-        if (result.success) {
-            showAlert('Event updated!', 'success');
-            setTimeout(() => location.reload(), 1000);
-        }
-    });
+  async 'add-run'() { if (await SW.runForm({ eventId: EV.id })) done('Added'); },
+  async 'edit-run'(b) { if (await SW.runForm({ eventId: EV.id, item: D.runs[b.dataset.id] })) done('Saved'); },
+  'del-run'(b) { return removeWith(`/events/crew-run/${b.dataset.id}/delete`, 'this run item'); },
+
+  async 'add-note'() { if (await SW.noteForm({ eventId: EV.id })) done('Note added'); },
+  async 'edit-note'(b) { if (await SW.noteForm({ eventId: EV.id, note: D.notes[b.dataset.id] })) done('Note saved'); },
+  'del-note'(b) { return removeWith(`/events/notes/${b.dataset.id}/delete`, 'this note'); },
+};
+
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-act]');
+  if (b && actions[b.dataset.act]) { e.preventDefault(); actions[b.dataset.act](b); }
 });
 
-function deleteEventConfirm() {
-    if (!confirm('Delete this event? This will also delete all related items.')) return;
-    fetch('/events/{{ event.id }}', {method: 'DELETE'})
-        .then(r => r.json())
-        .then(result => {
-            if (result.success) {
-                showAlert('Event deleted!', 'success');
-                setTimeout(() => window.location.href = '/calendar', 1000);
-            }
-        });
+const runList = document.getElementById('runList');
+if (runList && runList.querySelector('.handle') && window.Sortable) {
+  Sortable.create(runList, {
+    handle: '.handle', animation: 150,
+    onEnd: async () => {
+      const ids = [...runList.querySelectorAll('.sw-run')].map((r) => Number(r.dataset.id));
+      runList.querySelectorAll('.num').forEach((n, i) => { n.textContent = i + 1; });
+      try { await SW.api('POST', `/events/${EV.id}/crew-run/reorder`, { item_ids: ids }); }
+      catch (err) { SW.toast(err.message, 'error'); }
+    },
+  });
 }
-
-// Schedule functions
-
-document.getElementById('addScheduleForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    const title = document.getElementById('scheduleTitle').value.trim();
-    const scheduled_time = document.getElementById('scheduleTime').value;
-    const description = document.getElementById('scheduleDescription').value.trim();
-    
-    // Validation
-    if (!title || !scheduled_time) {
-        showAlert('Title and time are required', 'error');
-        return;
-    }
-    
-    const data = {
-        title: title,
-        scheduled_time: scheduled_time,
-        description: description
-    };
-    
-    console.log('Sending schedule data:', data);
-    
-    fetch('/events/{{ event.id }}/schedule/add', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(r => {
-        console.log('Response status:', r.status);
-        return r.json();
-    })
-    .then(result => {
-        console.log('Response data:', result);
-        if (result.success) {
-            showAlert('Schedule added!', 'success');
-            document.getElementById('addScheduleForm').reset();
-            hideModal('addScheduleModal');
-            setTimeout(() => location.reload(), 500);
-        } else {
-            showAlert(result.error || 'Error adding schedule', 'error');
-        }
-    })
-    .catch(err => {
-        console.error('Fetch error:', err);
-        showAlert('Error: ' + err.message, 'error');
-    });
-});
-
-function deleteSchedule(id) {
-    if (!confirm('Delete this schedule item?')) return;
-    
-    fetch(`/events/schedule/${id}/delete`, {method: 'DELETE'})
-        .then(r => r.json())
-        .then(result => {
-            if (result.success) {
-                showAlert('Schedule deleted!', 'success');
-                location.reload();
-            } else {
-                showAlert(result.error || 'Error deleting schedule', 'error');
-            }
-        })
-        .catch(err => showAlert('Error: ' + err.message, 'error'));
-}
-
-// Crew functions
-document.getElementById('addCrewForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const data = {
-        event_id: {{ event.id }},
-        crew_member: document.getElementById('crewMember').value,
-        role: document.getElementById('crewRole').value
-    };
-    fetch('/crew/assign', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    }).then(r => r.json()).then(result => {
-        if (result.success) {
-            showAlert('Crew member added!', 'success');
-            setTimeout(() => location.reload(), 500);
-        }
-    });
-});
-
-function removeCrew(id) {
-    if (!confirm('Remove this crew member?')) return;
-    fetch(`/crew/remove/${id}`, {method: 'DELETE'})
-        .then(r => r.json())
-        .then(result => {
-            if (result.success) {
-                showAlert('Crew member removed!', 'success');
-                location.reload();
-            }
-        });
-}
-
-// Edit event with end date
-document.getElementById('editEventForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    const data = {
-        title: document.getElementById('editTitle').value,
-        event_date: document.getElementById('editDate').value,
-        event_end_date: document.getElementById('editEndDate').value || null,
-        location: document.getElementById('editLocation').value,
-        description: document.getElementById('editDescription').value
-    };
-    
-    fetch('/events/{{ event.id }}/edit', {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    }).then(r => r.json()).then(result => {
-        if (result.success) {
-            showAlert('Event updated!', 'success');
-            setTimeout(() => location.reload(), 1000);
-        } else {
-            showAlert('Error updating event', 'error');
-        }
-    });
-});
-
-
-
-// Crew Run List Management
-let crewRunData = {{ event.crew_run_items|tojson }};
-
-// Add/Edit Crew Run Item
-document.getElementById('addCrewRunForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    const itemId = document.getElementById('crewRunItemId').value;
-    const data = {
-        title: document.getElementById('crewRunTitle').value,
-        cue_type: document.getElementById('crewRunCueType').value,
-        duration: document.getElementById('crewRunDuration').value,
-        description: document.getElementById('crewRunDescription').value,
-        notes: document.getElementById('crewRunNotes').value
-    };
-    
-    const url = itemId ? `/events/crew-run/${itemId}/edit` : `/events/{{ event.id }}/crew-run/add`;
-    const method = itemId ? 'PUT' : 'POST';
-    
-    fetch(url, {
-        method: method,
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(r => r.json())
-    .then(result => {
-        if (result.success) {
-            showAlert(itemId ? 'Run item updated!' : 'Run item added!', 'success');
-            hideModal('addCrewRunModal');
-            setTimeout(() => location.reload(), 500);
-        }
-    });
-});
-
-// Edit Crew Run Item
-function editCrewRunItem(id) {
-    const item = crewRunData.find(i => i.id === id);
-    if (!item) return;
-    
-    document.getElementById('crewRunModalTitle').innerHTML = '<i class="fas fa-edit"></i> Edit Crew Run Item';
-    document.getElementById('crewRunSubmitText').textContent = 'Update Item';
-    document.getElementById('crewRunItemId').value = item.id;
-    document.getElementById('crewRunTitle').value = item.title;
-    document.getElementById('crewRunCueType').value = item.cue_type || '';
-    document.getElementById('crewRunDuration').value = item.duration || '';
-    document.getElementById('crewRunDescription').value = item.description || '';
-    document.getElementById('crewRunNotes').value = item.notes || '';
-    
-    showModal('addCrewRunModal');
-}
-
-// Delete Crew Run Item
-function deleteCrewRunItem(id) {
-    if (!confirm('Delete this run item?')) return;
-    
-    fetch(`/events/crew-run/${id}/delete`, {method: 'DELETE'})
-        .then(r => r.json())
-        .then(result => {
-            if (result.success) {
-                showAlert('Run item deleted!', 'success');
-                location.reload();
-            }
-        });
-}
-
-// Reset form when opening for add
-function showModal(id) {
-    if (id === 'addCrewRunModal') {
-        document.getElementById('crewRunModalTitle').innerHTML = '<i class="fas fa-plus"></i> Add Crew Run Item';
-        document.getElementById('crewRunSubmitText').textContent = 'Add Item';
-        document.getElementById('addCrewRunForm').reset();
-        document.getElementById('crewRunItemId').value = '';
-    }
-    document.getElementById(id).style.display = 'block';
-}
-
-// Drag and Drop for Crew Run List
-if (document.getElementById('crewRunList')) {
-    new Sortable(document.getElementById('crewRunList'), {
-        animation: 150,
-        handle: '.fa-grip-vertical',
-        ghostClass: 'sortable-ghost',
-        onEnd: function(evt) {
-            const itemIds = Array.from(document.querySelectorAll('.run-item')).map(el => el.dataset.id);
-            
-            fetch(`/events/{{ event.id }}/crew-run/reorder`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ item_ids: itemIds })
-            })
-            .then(r => r.json())
-            .then(result => {
-                if (result.success) {
-                    location.reload();
-                }
-            });
-        }
-    });
-}
-
-
-// Add All Crew function
-function addAllCrew() {
-    if (!confirm('Add all crew members to this event?\n\nThis will assign all users with the "Crew" role and send notifications to those with email addresses.')) return;
-    
-    const btn = event.target;
-    const originalText = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding...';
-    
-    fetch('/crew/assign-all', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({event_id: {{ event.id }}})
-    })
-    .then(r => r.json())
-    .then(result => {
-        if (result.success) {
-            showAlert(`Added ${result.added} crew member${result.added !== 1 ? 's' : ''} to the event!`, 'success');
-            setTimeout(() => location.reload(), 1000);
-        } else {
-            showAlert(result.error || 'Error adding crew', 'error');
-            btn.disabled = false;
-            btn.innerHTML = originalText;
-        }
-    })
-    .catch(err => {
-        showAlert('Error: ' + err.message, 'error');
-        btn.disabled = false;
-        btn.innerHTML = originalText;
-    });
-}
-
-
-
 </script>
 {% endblock %}

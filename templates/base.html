@@ -36,6 +36,7 @@
     <!-- ── FONTS & ICONS ── -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    {% block head_extra %}{% endblock %}
 
     <style>
         * { 
@@ -1082,6 +1083,10 @@
             <i class="fas fa-calendar"></i>
             <span>Calendar</span>
         </a>
+        <a href="{{ url_for('events.events_list') }}" class="nav-item {% if request.endpoint in ['events.events_list', 'events.event_detail'] %}active{% endif %}">
+            <i class="fas fa-ticket-alt"></i>
+            <span>Events</span>
+        </a>
         <a href="{{ url_for('crew.my_schedule') }}" class="nav-item {% if request.endpoint == 'crew.my_schedule' %}active{% endif %}">
             <i class="fas fa-calendar-alt"></i>
             <span>My Schedule</span>
@@ -1098,10 +1103,6 @@
         <a href="{{ url_for('equipment.barcode_page') }}" class="nav-item {% if request.endpoint == 'equipment.barcode_page' %}active{% endif %}">
             <i class="fas fa-qrcode"></i>
             <span>QR Code Generator</span>
-        </a>
-        <a href="{{ url_for('shifts.shift_management') }}" class="nav-item {% if request.endpoint == 'shifts.shift_management' %}active{% endif %}">
-            <i class="fas fa-tasks"></i>
-            <span>Shift Management</span>
         </a>
         {% endif %}
         <a href="{{ url_for('hired_equipment.hired_equipment_list') }}" class="nav-item {% if request.endpoint == 'hired_equipment.hired_equipment_list' %}active{% endif %}">
