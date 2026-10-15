@@ -210,160 +210,49 @@ def leave_event():
 @login_required
 @crew_required
 def my_schedule():
-    from models import Shift, ShiftAssignment, CrewAssignment, Event, User
+    """Everything the current user is rostered on, soonest first."""
+    from models import Shift, ShiftAssignment, CrewAssignment, Event
     from datetime import datetime
+    from routes.events import event_end, fmt_range
 
     now = datetime.now()
+    rows = (db.session.query(ShiftAssignment, Shift, Event)
+            .join(Shift, ShiftAssignment.shift_id == Shift.id)
+            .join(Event, Shift.event_id == Event.id)
+            .filter(ShiftAssignment.user_id == current_user.id)
+            .order_by(Shift.shift_date).all())
 
-    # ------------------------------------------------------------------ #
-    # 1. Shift assignments for the current user
-    #    Use distinct() + explicit join to avoid row-multiplication when
-    #    a shift has multiple assignments (one row per assignment otherwise).
-    # ------------------------------------------------------------------ #
-    raw_assignments = (
-        ShiftAssignment.query
-        .filter_by(user_id=current_user.id)
-        .all()
-    )
-
-    # Deduplicate by assignment id (safety net)
-    seen_assignment_ids = set()
-    assignments = []
-    for a in raw_assignments:
-        if a.id in seen_assignment_ids:
-            continue
-        seen_assignment_ids.add(a.id)
-
-        shift = Shift.query.get(a.shift_id)
-        if not shift:
-            continue
-
-        event = Event.query.get(shift.event_id) if shift.event_id else None
-        assigned_count = ShiftAssignment.query.filter_by(
-            shift_id=shift.id,
-            # count accepted + confirmed only
-        ).filter(ShiftAssignment.status.in_(['accepted', 'confirmed'])).count()
-
-        assignments.append({
-            'id': a.id,
-            'status': a.status,
-            'shift': {
-                'id': shift.id,
-                'title': shift.title,
-                'role': shift.role or '',
-                'shift_date': shift.shift_date.isoformat(),
-                'shift_end_date': shift.shift_end_date.isoformat(),
-                'location': shift.location or '',
-                'description': shift.description or '',
-                'positions_needed': shift.positions_needed,
-                'assignments_count': assigned_count,
-                'event_id': shift.event_id,
-                'event': {
-                    'id': event.id,
-                    'title': event.title,
-                    'location': event.location or '',
-                    'description': event.description or '',
-                    'event_date': event.event_date.isoformat(),
-                    'event_end_date': event.event_end_date.isoformat() if event.event_end_date else None,
-                    'created_by': event.created_by,
-                    'crew_assignments': [
-                        {'id': ca.id, 'crew_member': ca.crew_member, 'role': ca.role}
-                        for ca in event.crew_assignments
-                    ],
-                } if event else None,
-            }
+    items = []
+    events_with_shift = set()
+    for a, shift, event in rows:
+        events_with_shift.add(event.id)
+        items.append({
+            'kind': 'shift', 'assignment': a, 'shift': shift, 'event': event,
+            'start': shift.shift_date, 'end': shift.shift_end_date,
+            'role': shift.role or '', 'status': a.status,
+            'when': fmt_range(shift.shift_date, shift.shift_end_date),
+            'location': shift.location or event.location or '',
         })
 
-    # ------------------------------------------------------------------ #
-    # 2. Crew (event-level) assignments — deduplicated by assignment id
-    # ------------------------------------------------------------------ #
-    raw_crew = (
-        CrewAssignment.query
-        .filter_by(crew_member=current_user.username)
-        .all()
-    )
-
-    seen_crew_ids = set()
-    crew_assignments = []
-    for ca in raw_crew:
-        if ca.id in seen_crew_ids:
+    # On the crew for an event but no shift times yet (self-joined, Discord, older data)
+    for ca in CrewAssignment.query.filter_by(crew_member=current_user.username).all():
+        event = db.session.get(Event, ca.event_id)
+        if not event or event.id in events_with_shift:
             continue
-        seen_crew_ids.add(ca.id)
-
-        event = Event.query.get(ca.event_id) if ca.event_id else None
-        if not event:
-            continue
-
-        crew_assignments.append({
-            'id': ca.id,
-            'role': ca.role or '',
-            'event': {
-                'id': event.id,
-                'title': event.title,
-                'location': event.location or '',
-                'description': event.description or '',
-                'event_date': event.event_date.isoformat(),
-                'event_end_date': event.event_end_date.isoformat() if event.event_end_date else None,
-                'created_by': event.created_by,
-                'crew_assignments': [
-                    {'id': x.id, 'crew_member': x.crew_member, 'role': x.role}
-                    for x in event.crew_assignments
-                ],
-            }
+        items.append({
+            'kind': 'crew', 'assignment': None, 'shift': None, 'event': event,
+            'start': event.event_date, 'end': event_end(event),
+            'role': ca.role or '', 'status': 'crew',
+            'when': fmt_range(event.event_date, event_end(event), bool(event.all_day)),
+            'location': event.location or '',
         })
 
-    # ------------------------------------------------------------------ #
-    # 3. Open shifts — shifts the user has NOT yet claimed, deduplicated
-    #    by shift id.
-    # ------------------------------------------------------------------ #
-    claimed_shift_ids = {a['shift']['id'] for a in assignments}
-
-    all_open = (
-        Shift.query
-        .filter_by(is_open=True)
-        .all()
-    )
-
-    seen_open_ids = set()
-    open_shifts = []
-    for shift in all_open:
-        if shift.id in seen_open_ids:
-            continue
-        if shift.id in claimed_shift_ids:
-            continue
-        seen_open_ids.add(shift.id)
-
-        confirmed_count = ShiftAssignment.query.filter_by(
-            shift_id=shift.id
-        ).filter(ShiftAssignment.status.in_(['accepted', 'confirmed'])).count()
-
-        if confirmed_count >= shift.positions_needed:
-            continue  # already full
-
-        event = Event.query.get(shift.event_id) if shift.event_id else None
-
-        open_shifts.append({
-            'id': shift.id,
-            'title': shift.title,
-            'role': shift.role or '',
-            'shift_date': shift.shift_date.isoformat(),
-            'shift_end_date': shift.shift_end_date.isoformat(),
-            'location': shift.location or '',
-            'description': shift.description or '',
-            'positions_needed': shift.positions_needed,
-            'assignments_count': confirmed_count,
-            'is_open': shift.is_open,
-            'event_id': shift.event_id,
-            'event_title': event.title if event else '',
-        })
-
-    return render_template(
-        '/crew/my_schedule.html',
-        assignments=assignments,
-        crew_assignments=crew_assignments,
-        open_shifts=open_shifts,
-        now=now,
-    )
+    items.sort(key=lambda i: i['start'])
+    upcoming = [i for i in items if i['end'] >= now]
+    past = [i for i in items if i['end'] < now][::-1][:50]
+    pending = [i for i in upcoming if i['status'] == 'pending']
+    return render_template('/crew/my_schedule.html', upcoming=upcoming, past=past,
+                           pending=pending, now=now)
 
 # ---------------------------------------------------------------------------
 # Unavailability
@@ -430,6 +319,29 @@ def list_unavailabilities():
     return jsonify({'success': True, 'unavailabilities': result})
 
 
+def _normalise_days(value):
+    """Accept '1,3', [1, 3] or '["1","3"]' and store '1,3' (Sunday=0 … Saturday=6)."""
+    import re
+    if value is None or value == '':
+        return None
+    digits = re.findall(r'[0-6]', ','.join(map(str, value)) if isinstance(value, (list, tuple)) else str(value))
+    return ','.join(sorted(set(digits))) or None
+
+
+@crew_bp.route('/recurring-unavailability/list', methods=['GET'])
+@login_required
+def list_recurring_unavailabilities():
+    rows = RecurringUnavailability.query.filter_by(user_id=current_user.id, is_active=True) \
+        .order_by(RecurringUnavailability.start_date).all()
+    return jsonify({'success': True, 'patterns': [{
+        'id': r.id, 'title': r.title, 'description': r.description,
+        'start_time': r.start_time, 'end_time': r.end_time, 'pattern_type': r.pattern_type,
+        'days_of_week': r.days_of_week, 'day_of_month': r.day_of_month,
+        'start_date': r.start_date.isoformat(),
+        'end_date': r.end_date.isoformat() if r.end_date else None,
+    } for r in rows]})
+
+
 @crew_bp.route('/recurring-unavailability/add', methods=['POST'])
 @login_required
 def add_recurring_unavailability():
@@ -441,7 +353,7 @@ def add_recurring_unavailability():
             description=data.get('description', ''),
             start_time=data['start_time'], end_time=data['end_time'],
             pattern_type=data['pattern_type'],
-            days_of_week=data.get('days_of_week'),
+            days_of_week=_normalise_days(data.get('days_of_week')),
             day_of_month=data.get('day_of_month'),
             start_date=datetime.fromisoformat(data['start_date']),
             end_date=datetime.fromisoformat(data['end_date']) if data.get('end_date') else None,
@@ -473,58 +385,18 @@ def delete_recurring_unavailability(id):
 @crew_bp.route('/api/unavailabilities-week', methods=['GET'])
 @login_required
 def api_unavailabilities_week():
-    start_str = request.args.get('start')
-    end_str   = request.args.get('end')
-    if not start_str or not end_str:
-        return jsonify({'error': 'start and end dates required'}), 400
+    """Kept for compatibility: everyone's unavailability between start and end."""
+    from services.availability_service import expand_unavailability
     try:
-        start_date = datetime.fromisoformat(start_str)
-        end_date   = datetime.fromisoformat(end_str)
-    except Exception as exc:
-        return jsonify({'error': f'Invalid date format: {exc}'}), 400
-
-    crew_users    = User.query.filter_by(user_role='crew').all()
-    unavailabilities = []
-    for user in crew_users:
-        for u in UserUnavailability.query.filter(
-            UserUnavailability.user_id == user.id,
-            UserUnavailability.start_date <= end_date,
-            UserUnavailability.end_date   >= start_date,
-        ).all():
-            unavailabilities.append({
-                'id': u.id, 'username': user.username, 'title': u.title,
-                'start': u.start_date.isoformat(), 'end': u.end_date.isoformat(),
-                'description': u.description, 'is_all_day': u.is_all_day,
-                'type': 'unavailability',
-            })
-        for rec in RecurringUnavailability.query.filter(
-            RecurringUnavailability.user_id   == user.id,
-            RecurringUnavailability.is_active == True,
-            RecurringUnavailability.start_date <= end_date,
-            (RecurringUnavailability.end_date >= start_date) | (RecurringUnavailability.end_date == None),
-        ).all():
-            current = start_date
-            while current < end_date:
-                should = False
-                if rec.pattern_type == 'daily':
-                    should = True
-                elif rec.pattern_type == 'weekly':
-                    days   = list(map(int, rec.days_of_week.split(','))) if rec.days_of_week else []
-                    form_d = (current.weekday() + 1) % 7
-                    should = form_d in days
-                elif rec.pattern_type == 'monthly':
-                    should = current.day == rec.day_of_month
-                if should and current.date() >= rec.start_date.date():
-                    if rec.end_date is None or current.date() <= rec.end_date.date():
-                        sh, sm = map(int, rec.start_time.split(':'))
-                        eh, em = map(int, rec.end_time.split(':'))
-                        unavailabilities.append({
-                            'id': f'rec-{rec.id}-{current.date()}',
-                            'username': user.username, 'title': rec.title,
-                            'start': current.replace(hour=sh, minute=sm, second=0).isoformat(),
-                            'end':   current.replace(hour=eh, minute=em, second=0).isoformat(),
-                            'description': rec.description, 'is_all_day': False,
-                            'type': 'recurring_unavailability',
-                        })
-                current += timedelta(days=1)
-    return jsonify({'success': True, 'unavailabilities': unavailabilities})
+        start_date = datetime.fromisoformat(request.args['start'].replace('Z', '')[:19])
+        end_date   = datetime.fromisoformat(request.args['end'].replace('Z', '')[:19])
+    except (KeyError, ValueError) as exc:
+        return jsonify({'error': f'start and end dates required: {exc}'}), 400
+    users = {u.id: u.username for u in User.query.filter_by(user_role='crew').all()}
+    out = [{
+        'id': w['id'], 'username': users.get(w['user_id'], ''), 'title': w['title'],
+        'start': w['start'].isoformat(), 'end': w['end'].isoformat(),
+        'is_all_day': w['all_day'],
+        'type': 'recurring_unavailability' if w['recurring'] else 'unavailability',
+    } for w in expand_unavailability(list(users), start_date, end_date)]
+    return jsonify({'success': True, 'unavailabilities': out})

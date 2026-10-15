@@ -1,1299 +1,271 @@
 {% extends "base.html" %}
-
 {% block title %}Calendar - ShowWise{% endblock %}
+{% block head_extra %}<link rel="stylesheet" href="{{ url_for('static', filename='css/events.css') }}">{% endblock %}
 
 {% block content %}
-<style>
-/* ============ GLOBAL ============ */
-.cal-toolbar {
-    display: flex;
-    gap: 0.75rem;
-    align-items: center;
-    flex-wrap: wrap;
-    margin-bottom: 1.5rem;
-}
-.view-tabs {
-    display: flex;
-    background: #f3f4f6;
-    border-radius: 10px;
-    padding: 4px;
-    gap: 4px;
-}
-.view-tab {
-    padding: 0.5rem 1.25rem;
-    border: none;
-    background: none;
-    border-radius: 7px;
-    cursor: pointer;
-    font-weight: 600;
-    color: #6b7280;
-    transition: all 0.2s;
-    font-size: 0.9rem;
-}
-.view-tab.active {
-    background: var(--bg-card);
-    color: var(--primary);
-    box-shadow: 0 1px 4px rgba(0,0,0,0.12);
-}
-.nav-arrows {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-}
-.arrow-btn {
-    width: 36px;
-    height: 36px;
-    border: 1.5px solid var(--border);
-    background: var(--bg-card);
-    border-radius: 8px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-    font-size: 1rem;
-    color: var(--dark);
-}
-.arrow-btn:hover { background: var(--primary); color: white; border-color: var(--primary); }
-.period-label {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: var(--dark);
-    min-width: 220px;
-    text-align: center;
-}
-
-/* ============ MONTH VIEW ============ */
-.month-grid {
-    background: white;
-    border-radius: 14px;
-    border: 1px solid var(--border);
-    overflow: hidden;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
-}
-.month-header-row {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    background: linear-gradient(135deg, var(--primary) 0%, #818cf8 100%);
-}
-.month-day-name {
-    padding: 0.9rem;
-    text-align: center;
-    font-weight: 700;
-    color: white;
-    font-size: 0.85rem;
-    letter-spacing: 0.05em;
-}
-.month-body {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-}
-.month-cell {
-    border-right: 1px solid #f0f0f0;
-    border-bottom: 1px solid #f0f0f0;
-    min-height: 110px;
-    padding: 0.5rem;
-    position: relative;
-    transition: background 0.15s;
-}
-.month-cell:nth-child(7n) { border-right: none; }
-.month-cell.other-month { background: #fafafa; }
-.month-cell.today { background: #ede9fe; }
-.month-cell-num {
-    font-size: 0.9rem;
-    font-weight: 700;
-    color: #374151;
-    margin-bottom: 0.3rem;
-}
-.month-cell.today .month-cell-num {
-    background: var(--primary);
-    color: white;
-    width: 26px;
-    height: 26px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.8rem;
-}
-.month-cell.other-month .month-cell-num { color: #c4c4c4; }
-.month-event-pill {
-    font-size: 0.72rem;
-    font-weight: 600;
-    padding: 0.2rem 0.5rem;
-    border-radius: 4px;
-    margin-bottom: 0.2rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    cursor: pointer;
-    transition: opacity 0.15s;
-}
-.month-event-pill:hover { opacity: 0.8; }
-.month-more {
-    font-size: 0.72rem;
-    color: #6b7280;
-    cursor: pointer;
-    font-weight: 600;
-    padding: 0.1rem 0.3rem;
-}
-.month-more:hover { color: var(--primary); }
-
-/* ============ SCHEDULER VIEW ============ */
-.scheduler-wrapper {
-    background: var(--bg-card);
-    border-radius: 14px;
-    border: 1px solid var(--border);
-    overflow: hidden;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
-}
-.scheduler-container {
-    overflow-x: auto;
-    overflow-y: auto;
-    max-height: calc(100vh - 260px);
-}
-.scheduler-table {
-    min-width: 900px;
-    border-collapse: collapse;
-    table-layout: fixed;
-}
-.scheduler-table th:first-child,
-.scheduler-table td:first-child {
-    position: sticky;
-    left: 0;
-    z-index: 10;
-    background: var(--bg-card);
-    border-right: 2px solid var(--border);
-}
-.scheduler-table thead th {
-    position: sticky;
-    top: 0;
-    z-index: 11;
-    background: var(--bg-card);
-}
-.scheduler-table thead th:first-child {
-    z-index: 12;
-}
-.sched-header-day {
-    padding: 0.6rem 0.4rem;
-    text-align: center;
-    font-size: 0.78rem;
-    font-weight: 700;
-    border-bottom: 2px solid var(--border);
-    border-right: 1px solid #f0f0f0;
-    min-width: 90px;
-    background: var(--bg-card);
-    color: var(--dark);
-}
-.sched-header-day.today-col {
-    background: #ede9fe;
-    color: var(--primary);
-}
-.sched-header-day .dow { font-size: 0.7rem; color: var(--text-secondary); font-weight: 500; }
-.sched-header-day .dom { font-size: 1.1rem; font-weight: 800; }
-.sched-header-day.today-col .dom {
-    background: var(--primary);
-    color: white;
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.9rem;
-}
-.open-spots-row th {
-    background: var(--bg-nav-hover);
-    padding: 0.5rem 0.4rem;
-    font-size: 0.72rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-    border-bottom: 2px solid var(--border);
-    border-right: 1px solid #f0f0f0;
-    text-align: center;
-    vertical-align: top;
-}
-.open-spot-badge {
-    display: inline-block;
-    font-size: 0.7rem;
-    padding: 0.2rem 0.5rem;
-    border-radius: 10px;
-    background: var(--bg-nav-hover);
-    color: var(--text-primary);
-    font-weight: 600;
-    white-space: nowrap;
-    margin: 1px;
-}
-.open-spot-badge.full {
-    background: #fee2e2;
-    color: #991b1b;
-}
-.sched-user-label {
-    padding: 0.6rem 0.75rem;
-    font-weight: 600;
-    font-size: 0.85rem;
-    color: var(--dark);
-    border-bottom: 1px solid #f0f0f0;
-    background: var(--bg-card);
-    min-width: 180px;
-    max-width: none;
-    word-break: break-word;
-}
-
-.sched-user-label .user-row-content {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-}
-
-.sched-user-avatar {
-    width: 32px;
-    height: 32px;
-    min-width: 32px;
-    min-height: 32px;
-    border-radius: 50%;
-    border: 2px solid var(--primary);
-    overflow: hidden;
-    background: linear-gradient(135deg, var(--primary), var(--secondary));
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    font-size: 0.8rem;
-    flex-shrink: 0;
-}
-
-.sched-user-avatar img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-
-.sched-user-label .user-role {
-    font-size: 0.7rem;
-    color: #9ca3af;
-    font-weight: 400;
-    display: block;
-    margin-top: 0.25rem;
-}
-.sched-cell {
-    padding: 0.3rem;
-    border-bottom: 1px solid #f0f0f0;
-    border-right: 1px solid #f0f0f0;
-    vertical-align: top;
-    min-width: 90px;
-    height: 56px;
-}
-.sched-cell.today-col { background: #faf9ff; }
-.sched-event-block {
-    font-size: 0.72rem;
-    font-weight: 600;
-    padding: 0.25rem 0.4rem;
-    border-radius: 5px;
-    cursor: pointer;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    transition: opacity 0.15s;
-    display: block;
-    margin-bottom: 2px;
-}
-.sched-event-block:hover { opacity: 0.8; }
-
-.event-tooltip {
-    position: fixed;
-    background: white;
-    border-radius: 10px;
-    padding: 1rem;
-    box-shadow: 0 8px 30px rgba(0,0,0,0.2);
-    z-index: 999;
-    max-width: 280px;
-    border: 1px solid var(--border);
-    pointer-events: none;
-    display: none;
-}
-.event-tooltip.show { display: block; }
-.event-tooltip-title { font-weight: 700; color: var(--dark); margin-bottom: 0.5rem; }
-.event-tooltip-row { font-size: 0.85rem; color: #6b7280; margin-bottom: 0.25rem; }
-
-.ec0 { background:#dbeafe; color:#1e40af; }
-.ec1 { background:#dcfce7; color:#166534; }
-.ec2 { background:#fce7f3; color:#9f1239; }
-.ec3 { background:#fef3c7; color:#78350f; }
-.ec4 { background:#f3e8ff; color:#6b21a8; }
-.ec5 { background:#ffedd5; color:#9a3412; }
-.ec6 { background:#e0f2fe; color:#0c4a6e; }
-.ec7 { background:#ecfdf5; color:#065f46; }
-
-@media (max-width: 768px) {
-    .scheduler-container { max-height: calc(100vh - 320px); }
-    .sched-user-label { min-width: 120px; padding: 0.5rem 0.5rem; }
-    .sched-user-avatar { width: 28px; height: 28px; min-width: 28px; min-height: 28px; font-size: 0.7rem; }
-    .sched-header-day { min-width: 70px; padding: 0.4rem 0.25rem; }
-    .sched-header-day .dom { font-size: 0.9rem; }
-    .sched-cell { min-width: 70px; height: 50px; padding: 0.2rem; }
-    .sched-event-block { font-size: 0.65rem; padding: 0.2rem 0.3rem; }
-    .cal-toolbar { flex-direction: column; gap: 1rem; }
-    .view-tabs { order: 1; }
-    .nav-arrows { order: 2; }
-    .period-label { min-width: 150px; font-size: 1rem; }
-}
-
-@media (max-width: 480px) {
-    .scheduler-container { max-height: calc(100vh - 380px); }
-    .sched-user-label { min-width: 100px; padding: 0.4rem 0.4rem; }
-    .sched-user-avatar { width: 24px; height: 24px; min-width: 24px; min-height: 24px; font-size: 0.6rem; }
-    .sched-header-day { min-width: 50px; padding: 0.3rem 0.2rem; font-size: 0.65rem; }
-    .sched-header-day .dom { font-size: 0.8rem; }
-    .sched-cell { min-width: 50px; height: 45px; padding: 0.15rem; }
-    .sched-event-block { font-size: 0.6rem; padding: 0.15rem 0.25rem; margin-bottom: 1px; }
-    .cal-toolbar { flex-direction: column; gap: 0.75rem; }
-    .period-label { min-width: 120px; font-size: 0.9rem; }
-}
-</style>
-
-<!-- Calendar Subscription Modal -->
-<div id="subscribeModal" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="hideModal('subscribeModal')">&times;</span>
-        <h2><i class="fas fa-calendar-check"></i> Subscribe to Calendar</h2>
-        <p style="margin-bottom: 1rem; color: #666;">Add ShowWise events to Google Calendar:</p>
-        <ol style="margin-left: 1.5rem; line-height: 2; margin-bottom: 1.5rem;">
-            <li>Click "Copy URL" below</li>
-            <li>Open <strong>Google Calendar → Settings → Add other calendars → From URL</strong></li>
-            <li>Paste the URL and click Add</li>
-        </ol>
-        <button onclick="subscribeCalendar()" class="btn btn-primary" style="width: 100%; margin-bottom: 0.75rem;">
-            <i class="fas fa-copy"></i> Copy Calendar URL
-        </button>
-        <button onclick="window.open('https://calendar.google.com/calendar/u/0/r/settings/addbyurl','_blank')" class="btn btn-success" style="width: 100%;">
-            <i class="fas fa-external-link-alt"></i> Open Google Calendar
-        </button>
-    </div>
+<div class="sw-page-head">
+  <div>
+    <h1>Calendar</h1>
+    <div class="page-subtitle">Events for everyone · shifts for each person{% if can_manage %} · drag to reschedule{% endif %}</div>
+  </div>
+  <div class="sw-actions-bar">
+    <button class="btn btn-secondary" id="btnUnavail"><i class="fas fa-calendar-times"></i>My unavailability</button>
+    <button class="btn btn-secondary" id="btnSubscribe"><i class="fas fa-rss"></i>Subscribe</button>
+    <button class="btn btn-primary" id="btnNew"><i class="fas fa-plus"></i>New event</button>
+  </div>
 </div>
 
-<!-- Add Event Modal -->
-<div id="addEventModal" class="modal">
-    <div class="modal-content" style="max-width: 700px;">
-        <span class="close" onclick="hideModal('addEventModal')">&times;</span>
-        <h2>Add New Event</h2>
-        <form id="addEventForm">
-            <div class="form-group">
-                <label>Event Title *</label>
-                <input type="text" id="eventTitle" required>
-            </div>
-            <div class="form-group">
-                <label>Start Date & Time *</label>
-                <input type="datetime-local" id="eventDate" required>
-            </div>
-            <div class="form-group">
-                <label>End Date & Time</label>
-                <input type="datetime-local" id="eventEndDate">
-            </div>
-            <div class="form-group">
-                <label>Location</label>
-                <input type="text" id="eventLocation" placeholder="e.g., Main Auditorium">
-            </div>
-            <div class="form-group">
-                <label>Description</label>
-                <textarea id="eventDescription" placeholder="Event details..."></textarea>
-            </div>
-            
-            <div style="border-top: 2px solid #e5e7eb; padding-top: 1rem; margin-top: 1rem;">
-                <h3 style="font-size: 1rem; margin-bottom: 1rem;">📅 Recurring Event (Optional)</h3>
-                <div class="form-group">
-                    <label>Repeat Pattern</label>
-                    <select id="recurPattern" onchange="toggleRecurrenceFields()">
-                        <option value="">None - Single Event</option>
-                        <option value="daily">Daily</option>
-                        <option value="weekly">Weekly</option>
-                        <option value="biweekly">Every 2 Weeks</option>
-                        <option value="monthly">Monthly</option>
-                        <option value="yearly">Yearly</option>
-                    </select>
-                </div>
-                
-                <div id="recurrenceFields" style="display: none;">
-                    <div class="form-group">
-                        <label>Repeat Every</label>
-                        <div style="display: flex; gap: 0.5rem;"><input type="number" id="recurInterval" min="1" value="1" style="width: 60px;"> <span id="recurIntervalLabel" style="padding-top: 0.75rem;">day(s)</span></div>
-                    </div>
-                    <div class="form-group">
-                        <label>End Recurrence</label>
-                        <select id="recurEndType">
-                            <option value="count">After X occurrences</option>
-                            <option value="date">Until date</option>
-                        </select>
-                    </div>
-                    <div class="form-group" id="recurCountField">
-                        <label>Number of Occurrences</label>
-                        <input type="number" id="recurCount" min="2" value="5">
-                    </div>
-                    <div class="form-group" id="recurDateField" style="display: none;">
-                        <label>End Date</label>
-                        <input type="date" id="recurEndDate">
-                    </div>
-                </div>
-            </div>
-            
-            <button type="submit" class="btn btn-success" style="width:100%;">Create Event</button>
-        </form>
-    </div>
+<div class="sw-cal-controls">
+  <label class="sw-check"><input type="checkbox" id="fEvents" checked> Events</label>
+  <label>Shifts
+    <select id="fShifts">
+      <option value="mine">My shifts</option>
+      <option value="none">Hide shifts</option>
+      {% if can_manage %}
+      <option value="all">Everyone's shifts</option>
+      <optgroup label="One person">
+        {% for u in crew_users %}<option value="user:{{ u.id }}">{{ u.username }}</option>{% endfor %}
+      </optgroup>
+      {% endif %}
+    </select>
+  </label>
+  <label>Unavailability
+    <select id="fUnavail">
+      <option value="none">Hidden</option>
+      <option value="mine">Mine</option>
+      {% if can_manage %}<option value="all">Everyone</option>{% endif %}
+    </select>
+  </label>
+</div>
+<div class="sw-legend">
+  <span><i style="background:#6366f1"></i>Event</span>
+  <span><i style="background:#4338ca"></i>Event you're on</span>
+  <span><i style="background:#059669"></i>Shift (confirmed)</span>
+  <span><i style="background:#f59e0b"></i>Shift (awaiting response)</span>
+  <span><i style="background:#fca5a5"></i>Unavailable</span>
 </div>
 
-<!-- Event Quick-view Modal -->
-<div id="eventQuickModal" class="modal">
-    <div class="modal-content" style="max-width: 480px;">
-        <span class="close" onclick="hideModal('eventQuickModal')">&times;</span>
-        <div id="eventQuickContent"></div>
-    </div>
-</div>
+<div class="card sw-cal-card sw-cal"><div id="calendar"></div></div>
+{% endblock %}
 
-<!-- Unavailability Management Modal -->
-<div id="unavailabilityModal" class="modal">
-    <div class="modal-content" style="max-width: 700px;">
-        <span class="close" onclick="hideModal('unavailabilityModal')">&times;</span>
-        <h2>📅 Manage Your Unavailability</h2>
-        
-        <ul style="display: flex; gap: 1rem; margin-bottom: 1.5rem; border-bottom: 2px solid #e5e7eb; padding-bottom: 1rem;">
-            <li style="cursor: pointer; padding-bottom: 0.5rem; border-bottom: 3px solid var(--primary);" onclick="switchUnavailTab('add')">
-                <strong>Add Unavailability</strong>
-            </li>
-            <li style="cursor: pointer; padding-bottom: 0.5rem;" onclick="switchUnavailTab('recurring')">
-                <strong>Recurring Patterns</strong>
-            </li>
-            <li style="cursor: pointer; padding-bottom: 0.5rem;" onclick="switchUnavailTab('list')">
-                <strong>Your Unavailabilities</strong>
-            </li>
-        </ul>
-        
-        <div id="unavailAddTab" style="display: block;">
-            <form id="addUnavailForm">
-                <div class="form-group">
-                    <label>Title</label>
-                    <input type="text" id="unavailTitle" placeholder="e.g., Vacation, Doctor's Appointment" required>
-                </div>
-                <div class="form-group">
-                    <label>Start Date & Time</label>
-                    <input type="datetime-local" id="unavailStart" required>
-                </div>
-                <div class="form-group">
-                    <label>End Date & Time</label>
-                    <input type="datetime-local" id="unavailEnd" required>
-                </div>
-                <div class="form-group">
-                    <label>Description</label>
-                    <textarea id="unavailDescription" placeholder="Additional notes..."></textarea>
-                </div>
-                <button type="submit" class="btn btn-success" style="width: 100%;">Add Unavailability</button>
-            </form>
-        </div>
-        
-        <div id="unavailRecurringTab" style="display: none;">
-            <form id="addRecurringUnavailForm">
-                <div class="form-group">
-                    <label>Title</label>
-                    <input type="text" id="recurUnavailTitle" placeholder="e.g., Every Sunday" required>
-                </div>
-                <div class="form-group">
-                    <label>Pattern Type</label>
-                    <select id="recurUnavailPattern" onchange="updateRecurringFields()">
-                        <option value="weekly">Weekly (same day each week)</option>
-                        <option value="daily">Daily</option>
-                        <option value="monthly">Monthly (same date)</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Days of Week</label>
-                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                        <label><input type="checkbox" value="0"> Sunday</label>
-                        <label><input type="checkbox" value="1"> Monday</label>
-                        <label><input type="checkbox" value="2"> Tuesday</label>
-                        <label><input type="checkbox" value="3"> Wednesday</label>
-                        <label><input type="checkbox" value="4"> Thursday</label>
-                        <label><input type="checkbox" value="5"> Friday</label>
-                        <label><input type="checkbox" value="6"> Saturday</label>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Start Time</label>
-                    <input type="time" id="recurUnavailStartTime" required>
-                </div>
-                <div class="form-group">
-                    <label>End Time</label>
-                    <input type="time" id="recurUnavailEndTime" required>
-                </div>
-                <div class="form-group">
-                    <label>Start From</label>
-                    <input type="date" id="recurUnavailStartDate" required>
-                </div>
-                <div class="form-group">
-                    <label>Until (Leave empty for ongoing)</label>
-                    <input type="date" id="recurUnavailEndDate">
-                </div>
-                <button type="submit" class="btn btn-success" style="width: 100%;">Add Recurring Pattern</button>
-            </form>
-        </div>
-        
-        <div id="unavailListTab" style="display: none;">
-            <div id="unavailList" style="max-height: 400px; overflow-y: auto;"></div>
-        </div>
-    </div>
-</div>
-
-<!-- TOOLBAR -->
-<div class="cal-toolbar">
-    <!-- Filter: Everyone / Only me -->
-    <div>
-        <select id="userFilterSelect" class="form-control" style="min-width: 130px; font-size:0.85rem; padding:0.35rem 0.6rem;">
-            <option value="everyone">Everyone</option>
-            <option value="me">Only me</option>
-        </select>
-    </div>
-
-    <div class="view-tabs">
-        <button class="view-tab active" id="tabMonth" onclick="switchView('month')">
-            <i class="fas fa-calendar-alt"></i> Month
-        </button>
-        <button class="view-tab" id="tabScheduler" onclick="switchView('scheduler')">
-            <i class="fas fa-th"></i> Scheduler
-        </button>
-    </div>
-
-    <div class="nav-arrows">
-        <button class="arrow-btn" onclick="navigate(-1)"><i class="fas fa-chevron-left"></i></button>
-        <span class="period-label" id="periodLabel"></span>
-        <button class="arrow-btn" onclick="navigate(1)"><i class="fas fa-chevron-right"></i></button>
-        <button class="arrow-btn" onclick="goToday()" title="Today" style="font-size:0.75rem; font-weight:700; width:auto; padding:0 0.75rem;">Today</button>
-    </div>
-
-    <div style="margin-left: auto; display: flex; gap: 0.5rem; flex-wrap: wrap;">
-        {% if current_user.is_admin %}
-        <button onclick="showModal('addEventModal')" class="btn btn-success"><i class="fas fa-plus"></i> Add Event</button>
-        {% endif %}
-        <button onclick="showModal('unavailabilityModal'); loadUnavailabilities();" class="btn btn-primary"><i class="fas fa-calendar-times"></i> My Unavailability</button>
-        <button onclick="showModal('subscribeModal')" class="btn btn-primary"><i class="fas fa-calendar-check"></i> Subscribe</button>
-    </div>
-</div>
-
-<!-- MONTH VIEW -->
-<div id="monthView">
-    <div class="month-grid">
-        <div class="month-header-row">
-            <div class="month-day-name">Sun</div>
-            <div class="month-day-name">Mon</div>
-            <div class="month-day-name">Tue</div>
-            <div class="month-day-name">Wed</div>
-            <div class="month-day-name">Thu</div>
-            <div class="month-day-name">Fri</div>
-            <div class="month-day-name">Sat</div>
-        </div>
-        <div class="month-body" id="monthBody"></div>
-    </div>
-</div>
-
-<!-- SCHEDULER VIEW -->
-<div id="schedulerView" style="display:none;">
-    <div class="scheduler-wrapper">
-        <div class="scheduler-container">
-            <table class="scheduler-table" id="schedulerTable">
-                <thead id="schedulerHead"></thead>
-                <tbody id="schedulerBody"></tbody>
-            </table>
-        </div>
-    </div>
-</div>
-
-<div class="event-tooltip" id="eventTooltip"></div>
-
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/fullcalendar-6.1.15.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/sw-ui.js') }}"></script>
 <script>
-// ============================================================
-// DATA FROM SERVER
-// ============================================================
+const CAN_MANAGE = {{ 'true' if can_manage else 'false' }};
+const KEY = 'sw-cal-filters';
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const $ = (id) => document.getElementById(id);
 
-/**
- * FIX #1 — Timezone-safe date parsing
- * new Date("2026-03-01T08:00:00") is parsed as LOCAL time in most browsers,
- * BUT new Date("2026-03-01") (date-only) is parsed as UTC midnight, shifting
- * the day by the local offset. We ensure every date string has a time component
- * so it is always treated as local time.
- */
-function parseLocalDate(isoStr) {
-    if (!isoStr) return null;
-    // If no time component, append midnight so it stays local
-    if (isoStr.length === 10) isoStr += 'T00:00:00';
-    return new Date(isoStr);
-}
+// ---- filters (remembered per browser) ----
+let filters = { events: true, shifts: 'mine', unavail: 'none' };
+try { Object.assign(filters, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (_) {}
+if (![...$('fShifts').options].some((o) => o.value === filters.shifts)) filters.shifts = 'mine';
+if (![...$('fUnavail').options].some((o) => o.value === filters.unavail)) filters.unavail = 'none';
+$('fEvents').checked = filters.events; $('fShifts').value = filters.shifts; $('fUnavail').value = filters.unavail;
+const saveFilters = () => {
+  filters = { events: $('fEvents').checked, shifts: $('fShifts').value, unavail: $('fUnavail').value };
+  try { localStorage.setItem(KEY, JSON.stringify(filters)); } catch (_) {}
+  cal.refetchEvents();
+};
+['fEvents', 'fShifts', 'fUnavail'].forEach((id) => $(id).addEventListener('change', saveFilters));
 
-const EVENTS_RAW = [
-    {% for event in events %}
-    {
-        id: {{ event.id }},
-        title: {{ event.title | tojson }},
-        start: parseLocalDate("{{ event.event_date.isoformat() }}"),
-        end: {% if event.event_end_date %}parseLocalDate("{{ event.event_end_date.isoformat() }}"){% else %}null{% endif %},
-        location: {{ (event.location or '') | tojson }},
-        description: {{ (event.description or '') | tojson }},
-        crew: [
-            {% for a in event.crew_assignments %}
-                {{ a.crew_member | tojson }}{% if not loop.last %},{% endif %}
-            {% endfor %}
-        ],
-        crewRoles: {
-            {% for a in event.crew_assignments %}
-                {{ a.crew_member | tojson }}: {{ (a.role or 'Crew Member') | tojson }}{% if not loop.last %},{% endif %}
-            {% endfor %}
-        }
-    }{% if not loop.last %},{% endif %}
-    {% endfor %}
-];
+// ---- calendar ----
+const narrow = window.innerWidth < 700;
+const cal = new FullCalendar.Calendar($('calendar'), {
+  timeZone: 'local',
+  initialView: narrow ? 'listWeek' : 'dayGridMonth',
+  firstDay: 1,
+  headerToolbar: { left: 'prev,next today', center: 'title', right: narrow ? 'dayGridMonth,listWeek' : 'dayGridMonth,timeGridWeek,timeGridDay,listWeek' },
+  buttonText: { today: 'Today', month: 'Month', week: 'Week', day: 'Day', list: 'List' },
+  height: 'auto', dayMaxEvents: true, nowIndicator: true, navLinks: true, selectable: true,
+  scrollTime: '08:00:00', eventTimeFormat: { hour: 'numeric', minute: '2-digit', meridiem: 'short' },
+  slotLabelFormat: { hour: 'numeric', minute: '2-digit', meridiem: 'short' },
+  noEventsContent: 'Nothing scheduled in this period',
+  editable: CAN_MANAGE,
+  eventAllow: (drop, ev) => !(ev.extendedProps.kind === 'shift' && drop.allDay),
 
-const SHIFTS_DATA = {{ shifts_data | tojson }};
-
-const CREW_USERS = {{ crew_users|map(attribute='username')|list | tojson }};
-const USERS_SET = CREW_USERS.slice().sort();
-const CURRENT_USERNAME = {{ current_user.username | tojson }};
-
-let UNAVAILABILITIES = [];
-
-// ============================================================
-// STATE
-// ============================================================
-let currentView = 'month';
-let currentUserFilter = 'everyone'; // 'everyone' | 'me'
-let currentDate = new Date();
-currentDate.setHours(0,0,0,0);
-
-const COLOR_CLASSES = ['ec0','ec1','ec2','ec3','ec4','ec5','ec6','ec7'];
-const eventColors = {};
-EVENTS_RAW.forEach((e, i) => { eventColors[e.id] = COLOR_CLASSES[i % COLOR_CLASSES.length]; });
-
-// ============================================================
-// UTILITIES
-// ============================================================
-function sameDay(a, b) {
-    return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
-}
-function startOfWeek(d) {
-    const r = new Date(d);
-    r.setDate(r.getDate() - r.getDay());
-    r.setHours(0,0,0,0);
-    return r;
-}
-function addDays(d, n) {
-    const r = new Date(d);
-    r.setDate(r.getDate() + n);
-    return r;
-}
-function fmtTime(d) {
-    if (!d) return '';
-    return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-}
-function fmtDate(d) {
-    return d.toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'});
-}
-const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-
-// Events are single‑day in this app, so we treat an event as
-// belonging to the day that matches its local start date.
-function eventsOnDay(day) {
-    return EVENTS_RAW.filter(e => sameDay(e.start, day));
-}
-
-/**
- * FIX #3 — shiftsForEventOnDay: compare using local date string to avoid
- * timezone drift when the shift_date ISO string from the server is parsed.
- */
-function shiftsForEvent(eventId) {
-    return SHIFTS_DATA.filter(s => s.event_id === eventId);
-}
-
-function shiftsForEventOnDay(eventId, day) {
-    // Build a local YYYY-MM-DD string for the target day
-    const y = day.getFullYear();
-    const m = String(day.getMonth() + 1).padStart(2, '0');
-    const dd = String(day.getDate()).padStart(2, '0');
-    const dayStr = `${y}-${m}-${dd}`;
-    return SHIFTS_DATA.filter(s => s.event_id === eventId && s.shift_date.startsWith(dayStr));
-}
-
-// ============================================================
-// NAVIGATION
-// ============================================================
-function switchView(view) {
-    currentView = view;
-    document.getElementById('monthView').style.display = view==='month' ? 'block' : 'none';
-    document.getElementById('schedulerView').style.display = view==='scheduler' ? 'block' : 'none';
-    document.getElementById('tabMonth').classList.toggle('active', view==='month');
-    document.getElementById('tabScheduler').classList.toggle('active', view==='scheduler');
-    render();
-}
-
-function navigate(dir) {
-    if (currentView === 'month') {
-        currentDate.setMonth(currentDate.getMonth() + dir);
-    } else {
-        currentDate.setDate(currentDate.getDate() + dir * 7);
+  events: async (info, ok, fail) => {
+    const p = new URLSearchParams({ start: SW.toInput(info.start), end: SW.toInput(info.end),
+      events: filters.events ? '1' : '0', shifts: filters.shifts, unavail: filters.unavail });
+    try { ok(await SW.api('GET', '/api/calendar/feed?' + p)); }
+    catch (e) { SW.toast(e.message, 'error'); fail(e); }
+  },
+  datesSet: (a) => cal.setOption('height', a.view.type.startsWith('timeGrid') ? 720 : 'auto'),
+  eventDidMount: (i) => {
+    const x = i.event.extendedProps;
+    i.el.title = [i.event.title, x.when, x.location].filter(Boolean).join('\n');
+  },
+  select: async (sel) => {
+    const allDay = sel.allDay;
+    let start = SW.toInput(sel.start), end = SW.toInput(sel.end);
+    if (allDay) {
+      // month view gives a date range with an exclusive end
+      const last = new Date(sel.end.getTime() - 86400000);
+      const multi = last > sel.start;
+      start = SW.toInput(sel.start, true) + 'T09:00';
+      end = multi ? SW.toInput(last, true) + 'T17:00' : SW.addHours(start, 3);
     }
-    render();
+    cal.unselect();
+    const r = await SW.eventForm({ defaults: { event_date: start, event_end_date: end, all_day: false }, canRecur: CAN_MANAGE });
+    if (r) { SW.toast('Event created'); cal.refetchEvents(); }
+  },
+  eventClick: (info) => { info.jsEvent.preventDefault(); showDetail(info.event); },
+  eventDrop: (i) => moved(i), eventResize: (i) => moved(i),
+});
+cal.render();
+
+async function moved(info) {
+  const ev = info.event, x = ev.extendedProps;
+  try {
+    if (x.kind === 'event') {
+      await SW.api('PUT', `/events/${x.event_id}/move`, {
+        all_day: ev.allDay, event_date: SW.toInput(ev.start, ev.allDay),
+        event_end_date: ev.end ? SW.toInput(ev.end, ev.allDay) : null });
+    } else if (x.kind === 'shift') {
+      const body = { start: SW.toInput(ev.start), end: SW.toInput(ev.end || new Date(ev.start.getTime() + 3600000)) };
+      try { await SW.api('PUT', `/events/shift-assignments/${x.assignment_id}/move`, body); }
+      catch (err) {
+        if (err.status === 409 && err.payload.conflicts) {
+          const list = err.payload.conflicts.map((c) => '• ' + c.title).join('\n');
+          if (!(await SW.confirm(`${err.message}:\n\n${list}\n\nMove anyway?`, { title: 'Scheduling clash', okText: 'Move anyway', danger: true }))) { info.revert(); return; }
+          await SW.api('PUT', `/events/shift-assignments/${x.assignment_id}/move`, { ...body, force: true });
+        } else throw err;
+      }
+    }
+    SW.toast('Updated'); cal.refetchEvents();
+  } catch (e) { info.revert(); SW.toast(e.message, 'error'); }
 }
 
-function goToday() {
-    currentDate = new Date();
-    currentDate.setHours(0,0,0,0);
-    render();
-}
+// ---- detail popup ----
+function showDetail(ev) {
+  const x = ev.extendedProps, esc = SW.esc;
+  const d = SW.dialog({ title: x.kind === 'event' ? ev.title : x.kind === 'shift' ? 'Shift' : 'Unavailable' });
+  const rows = [];
+  if (x.kind === 'shift') {
+    rows.push(['Person', x.username + (x.mine ? ' (you)' : '')], ['Event', x.event_title]);
+    if (x.role) rows.push(['Role', x.role]);
+  }
+  if (x.kind === 'unavailability') rows.push(['Person', x.username || 'You'], ['Reason', ev.title.replace(/^Unavailable – /, '')]);
+  rows.push(['When', x.when]);
+  if (x.location) rows.push(['Where', x.location]);
+  if (x.kind === 'shift') {
+    const label = { pending: 'Awaiting response', accepted: 'Confirmed', confirmed: 'Confirmed', rejected: 'Declined' }[x.status] || x.status;
+    rows.push(['Status', label]);
+  }
+  let html = '<dl class="sw-detail-grid">' + rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('') + '</dl>';
+  if (x.kind === 'event') {
+    if (x.on_team) html += '<p><span class="sw-chip ok">You\'re on this event</span></p>';
+    if (x.description_html) html += `<div class="md-content" style="margin-bottom:1rem">${x.description_html}</div>`;
+  }
+  if (x.kind === 'shift' && x.notes) html += `<p class="sw-muted" style="white-space:pre-line">${esc(x.notes)}</p>`;
+  d.body.innerHTML = html;
 
-// ============================================================
-// RENDER DISPATCHER
-// ============================================================
-function render() {
-    fetchUnavailabilities().then(() => {
-        if (currentView === 'month') renderMonth();
-        else renderScheduler();
+  const bar = document.createElement('div'); bar.className = 'sw-actions';
+  const add = (label, cls, fn) => { const b = document.createElement('button'); b.className = 'btn ' + cls; b.type = 'button'; b.textContent = label; b.onclick = fn; bar.appendChild(b); };
+  if (x.kind === 'event') {
+    if (CAN_MANAGE) add('Delete', 'btn-danger sw-left', async () => {
+      d.close();
+      let scope = 'this';
+      if (x.recurring) { scope = await SW.seriesScope('Delete', (await SW.api('GET', `/api/events/${x.event_id}`)).series_count); if (!scope) return; }
+      else if (!(await SW.confirm('Delete this event and everything attached to it?', { danger: true, okText: 'Delete' }))) return;
+      if (await SW.run(() => SW.api('DELETE', `/events/${x.event_id}?scope=${scope}`), 'Event deleted')) cal.refetchEvents();
     });
+    if (x.can_edit) add('Edit', 'btn-secondary', async () => {
+      d.close();
+      const data = await SW.run(() => SW.api('GET', `/api/events/${x.event_id}`));
+      if (data && await SW.eventForm({ event: data })) { SW.toast('Event saved'); cal.refetchEvents(); }
+    });
+  }
+  if (x.kind === 'shift') {
+    if (x.mine && x.status !== 'accepted' && x.status !== 'confirmed') add('Accept', 'btn-success', () => SW.respondShift(x.assignment_id, 'accepted'));
+    if (x.mine && x.status !== 'rejected') add("Can't make it", 'btn-secondary', () => SW.respondShift(x.assignment_id, 'rejected'));
+    if (CAN_MANAGE) {
+      add('Remove', 'btn-danger sw-left', async () => {
+        d.close();
+        if (!(await SW.confirm(`Delete ${x.username}'s shift?`, { danger: true, okText: 'Delete' }))) return;
+        if (await SW.run(() => SW.api('DELETE', `/events/shift-assignments/${x.assignment_id}`), 'Shift deleted')) cal.refetchEvents();
+      });
+      add('Edit shift', 'btn-secondary', async () => {
+        d.close();
+        const shift = { assignment_id: x.assignment_id, username: x.username, role: x.role, status: x.status, notes: x.notes,
+          start: SW.toInput(ev.start), end: SW.toInput(ev.end) };
+        if (await SW.shiftForm({ shift, event: { id: x.event_id } })) { SW.toast('Shift saved'); cal.refetchEvents(); }
+      });
+    }
+  }
+  if (x.url) { const a = document.createElement('a'); a.className = 'btn btn-primary'; a.href = x.url; a.textContent = 'Open event'; bar.appendChild(a); }
+  d.body.appendChild(bar);
 }
 
-async function fetchUnavailabilities() {
-    const weekStart = startOfWeek(currentDate);
-    const weekEnd = addDays(weekStart, 13);
+// ---- toolbar buttons ----
+$('btnNew').onclick = async () => {
+  const start = new Date(); start.setHours(start.getHours() + 1, 0, 0, 0);
+  const s = SW.toInput(start);
+  const r = await SW.eventForm({ defaults: { event_date: s, event_end_date: SW.addHours(s, 3) }, canRecur: CAN_MANAGE });
+  if (r) { SW.toast('Event created'); cal.refetchEvents(); }
+};
+$('btnSubscribe').onclick = async () => {
+  const url = `${location.protocol}//${location.host}/calendar/ics`;
+  try { await navigator.clipboard.writeText(url); SW.toast('Calendar link copied - paste it into Google Calendar → Add by URL'); }
+  catch (_) { await SW.confirm(url, { title: 'Calendar link (copy this)', okText: 'Done' }); }
+};
+
+// ---- my unavailability ----
+$('btnUnavail').onclick = async () => {
+  const d = SW.dialog({ title: 'My unavailability', wide: true });
+  const body = d.body;
+  const render = async () => {
+    body.innerHTML = '<p class="sw-muted">Loading…</p>';
+    let once = [], rec = [];
     try {
-        const response = await fetch(`/api/unavailabilities-week?start=${weekStart.toISOString()}&end=${weekEnd.toISOString()}`);
-        if (response.ok) {
-            const data = await response.json();
-            UNAVAILABILITIES = data.unavailabilities || [];
-        }
-    } catch (e) {
-        UNAVAILABILITIES = [];
-    }
-}
-
-// ============================================================
-// MONTH VIEW
-// ============================================================
-function renderMonth() {
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    document.getElementById('periodLabel').textContent = `${MONTHS[month]} ${year}`;
-
-    const today = new Date(); today.setHours(0,0,0,0);
-    const firstDay = new Date(year, month, 1);
-    const startPad = firstDay.getDay();
-    const daysInMonth = new Date(year, month+1, 0).getDate();
-
-    let cells = '';
-    const prevDays = new Date(year, month, 0).getDate();
-    for (let i = startPad - 1; i >= 0; i--) {
-        cells += `<div class="month-cell other-month"><div class="month-cell-num">${prevDays - i}</div></div>`;
-    }
-
-    for (let d = 1; d <= daysInMonth; d++) {
-        const date = new Date(year, month, d);
-        const isToday = sameDay(date, today);
-        const dayEvents = eventsOnDay(date);
-        const maxShow = 3;
-        let pillsHtml = '';
-        let shown = 0;
-        let total = 0;
-
-        dayEvents.forEach(e => {
-            const eventShifts = shiftsForEventOnDay(e.id, date);
-            if (eventShifts.length > 0) {
-                // FIX #4 — show each shift once, not once per shift + once for event
-                total += eventShifts.length;
-                eventShifts.forEach(shift => {
-                    if (shown < maxShow) {
-                        pillsHtml += `<div class="month-event-pill ${eventColors[e.id]}" onclick="showEventQuick(${e.id})" title="${shift.role}: ${shift.assigned_count}/${shift.positions_needed} assigned">
-                            <strong>${shift.role}</strong> ${shift.assigned_count}/${shift.positions_needed}
-                        </div>`;
-                        shown++;
-                    }
-                });
-            } else {
-                // Event with no shifts — show the event itself once
-                total += 1;
-                if (shown < maxShow) {
-                    pillsHtml += `<div class="month-event-pill ${eventColors[e.id]}" onclick="showEventQuick(${e.id})" title="${e.title}">
-                        ${fmtTime(e.start) ? fmtTime(e.start)+' · ' : ''}${e.title}
-                    </div>`;
-                    shown++;
-                }
-            }
-        });
-
-        if (total > shown) {
-            pillsHtml += `<div class="month-more" onclick="showDayEvents(${date.getTime()})">+${total - shown} more</div>`;
-        }
-
-        cells += `<div class="month-cell${isToday?' today':''}">
-            <div class="month-cell-num">${isToday ? `<span>${d}</span>` : d}</div>
-            ${pillsHtml}
-        </div>`;
-    }
-
-    const totalCells = Math.ceil((startPad + daysInMonth) / 7) * 7;
-    let nextDay = 1;
-    for (let i = startPad + daysInMonth; i < totalCells; i++, nextDay++) {
-        cells += `<div class="month-cell other-month"><div class="month-cell-num">${nextDay}</div></div>`;
-    }
-    document.getElementById('monthBody').innerHTML = cells;
-}
-
-// ============================================================
-// SCHEDULER VIEW
-// ============================================================
-function renderScheduler() {
-    const weekStart = startOfWeek(currentDate);
-    const weekEnd = addDays(weekStart, 6);
-    const today = new Date(); today.setHours(0,0,0,0);
-
-    document.getElementById('periodLabel').textContent =
-        `${fmtDate(weekStart)} – ${fmtDate(weekEnd)}`;
-
-    const days = [];
-    for (let i = 0; i < 7; i++) days.push(addDays(weekStart, i));
-
-    // ---- HEADER ROW ----
-    let headHtml = '<tr><th class="sched-user-label" style="background:var(--bg-card);border-bottom:2px solid var(--border);">Team Member</th>';
-    days.forEach(d => {
-        const isTod = sameDay(d, today);
-        headHtml += `<th class="sched-header-day${isTod?' today-col':''}">
-            <div class="dow">${DOW[d.getDay()]}</div>
-            <div class="dom">${d.getDate()}</div>
-        </th>`;
+      once = (await SW.api('GET', '/unavailability/list')).unavailabilities || [];
+      rec = (await SW.api('GET', '/recurring-unavailability/list')).patterns || [];
+    } catch (e) { body.innerHTML = `<div class="sw-error">${SW.esc(e.message)}</div>`; return; }
+    const fmt = (s) => new Date(s).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+    const item = (kind, id, title, sub) => `<div class="sw-una-item"><div><strong>${SW.esc(title)}</strong><div class="sw-muted" style="font-size:.85rem">${SW.esc(sub)}</div></div>
+      <button class="btn btn-ghost btn-icon" data-del="${kind}:${id}" title="Remove"><i class="fas fa-trash"></i></button></div>`;
+    body.innerHTML = `<div class="sw-actions" style="justify-content:flex-start;margin-bottom:1rem">
+        <button class="btn btn-primary btn-sm" id="uaAdd"><i class="fas fa-plus"></i>One-off</button>
+        <button class="btn btn-secondary btn-sm" id="uaRec"><i class="fas fa-redo"></i>Repeating</button></div>
+      <h4 style="margin:.5rem 0">One-off</h4>${once.map((u) => item('one', u.id, u.title, `${fmt(u.start_date)} → ${fmt(u.end_date)}`)).join('') || '<p class="sw-muted">None.</p>'}
+      <h4 style="margin:1rem 0 .5rem">Repeating</h4>${rec.map((r) => item('rec', r.id, r.title,
+        `${r.pattern_type === 'weekly' ? (r.days_of_week || '').split(',').filter(Boolean).map((n) => DAYS[n]).join(', ') : r.pattern_type === 'monthly' ? 'Day ' + r.day_of_month + ' of each month' : 'Every day'}, ${r.start_time}–${r.end_time}`)).join('') || '<p class="sw-muted">None.</p>'}`;
+    $('uaAdd') && ($('uaAdd').onclick = addOne); $('uaRec').onclick = addRec;
+    body.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
+      const [kind, id] = b.dataset.del.split(':');
+      if (!(await SW.confirm('Remove this unavailability?', { danger: true, okText: 'Remove' }))) return;
+      if (await SW.run(() => SW.api('DELETE', kind === 'one' ? `/unavailability/delete/${id}` : `/recurring-unavailability/delete/${id}`), 'Removed')) { render(); cal.refetchEvents(); }
     });
-    headHtml += '</tr>';
-
-    // ---- OPEN SPOTS / SHIFTS SUMMARY ROW ----
-    // FIX #5 — show shifts if available, otherwise show event once (not both)
-    headHtml += '<tr class="open-spots-row"><th style="background:#f8fafc; border-bottom:2px solid var(--border); padding:0.5rem 0.75rem; text-align:left; font-size:0.78rem; color:#6b7280; font-weight:600; position:sticky; left:0; z-index:12;">Shifts / Crew</th>';
-    days.forEach(d => {
-        const isTod = sameDay(d, today);
-        const dayEvs = eventsOnDay(d);
-        let content = '';
-
-        if (dayEvs.length === 0) {
-            content = '–';
-        } else {
-            dayEvs.forEach(ev => {
-                const eventShifts = shiftsForEventOnDay(ev.id, d);
-                if (eventShifts.length > 0) {
-                    // Show shifts only — don't also show the event crew count
-                    eventShifts.forEach(shift => {
-                        content += `<span class="open-spot-badge${shift.assigned_count >= shift.positions_needed ? ' full' : ''}"
-                            onclick="showEventQuick(${ev.id})"
-                            title="${shift.role}: ${shift.assigned_count}/${shift.positions_needed}">
-                            ${shift.role.substring(0,10)} ${shift.assigned_count}/${shift.positions_needed}
-                        </span><br>`;
-                    });
-                } else {
-                    // No shifts — show event summary once
-                    const assignedCount = ev.crew.length;
-                    content += `<span class="open-spot-badge"
-                        onclick="showEventQuick(${ev.id})"
-                        title="${ev.title}">
-                        ${ev.title.substring(0,12)}${ev.title.length>12?'…':''} (${assignedCount})
-                    </span><br>`;
-                }
-            });
-        }
-
-        headHtml += `<th style="${isTod?'background:#faf9ff;':''}border-bottom:2px solid var(--border);border-right:1px solid #f0f0f0;padding:0.4rem;text-align:center;vertical-align:top;font-size:0.75rem;font-weight:400;">
-            ${content}
-        </th>`;
-    });
-    headHtml += '</tr>';
-
-    document.getElementById('schedulerHead').innerHTML = headHtml;
-
-    // ---- USER ROWS ----
-    // FIX #6 — deduplicate: a user should appear at most once per event per day,
-    // regardless of how many shifts or assignments exist for that event.
-    let bodyHtml = '';
-    const visibleUsers = currentUserFilter === 'me' ? [CURRENT_USERNAME] : USERS_SET;
-
-    if (visibleUsers.length === 0) {
-        bodyHtml = `<tr><td colspan="8" style="text-align:center;padding:3rem;color:#9ca3af;">No crew members found.</td></tr>`;
-    } else {
-        visibleUsers.forEach(username => {
-            bodyHtml += `<tr><td class="sched-user-label">
-                <div class="user-row-content">
-                    <div class="sched-user-avatar">
-                        <img src="/profile/picture/${username}" alt="${username}"
-                            style="width:100%;height:100%;object-fit:cover;"
-                            onerror="this.style.display='none';this.parentElement.textContent='${username[0].toUpperCase()}'">
-                    </div>
-                    <div style="overflow: hidden;">
-                        <div style="font-weight: 600; font-size: 0.85rem;">${username}</div>
-                    </div>
-                </div>
-            </td>`;
-
-            days.forEach(d => {
-                const isTod = sameDay(d, today);
-                // Get events this user is assigned to on this day — either via crew assignment
-                // or via an accepted/confirmed shift assignment.
-                const y = d.getFullYear();
-                const m = String(d.getMonth() + 1).padStart(2, '0');
-                const dd = String(d.getDate()).padStart(2, '0');
-                const dayStr = `${y}-${m}-${dd}`;
-
-                const shiftEventIds = new Set(
-                    SHIFTS_DATA
-                        .filter(s =>
-                            s.shift_date.startsWith(dayStr) &&
-                            Array.isArray(s.assigned_users) &&
-                            s.assigned_users.includes(username)
-                        )
-                        .map(s => s.event_id)
-                );
-
-                const userEvents = eventsOnDay(d).filter(
-                    e => e.crew.includes(username) || shiftEventIds.has(e.id)
-                );
-                const seenEventIds = new Set();
-
-                const userUnavail = UNAVAILABILITIES.filter(u => {
-                    const uStart = new Date(u.start);
-                    const uEnd = new Date(u.end);
-                    const dEnd = addDays(d, 1);
-                    return u.username === username && uStart < dEnd && uEnd > d;
-                });
-
-                let cellContent = '';
-
-                userUnavail.forEach(u => {
-                    cellContent += `<span style="font-size:0.65rem;font-weight:600;padding:0.2rem 0.3rem;border-radius:5px;cursor:pointer;display:block;margin-bottom:2px;background:#fed7aa;color:#92400e;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;" title="${u.title}${u.description?' - '+u.description:''}">
-                        ⚠️ ${u.title.substring(0,12)}${u.title.length>12?'…':''}
-                    </span>`;
-                });
-
-                userEvents.forEach(e => {
-                    if (seenEventIds.has(e.id)) return; // deduplicate
-                    seenEventIds.add(e.id);
-                    const role = e.crewRoles[username] || 'Crew';
-                    cellContent += `<span class="sched-event-block ${eventColors[e.id]}" onclick="showEventQuick(${e.id})" title="${e.title} · ${role}">
-                        ${e.title.substring(0,14)}${e.title.length>14?'…':''}
-                    </span>`;
-                });
-
-                bodyHtml += `<td class="sched-cell${isTod?' today-col':''}">${cellContent}</td>`;
-            });
-            bodyHtml += '</tr>';
-        });
-    }
-
-    document.getElementById('schedulerBody').innerHTML = bodyHtml;
-}
-
-// ============================================================
-// EVENT QUICK VIEW
-// ============================================================
-function showEventQuick(eventId) {
-    const ev = EVENTS_RAW.find(e => e.id === eventId);
-    if (!ev) return;
-    const endStr = ev.end ? ` – ${fmtTime(ev.end)}` : '';
-    
-    const currentUsername = '{{ current_user.username }}';
-    const isAssigned = ev.crew.includes(currentUsername);
-    const isAdmin = {{ 'true' if current_user.is_admin else 'false' }};
-    
-    const joinButton = !isAdmin && !isAssigned ? 
-        `<button onclick="joinEvent(${ev.id})" class="btn btn-success" style="margin-right:0.75rem;"><i class="fas fa-user-plus"></i> Join Event</button>` 
-        : '';
-    
-    const eventShifts = shiftsForEvent(ev.id);
-    let shiftsHtml = '';
-    if (eventShifts.length > 0) {
-        shiftsHtml = `
-            <div style="margin-bottom:1rem;">
-                <strong style="font-size:0.85rem;">Shifts Needed</strong>
-                <div style="margin-top:0.5rem;">
-                    ${eventShifts.map(shift => `
-                        <div style="background:#f3f4f6;padding:0.5rem 0.75rem;border-radius:6px;margin-bottom:0.4rem;border-left:3px solid var(--primary);">
-                            <div style="font-weight:600;font-size:0.9rem;">${shift.role}</div>
-                            <div style="font-size:0.8rem;color:#6b7280;">
-                                ${shift.assigned_count} / ${shift.positions_needed} assigned
-                                ${shift.is_open ? '<span style="color:#059669;font-weight:600;"> (Open)</span>' : ''}
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        `;
-    }
-    
-    document.getElementById('eventQuickContent').innerHTML = `
-        <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
-            <div style="width:12px;height:40px;border-radius:6px;" class="${eventColors[ev.id]}"></div>
-            <div>
-                <h3 style="margin:0;">${ev.title}</h3>
-                <p style="color:#6b7280;font-size:0.85rem;margin:0;">${fmtDate(ev.start)} ${fmtTime(ev.start)}${endStr}</p>
-            </div>
-        </div>
-        ${ev.location ? `<p style="margin-bottom:0.5rem;"><i class="fas fa-map-marker-alt" style="color:var(--primary);width:16px;"></i> ${ev.location}</p>` : ''}
-        ${ev.description ? `<p style="margin-bottom:0.75rem;color:#374151;font-size:0.9rem;">${ev.description}</p>` : ''}
-        ${shiftsHtml}
-        <div style="margin-bottom:1rem;">
-            <strong style="font-size:0.85rem;">Crew Assigned (${ev.crew.length})</strong>
-            <div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.5rem;">
-                ${ev.crew.map(u => `<span style="background:#e5e7eb;padding:0.2rem 0.6rem;border-radius:10px;font-size:0.8rem;">${u}</span>`).join('') || '<span style="color:#9ca3af;font-size:0.85rem;">None assigned</span>'}
-            </div>
-        </div>
-        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
-            ${joinButton}
-            <a href="/events/${ev.id}" class="btn btn-primary" style="flex:1;text-align:center;"><i class="fas fa-eye"></i> View Details</a>
-            {% if current_user.is_admin %}
-            <button onclick="deleteEvent(${ev.id})" class="btn btn-danger" style="flex:none;"><i class="fas fa-trash"></i></button>
-            {% endif %}
-        </div>
-    `;
-    showModal('eventQuickModal');
-}
-
-function joinEvent(eventId) {
-    if (!confirm('Join this event?')) return;
-    const btn = event.target.closest('button');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Joining...';
-    fetch('/crew/join-event', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ event_id: eventId })
-    }).then(r => r.json()).then(result => {
-        if (result.success) {
-            showAlert('✓ Successfully joined event!', 'success');
-            setTimeout(() => location.reload(), 1000);
-        } else {
-            showAlert(result.error || 'Failed to join event', 'error');
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-user-plus"></i> Join Event';
-        }
-    }).catch(() => {
-        showAlert('Error: Network connection failed', 'error');
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-user-plus"></i> Join Event';
-    });
-}
-
-function showDayEvents(ts) {
-    const d = new Date(ts);
-    const dayEvs = eventsOnDay(d);
-    if (!dayEvs.length) return;
-    document.getElementById('eventQuickContent').innerHTML = `
-        <h3 style="margin-bottom:1rem;">${fmtDate(d)}</h3>
-        ${dayEvs.map(ev => `
-            <div class="month-event-pill ${eventColors[ev.id]}" style="margin-bottom:0.5rem;cursor:pointer;font-size:0.9rem;padding:0.5rem 0.75rem;" onclick="hideModal('eventQuickModal');showEventQuick(${ev.id})">
-                ${fmtTime(ev.start) ? '<strong>'+fmtTime(ev.start)+'</strong> · ' : ''}${ev.title}
-            </div>
-        `).join('')}
-    `;
-    showModal('eventQuickModal');
-}
-
-// ============================================================
-// RECURRENCE HANDLERS
-// ============================================================
-function toggleRecurrenceFields() {
-    const pattern = document.getElementById('recurPattern').value;
-    document.getElementById('recurrenceFields').style.display = pattern ? 'block' : 'none';
-    const labels = {daily:'day(s)', weekly:'week(s)', biweekly:'cycle(s)', monthly:'month(s)', yearly:'year(s)'};
-    document.getElementById('recurIntervalLabel').textContent = labels[pattern] || 'unit(s)';
-}
-
-document.getElementById('recurEndType')?.addEventListener('change', function() {
-    const isCount = this.value === 'count';
-    document.getElementById('recurCountField').style.display = isCount ? 'block' : 'none';
-    document.getElementById('recurDateField').style.display = isCount ? 'none' : 'block';
-});
-
-// ============================================================
-// ADD EVENT FORM
-// ============================================================
-document.getElementById('addEventForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const submitBtn = this.querySelector('button[type="submit"]');
-    const originalText = submitBtn.innerHTML;
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
-    
-    const recurPattern = document.getElementById('recurPattern').value;
-    const data = {
-        title: document.getElementById('eventTitle').value,
-        event_date: document.getElementById('eventDate').value,
-        event_end_date: document.getElementById('eventEndDate').value || null,
-        location: document.getElementById('eventLocation').value,
-        description: document.getElementById('eventDescription').value
-    };
-    
-    if (recurPattern) {
-        data.recurrence_pattern = recurPattern;
-        data.recurrence_interval = parseInt(document.getElementById('recurInterval').value) || 1;
-        if (document.getElementById('recurEndType').value === 'count') {
-            data.recurrence_count = parseInt(document.getElementById('recurCount').value);
-        } else {
-            data.recurrence_end_date = document.getElementById('recurEndDate').value;
-        }
-    }
-    
-    const endpoint = recurPattern ? '/events/create-recurring' : '/events/add';
-    
-    fetch(endpoint, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    }).then(r => r.json()).then(result => {
-        if (result.success) {
-            showAlert('✓ Event created successfully!', 'success');
-            hideModal('addEventModal');
-            this.reset();
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = originalText;
-            setTimeout(() => location.reload(), 1200);
-        } else {
-            showAlert(result.error || 'Error creating event', 'error');
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = originalText;
-        }
-    }).catch(err => {
-        showAlert('Network error: ' + err.message, 'error');
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = originalText;
-    });
-});
-
-// ============================================================
-// UNAVAILABILITY MANAGEMENT
-// ============================================================
-function switchUnavailTab(tab) {
-    document.getElementById('unavailAddTab').style.display = tab === 'add' ? 'block' : 'none';
-    document.getElementById('unavailRecurringTab').style.display = tab === 'recurring' ? 'block' : 'none';
-    document.getElementById('unavailListTab').style.display = tab === 'list' ? 'block' : 'none';
-    document.querySelectorAll('#unavailabilityModal li').forEach((li, idx) => {
-        const active = (tab==='add'&&idx===0)||(tab==='recurring'&&idx===1)||(tab==='list'&&idx===2);
-        li.style.borderBottom = active ? '3px solid var(--primary)' : '1px solid transparent';
-    });
-}
-
-function updateRecurringFields() {
-    const pattern = document.getElementById('recurUnavailPattern').value;
-    const daysDiv = document.querySelector('#addRecurringUnavailForm .form-group:nth-child(3)');
-    daysDiv.style.display = pattern === 'weekly' ? 'block' : 'none';
-}
-
-document.getElementById('addUnavailForm')?.addEventListener('submit', function(e) {
-    e.preventDefault();
-    const btn = this.querySelector('button[type="submit"]');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding...';
-    fetch('/unavailability/add', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            title: document.getElementById('unavailTitle').value,
-            start_date: document.getElementById('unavailStart').value,
-            end_date: document.getElementById('unavailEnd').value,
-            description: document.getElementById('unavailDescription').value,
-            is_all_day: false
-        })
-    }).then(r => r.json()).then(result => {
-        btn.disabled = false;
-        btn.innerHTML = 'Add Unavailability';
-        if (result.success) { showAlert('✓ Unavailability added!', 'success'); this.reset(); loadUnavailabilities(); }
-        else showAlert(result.error || 'Error', 'error');
-    }).catch(() => { btn.disabled = false; btn.innerHTML = 'Add Unavailability'; showAlert('Network error', 'error'); });
-});
-
-document.getElementById('addRecurringUnavailForm')?.addEventListener('submit', function(e) {
-    e.preventDefault();
-    const btn = this.querySelector('button[type="submit"]');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding...';
-    const selectedDays = Array.from(this.querySelectorAll('input[type="checkbox"]')).filter(cb => cb.checked).map(cb => cb.value);
-    fetch('/recurring-unavailability/add', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            title: document.getElementById('recurUnavailTitle').value,
-            pattern_type: document.getElementById('recurUnavailPattern').value,
-            start_time: document.getElementById('recurUnavailStartTime').value,
-            end_time: document.getElementById('recurUnavailEndTime').value,
-            start_date: document.getElementById('recurUnavailStartDate').value,
-            end_date: document.getElementById('recurUnavailEndDate').value || null,
-            days_of_week: JSON.stringify(selectedDays)
-        })
-    }).then(r => r.json()).then(result => {
-        btn.disabled = false;
-        btn.innerHTML = 'Add Recurring Pattern';
-        if (result.success) { showAlert('✓ Recurring pattern added!', 'success'); this.reset(); loadUnavailabilities(); }
-        else showAlert(result.error || 'Error', 'error');
-    }).catch(() => { btn.disabled = false; btn.innerHTML = 'Add Recurring Pattern'; showAlert('Network error', 'error'); });
-});
-
-function loadUnavailabilities() {
-    fetch('/unavailability/list').then(r => r.json()).then(result => {
-        if (result.success) {
-            const list = document.getElementById('unavailList');
-            if (!result.unavailabilities || result.unavailabilities.length === 0) {
-                list.innerHTML = '<p style="color:#9ca3af;">No unavailabilities set</p>';
-            } else {
-                list.innerHTML = result.unavailabilities.map(u => `
-                    <div style="background:#f3f4f6;padding:1rem;border-radius:8px;margin-bottom:0.75rem;border-left:4px solid var(--warning);">
-                        <div style="display:flex;justify-content:space-between;align-items:start;">
-                            <div>
-                                <strong>${u.title}</strong>
-                                <p style="font-size:0.85rem;color:#6b7280;margin-top:0.25rem;">
-                                    ${new Date(u.start_date).toLocaleDateString()} – ${new Date(u.end_date).toLocaleDateString()}
-                                </p>
-                                ${u.description ? `<p style="font-size:0.85rem;color:#374151;margin-top:0.25rem;">${u.description}</p>` : ''}
-                            </div>
-                            <button onclick="deleteUnavailability(${u.id})" class="btn btn-danger" style="padding:0.4rem 0.8rem;font-size:0.8rem;">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-                    </div>
-                `).join('');
-            }
-        }
-    });
-}
-
-function deleteUnavailability(id) {
-    if (!confirm('Remove this unavailability?')) return;
-    fetch(`/unavailability/delete/${id}`, {method:'DELETE'}).then(r => r.json()).then(result => {
-        if (result.success) { showAlert('✓ Removed', 'success'); loadUnavailabilities(); }
-        else showAlert('Error: ' + (result.error || 'Unknown'), 'error');
-    });
-}
-
-function deleteEvent(id) {
-    if (!confirm('Delete this event? This will also remove all crew assignments, pick lists, and stage plans.')) return;
-    fetch(`/events/${id}`, {method:'DELETE'}).then(r=>r.json()).then(result => {
-        if (result.success) { showAlert('Deleted!', 'success'); setTimeout(()=>location.reload(), 800); }
-        else alert('Error: ' + (result.error || 'Unknown'));
-    });
-}
-
-function subscribeCalendar() {
-    const url = `${location.protocol}//${location.host}/calendar/ics`;
-    navigator.clipboard.writeText(url).then(() => {
-        showAlert('Calendar URL copied! Paste it in Google Calendar settings.', 'success');
-    });
-    setTimeout(() => window.open('https://calendar.google.com/calendar/u/0/r/settings/addbyurl', '_blank'), 500);
-}
-
-// ============================================================
-// INIT
-// ============================================================
-
-// Hook up filter dropdown for "Everyone" / "Only me"
-document.getElementById('userFilterSelect')?.addEventListener('change', function() {
-    currentUserFilter = this.value === 'me' ? 'me' : 'everyone';
-    render();
-});
-
-render();
+  };
+  const addOne = async () => {
+    const s = new Date(); s.setHours(9, 0, 0, 0);
+    const r = await SW.form({ title: 'Add unavailability', values: { start_date: SW.toInput(s), end_date: SW.addHours(SW.toInput(s), 8) },
+      fields: [{ name: 'title', label: 'Reason', required: true, placeholder: 'e.g. Holiday, exam' },
+        { name: 'start_date', label: 'From', type: 'datetime', required: true, half: true },
+        { name: 'end_date', label: 'Until', type: 'datetime', required: true, half: true },
+        { name: 'description', label: 'Notes', type: 'textarea', rows: 2 }],
+      onSubmit: (v) => { if (v.end_date <= v.start_date) throw new Error('The end must be after the start'); return SW.api('POST', '/unavailability/add', { ...v, is_all_day: false }); } });
+    if (r) { render(); cal.refetchEvents(); }
+  };
+  const addRec = async () => {
+    const r = await SW.form({ title: 'Add repeating unavailability', values: { pattern_type: 'weekly', start_time: '09:00', end_time: '17:00', start_date: SW.toInput(new Date(), true) },
+      fields: [{ name: 'title', label: 'Reason', required: true, placeholder: 'e.g. Work, class' },
+        { name: 'pattern_type', label: 'Repeats', type: 'select', options: [{ value: 'weekly', label: 'Weekly' }, { value: 'daily', label: 'Daily' }, { value: 'monthly', label: 'Monthly' }] },
+        { name: 'days_of_week', label: 'On', type: 'days', show: (v) => v.pattern_type === 'weekly' },
+        { name: 'day_of_month', label: 'Day of month', type: 'number', min: 1, max: 31, show: (v) => v.pattern_type === 'monthly' },
+        { name: 'start_time', label: 'From', type: 'time', required: true, half: true },
+        { name: 'end_time', label: 'Until', type: 'time', required: true, half: true },
+        { name: 'start_date', label: 'Starting', type: 'date', required: true, half: true },
+        { name: 'end_date', label: 'Until date (optional)', type: 'date', half: true }],
+      onSubmit: (v) => {
+        if (v.pattern_type === 'weekly' && !v.days_of_week) throw new Error('Pick at least one day');
+        if (v.pattern_type === 'monthly' && !v.day_of_month) throw new Error('Enter the day of the month');
+        return SW.api('POST', '/recurring-unavailability/add', { ...v, end_date: v.end_date || null });
+      } });
+    if (r) { render(); cal.refetchEvents(); }
+  };
+  render();
+};
 </script>
 {% endblock %}

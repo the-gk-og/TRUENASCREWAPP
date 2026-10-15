@@ -150,6 +150,7 @@ class Event(db.Model):
     description           = db.Column(db.Text)
     event_date            = db.Column(db.DateTime, nullable=False)
     event_end_date        = db.Column(db.DateTime, nullable=True)
+    all_day               = db.Column(db.Boolean, default=False)
     location              = db.Column(db.String(200))
     created_by            = db.Column(db.String(80))
     created_at            = db.Column(db.DateTime, default=datetime.utcnow)

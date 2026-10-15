@@ -55,6 +55,10 @@ def create_app(config_name: str | None = None):
     def load_user(user_id):
         return User.query.get(int(user_id))
 
+    # Markdown filter — {{ text|md }} renders sanitised HTML
+    from services.markdown_service import render_markdown
+    app.jinja_env.filters['md'] = render_markdown
+
     # Context processor
     @app.context_processor
     def inject_globals():
@@ -98,6 +102,9 @@ def create_app(config_name: str | None = None):
     # Register all blueprints (OAuth now ready)
     register_blueprints(app)
 
+    # Add any columns introduced since the DB was created
+    ensure_schema(app)
+
     # Backend client
     with app.app_context():
         try:
@@ -125,6 +132,28 @@ def create_app(config_name: str | None = None):
             pass
 
     return app
+
+
+def ensure_schema(app):
+    """
+    Lightweight, idempotent schema upgrade for existing databases
+    (db.create_all() never alters existing tables).
+    """
+    from sqlalchemy import inspect, text
+    try:
+        with app.app_context():
+            insp = inspect(db.engine)
+            if 'event' not in insp.get_table_names():
+                return
+            cols = {c['name'] for c in insp.get_columns('event')}
+            if 'all_day' not in cols:
+                table = db.engine.dialect.identifier_preparer.quote('event')
+                db.session.execute(text(f'ALTER TABLE {table} ADD COLUMN all_day BOOLEAN DEFAULT 0'))
+                db.session.commit()
+                print("✓ Added event.all_day column")
+    except Exception as exc:
+        db.session.rollback()
+        print(f"⚠️  Schema check failed: {exc}")
 
 
 def _start_heartbeat(app, backend):

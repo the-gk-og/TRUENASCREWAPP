@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Events - ShowWise{% endblock %}
+{% block head_extra %}<link rel="stylesheet" href="{{ url_for('static', filename='css/events.css') }}">{% endblock %}
+
+{% block content %}
+<div class="sw-page-head">
+  <div>
+    <h1>Events</h1>
+    <div class="page-subtitle">{{ upcoming|length }} upcoming · open an event to manage its team, shifts, schedule and notes</div>
+  </div>
+  <div class="sw-actions-bar">
+    <a class="btn btn-secondary" href="{{ url_for('calendar.calendar') }}"><i class="fas fa-calendar"></i>Calendar</a>
+    <button class="btn btn-primary" id="newEvent"><i class="fas fa-plus"></i>New event</button>
+  </div>
+</div>
+
+<div class="sw-card-head">
+  <input type="search" id="q" class="sw-search" placeholder="Search events…" aria-label="Search events">
+  <div class="sw-actions-bar">
+    <button class="btn btn-sm btn-primary" data-tab="upcoming">Upcoming</button>
+    <button class="btn btn-sm btn-ghost" data-tab="past">Past</button>
+  </div>
+</div>
+
+{% macro row(e) %}
+  <a class="sw-event-row" href="{{ url_for('events.event_detail', id=e.id) }}"
+     data-search="{{ (e.title ~ ' ' ~ (e.location or ''))|lower }}">
+    <div class="sw-datebox"><b>{{ e.event_date.day }}</b><span>{{ e.event_date.strftime('%b') }}</span></div>
+    <div class="main">
+      <div class="title">{{ e.title }}</div>
+      <div class="sub">{{ fmt_range(e.event_date, event_end(e), e.all_day) }}{% if e.location %} · <i class="fas fa-map-marker-alt"></i> {{ e.location }}{% endif %}</div>
+    </div>
+    <div class="sw-chips" style="margin:0">
+      {% if e.id in mine %}<span class="sw-chip ok">You're on this</span>{% endif %}
+      {% if e.recurrence_pattern or e.recurring_event_id %}<span class="sw-chip plain"><i class="fas fa-redo"></i>Repeats</span>{% endif %}
+    </div>
+  </a>
+{% endmacro %}
+
+<div id="tab-upcoming">
+  {% for e in upcoming %}{{ row(e) }}{% else %}<div class="card sw-empty">No upcoming events. Create one with “New event”.</div>{% endfor %}
+</div>
+<div id="tab-past" hidden>
+  {% for e in past %}{{ row(e) }}{% else %}<div class="card sw-empty">No past events.</div>{% endfor %}
+</div>
+<p class="sw-muted" id="noMatch" hidden>No events match your search.</p>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/sw-ui.js') }}"></script>
+<script>
+document.getElementById('newEvent').onclick = async () => {
+  const r = await SW.eventForm({ canRecur: {{ 'true' if can_manage else 'false' }} });
+  if (r && r.id) location.href = '/events/' + r.id;
+};
+document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => {
+  document.querySelectorAll('[data-tab]').forEach(x => { x.className = 'btn btn-sm ' + (x === b ? 'btn-primary' : 'btn-ghost'); });
+  document.getElementById('tab-upcoming').hidden = b.dataset.tab !== 'upcoming';
+  document.getElementById('tab-past').hidden = b.dataset.tab !== 'past';
+  filter();
+});
+function filter() {
+  const q = document.getElementById('q').value.trim().toLowerCase();
+  let shown = 0;
+  document.querySelectorAll('.sw-event-row').forEach(r => {
+    const vis = !q || r.dataset.search.includes(q);
+    r.hidden = !vis;
+    if (vis && !r.closest('[hidden]')) shown++;
+  });
+  document.getElementById('noMatch').hidden = !(q && !shown);
+}
+document.getElementById('q').addEventListener('input', filter);
+</script>
+{% endblock %}
