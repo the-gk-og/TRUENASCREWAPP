@@ -3,622 +3,456 @@
 
 {% block content %}
 <style>
-    .dashboard-container {
+    /* ============================================================
+       DASHBOARD — mobile-first. Uses the theme variables from
+       base.html, so dark mode and colour-vision modes just work.
+       ============================================================ */
+    .dash {
         display: grid;
-        grid-template-columns: 1fr;
-        gap: 2rem;
-        padding: 0;
-    }
-
-    /* Header Section */
-    .dashboard-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 2rem;
-        border-radius: 12px;
-        display: flex;
-        align-items: center;
-        gap: 2rem;
-        box-shadow: 0 10px 30px rgba(102, 126, 234, 0.2);
-        animation: slideInDown 0.5s ease-out;
-    }
-
-    .dashboard-header-avatar {
-        width: 100px;
-        height: 100px;
-        border-radius: 12px;
-        border: 4px solid rgba(255, 255, 255, 0.3);
-        overflow: hidden;
-        flex-shrink: 0;
-        background: rgba(255, 255, 255, 0.1);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 700;
-        font-size: 2.5rem;
-    }
-
-    .dashboard-header-avatar img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-
-    .dashboard-header-content h1 {
-        font-size: 2rem;
-        margin: 0;
-        font-weight: 700;
-    }
-
-    .dashboard-header-content p {
-        margin: 0.5rem 0 0 0;
-        opacity: 0.95;
-        font-size: 1rem;
-    }
-
-    .dashboard-header-time {
-        margin-top: 1rem;
-        opacity: 0.9;
-        font-size: 0.9rem;
-    }
-
-    /* Stats Grid */
-    .stats-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 1.5rem;
-        margin-bottom: 2rem;
-    }
-
-    .stat-card {
-        background: var(--bg-card);
-        padding: 1.5rem;
-        border-radius: 12px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-        transition: all 0.3s ease;
-        border-top: 4px solid var(--primary);
-        animation: fadeIn 0.5s ease-out;
-    }
-
-    .stat-card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
-    }
-
-    .stat-card.blue { border-top-color: #667eea; }
-    .stat-card.purple { border-top-color: #764ba2; }
-    .stat-card.pink { border-top-color: #ec4899; }
-    .stat-card.green { border-top-color: #10b981; }
-
-    .stat-icon {
-        font-size: 2rem;
-        margin-bottom: 0.5rem;
-    }
-
-    .stat-value {
-        font-size: 2.5rem;
-        font-weight: 700;
-        color: var(--dark);
-        line-height: 1;
-        margin: 0.5rem 0;
-    }
-
-    .stat-label {
-        color: var(--text-secondary);
-        font-size: 0.9rem;
-        font-weight: 500;
-    }
-
-    /* Quick Actions */
-    .quick-actions {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas:
+            "head"
+            "next"
+            "stats"
+            "side"
+            "events";
         gap: 1rem;
-        margin-bottom: 2rem;
+        max-width: 1100px;
+        margin: 0 auto;
+        padding-bottom: env(safe-area-inset-bottom, 0px);
     }
+    .dash a { -webkit-tap-highlight-color: transparent; }
 
-    .quick-action-btn {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 1.5rem 1rem;
-        background: var(--bg-card);
-        border: 2px solid var(--border);
-        border-radius: 12px;
-        cursor: pointer;
-        text-decoration: none;
-        color: var(--dark);
-        transition: all 0.3s ease;
-        font-size: 0.9rem;
-        font-weight: 500;
-    }
-
-    .quick-action-btn:hover {
-        border-color: var(--primary);
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
-        color: var(--primary);
-        transform: translateY(-2px);
-    }
-
-    .quick-action-icon {
-        font-size: 1.8rem;
-        margin-bottom: 0.5rem;
-    }
-
-    /* Events Section */
-    .section-title {
-        font-size: 1.5rem;
-        font-weight: 700;
-        color: var(--dark);
-        margin-bottom: 1.5rem;
+    /* ---------- Greeting ---------- */
+    .dash-head {
+        grid-area: head;
         display: flex;
         align-items: center;
-        gap: 0.75rem;
+        gap: 0.875rem;
+        padding: 1rem;
+        border-radius: 16px;
+        color: #fff;
+        background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+        box-shadow: var(--shadow-md);
     }
-
-    .section-title-icon {
-        font-size: 1.5rem;
-    }
-
-    .events-container {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-        gap: 1.5rem;
-    }
-
-    .event-card {
-        background: var(--bg-card);
-        border-radius: 12px;
-        overflow: hidden;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-        transition: all 0.3s ease;
-        display: flex;
-        flex-direction: column;
-        animation: fadeIn 0.5s ease-out;
-    }
-
-    .event-card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
-    }
-
-    .event-card-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 1.5rem;
-        position: relative;
+    .dash-avatar {
+        width: 52px; height: 52px;
+        flex: 0 0 52px;
+        border-radius: 14px;
+        border: 2px solid rgba(255,255,255,0.35);
+        background: rgba(255,255,255,0.15);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.4rem; font-weight: 700;
         overflow: hidden;
     }
-
-    .event-card-header::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        right: 0;
-        width: 100px;
-        height: 100px;
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 50%;
-        transform: translate(30%, -30%);
-    }
-
-    .event-card-title {
-        font-size: 1.3rem;
-        font-weight: 700;
+    .dash-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .dash-head-text { min-width: 0; }
+    .dash-head h1 {
         margin: 0;
-        position: relative;
-        z-index: 1;
+        font-size: 1.25rem;
+        font-weight: 700;
+        line-height: 1.25;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
+    .dash-date { margin: 0.15rem 0 0; font-size: 0.85rem; opacity: 0.9; }
 
-    .event-card-date-badge {
-        display: inline-block;
-        background: rgba(255, 255, 255, 0.2);
-        padding: 0.25rem 0.75rem;
-        border-radius: 20px;
-        font-size: 0.8rem;
-        margin-top: 0.5rem;
-        position: relative;
-        z-index: 1;
-    }
-
-    .event-card-body {
-        padding: 1.5rem;
-        flex: 1;
-    }
-
-    .event-detail {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        margin-bottom: 1rem;
-        color: #6b7280;
-        font-size: 0.9rem;
-    }
-
-    .event-detail-icon {
-        color: var(--primary);
-        width: 20px;
-        text-align: center;
-    }
-
-    .event-card-footer {
-        padding: 0 1.5rem 1.5rem 1.5rem;
-        display: flex;
-        gap: 0.75rem;
-    }
-
-    .event-card-btn {
-        flex: 1;
-        padding: 0.75rem;
-        border: none;
-        border-radius: 8px;
-        font-size: 0.9rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        text-decoration: none;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0.5rem;
-    }
-
-    .event-card-btn-primary {
-        background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-        color: white;
-    }
-
-    .event-card-btn-primary:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-    }
-
-    .event-card-btn-secondary {
-        background: #f3f4f6;
-        color: var(--primary);
-        border: 1px solid #e5e7eb;
-    }
-
-    .event-card-btn-secondary:hover {
-        background: #e5e7eb;
-    }
-
-    /* Empty State */
-    .empty-state {
-        text-align: center;
-        padding: 3rem 2rem;
+    /* ---------- Next shift ---------- */
+    .dash-next {
+        grid-area: next;
         background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-left: 4px solid var(--primary);
+        border-radius: 16px;
+        padding: 1rem;
+        box-shadow: var(--shadow-sm);
+    }
+    .dash-eyebrow {
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+    }
+    .dash-next-row {
+        display: flex; align-items: baseline; justify-content: space-between;
+        gap: 0.75rem; margin-top: 0.25rem;
+    }
+    .dash-next-title {
+        margin: 0;
+        font-size: 1.15rem; font-weight: 700;
+        color: var(--text-primary);
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+    .dash-countdown {
+        flex: 0 0 auto;
+        font-size: 0.8rem; font-weight: 700;
+        padding: 0.25rem 0.65rem;
+        border-radius: 999px;
+        background: var(--bg-nav-active);
+        color: var(--text-nav-active);
+        white-space: nowrap;
+    }
+    .dash-meta {
+        display: flex; flex-wrap: wrap; gap: 0.35rem 1rem;
+        margin: 0.6rem 0 0; padding: 0; list-style: none;
+        font-size: 0.9rem; color: var(--text-secondary);
+    }
+    .dash-meta li { display: flex; align-items: center; gap: 0.45rem; min-width: 0; }
+    .dash-meta i { color: var(--primary); width: 1rem; text-align: center; }
+
+    .dash-btn {
+        display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+        min-height: 46px;
+        margin-top: 0.9rem;
+        padding: 0 1rem;
         border-radius: 12px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-    }
-
-    .empty-state-icon {
-        font-size: 3rem;
-        margin-bottom: 1rem;
-        opacity: 0.6;
-    }
-
-    .empty-state-text {
-        color: #6b7280;
-        margin-bottom: 1.5rem;
-    }
-
-    .empty-state-btn {
-        display: inline-block;
         background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-        color: white;
-        padding: 0.75rem 1.5rem;
-        border-radius: 8px;
+        color: #fff;
+        font-weight: 600; font-size: 0.95rem;
         text-decoration: none;
-        font-weight: 600;
-        transition: all 0.2s ease;
+    }
+    .dash-btn:active { transform: scale(0.98); }
+
+    /* ---------- Stats ---------- */
+    .dash-stats {
+        grid-area: stats;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.625rem;
+    }
+    .dash-stat {
+        display: flex; flex-direction: column; justify-content: center;
+        min-height: 84px;
+        padding: 0.75rem 0.5rem;
+        text-align: center;
+        text-decoration: none;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        box-shadow: var(--shadow-sm);
+        color: var(--text-primary);
+    }
+    .dash-stat:active { transform: scale(0.97); }
+    .dash-stat-value { font-size: 1.75rem; font-weight: 700; line-height: 1.1; }
+    .dash-stat-value small { font-size: 0.9rem; font-weight: 600; color: var(--text-muted); }
+    .dash-stat-label { margin-top: 0.2rem; font-size: 0.75rem; font-weight: 500; color: var(--text-secondary); }
+
+    /* ---------- Side column (quick actions + tasks) ---------- */
+    .dash-side { grid-area: side; display: grid; gap: 1rem; align-content: start; min-width: 0; }
+
+    .dash-section-title {
+        display: flex; align-items: center; justify-content: space-between;
+        margin: 0 0 0.6rem;
+        font-size: 1.05rem; font-weight: 700;
+        color: var(--text-primary);
+    }
+    .dash-section-title a {
+        font-size: 0.85rem; font-weight: 600;
+        color: var(--primary); text-decoration: none;
+        padding: 0.5rem 0;           /* bigger tap area */
     }
 
-    .empty-state-btn:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    .dash-actions {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.625rem;
     }
-
-    /* Animations */
-    @keyframes slideInDown {
-        from {
-            opacity: 0;
-            transform: translateY(-20px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
+    .dash-action {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 0.4rem;
+        min-height: 78px;
+        padding: 0.6rem 0.25rem;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        color: var(--text-primary);
+        text-decoration: none;
+        font-size: 0.8rem; font-weight: 600;
+        text-align: center;
     }
+    .dash-action i { font-size: 1.25rem; color: var(--primary); }
+    .dash-action:active { transform: scale(0.97); background: var(--bg-nav-hover); }
 
-    @keyframes fadeIn {
-        from {
-            opacity: 0;
-            transform: translateY(10px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
+    /* ---------- Tasks ---------- */
+    .dash-list {
+        margin: 0; padding: 0; list-style: none;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        overflow: hidden;
     }
+    .dash-list > li + li { border-top: 1px solid var(--border); }
 
-    /* Mobile Responsive */
-    @media (max-width: 768px) {
-        .dashboard-header {
-            flex-direction: column;
-            text-align: center;
-            padding: 1.5rem;
-        }
-
-        .dashboard-header h1 {
-            font-size: 1.5rem;
-        }
-
-        .stats-grid {
-            grid-template-columns: repeat(2, 1fr);
-            gap: 1rem;
-        }
-
-        .quick-actions {
-            grid-template-columns: repeat(2, 1fr);
-        }
-
-        .events-container {
-            grid-template-columns: 1fr;
-        }
-
-        .event-card-footer {
-            flex-direction: column;
-        }
-
-        .event-card-btn {
-            width: 100%;
-        }
-
-        .stat-card {
-            padding: 1rem;
-            border-top-width: 3px;
-        }
-
-        .stat-value {
-            font-size: 2rem;
-        }
-
-        .stat-label {
-            font-size: 0.85rem;
-        }
-
-        .quick-action-btn {
-            padding: 1rem;
-            font-size: 0.8rem;
-        }
-
-        .quick-action-icon {
-            font-size: 1.5rem;
-        }
-
-        .section-title {
-            font-size: 1.25rem;
-            margin-bottom: 1rem;
-        }
+    .dash-task {
+        display: flex; align-items: center; gap: 0.75rem;
+        min-height: 56px;
+        padding: 0.65rem 0.9rem;
+        text-decoration: none;
+        color: var(--text-primary);
     }
+    .dash-task:active { background: var(--bg-nav-hover); }
+    .dash-dot {
+        flex: 0 0 10px; width: 10px; height: 10px; border-radius: 50%;
+        background: var(--text-muted);
+    }
+    .dash-dot.high   { background: var(--danger); }
+    .dash-dot.medium { background: var(--warning); }
+    .dash-dot.low    { background: var(--success); }
+    .dash-task-main { min-width: 0; flex: 1; }
+    .dash-task-title { font-size: 0.95rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dash-task-due { font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.1rem; }
+    .dash-task-due.overdue { color: var(--danger); font-weight: 600; }
 
-    @media (max-width: 480px) {
-        .dashboard-container {
-            gap: 1.5rem;
-        }
+    /* ---------- Upcoming events ---------- */
+    .dash-events { grid-area: events; min-width: 0; }
+    .dash-events-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.625rem; margin: 0; padding: 0; list-style: none; }
 
-        .dashboard-header {
-            padding: 1rem;
-        }
+    .dash-event {
+        display: flex; align-items: center; gap: 0.85rem;
+        min-height: 72px;
+        padding: 0.75rem;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        box-shadow: var(--shadow-sm);
+        text-decoration: none;
+        color: var(--text-primary);
+    }
+    .dash-event:active { transform: scale(0.985); }
+    .dash-event.mine { border-left: 4px solid var(--primary); }
 
-        .dashboard-header-avatar {
-            width: 80px;
-            height: 80px;
-            font-size: 2rem;
-        }
+    .dash-datebox {
+        flex: 0 0 52px;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        padding: 0.4rem 0;
+        border-radius: 12px;
+        background: var(--bg-nav-active);
+        color: var(--text-nav-active);
+        line-height: 1.05;
+    }
+    .dash-datebox-mon { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+    .dash-datebox-day { font-size: 1.35rem; font-weight: 700; }
 
-        .dashboard-header h1 {
-            font-size: 1.25rem;
-        }
+    .dash-event-main { min-width: 0; flex: 1; }
+    .dash-event-title {
+        font-size: 1rem; font-weight: 700;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .dash-event-sub {
+        margin-top: 0.2rem;
+        font-size: 0.82rem; color: var(--text-secondary);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .dash-event-sub i { color: var(--text-muted); margin-right: 0.2rem; }
+    .dash-chip {
+        display: inline-block;
+        margin-top: 0.35rem;
+        padding: 0.1rem 0.55rem;
+        border-radius: 999px;
+        font-size: 0.7rem; font-weight: 700;
+        background: var(--bg-nav-active); color: var(--text-nav-active);
+    }
+    .dash-chevron { flex: 0 0 auto; color: var(--text-muted); }
 
-        .dashboard-header p {
-            font-size: 0.9rem;
-        }
+    /* ---------- Empty states ---------- */
+    .dash-empty {
+        padding: 1.5rem 1rem;
+        text-align: center;
+        color: var(--text-secondary);
+        background: var(--bg-card);
+        border: 1px dashed var(--border);
+        border-radius: 14px;
+        font-size: 0.9rem;
+    }
+    .dash-empty a { color: var(--primary); font-weight: 600; text-decoration: none; }
 
-        .stats-grid {
-            grid-template-columns: 1fr;
-            gap: 1rem;
+    /* ---------- Larger screens ---------- */
+    @media (min-width: 600px) {
+        .dash { gap: 1.25rem; }
+        .dash-head { padding: 1.25rem 1.5rem; }
+        .dash-avatar { width: 64px; height: 64px; flex-basis: 64px; font-size: 1.7rem; }
+        .dash-head h1 { font-size: 1.5rem; }
+        .dash-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .dash-events-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (min-width: 960px) {
+        .dash {
+            grid-template-columns: minmax(0, 1fr) 340px;
+            grid-template-areas:
+                "head   head"
+                "next   next"
+                "stats  stats"
+                "events side";
+            align-items: start;
         }
-
-        .quick-actions {
-            grid-template-columns: 1fr;
-        }
-
-        .stat-value {
-            font-size: 1.75rem;
-        }
-
-        .event-card-body {
-            padding: 1rem;
-        }
-
-        .event-card-footer {
-            padding: 0 1rem 1rem;
-        }
+        .dash-events-list { grid-template-columns: minmax(0, 1fr); }
+    }
+    /* Hover effects only where a real pointer exists (not on touch) */
+    @media (hover: hover) {
+        .dash-stat, .dash-action, .dash-event { transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease; }
+        .dash-stat:hover, .dash-action:hover, .dash-event:hover { border-color: var(--primary); box-shadow: var(--shadow-md); }
+        .dash-btn:hover { filter: brightness(1.08); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .dash * { transition: none !important; animation: none !important; }
     }
 </style>
 
-<div class="dashboard-container">
-    <!-- Welcome Header -->
-    <div class="dashboard-header">
-        <div class="dashboard-header-avatar">
+<div class="dash">
+
+    <!-- Greeting -->
+    <header class="dash-head">
+        <div class="dash-avatar" id="dashAvatar">
             {% if current_user.profile_picture %}
-            <img src="/profile/picture/{{ current_user.username }}" alt="{{ current_user.username }}" onerror="this.style.display='none'; this.parentElement.innerHTML='{{ current_user.username[0].upper() }}'">
+            <img src="/profile/picture/{{ current_user.username }}" alt=""
+                 onerror="this.remove(); document.getElementById('dashAvatar').textContent = '{{ current_user.username[0].upper() }}';">
             {% else %}
             {{ current_user.username[0].upper() }}
             {% endif %}
         </div>
-        <div class="dashboard-header-content">
-            <h1>Welcome back, {{ current_user.username }}! 👋</h1>
-            <p>You're all set and ready to manage your crew operations.</p>
-            <div class="dashboard-header-time">
-                <i class="far fa-calendar"></i> <span id="currentDate"></span>
-            </div>
+        <div class="dash-head-text">
+            <h1>Hi, {{ current_user.username }} 👋</h1>
+            <p class="dash-date" id="currentDate">{{ now.strftime('%A, %d %B %Y') }}</p>
         </div>
-    </div>
+    </header>
 
-    <!-- Stats Cards -->
-    <div class="stats-grid">
-        <div class="stat-card blue">
-            <div class="stat-icon">�</div>
-            {% if next_event %}
-            <div class="stat-value">
-                {% set days_until = (next_event.event_date.date() - now.date()).days %}
-                {% if days_until == 0 %}
-                    Today
-                {% elif days_until == 1 %}
-                    Tomorrow
-                {% else %}
-                    {{ days_until }}d
-                {% endif %}
-            </div>
-            <div class="stat-label">Next Shift</div>
-            <div style="font-size: 0.8rem; color: #6b7280; margin-top: 0.5rem;">{{ next_event.event_date.strftime('%I:%M %p') }}</div>
-            {% else %}
-            <div class="stat-value">—</div>
-            <div class="stat-label">No Upcoming Shifts</div>
+    <!-- Your next shift -->
+    <section class="dash-next" aria-label="Your next shift">
+        {% if next_event %}
+        {% set days_until = (next_event.event_date.date() - now.date()).days %}
+        <div class="dash-eyebrow">Your next shift</div>
+        <div class="dash-next-row">
+            <h2 class="dash-next-title">{{ next_event.title }}</h2>
+            <span class="dash-countdown">
+                {% if days_until <= 0 %}Today{% elif days_until == 1 %}Tomorrow{% else %}In {{ days_until }} days{% endif %}
+            </span>
+        </div>
+        <ul class="dash-meta">
+            <li><i class="far fa-clock"></i>
+                {{ next_event.event_date.strftime('%a %d %b') }}{% if not next_event.all_day %}, {{ next_event.event_date.strftime('%I:%M %p').lstrip('0') }}{% else %} · All day{% endif %}
+            </li>
+            {% if next_event.location %}
+            <li><i class="fas fa-map-marker-alt"></i> {{ next_event.location }}</li>
             {% endif %}
-        </div>
-        <div class="stat-card purple">
-            <div class="stat-icon">✓</div>
-            <div class="stat-value">{{ pending_tasks_count }}</div>
-            <div class="stat-label">Pending Tasks</div>
-            {% if pending_tasks_count > 0 %}
-            <div style="font-size: 0.8rem; color: #6b7280; margin-top: 0.5rem;">
-                {% set next_task = pending_tasks[0] if pending_tasks else none %}
-                {% if next_task and next_task.due_date %}
-                    Due {{ next_task.due_date.strftime('%b %d') }}
-                {% endif %}
-            </div>
-            {% endif %}
-        </div>
-        <div class="stat-card pink">
-            <div class="stat-icon">📅</div>
-            <div class="stat-value">{{ my_events_this_week }}</div>
-            <div class="stat-label">This Week</div>
-            <div style="font-size: 0.8rem; color: #6b7280; margin-top: 0.5rem;">of {{ events_this_week }} total</div>
-        </div>
-        <div class="stat-card green">
-            <div class="stat-icon">✅</div>
-            <div class="stat-value">{{ my_events_this_week }}</div>
-            <div class="stat-label">Events Attended</div>
-            <div style="font-size: 0.8rem; color: #6b7280; margin-top: 0.5rem;">this week</div>
-        </div>
-    </div>
-
-    <!-- Quick Actions -->
-    <div style="margin-bottom: 2rem;">
-        <h3 class="section-title">
-            <span class="section-title-icon">⚡</span> Quick Actions
-        </h3>
-        <div class="quick-actions">
-            <a href="{{ url_for('events.event_detail', id=upcoming_events[0].id) if upcoming_events else 'javascript:void(0)' }}" class="quick-action-btn" {% if not upcoming_events %}style="opacity: 0.5; cursor: not-allowed; pointer-events: none;"{% endif %}>
-                <div class="quick-action-icon">📌</div>
-                <div>Next Event</div>
-            </a>
-            <a href="{{ url_for('calendar.calendar') }}" class="quick-action-btn">
-                <div class="quick-action-icon">📅</div>
-                <div>Calendar</div>
-            </a>
-            <a href="{{ url_for('equipment.equipment_list') }}" class="quick-action-btn">
-                <div class="quick-action-icon">📦</div>
-                <div>Equipment</div>
-            </a>
-            <a href="{{ url_for('picklist.picklist') }}" class="quick-action-btn">
-                <div class="quick-action-icon">📋</div>
-                <div>Pick Lists</div>
-            </a>
-            <a href="{{ url_for('stage_designer.stageplans') }}" class="quick-action-btn">
-                <div class="quick-action-icon">🎨</div>
-                <div>Stage Plans</div>
-            </a>
-        </div>
-    </div>
-
-    <!-- Upcoming Events Section -->
-    <div>
-        <h3 class="section-title">
-            <span class="section-title-icon">🚀</span> Upcoming Events
-        </h3>
-        
-        {% if upcoming_events %}
-        <div class="events-container">
-            {% for event in upcoming_events %}
-            <div class="event-card">
-                <div class="event-card-header">
-                    <h4 class="event-card-title">{{ event.title }}</h4>
-                    <div class="event-card-date-badge">
-                        <i class="far fa-calendar"></i> {{ event.event_date.strftime('%b %d') }}
-                    </div>
-                </div>
-                <div class="event-card-body">
-                    <div class="event-detail">
-                        <div class="event-detail-icon">
-                            <i class="far fa-calendar"></i>
-                        </div>
-                        <div>{{ event.event_date.strftime('%A, %B %d, %Y at %I:%M %p') }}</div>
-                    </div>
-                    {% if event.location %}
-                    <div class="event-detail">
-                        <div class="event-detail-icon">
-                            <i class="fas fa-map-marker-alt"></i>
-                        </div>
-                        <div>{{ event.location }}</div>
-                    </div>
-                    {% endif %}
-                    <div class="event-detail">
-                        <div class="event-detail-icon">
-                            <i class="fas fa-users"></i>
-                        </div>
-                        <div>{{ event.crew_assignments|length }} crew members assigned</div>
-                    </div>
-                    {% if event.description %}
-                    <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 0.9rem; line-height: 1.5;">
-                        {{ event.description[:100] }}{% if event.description|length > 100 %}...{% endif %}
-                    </div>
-                    {% endif %}
-                </div>
-                <div class="event-card-footer">
-                    <a href="{{ url_for('events.event_detail', id=event.id) }}" class="event-card-btn event-card-btn-primary">
-                        <i class="fas fa-arrow-right"></i> View Details
-                    </a>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
+        </ul>
+        <a class="dash-btn" href="{{ url_for('events.event_detail', id=next_event.id) }}">
+            View details <i class="fas fa-arrow-right"></i>
+        </a>
         {% else %}
-        <div class="empty-state">
-            <div class="empty-state-icon">📭</div>
-            <p class="empty-state-text">No upcoming events scheduled yet.</p>
-            <a href="{{ url_for('calendar.calendar') }}" class="empty-state-btn">
-                <i class="fas fa-plus"></i> Create an Event
-            </a>
+        <div class="dash-eyebrow">Your next shift</div>
+        <p class="dash-next-title" style="margin-top:.35rem;">Nothing scheduled for you</p>
+        <p class="dash-meta" style="margin-top:.4rem;">You're not assigned to any upcoming events.</p>
+        <a class="dash-btn" href="{{ url_for('calendar.calendar') }}">
+            <i class="far fa-calendar"></i> Open calendar
+        </a>
+        {% endif %}
+    </section>
+
+    <!-- Stats -->
+    <section class="dash-stats" aria-label="Summary">
+        <a class="dash-stat" href="{{ url_for('todos.todos') }}">
+            <div class="dash-stat-value">{{ pending_tasks_count }}</div>
+            <div class="dash-stat-label">Open tasks</div>
+        </a>
+        <a class="dash-stat" href="{{ url_for('crew.my_schedule') }}">
+            <div class="dash-stat-value">{{ my_events_this_week }}</div>
+            <div class="dash-stat-label">My shifts · 7d</div>
+        </a>
+        <a class="dash-stat" href="{{ url_for('calendar.calendar') }}">
+            <div class="dash-stat-value">{{ events_this_week }}</div>
+            <div class="dash-stat-label">All events · 7d</div>
+        </a>
+    </section>
+
+    <!-- Quick actions + tasks -->
+    <div class="dash-side">
+        <section>
+            <h3 class="dash-section-title">Quick actions</h3>
+            <div class="dash-actions">
+                <a class="dash-action" href="{{ url_for('calendar.calendar') }}"><i class="far fa-calendar-alt"></i>Calendar</a>
+                <a class="dash-action" href="{{ url_for('crew.my_schedule') }}"><i class="far fa-clock"></i>My Schedule</a>
+                <a class="dash-action" href="{{ url_for('todos.todos') }}"><i class="fas fa-check-circle"></i>Tasks</a>
+                <a class="dash-action" href="{{ url_for('equipment.equipment_list') }}"><i class="fas fa-box"></i>Equipment</a>
+                <a class="dash-action" href="{{ url_for('picklist.picklist') }}"><i class="fas fa-clipboard-list"></i>Pick Lists</a>
+                <a class="dash-action" href="{{ url_for('stage_designer.stageplans') }}"><i class="fas fa-drafting-compass"></i>Stage Plans</a>
+            </div>
+        </section>
+
+        <section>
+            <h3 class="dash-section-title">
+                <span>Tasks</span>
+                {% if pending_tasks_count > 3 %}<a href="{{ url_for('todos.todos') }}">View all ({{ pending_tasks_count }})</a>{% endif %}
+            </h3>
+            {% if pending_tasks %}
+            <ul class="dash-list">
+                {% for task in pending_tasks[:3] %}
+                <li>
+                    <a class="dash-task" href="{{ url_for('todos.todos') }}">
+                        <span class="dash-dot {{ task.priority or '' }}"></span>
+                        <span class="dash-task-main">
+                            <div class="dash-task-title">{{ task.title }}</div>
+                            {% if task.due_date %}
+                            <div class="dash-task-due {% if task.due_date < now %}overdue{% endif %}">
+                                {% if task.due_date < now %}Overdue · {% else %}Due {% endif %}{{ task.due_date.strftime('%a %d %b') }}
+                            </div>
+                            {% endif %}
+                        </span>
+                        <i class="fas fa-chevron-right dash-chevron"></i>
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <div class="dash-empty">All caught up — no open tasks 🎉</div>
+            {% endif %}
+        </section>
+    </div>
+
+    <!-- Upcoming events -->
+    <section class="dash-events">
+        <h3 class="dash-section-title">
+            <span>Upcoming events</span>
+            <a href="{{ url_for('calendar.calendar') }}">Calendar</a>
+        </h3>
+        {% if upcoming_events %}
+        <ul class="dash-events-list">
+            {% for event in upcoming_events %}
+            {% set is_mine = event in my_upcoming_events %}
+            <li>
+                <a class="dash-event {% if is_mine %}mine{% endif %}" href="{{ url_for('events.event_detail', id=event.id) }}">
+                    <div class="dash-datebox">
+                        <span class="dash-datebox-mon">{{ event.event_date.strftime('%b') }}</span>
+                        <span class="dash-datebox-day">{{ event.event_date.strftime('%d').lstrip('0') }}</span>
+                    </div>
+                    <div class="dash-event-main">
+                        <div class="dash-event-title">{{ event.title }}</div>
+                        <div class="dash-event-sub">
+                            <i class="far fa-clock"></i>{% if event.all_day %}All day{% else %}{{ event.event_date.strftime('%a, %I:%M %p').replace(' 0', ' ') }}{% endif %}
+                            {% if event.location %} · <i class="fas fa-map-marker-alt"></i>{{ event.location }}{% endif %}
+                        </div>
+                        {% if is_mine %}<span class="dash-chip">You're on this</span>{% endif %}
+                    </div>
+                    <i class="fas fa-chevron-right dash-chevron"></i>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="dash-empty">
+            No upcoming events yet. <a href="{{ url_for('calendar.calendar') }}">Create one</a>
         </div>
         {% endif %}
-    </div>
+    </section>
 </div>
 
 <script>
-    // Update current date
-    function updateDate() {
-        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-        const today = new Date().toLocaleDateString('en-US', options);
-        document.getElementById('currentDate').textContent = today;
-    }
-    
-    document.addEventListener('DOMContentLoaded', updateDate);
+    // Show the date in the viewer's own locale/timezone (server text is the fallback)
+    (function () {
+        var el = document.getElementById('currentDate');
+        if (!el) return;
+        el.textContent = new Date().toLocaleDateString(undefined,
+            { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    })();
 </script>
-
 {% endblock %}
