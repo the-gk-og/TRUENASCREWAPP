@@ -1,0 +1,16 @@
+# Do not copy secrets or local/runtime data into the image.
+.env
+.env.*
+!.env.example
+.git
+.github
+__pycache__/
+*.py[cod]
+*.sqlite
+*.sqlite3
+*.db
+instance/
+uploads/
+backups/
+.venv/
+venv/
