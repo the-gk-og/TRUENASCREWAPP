@@ -3,233 +3,594 @@
 {% block title %}My To-Do List - ShowWise{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1 class="page-title"><i class="fas fa-tasks"></i> My To-Do List</h1>
-    <p class="page-subtitle">Stay organized and track your production tasks</p>
-</div>
+<style>
+    /* ============================================================
+       TO-DO LIST — mobile-first. Uses base.html theme variables so
+       dark mode and colour-vision modes work automatically.
+       ============================================================ */
+    .td { max-width: 760px; margin: 0 auto; padding-bottom: 6rem; }
+    .td * { box-sizing: border-box; }
+    .td button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
 
-<div style="display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap;">
-    <button onclick="showModal('addTodoModal')" class="btn btn-success">
-        <i class="fas fa-plus"></i> Add Task
-    </button>
-    <button onclick="filterTodos('all')" class="btn btn-primary" id="filterAll" style="opacity: 1;">
-        <i class="fas fa-list"></i> All
-    </button>
-    <button onclick="filterTodos('active')" class="btn btn-primary" id="filterActive" style="opacity: 0.6;">
-        <i class="fas fa-hourglass-half"></i> Active
-    </button>
-    <button onclick="filterTodos('completed')" class="btn btn-primary" id="filterCompleted" style="opacity: 0.6;">
-        <i class="fas fa-check-circle"></i> Completed
-    </button>
-</div>
+    /* ---------- Header + progress ---------- */
+    .td-head h1 { margin: 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: .6rem; }
+    .td-head p  { margin: .25rem 0 0; font-size: .9rem; color: var(--text-secondary); }
 
-<!-- Progress Overview -->
+    .td-progress {
+        margin: 1rem 0;
+        padding: 1rem;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        box-shadow: var(--shadow-sm);
+    }
+    .td-progress-row { display: flex; justify-content: space-between; align-items: baseline; gap: .75rem; }
+    .td-progress-text { font-size: .95rem; font-weight: 600; color: var(--text-primary); }
+    .td-progress-pct  { font-size: 1.1rem; font-weight: 700; color: var(--primary); }
+    .td-bar { height: 8px; margin-top: .65rem; border-radius: 999px; background: var(--bg-nav-hover); overflow: hidden; }
+    .td-bar > span { display: block; height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, var(--primary), var(--success)); transition: width .3s ease; }
+
+    /* ---------- Filter tabs ---------- */
+    .td-tabs {
+        position: sticky; top: var(--topbar-height); z-index: 5;
+        display: grid; grid-template-columns: repeat(3, 1fr); gap: .25rem;
+        margin: 0 0 .9rem; padding: .25rem;
+        background: var(--bg-nav-hover);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+    }
+    .td-tab {
+        min-height: 44px;
+        border: 0; border-radius: 9px;
+        background: transparent;
+        color: var(--text-secondary);
+        font-size: .9rem; font-weight: 600;
+        cursor: pointer;
+    }
+    .td-tab .n { margin-left: .25rem; font-weight: 500; opacity: .8; }
+    .td-tab[aria-selected="true"] { background: var(--bg-card); color: var(--text-primary); box-shadow: var(--shadow-sm); }
+
+    /* ---------- Task rows ---------- */
+    .td-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; }
+    .td-item {
+        display: flex; align-items: flex-start; gap: .35rem;
+        padding: .4rem .4rem .4rem .25rem;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-left: 4px solid var(--success);
+        border-radius: 14px;
+        box-shadow: var(--shadow-sm);
+        transition: opacity .25s ease, transform .25s ease;
+    }
+    .td-item.p-high   { border-left-color: var(--danger); }
+    .td-item.p-medium { border-left-color: var(--warning); }
+    .td-item.p-low    { border-left-color: var(--success); }
+    .td-item.leaving  { opacity: 0; transform: translateX(12px); }
+    .td-item[hidden]  { display: none; }
+
+    .td-check {
+        flex: 0 0 48px; width: 48px; height: 48px;
+        display: flex; align-items: center; justify-content: center;
+        background: none; border: 0; cursor: pointer; padding: 0;
+    }
+    .td-check span {
+        width: 26px; height: 26px; border-radius: 8px;
+        border: 2px solid var(--text-muted);
+        display: flex; align-items: center; justify-content: center;
+        color: transparent; font-size: .8rem;
+        transition: background .15s ease, border-color .15s ease, color .15s ease;
+    }
+    .td-check[aria-checked="true"] span { background: var(--success); border-color: var(--success); color: #fff; }
+
+    .td-body { flex: 1; min-width: 0; padding: .6rem .25rem .6rem 0; cursor: pointer; }
+    .td-title { font-size: 1rem; font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
+    .td-desc  { margin-top: .2rem; font-size: .88rem; color: var(--text-secondary); overflow-wrap: anywhere; white-space: pre-line;
+                display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .td-meta  { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .5rem; }
+    .td-chip {
+        display: inline-flex; align-items: center; gap: .35rem;
+        max-width: 100%;
+        padding: .15rem .6rem; border-radius: 999px;
+        background: var(--bg-nav-hover);
+        color: var(--text-secondary);
+        font-size: .75rem; font-weight: 600;
+    }
+    .td-chip i { font-size: .7rem; }
+    .td-chip.p-high i   { color: var(--danger); }
+    .td-chip.p-medium i { color: var(--warning); }
+    .td-chip.p-low i    { color: var(--success); }
+    .td-chip.overdue { color: var(--danger); background: transparent; border: 1px solid var(--danger); }
+    .td-chip.event { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .td-edit {
+        flex: 0 0 44px; width: 44px; height: 44px;
+        display: flex; align-items: center; justify-content: center;
+        background: none; border: 0; border-radius: 10px;
+        color: var(--text-muted); cursor: pointer;
+    }
+    .td-edit:active { background: var(--bg-nav-hover); }
+
+    .td-item.done .td-title { text-decoration: line-through; color: var(--text-muted); }
+    .td-item.done { opacity: .75; }
+
+    .td-empty {
+        margin-top: .5rem; padding: 2rem 1rem; text-align: center;
+        color: var(--text-secondary);
+        background: var(--bg-card); border: 1px dashed var(--border); border-radius: 14px;
+    }
+    .td-empty i { font-size: 1.75rem; color: var(--text-muted); margin-bottom: .5rem; display: block; }
+    .td-empty strong { display: block; color: var(--text-primary); margin-bottom: .25rem; }
+
+    /* ---------- Add button (floating) ---------- */
+    .td-fab {
+        position: fixed; z-index: 900;
+        right: 1.1rem; bottom: calc(1.1rem + env(safe-area-inset-bottom, 0px));
+        height: 56px; padding: 0 1.25rem 0 1.1rem;
+        display: flex; align-items: center; gap: .55rem;
+        border: 0; border-radius: 999px; cursor: pointer;
+        background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+        color: #fff; font-size: 1rem; font-weight: 700;
+        box-shadow: var(--shadow-md);
+    }
+    .td-fab:active { transform: scale(.97); }
+
+    /* ---------- Bottom sheet (add / edit) ---------- */
+    .td-scrim {
+        position: fixed; inset: 0; z-index: 2100;
+        display: none; align-items: flex-end; justify-content: center;
+        background: var(--overlay-bg);
+    }
+    .td-scrim.open { display: flex; }
+    .td-sheet {
+        width: 100%; max-width: 560px;
+        max-height: 92vh; max-height: 92dvh;
+        display: flex; flex-direction: column;
+        background: var(--bg-modal);
+        border: 1px solid var(--border);
+        border-radius: 20px 20px 0 0;
+        box-shadow: var(--shadow-lg);
+        animation: tdUp .22s ease-out;
+    }
+    @keyframes tdUp { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+    .td-sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1rem .5rem 1.25rem; }
+    .td-sheet-head h2 { margin: 0; font-size: 1.15rem; font-weight: 700; color: var(--text-primary); }
+    .td-x { width: 44px; height: 44px; border: 0; background: none; border-radius: 10px; font-size: 1.1rem; color: var(--text-secondary); cursor: pointer; }
+    .td-form { overflow-y: auto; padding: .25rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom, 0px)); -webkit-overflow-scrolling: touch; }
+
+    .td-field { margin-bottom: 1rem; }
+    .td-field > label, .td-field > .lbl { display: block; margin-bottom: .35rem; font-size: .82rem; font-weight: 600; color: var(--text-secondary); }
+    .td-input {
+        width: 100%; min-height: 48px; padding: .65rem .8rem;
+        font-size: 16px;                    /* stops iOS zooming on focus */
+        font-family: inherit;
+        color: var(--text-primary);
+        background: var(--bg-input);
+        border: 1px solid var(--border-input);
+        border-radius: 12px;
+    }
+    textarea.td-input { min-height: 84px; resize: vertical; }
+    .td-input:focus { outline: none; border-color: var(--border-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--border-focus) 25%, transparent); }
+
+    .td-seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; }
+    .td-seg input { position: absolute; opacity: 0; pointer-events: none; }
+    .td-seg label {
+        display: flex; align-items: center; justify-content: center; gap: .4rem;
+        min-height: 48px; border-radius: 12px; cursor: pointer;
+        background: var(--bg-input); border: 1px solid var(--border-input);
+        color: var(--text-secondary); font-size: .9rem; font-weight: 600;
+    }
+    .td-seg label i { font-size: .75rem; }
+    .td-seg .p-high i { color: var(--danger); } .td-seg .p-medium i { color: var(--warning); } .td-seg .p-low i { color: var(--success); }
+    .td-seg input:checked + label { border-color: var(--primary); background: var(--bg-nav-active); color: var(--text-nav-active); }
+    .td-seg input:focus-visible + label { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+
+    .td-error { margin: 0 0 .75rem; padding: .6rem .8rem; border-radius: 10px; font-size: .88rem; color: var(--danger); border: 1px solid var(--danger); }
+    .td-error[hidden] { display: none; }
+
+    .td-actions { display: grid; gap: .6rem; margin-top: .25rem; }
+    .td-save, .td-del {
+        min-height: 50px; border-radius: 12px; font-size: 1rem; font-weight: 700; cursor: pointer; border: 0;
+    }
+    .td-save { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #fff; }
+    .td-save:disabled { opacity: .6; cursor: default; }
+    .td-del { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+    .td-del.armed { background: var(--danger); color: #fff; }
+    .td-del[hidden] { display: none; }
+
+    /* ---------- Toast ---------- */
+    .td-toast {
+        position: fixed; z-index: 2200; left: 50%;
+        bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+        transform: translateX(-50%);
+        display: none; align-items: center; gap: .9rem;
+        max-width: calc(100vw - 2rem);
+        padding: .7rem 1rem; border-radius: 12px;
+        background: var(--text-primary); color: var(--bg-card);
+        font-size: .9rem; box-shadow: var(--shadow-lg);
+    }
+    .td-toast.show { display: flex; }
+    .td-toast button { background: none; border: 0; color: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; padding: .4rem; min-height: 40px; }
+
+    /* ---------- Larger screens ---------- */
+    @media (min-width: 640px) {
+        .td-scrim { align-items: center; }
+        .td-sheet { border-radius: 20px; }
+        .td-head h1 { font-size: 1.75rem; }
+    }
+    @media (hover: hover) {
+        .td-item:hover { border-color: var(--primary); }
+        .td-tab:hover { color: var(--text-primary); }
+        .td-edit:hover { background: var(--bg-nav-hover); color: var(--text-primary); }
+        .td-fab:hover { filter: brightness(1.08); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .td *, .td-scrim * { transition: none !important; animation: none !important; }
+    }
+</style>
+
+{% set total_count     = todos|length %}
 {% set completed_count = todos|selectattr('is_completed')|list|length %}
-{% set total_count = todos|length %}
-<div class="card" style="background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-left: 4px solid var(--primary);">
-    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-        <div>
-            <h3 style="margin: 0; color: var(--primary);">Progress</h3>
-            <p style="margin: 0.5rem 0 0 0; color: #1e40af; font-size: 1.1rem;">
-                {{ completed_count }} of {{ total_count }} tasks completed
-            </p>
-        </div>
-        <div style="width: 100px; height: 100px; border-radius: 50%; background: var(--bg-card); display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 700; color: var(--primary); box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-            {% if total_count > 0 %}
-            {{ ((completed_count / total_count) * 100)|int }}%
-            {% else %}
-            0%
-            {% endif %}
-        </div>
-    </div>
-</div>
+{% set active_count    = total_count - completed_count %}
 
-<!-- To-Do Items -->
-<div id="todoList">
-    {% if todos %}
-    <div style="display: flex; flex-direction: column; gap: 1rem;">
+<div class="td">
+    <header class="td-head">
+        <h1><i class="fas fa-tasks" style="color: var(--primary);"></i> My To-Do List</h1>
+        <p>Your personal production tasks</p>
+    </header>
+
+    <!-- Progress -->
+    <section class="td-progress" aria-label="Progress">
+        <div class="td-progress-row">
+            <span class="td-progress-text"><span id="tdDone">{{ completed_count }}</span> of <span id="tdTotal">{{ total_count }}</span> done</span>
+            <span class="td-progress-pct" id="tdPct">0%</span>
+        </div>
+        <div class="td-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="tdBarWrap"><span id="tdBar"></span></div>
+    </section>
+
+    <!-- Filters -->
+    <div class="td-tabs" role="tablist" aria-label="Filter tasks">
+        <button class="td-tab" role="tab" data-filter="active"    aria-selected="true">To do<span class="n" id="cntActive">{{ active_count }}</span></button>
+        <button class="td-tab" role="tab" data-filter="completed" aria-selected="false">Done<span class="n" id="cntDone">{{ completed_count }}</span></button>
+        <button class="td-tab" role="tab" data-filter="all"       aria-selected="false">All<span class="n" id="cntAll">{{ total_count }}</span></button>
+    </div>
+
+    <!-- Items -->
+    <ul class="td-list" id="tdList">
         {% for todo in todos %}
-        <div class="todo-item" data-status="{{ 'completed' if todo.is_completed else 'active' }}" 
-             style="background: {% if todo.is_completed %}#f3f4f6{% else %}white{% endif %}; 
-                    border: 2px solid {% if todo.is_completed %}#d1d5db{% else %}var(--border){% endif %}; 
-                    border-left: 4px solid {% if todo.priority == 'high' %}var(--danger){% elif todo.priority == 'medium' %}var(--warning){% else %}var(--success){% endif %}; 
-                    padding: 1.25rem; 
-                    border-radius: 8px; 
-                    transition: all 0.2s ease;">
-            <div style="display: flex; align-items: start; gap: 1rem;">
-                <input type="checkbox" 
-                       {% if todo.is_completed %}checked{% endif %} 
-                       onchange="toggleTodo({{ todo.id }})"
-                       style="width: 24px; height: 24px; cursor: pointer; flex-shrink: 0; margin-top: 0.25rem;">
-                
-                <div style="flex: 1; min-width: 0;">
-                    <h4 style="{% if todo.is_completed %}text-decoration: line-through; color: #9ca3af;{% else %}color: var(--dark);{% endif %} margin: 0 0 0.5rem 0; font-size: 1.1rem; word-break: break-word;">
-                        {{ todo.title }}
-                    </h4>
-                    
-                    {% if todo.description %}
-                    <p style="color: #6b7280; margin: 0.5rem 0; font-size: 0.9rem; word-break: break-word;">{{ todo.description }}</p>
+        {% set pr = todo.priority if todo.priority in ['low', 'medium', 'high'] else 'medium' %}
+        <li class="td-item p-{{ pr }}{% if todo.is_completed %} done{% endif %}"
+            data-id="{{ todo.id }}"
+            data-status="{{ 'completed' if todo.is_completed else 'active' }}"
+            data-title="{{ todo.title }}"
+            data-desc="{{ todo.description or '' }}"
+            data-priority="{{ pr }}"
+            data-due="{{ todo.due_date.strftime('%Y-%m-%d') if todo.due_date else '' }}"
+            data-event="{{ todo.event_id or '' }}">
+            <button type="button" class="td-check" role="checkbox"
+                    aria-checked="{{ 'true' if todo.is_completed else 'false' }}"
+                    aria-label="Mark “{{ todo.title }}” as done">
+                <span><i class="fas fa-check"></i></span>
+            </button>
+
+            <div class="td-body" data-edit>
+                <div class="td-title">{{ todo.title }}</div>
+                {% if todo.description %}<div class="td-desc">{{ todo.description }}</div>{% endif %}
+                <div class="td-meta">
+                    <span class="td-chip p-{{ pr }}"><i class="fas fa-flag"></i>{{ pr|capitalize }}</span>
+                    {% if todo.due_date %}
+                    <span class="td-chip due"><i class="far fa-calendar"></i><span class="due-text">Due {{ todo.due_date.strftime('%a %d %b') }}</span></span>
                     {% endif %}
-                    
-                    <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.75rem; font-size: 0.85rem;">
-                        <span style="background: {% if todo.priority == 'high' %}#fee2e2{% elif todo.priority == 'medium' %}#fef3c7{% else %}#dcfce7{% endif %}; 
-                                     color: {% if todo.priority == 'high' %}#991b1b{% elif todo.priority == 'medium' %}#78350f{% else %}#065f46{% endif %}; 
-                                     padding: 0.25rem 0.75rem; border-radius: 20px; font-weight: 600;">
-                            <i class="fas fa-flag"></i> {{ todo.priority|upper }}
-                        </span>
-                        
-                        {% if todo.due_date %}
-                        <span style="background: #eff6ff; color: #1e40af; padding: 0.25rem 0.75rem; border-radius: 20px;">
-                            <i class="fas fa-calendar"></i> Due: {{ todo.due_date.strftime('%b %d, %Y') }}
-                        </span>
-                        {% endif %}
-                        
-                        {% if todo.event %}
-                        <span style="background: #fce7f3; color: #9f1239; padding: 0.25rem 0.75rem; border-radius: 20px;">
-                            <i class="fas fa-theater-masks"></i> {{ todo.event.title }}
-                        </span>
-                        {% endif %}
-                    </div>
+                    {% if todo.event %}
+                    <span class="td-chip event"><i class="fas fa-theater-masks"></i>{{ todo.event.title }}</span>
+                    {% endif %}
                 </div>
-                
-                <button onclick="deleteTodo({{ todo.id }})" class="btn btn-danger" style="padding: 0.5rem; font-size: 0.85rem; flex-shrink: 0;">
-                    <i class="fas fa-trash"></i>
-                </button>
             </div>
-        </div>
+
+            <button type="button" class="td-edit" data-edit aria-label="Edit “{{ todo.title }}”"><i class="fas fa-pen"></i></button>
+        </li>
         {% endfor %}
+    </ul>
+
+    <div class="td-empty" id="tdEmpty" hidden>
+        <i class="far fa-check-circle"></i>
+        <strong id="tdEmptyTitle">Nothing here</strong>
+        <span id="tdEmptyText"></span>
     </div>
-    {% else %}
-    <div class="card" style="text-align: center; padding: 3rem;">
-        <p style="font-size: 3rem; margin-bottom: 1rem;">📝</p>
-        <h3 style="color: var(--dark); margin-bottom: 0.5rem;">No tasks yet!</h3>
-        <p style="color: #6b7280; margin-bottom: 1.5rem;">Add your first task to get started</p>
-        <button onclick="showModal('addTodoModal')" class="btn btn-success">
-            <i class="fas fa-plus"></i> Add First Task
-        </button>
-    </div>
-    {% endif %}
 </div>
 
-<!-- Add To-Do Modal -->
-<div id="addTodoModal" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="hideModal('addTodoModal')">&times;</span>
-        <h2><i class="fas fa-plus"></i> Add New Task</h2>
-        <form id="addTodoForm">
-            <div class="form-group">
-                <label>Task Title *</label>
-                <input type="text" id="todoTitle" required placeholder="What needs to be done?">
+<!-- Add button -->
+<button type="button" class="td-fab" id="tdAdd" aria-label="Add task"><i class="fas fa-plus"></i> Add task</button>
+
+<!-- Add / edit sheet -->
+<div class="td-scrim" id="tdScrim" aria-hidden="true">
+    <div class="td-sheet" role="dialog" aria-modal="true" aria-labelledby="tdSheetTitle">
+        <div class="td-sheet-head">
+            <h2 id="tdSheetTitle">New task</h2>
+            <button type="button" class="td-x" id="tdClose" aria-label="Close"><i class="fas fa-times"></i></button>
+        </div>
+        <form class="td-form" id="tdForm" autocomplete="off" novalidate>
+            <div class="td-field">
+                <label for="tdTitle">Task</label>
+                <input class="td-input" id="tdTitle" type="text" maxlength="200" placeholder="What needs doing?" enterkeyhint="done">
             </div>
-            
-            <div class="form-group">
-                <label>Description</label>
-                <textarea id="todoDescription" rows="3" placeholder="Add details about this task..."></textarea>
+            <div class="td-field">
+                <label for="tdDesc">Notes (optional)</label>
+                <textarea class="td-input" id="tdDesc" rows="3" placeholder="Add details…"></textarea>
             </div>
-            
-            <div class="form-group">
-                <label>Priority *</label>
-                <select id="todoPriority" required>
-                    <option value="low">Low - Can wait</option>
-                    <option value="medium" selected>Medium - Important</option>
-                    <option value="high">High - Urgent</option>
-                </select>
+            <div class="td-field">
+                <span class="lbl" id="tdPrioLbl">Priority</span>
+                <div class="td-seg" role="radiogroup" aria-labelledby="tdPrioLbl">
+                    <input type="radio" name="prio" id="prioLow"  value="low">
+                    <label for="prioLow"  class="p-low"><i class="fas fa-flag"></i>Low</label>
+                    <input type="radio" name="prio" id="prioMed"  value="medium" checked>
+                    <label for="prioMed"  class="p-medium"><i class="fas fa-flag"></i>Medium</label>
+                    <input type="radio" name="prio" id="prioHigh" value="high">
+                    <label for="prioHigh" class="p-high"><i class="fas fa-flag"></i>High</label>
+                </div>
             </div>
-            
-            <div class="form-group">
-                <label>Due Date (Optional)</label>
-                <input type="date" id="todoDueDate">
+            <div class="td-field">
+                <label for="tdDue">Due date (optional)</label>
+                <input class="td-input" id="tdDue" type="date">
             </div>
-            
-            <div class="form-group">
-                <label>Link to Event (Optional)</label>
-                <select id="todoEventId">
+            <div class="td-field">
+                <label for="tdEvent">Link to event (optional)</label>
+                <select class="td-input" id="tdEvent">
                     <option value="">No event</option>
                     {% for event in events %}
-                    <option value="{{ event.id }}">{{ event.title }} - {{ event.event_date.strftime('%b %d, %Y') }}</option>
+                    <option value="{{ event.id }}">{{ event.title }} · {{ event.event_date.strftime('%d %b %Y') }}</option>
                     {% endfor %}
                 </select>
             </div>
-            
-            <button type="submit" class="btn btn-success" style="width: 100%;">
-                <i class="fas fa-check"></i> Add Task
-            </button>
+
+            <p class="td-error" id="tdError" role="alert" hidden></p>
+
+            <div class="td-actions">
+                <button type="submit" class="td-save" id="tdSave">Add task</button>
+                <button type="button" class="td-del" id="tdDelete" hidden>Delete task</button>
+            </div>
         </form>
     </div>
 </div>
 
+<div class="td-toast" id="tdToast" role="status" aria-live="polite"><span id="tdToastMsg"></span><button type="button" id="tdToastUndo" hidden>Undo</button></div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-// Add to-do
-document.getElementById('addTodoForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    const data = {
-        title: document.getElementById('todoTitle').value,
-        description: document.getElementById('todoDescription').value,
-        priority: document.getElementById('todoPriority').value,
-        due_date: document.getElementById('todoDueDate').value || null,
-        event_id: document.getElementById('todoEventId').value || null
-    };
-    
-    fetch('/todos/add', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(r => r.json())
-    .then(result => {
-        if (result.success) {
-            showAlert('Task added!', 'success');
-            setTimeout(() => location.reload(), 500);
+(function () {
+    const $  = (s, r = document) => r.querySelector(s);
+    const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+
+    const list   = $('#tdList');
+    const scrim  = $('#tdScrim');
+    const form   = $('#tdForm');
+    const fTitle = $('#tdTitle'), fDesc = $('#tdDesc'), fDue = $('#tdDue'), fEvent = $('#tdEvent');
+    const fSave  = $('#tdSave'),  fDel  = $('#tdDelete'), fErr = $('#tdError');
+    let filter = 'active';
+    let editingId = null;
+    let delTimer = null, toastTimer = null, lastFocus = null;
+
+    /* ---------- API helper ---------- */
+    async function api(url, method, body) {
+        const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: body ? JSON.stringify(body) : undefined
+        });
+        let data = {};
+        try { data = await res.json(); } catch (e) {}
+        if (!res.ok || data.error) throw new Error(data.error || 'Something went wrong. Please try again.');
+        return data;
+    }
+
+    /* ---------- Due-date labels (uses the viewer's own "today") ---------- */
+    function parseDay(s) { const p = s.split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); }
+    function refreshDueLabels() {
+        const t = new Date(); const today = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+        $$('.td-item').forEach(li => {
+            const chip = $('.td-chip.due', li);
+            if (!chip) return;
+            const due = li.dataset.due;
+            if (!due) return;
+            const d = parseDay(due);
+            const days = Math.round((d - today) / 86400000);
+            const nice = d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+            const done = li.dataset.status === 'completed';
+            let text = 'Due ' + nice;
+            if (!done) {
+                if (days < 0) text = 'Overdue · ' + nice;
+                else if (days === 0) text = 'Due today';
+                else if (days === 1) text = 'Due tomorrow';
+            }
+            $('.due-text', chip).textContent = text;
+            chip.classList.toggle('overdue', !done && days < 0);
+        });
+    }
+
+    /* ---------- Counts, progress, filtering ---------- */
+    function applyFilter() {
+        let shown = 0;
+        $$('.td-item').forEach(li => {
+            const show = filter === 'all' || li.dataset.status === filter;
+            li.hidden = !show;
+            if (show) shown++;
+        });
+        $$('.td-tab').forEach(b => b.setAttribute('aria-selected', b.dataset.filter === filter ? 'true' : 'false'));
+
+        const total = $$('.td-item').length;
+        const empty = $('#tdEmpty');
+        empty.hidden = shown > 0;
+        if (!shown) {
+            let title, text;
+            if (!total)                  { title = 'No tasks yet';   text = 'Tap “Add task” to create your first one.'; }
+            else if (filter === 'active')    { title = 'All caught up!'; text = 'You have no open tasks.'; }
+            else                         { title = 'Nothing done yet'; text = 'Completed tasks will show up here.'; }
+            $('#tdEmptyTitle').textContent = title;
+            $('#tdEmptyText').textContent = text;
         }
-    });
-});
+    }
+    function refreshCounts() {
+        const items = $$('.td-item');
+        const done = items.filter(li => li.dataset.status === 'completed').length;
+        const total = items.length;
+        const pct = total ? Math.round(done / total * 100) : 0;
+        $('#cntActive').textContent = total - done;
+        $('#cntDone').textContent = done;
+        $('#cntAll').textContent = total;
+        $('#tdDone').textContent = done;
+        $('#tdTotal').textContent = total;
+        $('#tdPct').textContent = pct + '%';
+        $('#tdBar').style.width = pct + '%';
+        $('#tdBarWrap').setAttribute('aria-valuenow', pct);
+    }
+    function setFilter(f, updateHash) {
+        filter = f;
+        if (updateHash) history.replaceState(null, '', f === 'active' ? location.pathname : '#' + f);
+        applyFilter();
+    }
+    $$('.td-tab').forEach(b => b.addEventListener('click', () => setFilter(b.dataset.filter, true)));
 
-// Toggle to-do
-function toggleTodo(id) {
-    fetch(`/todos/${id}/toggle`, {method: 'POST'})
-        .then(r => r.json())
-        .then(result => {
-            if (result.success) {
-                location.reload();
-            }
-        });
-}
+    /* ---------- Toast ---------- */
+    function toast(msg, undoFn) {
+        clearTimeout(toastTimer);
+        $('#tdToastMsg').textContent = msg;
+        const u = $('#tdToastUndo');
+        u.hidden = !undoFn;
+        u.onclick = undoFn ? () => { hideToast(); undoFn(); } : null;
+        $('#tdToast').classList.add('show');
+        toastTimer = setTimeout(hideToast, 4000);
+    }
+    function hideToast() { $('#tdToast').classList.remove('show'); }
 
-// Delete to-do
-function deleteTodo(id) {
-    if (!confirm('Delete this task?')) return;
-    
-    fetch(`/todos/${id}`, {method: 'DELETE'})
-        .then(r => r.json())
-        .then(result => {
-            if (result.success) {
-                showAlert('Task deleted!', 'success');
-                location.reload();
-            }
-        });
-}
-
-// Filter to-dos
-function filterTodos(filter) {
-    const items = document.querySelectorAll('.todo-item');
-    
-    items.forEach(item => {
-        if (filter === 'all') {
-            item.style.display = 'flex';
+    /* ---------- Toggle complete (optimistic) ---------- */
+    async function toggle(li, fromUndo) {
+        const btn = $('.td-check', li);
+        const nowDone = li.dataset.status !== 'completed';
+        setDone(li, nowDone);
+        try {
+            await api('/todos/' + li.dataset.id + '/toggle', 'POST');
+        } catch (e) {
+            setDone(li, !nowDone);                       // revert
+            toast(e.message);
+            return;
+        }
+        if (!fromUndo) toast(nowDone ? 'Task completed' : 'Task reopened', () => toggle(li, true));
+    }
+    function setDone(li, done) {
+        li.dataset.status = done ? 'completed' : 'active';
+        li.classList.toggle('done', done);
+        $('.td-check', li).setAttribute('aria-checked', done ? 'true' : 'false');
+        refreshCounts();
+        refreshDueLabels();
+        const hideNow = filter !== 'all' && li.dataset.status !== filter;
+        if (hideNow) {
+            li.classList.add('leaving');
+            setTimeout(() => { li.classList.remove('leaving'); applyFilter(); }, 250);
         } else {
-            item.style.display = item.dataset.status === filter ? 'flex' : 'none';
+            applyFilter();
+        }
+    }
+
+    /* ---------- Sheet ---------- */
+    function openSheet(li) {
+        lastFocus = document.activeElement;
+        editingId = li ? li.dataset.id : null;
+        $('#tdSheetTitle').textContent = li ? 'Edit task' : 'New task';
+        fSave.textContent = li ? 'Save changes' : 'Add task';
+        fTitle.value = li ? li.dataset.title : '';
+        fDesc.value  = li ? li.dataset.desc  : '';
+        fDue.value   = li ? li.dataset.due   : '';
+        fEvent.value = li ? li.dataset.event : '';
+        const prio = li ? li.dataset.priority : 'medium';
+        $$('input[name="prio"]').forEach(r => r.checked = (r.value === prio));
+        fErr.hidden = true;
+        resetDelete();
+        fDel.hidden = !li;
+        scrim.classList.add('open');
+        scrim.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+        if (!li) setTimeout(() => fTitle.focus(), 50);   // keyboard up straight away when adding
+    }
+    function closeSheet() {
+        scrim.classList.remove('open');
+        scrim.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+        resetDelete();
+        if (lastFocus && lastFocus.focus) lastFocus.focus();
+    }
+    function resetDelete() {
+        clearTimeout(delTimer);
+        fDel.classList.remove('armed');
+        fDel.textContent = 'Delete task';
+    }
+
+    $('#tdAdd').addEventListener('click', () => openSheet(null));
+    $('#tdClose').addEventListener('click', closeSheet);
+    scrim.addEventListener('click', e => { if (e.target === scrim) closeSheet(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && scrim.classList.contains('open')) closeSheet(); });
+
+    /* ---------- Row interactions ---------- */
+    list.addEventListener('click', e => {
+        const li = e.target.closest('.td-item');
+        if (!li) return;
+        if (e.target.closest('.td-check')) { toggle(li); return; }
+        if (e.target.closest('[data-edit]')) openSheet(li);
+    });
+
+    /* ---------- Save (add or edit) ---------- */
+    form.addEventListener('submit', async e => {
+        e.preventDefault();
+        const title = fTitle.value.trim();
+        if (!title) { fErr.textContent = 'Please enter a task title.'; fErr.hidden = false; fTitle.focus(); return; }
+        const body = {
+            title,
+            description: fDesc.value,
+            priority: ($('input[name="prio"]:checked') || {}).value || 'medium',
+            due_date: fDue.value || null,
+            event_id: fEvent.value || null
+        };
+        fSave.disabled = true;
+        const label = fSave.textContent; fSave.textContent = 'Saving…';
+        fErr.hidden = true;
+        try {
+            if (editingId) await api('/todos/' + editingId, 'PUT', body);
+            else           await api('/todos/add', 'POST', body);
+            location.reload();                        // re-render rows server-side
+        } catch (err) {
+            fErr.textContent = err.message; fErr.hidden = false;
+            fSave.disabled = false; fSave.textContent = label;
         }
     });
-    
-    // Update button styles
-    document.querySelectorAll('[id^="filter"]').forEach(btn => {
-        btn.style.opacity = '0.6';
+
+    /* ---------- Delete (tap twice to confirm — no browser popup) ---------- */
+    fDel.addEventListener('click', async () => {
+        if (!fDel.classList.contains('armed')) {
+            fDel.classList.add('armed');
+            fDel.textContent = 'Tap again to confirm';
+            delTimer = setTimeout(resetDelete, 3000);
+            return;
+        }
+        clearTimeout(delTimer);
+        const li = $('.td-item[data-id="' + editingId + '"]');
+        fDel.disabled = true;
+        try {
+            await api('/todos/' + editingId, 'DELETE');
+            if (li) li.remove();
+            refreshCounts(); applyFilter();
+            closeSheet();
+            toast('Task deleted');
+        } catch (err) {
+            fErr.textContent = err.message; fErr.hidden = false; resetDelete();
+        }
+        fDel.disabled = false;
     });
-    document.getElementById('filter' + filter.charAt(0).toUpperCase() + filter.slice(1)).style.opacity = '1';
-}
+
+    /* ---------- Init ---------- */
+    const h = location.hash.replace('#', '');
+    if (['completed', 'all'].includes(h)) filter = h;
+    refreshDueLabels();
+    refreshCounts();
+    applyFilter();
+})();
 </script>
 {% endblock %}
