@@ -18,6 +18,7 @@ from flask_login import login_required, current_user
 from extensions import db
 from models import Shift, ShiftAssignment, ShiftNote, ShiftTask
 from decorators import crew_required
+from services.shift_notifications import notify_shift_declined
 
 shifts_bp = Blueprint('shifts', __name__)
 
@@ -73,16 +74,24 @@ def respond_to_shift(assignment_id):
         allowed |= {'confirmed', 'pending'}
     if status not in allowed:
         return jsonify({'error': 'Invalid status'}), 400
+    was_rejected = assignment.status == 'rejected'
     try:
         assignment.status = status
         assignment.responded_at = datetime.utcnow()
         if 'notes' in data:
             assignment.notes = str(data.get('notes') or '').strip()
+        if status == 'rejected':
+            assignment.decline_reason = str(data.get('reason') or '').strip()[:500] or None
+        else:
+            assignment.decline_reason = None
         db.session.commit()
-        return jsonify({'success': True, 'status': status})
     except Exception as exc:
         db.session.rollback()
         return jsonify({'error': str(exc)}), 400
+    # Only tell the admins when the person themselves declines (not when an admin edits it)
+    if status == 'rejected' and not was_rejected and assignment.user_id == current_user.id:
+        notify_shift_declined(assignment)
+    return jsonify({'success': True, 'status': status})
 
 
 @shifts_bp.route('/shifts/<int:shift_id>/reject', methods=['POST'])
@@ -92,9 +101,13 @@ def reject_shift(shift_id):
     assignment = ShiftAssignment.query.filter_by(shift_id=shift_id, user_id=current_user.id).first()
     if not assignment:
         return jsonify({'error': 'Assignment not found'}), 404
+    was_rejected = assignment.status == 'rejected'
     assignment.status = 'rejected'
     assignment.responded_at = datetime.utcnow()
+    assignment.decline_reason = str((request.get_json(silent=True) or {}).get('reason') or '').strip()[:500] or None
     db.session.commit()
+    if not was_rejected:
+        notify_shift_declined(assignment)
     return jsonify({'success': True})
 
 

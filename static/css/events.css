@@ -188,7 +188,7 @@
   --fc-neutral-text-color:var(--text-secondary); --fc-today-bg-color:rgba(99,102,241,.1); --fc-list-event-hover-bg-color:var(--bg-nav-hover);
   --fc-button-bg-color:var(--primary); --fc-button-border-color:var(--primary); --fc-button-hover-bg-color:var(--primary-dark);
   --fc-button-hover-border-color:var(--primary-dark); --fc-button-active-bg-color:var(--primary-dark); --fc-button-active-border-color:var(--primary-dark);
-  --fc-now-indicator-color:var(--danger); --fc-event-border-color:transparent; color:var(--text-primary); font-size:.92rem; }
+  --fc-now-indicator-color:var(--danger); color:var(--text-primary); font-size:.92rem; }
 .sw-cal .fc .fc-toolbar-title { font-size:1.2rem; color:var(--text-primary); }
 .sw-cal .fc .fc-col-header-cell-cushion,.sw-cal .fc .fc-daygrid-day-number,.sw-cal .fc .fc-timegrid-slot-label-cushion,
 .sw-cal .fc .fc-list-day-text,.sw-cal .fc .fc-list-day-side-text { color:var(--text-primary); text-decoration:none; }
@@ -199,17 +199,19 @@
 .sw-cal .fc .fc-event { cursor:pointer; border-radius:5px; padding:1px 3px; }
 .sw-cal .fc .fc-daygrid-event { white-space:nowrap; }
 
-.sw-cal .sw-event { --fc-event-bg-color:#6366f1; --fc-event-text-color:#fff; }
-.sw-cal .sw-event-mine { --fc-event-bg-color:#4338ca; box-shadow:0 0 0 2px #a5b4fc inset; }
-.sw-cal .sw-shift-confirmed { --fc-event-bg-color:#059669; --fc-event-text-color:#fff; }
-.sw-cal .sw-shift-pending { --fc-event-bg-color:#f59e0b; --fc-event-text-color:#1f2937; }
-.sw-cal .sw-shift-declined { --fc-event-bg-color:#9ca3af; --fc-event-text-color:#fff; text-decoration:line-through; }
-.sw-cal .sw-unavail { --fc-event-text-color:#7f1d1d;
+/* Calendar item colours.  Class names are cal-* on purpose: .sw-shift is the team-list row style. */
+.sw-cal .cal-event             { --fc-event-bg-color:#6366f1; --fc-event-border-color:#6366f1; --fc-event-text-color:#fff; }
+.sw-cal .cal-event-mine        { --fc-event-bg-color:#4338ca; --fc-event-border-color:#a5b4fc; --fc-event-text-color:#fff; }
+.sw-cal .cal-shift-confirmed   { --fc-event-bg-color:#059669; --fc-event-border-color:#059669; --fc-event-text-color:#fff; }
+.sw-cal .cal-shift-pending     { --fc-event-bg-color:#f59e0b; --fc-event-border-color:#f59e0b; --fc-event-text-color:#1f2937; }
+.sw-cal .cal-shift-declined    { --fc-event-bg-color:#9ca3af; --fc-event-border-color:#9ca3af; --fc-event-text-color:#fff; text-decoration:line-through; }
+.sw-cal .cal-unavail           { --fc-event-bg-color:#fca5a5; --fc-event-border-color:#f87171; --fc-event-text-color:#7f1d1d;
   background:repeating-linear-gradient(45deg,#fca5a5,#fca5a5 6px,#fecaca 6px,#fecaca 12px); }
-.sw-cal .sw-past { opacity:.6; }
-.sw-cal .fc-list-event.sw-event .fc-list-event-dot { border-color:#6366f1; }
-.sw-cal .fc-list-event.sw-shift-confirmed .fc-list-event-dot { border-color:#059669; }
-.sw-cal .fc-list-event.sw-shift-pending .fc-list-event-dot { border-color:#f59e0b; }
+.sw-cal .cal-past { opacity:.6; }
+.sw-cal .fc-list-event.cal-event .fc-list-event-dot,.sw-cal .fc-list-event.cal-event-mine .fc-list-event-dot,
+.sw-cal .fc-list-event.cal-shift-confirmed .fc-list-event-dot,.sw-cal .fc-list-event.cal-shift-pending .fc-list-event-dot,
+.sw-cal .fc-list-event.cal-shift-declined .fc-list-event-dot,.sw-cal .fc-list-event.cal-unavail .fc-list-event-dot { border-color:var(--fc-event-bg-color); }
+.sw-cal .fc-event.cal-shift-pending .fc-event-time,.sw-cal .fc-event.cal-shift-pending .fc-event-title { color:#1f2937; }
 
 @media (max-width:700px) {
   .sw-cal-card { padding:.5rem; }

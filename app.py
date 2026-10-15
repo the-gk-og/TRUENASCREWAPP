@@ -134,23 +134,31 @@ def create_app(config_name: str | None = None):
     return app
 
 
+# (table, column, SQL type + default) added after the first release
+_NEW_COLUMNS = [
+    ('event',            'all_day',        'BOOLEAN DEFAULT 0'),
+    ('shift_assignment', 'decline_reason', 'VARCHAR(500)'),
+]
+
+
 def ensure_schema(app):
     """
     Lightweight, idempotent schema upgrade for existing databases
-    (db.create_all() never alters existing tables).
+    (db.create_all() never alters existing tables, only creates new ones).
     """
     from sqlalchemy import inspect, text
     try:
         with app.app_context():
+            db.create_all()                      # picks up brand-new tables (e.g. app_setting)
             insp = inspect(db.engine)
-            if 'event' not in insp.get_table_names():
-                return
-            cols = {c['name'] for c in insp.get_columns('event')}
-            if 'all_day' not in cols:
-                table = db.engine.dialect.identifier_preparer.quote('event')
-                db.session.execute(text(f'ALTER TABLE {table} ADD COLUMN all_day BOOLEAN DEFAULT 0'))
-                db.session.commit()
-                print("✓ Added event.all_day column")
+            quote = db.engine.dialect.identifier_preparer.quote
+            for table, column, ddl in _NEW_COLUMNS:
+                if table not in insp.get_table_names():
+                    continue
+                if column not in {c['name'] for c in insp.get_columns(table)}:
+                    db.session.execute(text(f'ALTER TABLE {quote(table)} ADD COLUMN {quote(column)} {ddl}'))
+                    db.session.commit()
+                    print(f"✓ Added {table}.{column} column")
     except Exception as exc:
         db.session.rollback()
         print(f"⚠️  Schema check failed: {exc}")

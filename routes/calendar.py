@@ -102,11 +102,11 @@ def _event_items(start: datetime, end: datetime, manager: bool) -> list[dict]:
     for e in events:
         e_end = event_end(e)
         all_day = bool(e.all_day)
-        classes = ['sw-event']
+        classes = ['cal-event']
         if e.id in mine:
-            classes.append('sw-event-mine')
+            classes.append('cal-event-mine')
         if e_end < now:
-            classes.append('sw-past')
+            classes.append('cal-past')
         items.append({
             'id': f'e-{e.id}',
             'title': e.title,
@@ -154,10 +154,10 @@ def _shift_items(start, end, mode: str, manager: bool) -> list[dict]:
         confirmed = a.status in ('accepted', 'confirmed')
         role = shift.role or 'Shift'
         title = f'{role} · {event.title}' if scope == 'mine' else f'{user.username}: {role}'
-        classes = ['sw-shift', 'sw-shift-confirmed' if confirmed else
-                   'sw-shift-declined' if declined else 'sw-shift-pending']
+        classes = ['cal-shift', 'cal-shift-confirmed' if confirmed else
+                   'cal-shift-declined' if declined else 'cal-shift-pending']
         if shift.shift_end_date < datetime.now():
-            classes.append('sw-past')
+            classes.append('cal-past')
         items.append({
             'id': f's-{a.id}',
             'title': title,
@@ -193,7 +193,7 @@ def _unavail_items(start, end, mode: str, manager: bool) -> list[dict]:
             'start': _iso(w['start'], w['all_day']),
             'end': _iso(w['end'] + timedelta(days=1), True) if w['all_day'] else _iso(w['end']),
             'allDay': w['all_day'],
-            'classNames': ['sw-unavail'],
+            'classNames': ['cal-unavail'],
             'editable': False,
             'extendedProps': {'kind': 'unavailability', 'username': names.get(w['user_id'], ''),
                               'mine': mine, 'when': fmt_range(w['start'], w['end'], w['all_day'])},

@@ -1134,13 +1134,9 @@
             <i class="fas fa-users"></i>
             <span>Cast Events</span>
         </a>
-        <a href="{{ url_for('admin.admin_overview') }}" class="nav-item {% if request.endpoint == 'admin.admin_overview' %}active{% endif %}">
-            <i class="fas fa-chart-line"></i>
-            <span>Overview</span>
-        </a>
         <a href="{{ url_for('admin.admin_panel') }}" class="nav-item {% if request.endpoint == 'admin.admin_panel' %}active{% endif %}">
-            <i class="fas fa-cog"></i>
-            <span>Admin Panel</span>
+            <i class="fas fa-shield-alt"></i>
+            <span>Admin Console</span>
         </a>
         {% endif %}
         <a href="{{ url_for('auth.logout') }}" class="nav-item">
