@@ -138,6 +138,7 @@ def create_app(config_name: str | None = None):
 _NEW_COLUMNS = [
     ('event',            'all_day',        'BOOLEAN DEFAULT 0'),
     ('shift_assignment', 'decline_reason', 'VARCHAR(500)'),
+    ('user',             'calendar_token', 'VARCHAR(64)'),
 ]
 
 
@@ -159,6 +160,12 @@ def ensure_schema(app):
                     db.session.execute(text(f'ALTER TABLE {quote(table)} ADD COLUMN {quote(column)} {ddl}'))
                     db.session.commit()
                     print(f"✓ Added {table}.{column} column")
+            # ALTER TABLE can't add a UNIQUE column, so the calendar-token index is created separately
+            if 'user' in insp.get_table_names():
+                db.session.execute(text(
+                    f'CREATE UNIQUE INDEX IF NOT EXISTS ix_user_calendar_token '
+                    f'ON {quote("user")} (calendar_token)'))
+                db.session.commit()
     except Exception as exc:
         db.session.rollback()
         print(f"⚠️  Schema check failed: {exc}")

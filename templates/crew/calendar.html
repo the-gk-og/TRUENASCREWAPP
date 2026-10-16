@@ -206,9 +206,40 @@ $('btnNew').onclick = async () => {
   if (r) { SW.toast('Event created'); cal.refetchEvents(); }
 };
 $('btnSubscribe').onclick = async () => {
-  const url = `${location.protocol}//${location.host}/calendar/ics`;
-  try { await navigator.clipboard.writeText(url); SW.toast('Calendar link copied - paste it into Google Calendar → Add by URL'); }
-  catch (_) { await SW.confirm(url, { title: 'Calendar link (copy this)', okText: 'Done' }); }
+  let link;
+  try { link = await SW.api('GET', '/api/calendar/sync-link'); }
+  catch (e) { SW.toast(e.message, 'error'); return; }
+
+  const d = SW.dialog({ title: 'Sync to your calendar' });
+  const copy = async (input) => {
+    try { await navigator.clipboard.writeText(input.value); }
+    catch (_) { input.select(); document.execCommand('copy'); }
+    SW.toast('Link copied');
+  };
+  const render = (l) => {
+    d.body.innerHTML = `
+      <p class="sw-confirm-text">This is <b>your</b> private calendar link. It contains every event plus your own shifts,
+        and your calendar app keeps it up to date. Anyone who has the link can see your schedule, so don't share it.</p>
+      <div class="sw-field"><input type="text" id="syncUrl" readonly value="${SW.esc(l.url)}" style="width:100%"></div>
+      <div class="sw-actions">
+        <button type="button" class="btn btn-danger" id="syncReset">Reset link</button>
+        <a class="btn btn-secondary" href="${SW.esc(l.webcal_url)}">Open in Apple / Outlook</a>
+        <button type="button" class="btn btn-primary" id="syncCopy">Copy link</button>
+      </div>
+      <p class="sw-confirm-text" style="margin:1rem 0 0;font-size:.85rem;opacity:.8">
+        Google Calendar: <i>Other calendars → From URL</i> and paste the link (Google can take a few hours to refresh).</p>`;
+    const input = d.body.querySelector('#syncUrl');
+    input.onclick = () => input.select();
+    d.body.querySelector('#syncCopy').onclick = () => copy(input);
+    d.body.querySelector('#syncReset').onclick = async () => {
+      const ok = await SW.confirm('Make a new link? The old one stops working straight away, so you will need to add the new one to your calendar app again.',
+        { title: 'Reset calendar link', danger: true, okText: 'Reset link' });
+      if (!ok) return;
+      try { render(await SW.api('POST', '/api/calendar/sync-link/reset')); SW.toast('New link created'); }
+      catch (e) { SW.toast(e.message, 'error'); }
+    };
+  };
+  render(link);
 };
 
 // ---- my unavailability ----

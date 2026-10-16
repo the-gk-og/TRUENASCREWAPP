@@ -28,6 +28,8 @@ class User(UserMixin, db.Model):
     profile_picture       = db.Column(db.String(300), nullable=True)
     password_reset_token  = db.Column(db.String(100), nullable=True)
     password_reset_expiry = db.Column(db.DateTime, nullable=True)
+    # Secret slug for this user's private calendar-sync (.ics) URL; see routes/calendar.py
+    calendar_token        = db.Column(db.String(64), unique=True, nullable=True, index=True)
 
 
 class TwoFactorAuth(db.Model):

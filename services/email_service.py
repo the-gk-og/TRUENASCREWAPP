@@ -43,6 +43,8 @@ from __future__ import annotations
 import os
 import re
 import json
+import html as _html
+import threading
 from datetime import datetime
 from typing import Optional
 
@@ -129,7 +131,7 @@ def _render(template_name: str, context: dict) -> str:
             if _eval_condition(cond, context):
                 parts = re.split(
                     r"\{%-?\s*(?:elif\b.*?|else)\s*-?%\}",
-                    full[full.index("%}") + 2 :],
+                    full[full.index("%}") + 2 : full.rfind("{%")],   # exclude the closing endif tag
                     flags=re.DOTALL,
                 )
                 return parts[idx] if idx < len(parts) else ""
@@ -340,20 +342,27 @@ def send_shift_assignment_email(
     positions_needed: int,
     description: str = "",
     org: Optional[dict] = None,
+    shifts_url: str = "",
 ) -> bool:
     """Notify a crew member they've been assigned to a shift."""
     org_ctx = _org_defaults(org)
+
+    def h(value) -> str:           # titles / notes are typed by users: never let them inject HTML
+        return _html.escape(str(value or ""), quote=True)
+
     context = {
         **org_ctx,
-        "username":         username,
-        "event_title":      event_title,
-        "shift_title":      shift_title,
-        "shift_date":       shift_date,
-        "shift_end_time":   shift_end_time,
-        "role":             role or "General Crew",
-        "location":         location or "TBD",
+        "username":         h(username),
+        "event_title":      h(event_title),
+        "shift_title":      h(shift_title),
+        "shift_date":       h(shift_date),
+        "shift_end_time":   h(shift_end_time),
+        "role":             h(role or "General Crew"),
+        "location":         h(location or "TBD"),
         "positions_needed": str(positions_needed),
-        "description":      description,
+        "show_positions":   "1" if int(positions_needed or 1) > 1 else "",
+        "description":      h(description).replace("\n", "<br>"),
+        "shifts_url":       h(shifts_url),
     }
 
     html_body = _render("shift_assignment.html", context)
@@ -367,12 +376,38 @@ def send_shift_assignment_email(
         f"Location: {location or 'TBD'}\n"
         f"Positions Needed: {positions_needed}\n"
         + (f"Notes: {description}\n" if description else "")
+        + (f"\nView your shifts: {shifts_url}\n" if shifts_url else "")
         + f"\nLog in to ShowWise to accept or reject this assignment.\n\n"
         f"ShowWise Team"
     )
 
-    subject = f"🎬 Shift Assignment: {shift_title} – {event_title}"
+    subject = f"🎬 New shift assigned: {shift_title} – {event_title}"
     return send_html_email(subject, recipient_email, html_body, text_body)
+
+
+def send_shift_assignment_emails_async(jobs: list[dict]) -> None:
+    """Email each person their new shift without making the request wait for SMTP.
+
+    ``jobs`` is a list of keyword-argument dicts for :func:`send_shift_assignment_email`
+    (plain strings only - no ORM objects, the work runs after the request ends).
+    Failures are logged and never raised: assigning a shift must not fail because email did.
+    """
+    if not jobs or not _app or not _app.config.get("MAIL_USERNAME"):
+        return
+    app = _app
+
+    def run():
+        with app.app_context():
+            for job in jobs:
+                try:
+                    send_shift_assignment_email(**job)
+                except Exception as exc:          # noqa: BLE001
+                    print(f"❌ Shift email to {job.get('recipient_email')} failed: {exc}")
+
+    if app.config.get("TESTING"):
+        run()                                      # deterministic for tests
+    else:
+        threading.Thread(target=run, daemon=True, name="shift-emails").start()
 
 
 def send_cast_assignment_email(
