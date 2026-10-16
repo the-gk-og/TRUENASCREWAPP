@@ -34,10 +34,10 @@ GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
 
 @auth_bp.route('/')
 def index():
-    from config import BaseConfig
+    """Signed-in people go to their dashboard; everyone else goes to the login page."""
     if current_user.is_authenticated:
         return redirect(url_for('crew.dashboard'))
-    return redirect(BaseConfig.MAIN_SERVER_URL)
+    return redirect(url_for('auth.login'))
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])

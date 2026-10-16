@@ -1,7 +1,7 @@
 """
 routes/calendar.py
 ==================
-Calendar page, its JSON feed (consumed by FullCalendar) and the ICS export.
+Calendar page, its JSON feed (consumed by FullCalendar) and the private ICS sync feed.
 
 What a person sees
 ------------------
@@ -15,10 +15,11 @@ All stored times are naive wall-clock (venue-local) values, so the feed sends
 naive ISO strings and FullCalendar runs with timeZone 'local'.
 """
 
+import secrets
 from datetime import datetime, timedelta
 from functools import lru_cache
 
-from flask import Blueprint, render_template, request, jsonify, Response
+from flask import Blueprint, render_template, request, jsonify, Response, abort, redirect, url_for
 from flask_login import login_required, current_user
 from sqlalchemy import or_
 
@@ -202,7 +203,7 @@ def _unavail_items(start, end, mode: str, manager: bool) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# ICS export (public feed, events only)
+# ICS sync - one private, unguessable URL per person (events + that person's shifts)
 # ---------------------------------------------------------------------------
 
 def _esc(text: str | None) -> str:
@@ -234,26 +235,87 @@ TZ_BLOCK = (
 )
 
 
+# A 32-byte token is a 43-character URL-safe slug (256 bits) - not guessable.
+TOKEN_BYTES = 32
+
+
+def ensure_calendar_token(user: User, rotate: bool = False) -> str:
+    """Return the user's calendar slug, creating it on first use (or replacing it when rotate=True)."""
+    if rotate or not user.calendar_token:
+        user.calendar_token = secrets.token_urlsafe(TOKEN_BYTES)
+        db.session.commit()
+    return user.calendar_token
+
+
+def _sync_urls(token: str) -> dict:
+    https = url_for('calendar.calendar_ics_private', token=token, _external=True)
+    return {'url': https, 'webcal_url': 'webcal://' + https.split('://', 1)[1]}
+
+
+@calendar_bp.route('/api/calendar/sync-link')
+@login_required
+@crew_required
+def sync_link():
+    """The signed-in person's own private sync URL."""
+    return jsonify(_sync_urls(ensure_calendar_token(current_user)))
+
+
+@calendar_bp.route('/api/calendar/sync-link/reset', methods=['POST'])
+@login_required
+@crew_required
+def sync_link_reset():
+    """Replace the slug - the old URL stops working immediately."""
+    return jsonify(_sync_urls(ensure_calendar_token(current_user, rotate=True)))
+
+
 @calendar_bp.route('/calendar/ics')
+@login_required
 def calendar_ics():
+    """The old open feed is gone: signed-in people are sent to their own private feed instead."""
+    if current_user.is_cast and not current_user.is_admin:
+        abort(404)
+    return redirect(url_for('calendar.calendar_ics_private', token=ensure_calendar_token(current_user)))
+
+
+@calendar_bp.route('/calendar/ics/<token>')
+def calendar_ics_private(token):
+    """Calendar-app subscription URL. No login (calendar apps can't), so the slug *is* the credential."""
+    user = User.query.filter_by(calendar_token=token).first() if 20 <= len(token) <= 64 else None
+    if not user or (user.is_cast and not user.is_admin):
+        abort(404)                                     # unknown slug: reveal nothing
+    return Response(
+        _build_ics(user, request.url_root.rstrip('/')),
+        mimetype='text/calendar',
+        headers={
+            'Content-Disposition': 'inline; filename="showwise_sync.ics"',
+            'Cache-Control': 'private, no-cache, must-revalidate',
+            'X-Robots-Tag': 'noindex, nofollow',
+            'Referrer-Policy': 'no-referrer',
+        })
+
+
+def _dt_lines(start: datetime, end: datetime, all_day: bool = False) -> list[str]:
+    if all_day:
+        return [f'DTSTART;VALUE=DATE:{start:%Y%m%d}', f'DTEND;VALUE=DATE:{(end + timedelta(days=1)):%Y%m%d}']
+    return [f'DTSTART;TZID=Australia/Sydney:{start:%Y%m%dT%H%M%S}',
+            f'DTEND;TZID=Australia/Sydney:{end:%Y%m%dT%H%M%S}']
+
+
+def _build_ics(user: User, site_url: str) -> str:
+    """Every event, plus this person's own (non-declined) shifts."""
     stamp = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
     lines = [
         'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//ShowWise//EN', 'CALSCALE:GREGORIAN',
-        'METHOD:PUBLISH', 'X-WR-CALNAME:ShowWise sync', 'X-WR-TIMEZONE:Australia/Sydney',
+        'METHOD:PUBLISH', f'X-WR-CALNAME:{_esc("ShowWise - " + user.username)}',
+        'X-WR-TIMEZONE:Australia/Sydney',
         'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H',
     ]
     head = '\r\n'.join(lines) + '\r\n' + TZ_BLOCK
     body = []
 
     for e in Event.query.order_by(Event.event_date).all():
-        e_end = event_end(e)
         body += ['BEGIN:VEVENT', f'UID:event-{e.id}@showwise', f'DTSTAMP:{stamp}']
-        if e.all_day:
-            body += [f'DTSTART;VALUE=DATE:{e.event_date:%Y%m%d}',
-                     f'DTEND;VALUE=DATE:{(e_end + timedelta(days=1)):%Y%m%d}']
-        else:
-            body += [f'DTSTART;TZID=Australia/Sydney:{e.event_date:%Y%m%dT%H%M%S}',
-                     f'DTEND;TZID=Australia/Sydney:{e_end:%Y%m%dT%H%M%S}']
+        body += _dt_lines(e.event_date, event_end(e), bool(e.all_day))
         body.append(f'SUMMARY:{_esc(e.title)}')
         desc = [e.description] if e.description else []
         sched = sorted(e.schedules, key=lambda x: x.scheduled_time)
@@ -264,9 +326,27 @@ def calendar_ics():
             body.append(f"DESCRIPTION:{_esc(chr(10).join(desc))}")
         if e.location:
             body.append(f'LOCATION:{_esc(e.location)}')
-        body += ['STATUS:CONFIRMED', 'END:VEVENT']
+        body += [f'URL:{site_url}/events/{e.id}', 'STATUS:CONFIRMED', 'END:VEVENT']
 
-    text = head + '\r\n'.join(_fold(l) for l in body) + ('\r\n' if body else '') + 'END:VCALENDAR\r\n'
-    return Response(text, mimetype='text/calendar',
-                    headers={'Content-Disposition': 'inline; filename="showwise_sync.ics"',
-                             'Cache-Control': 'no-cache, must-revalidate'})
+    rows = (db.session.query(ShiftAssignment, Shift, Event)
+            .join(Shift, ShiftAssignment.shift_id == Shift.id)
+            .join(Event, Shift.event_id == Event.id)
+            .filter(ShiftAssignment.user_id == user.id, ShiftAssignment.status != 'rejected')
+            .order_by(Shift.shift_date).all())
+    for a, shift, e in rows:
+        confirmed = a.status in ('accepted', 'confirmed')
+        role = shift.role or 'Crew'
+        body += ['BEGIN:VEVENT', f'UID:shift-{a.id}@showwise', f'DTSTAMP:{stamp}']
+        body += _dt_lines(shift.shift_date, shift.shift_end_date)
+        body.append(f'SUMMARY:{_esc(f"{role} shift · {e.title}")}')
+        desc = [f'Your shift ({"confirmed" if confirmed else "awaiting your response"})', f'Event: {e.title}']
+        if a.notes:
+            desc.append(f'Notes: {a.notes}')
+        body.append(f"DESCRIPTION:{_esc(chr(10).join(desc))}")
+        place = shift.location or e.location
+        if place:
+            body.append(f'LOCATION:{_esc(place)}')
+        body += [f'URL:{site_url}/events/{e.id}',
+                 f'STATUS:{"CONFIRMED" if confirmed else "TENTATIVE"}', 'END:VEVENT']
+
+    return head + '\r\n'.join(_fold(l) for l in body) + ('\r\n' if body else '') + 'END:VCALENDAR\r\n'

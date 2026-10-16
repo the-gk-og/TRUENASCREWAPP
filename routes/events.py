@@ -36,6 +36,7 @@ from models import (
 from decorators import crew_required
 from services.markdown_service import render_markdown
 from services.availability_service import find_conflicts
+from services.email_service import send_shift_assignment_emails_async
 from services.notification_service import (
     send_discord_event_announcement, schedule_event_notifications,
 )
@@ -571,6 +572,19 @@ def _split_shared_shift(a: ShiftAssignment, start, end, role) -> Shift:
     return clone
 
 
+def _shift_email_job(user: User, event: Event, shift: Shift, notes: str = '') -> dict:
+    """Plain-string arguments for send_shift_assignment_email (it runs after the request ends)."""
+    return dict(
+        recipient_email=user.email, username=user.username,
+        event_title=event.title, shift_title=shift.title,
+        shift_date=shift.shift_date.strftime('%a %d %b %Y, %I:%M %p'),
+        shift_end_time=shift.shift_end_date.strftime('%I:%M %p'),
+        role=shift.role or 'Crew', location=shift.location or event.location or 'TBD',
+        positions_needed=1, description=notes,
+        shifts_url=request.url_root.rstrip('/') + '/crew/my-schedule',
+    )
+
+
 @events_bp.route('/events/<int:event_id>/team/add', methods=['POST'])
 @login_required
 @crew_required
@@ -619,18 +633,8 @@ def add_team_shift(event_id):
         db.session.rollback()
         raise ApiError(f'Could not add shift: {exc}', 500)
 
-    if user.email and user.id != current_user.id:
-        try:
-            from services.email_service import send_shift_assignment_email
-            send_shift_assignment_email(
-                recipient_email=user.email, username=user.username,
-                event_title=event.title, shift_title=shift.title,
-                shift_date=start.strftime('%B %d, %Y at %I:%M %p'),
-                shift_end_time=end.strftime('%I:%M %p'), role=role or 'Crew',
-                location=event.location or 'TBD', positions_needed=1, description=notes,
-            )
-        except Exception as exc:
-            print(f'⚠️  Shift email failed: {exc}')
+    if user.email and user.id != current_user.id:          # no email for assigning yourself
+        send_shift_assignment_emails_async([_shift_email_job(user, event, shift, notes)])
     return jsonify({'success': True, 'shift': serialize_assignment(assignment),
                     'warnings': conflicts})
 
@@ -644,6 +648,7 @@ def add_all_crew(event_id):
     event = Event.query.get_or_404(event_id)
     on_team = {c.crew_member for c in event.crew_assignments}
     added = 0
+    emails = []
     users = (User.query.filter(User.user_role.in_(['crew', 'staff']))
              .filter(or_(User.is_cast.is_(False), User.is_cast.is_(None))).all())
     for user in users:
@@ -660,7 +665,10 @@ def add_all_crew(event_id):
         db.session.add(ShiftAssignment(shift_id=shift.id, user_id=user.id, status='pending',
                                        assigned_by=current_user.username))
         added += 1
+        if user.email and user.id != current_user.id:
+            emails.append(_shift_email_job(user, event, shift))
     db.session.commit()
+    send_shift_assignment_emails_async(emails)
     return jsonify({'success': True, 'added': added})
 
 

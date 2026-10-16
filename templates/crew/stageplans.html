@@ -2,259 +2,397 @@
 
 {% block title %}Stage Plans - ShowWise{% endblock %}
 
+{% block head_extra %}
+<style>
+/* Stage Plans page — scoped to avoid changing other ShowWise pages */
+.stageplans-page { --sp-ink: var(--text-primary, #18232d); --sp-muted: var(--text-secondary, #687684); --sp-line: var(--border-color, #e2e8f0); --sp-panel: var(--card-bg, #fff); color: var(--sp-ink); }
+.stageplans-page .sp-hero { display:flex; align-items:flex-start; justify-content:space-between; gap:1.25rem; flex-wrap:wrap; margin-bottom:1.5rem; }
+.stageplans-page .sp-eyebrow { color:var(--sp-muted); text-transform:uppercase; letter-spacing:.12em; font-size:.72rem; font-weight:800; margin-bottom:.45rem; }
+.stageplans-page .sp-title { font-size:clamp(1.7rem,3vw,2.35rem); line-height:1.15; margin:0 0 .5rem; letter-spacing:-.035em; }
+.stageplans-page .sp-subtitle { color:var(--sp-muted); max-width:650px; line-height:1.55; }
+.stageplans-page .sp-actions { display:flex; flex-wrap:wrap; gap:.65rem; }
+.stageplans-page .sp-btn { display:inline-flex; align-items:center; justify-content:center; gap:.55rem; min-height:42px; border:1px solid var(--sp-line); border-radius:10px; padding:.7rem 1rem; font:inherit; font-size:.9rem; font-weight:700; text-decoration:none; cursor:pointer; transition:transform .15s ease, box-shadow .15s ease, opacity .15s ease; }
+.stageplans-page .sp-btn:hover { transform:translateY(-1px); box-shadow:0 5px 16px #0f172a12; }
+.stageplans-page .sp-btn-primary { color:#fff; background:#4f46e5; border-color:#4f46e5; }
+.stageplans-page .sp-btn-secondary { color:var(--sp-ink); background:var(--sp-panel); }
+.stageplans-page .sp-btn-danger { color:#b91c1c; background:var(--sp-panel); border-color:#fecaca; }
+.stageplans-page .sp-toolbar { display:flex; align-items:end; justify-content:space-between; gap:1rem; flex-wrap:wrap; padding:1rem; border:1px solid var(--sp-line); border-radius:14px; background:var(--sp-panel); margin-bottom:1.25rem; }
+.stageplans-page .sp-filter { display:flex; flex-direction:column; gap:.4rem; min-width:min(100%,280px); }
+.stageplans-page .sp-filter label { font-size:.78rem; font-weight:800; color:var(--sp-muted); }
+.stageplans-page .sp-filter select, .stageplans-page .sp-search { width:100%; min-height:42px; padding:.65rem .8rem; border:1px solid var(--sp-line); border-radius:9px; background:var(--sp-panel); color:var(--sp-ink); font:inherit; }
+.stageplans-page .sp-search-wrap { position:relative; flex:1; min-width:min(100%,220px); max-width:360px; }
+.stageplans-page .sp-search-wrap i { position:absolute; left:.85rem; top:50%; transform:translateY(-50%); color:var(--sp-muted); }
+.stageplans-page .sp-search { padding-left:2.4rem; }
+.stageplans-page .sp-event-banner { display:flex; align-items:center; gap:.9rem; padding:1rem 1.1rem; margin-bottom:1.25rem; border:1px solid #c7d2fe; background:color-mix(in srgb, #6366f1 8%, var(--sp-panel)); border-radius:12px; }
+.stageplans-page .sp-event-icon { display:grid; place-items:center; flex:0 0 42px; width:42px; height:42px; border-radius:12px; background:#e0e7ff; color:#4338ca; }
+.stageplans-page .sp-event-banner strong { display:block; margin-bottom:.2rem; }
+.stageplans-page .sp-event-banner small { color:var(--sp-muted); }
+.stageplans-page .sp-results { display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin:0 0 .8rem; color:var(--sp-muted); font-size:.85rem; }
+.stageplans-page .sp-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr)); gap:1rem; }
+.stageplans-page .sp-card { min-width:0; overflow:hidden; border:1px solid var(--sp-line); border-radius:15px; background:var(--sp-panel); box-shadow:0 2px 8px #0f172a05; transition:transform .18s ease,box-shadow .18s ease; }
+.stageplans-page .sp-card:hover { transform:translateY(-2px); box-shadow:0 12px 30px #0f172a10; }
+.stageplans-page .sp-preview { position:relative; display:grid; place-items:center; height:190px; overflow:hidden; background:linear-gradient(135deg,#f1f5f9,#e8edf4); border-bottom:1px solid var(--sp-line); cursor:pointer; }
+.stageplans-page .sp-preview img { width:100%; height:100%; object-fit:contain; padding:.65rem; }
+.stageplans-page .sp-preview .sp-file-icon { font-size:2.7rem; color:#64748b; }
+.stageplans-page .sp-file-type { position:absolute; top:.7rem; left:.7rem; padding:.3rem .5rem; border-radius:6px; color:#334155; background:#ffffffdf; font-size:.7rem; font-weight:800; text-transform:uppercase; letter-spacing:.05em; }
+.stageplans-page .sp-card-body { padding:1rem; }
+.stageplans-page .sp-card-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:.6rem; }
+.stageplans-page .sp-card-title { margin:0; font-size:1.03rem; line-height:1.35; overflow-wrap:anywhere; }
+.stageplans-page .sp-badge { flex:0 0 auto; display:inline-flex; align-items:center; gap:.35rem; padding:.28rem .48rem; border-radius:6px; background:#eef2ff; color:#4338ca; font-size:.68rem; font-weight:800; }
+.stageplans-page .sp-meta { display:flex; flex-direction:column; gap:.35rem; margin:.65rem 0 1rem; color:var(--sp-muted); font-size:.79rem; }
+.stageplans-page .sp-meta span { display:flex; align-items:center; gap:.45rem; overflow-wrap:anywhere; }
+.stageplans-page .sp-card-actions { display:grid; grid-template-columns:1fr 1fr auto; gap:.5rem; }
+.stageplans-page .sp-card-actions .sp-btn { min-width:0; min-height:38px; padding:.55rem .65rem; font-size:.82rem; }
+.stageplans-page .sp-empty { text-align:center; padding:3.5rem 1.25rem; border:1px dashed var(--sp-line); border-radius:16px; background:var(--sp-panel); }
+.stageplans-page .sp-empty-icon { display:grid; place-items:center; width:64px; height:64px; margin:0 auto 1rem; border-radius:18px; background:#eef2ff; color:#4f46e5; font-size:1.6rem; }
+.stageplans-page .sp-empty h3 { margin:0 0 .45rem; font-size:1.2rem; }
+.stageplans-page .sp-empty p { max-width:440px; margin:0 auto 1.2rem; color:var(--sp-muted); line-height:1.55; }
+.stageplans-page .sp-empty-actions { display:flex; justify-content:center; gap:.65rem; flex-wrap:wrap; }
+.stageplans-page .sp-modal { display:none; position:fixed; inset:0; z-index:10000; overflow:auto; padding:5vh 1rem; background:#0f172a99; }
+.stageplans-page .sp-modal.is-open { display:block; }
+.stageplans-page .sp-modal-panel { position:relative; width:min(100%,560px); margin:0 auto; padding:1.35rem; border:1px solid var(--sp-line); border-radius:16px; background:var(--sp-panel); color:var(--sp-ink); box-shadow:0 24px 80px #0003; }
+.stageplans-page .sp-modal-panel.sp-modal-wide { width:min(100%,1000px); }
+.stageplans-page .sp-modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; margin-bottom:1.2rem; }
+.stageplans-page .sp-modal-head h2 { margin:0 0 .35rem; font-size:1.3rem; }
+.stageplans-page .sp-modal-head p { color:var(--sp-muted); font-size:.88rem; }
+.stageplans-page .sp-close { border:0; background:transparent; color:var(--sp-muted); font-size:1.5rem; line-height:1; cursor:pointer; padding:.2rem; }
+.stageplans-page .sp-form-group { display:flex; flex-direction:column; gap:.45rem; margin-bottom:1rem; }
+.stageplans-page .sp-form-group label { font-size:.84rem; font-weight:750; }
+.stageplans-page .sp-form-group input, .stageplans-page .sp-form-group select { width:100%; min-height:43px; border:1px solid var(--sp-line); border-radius:9px; padding:.65rem .75rem; background:var(--sp-panel); color:var(--sp-ink); font:inherit; }
+.stageplans-page .sp-help { color:var(--sp-muted); font-size:.78rem; line-height:1.45; }
+.stageplans-page .sp-upload-drop { padding:1.25rem; border:1px dashed var(--sp-line); border-radius:11px; background:color-mix(in srgb,#64748b 5%,var(--sp-panel)); }
+.stageplans-page .sp-modal-actions { display:flex; justify-content:flex-end; gap:.6rem; flex-wrap:wrap; margin-top:1.3rem; }
+.stageplans-page .sp-alert { position:fixed; top:85px; right:20px; z-index:11000; max-width:min(420px,calc(100vw - 40px)); padding:.9rem 1.1rem; border-radius:10px; color:white; background:#059669; box-shadow:0 8px 28px #0002; }
+.stageplans-page .sp-alert.error { background:#dc2626; }
+.stageplans-page .sp-hidden { display:none !important; }
+@media (max-width:600px) {
+ .stageplans-page .sp-hero { flex-direction:column; }
+ .stageplans-page .sp-actions { width:100%; }
+ .stageplans-page .sp-actions .sp-btn { flex:1; }
+ .stageplans-page .sp-toolbar { align-items:stretch; }
+ .stageplans-page .sp-search-wrap { max-width:none; }
+ .stageplans-page .sp-card-actions { grid-template-columns:1fr 1fr auto; }
+}
+@media (prefers-reduced-motion:reduce) { .stageplans-page * { transition:none !important; } }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
-        <h2>🎨 Stage Plans</h2>
-        <div style="display: flex; gap: 0.5rem;">
-            <a href="{{ url_for('stage_designer.stage_designer') }}" class="btn btn-primary">
-                <i class="fas fa-drafting-compass"></i> Open Designer
+<div class="stageplans-page">
+    <header class="sp-hero">
+        <div>
+            <div class="sp-eyebrow">Production workspace</div>
+            <h1 class="sp-title">Stage plans</h1>
+            <p class="sp-subtitle">Keep your ground plans, lighting layouts and stage references together. Preview files, filter by production, or jump into the designer.</p>
+        </div>
+        <div class="sp-actions">
+            <a href="{{ url_for('stage_designer.stage_designer') }}" class="sp-btn sp-btn-secondary">
+                <i class="fas fa-drafting-compass"></i> Open designer
             </a>
-            <button onclick="showModal('uploadModal')" class="btn btn-success">
-                <i class="fas fa-upload"></i> Upload File
+            <button type="button" class="sp-btn sp-btn-primary" data-open-modal="uploadModal">
+                <i class="fas fa-plus"></i> Add stage plan
             </button>
         </div>
-    </div>
-    
-    <div class="form-group">
-        <label>Filter by Event:</label>
-        <select id="eventFilter" onchange="window.location.href='/stageplans?event_id='+this.value">
-            <option value="">All Plans</option>
-            {% for event in events %}
-            <option value="{{ event.id }}" {% if current_event and current_event.id == event.id %}selected{% endif %}>
-                {{ event.title }} - {{ event.event_date.strftime('%b %d, %Y') }}
-            </option>
-            {% endfor %}
-        </select>
-    </div>
-    
-    {% if current_event %}
-    <div style="background: #e8f4f8; padding: 1rem; border-radius: 6px; margin-bottom: 1rem;">
-        <strong>Event:</strong> {{ current_event.title }}<br>
-        <strong>Date:</strong> {{ current_event.event_date.strftime('%B %d, %Y at %I:%M %p') }}
-    </div>
-    {% endif %}
-    
-    {% if plans %}
-    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
-        {% for plan in plans %}
-        <div class="card" style="padding: 1rem;">
-            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
-                <h3 style="margin: 0;">{{ plan.title }}</h3>
-                {% if plan.filename.startswith('designer_thumb_') %}
-                <span style="background: #6366f1; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">
-                    <i class="fas fa-drafting-compass"></i> Designer
-                </span>
-                {% endif %}
-            </div>
-            
-            <p style="color: #666; font-size: 0.9rem; margin-bottom: 1rem;">
-                Uploaded by {{ plan.uploaded_by }} on {{ plan.created_at.strftime('%b %d, %Y') }}
-            </p>
-            
-            {# Display thumbnail for designer plans or regular images #}
-            {% if plan.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')) %}
-            <img src="{{ url_for('stage_designer.uploaded_file', filename=plan.filename) }}" 
-                 alt="{{ plan.title }}" 
-                 style="width: 100%; height: 200px; object-fit: contain; background: #f5f5f5; border-radius: 6px; margin-bottom: 1rem; cursor: pointer; border: 2px solid #e5e7eb;"
-                 onclick="showImageModal('{{ url_for('stage_designer.uploaded_file', filename=plan.filename) }}', '{{ plan.title }}')">
-            {% else %}
-            <div style="background: #f0f0f0; padding: 2rem; text-align: center; border-radius: 6px; margin-bottom: 1rem;">
-                <p style="font-size: 3rem;">📄</p>
-                <p>{{ plan.filename }}</p>
-            </div>
-            {% endif %}
-            
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem;">
-                {% if plan.filename.startswith('designer_thumb_') %}
-                {# For designer plans, try to find the design ID from the StagePlanDesign table #}
-                {# We'll need to add a helper route for this #}
-                <button onclick="openDesignerPlan('{{ plan.filename }}')" 
-                   class="btn btn-primary" 
-                   style="text-align: center; padding: 0.5rem; font-size: 0.85rem;"
-                   title="Edit in Designer">
-                    <i class="fas fa-edit"></i>
-                </button>
-                {% else %}
-                <a href="{{ url_for('stage_designer.stage_designer') }}" 
-                   class="btn btn-primary" 
-                   style="text-align: center; padding: 0.5rem; font-size: 0.85rem;"
-                   title="Open Designer">
-                    <i class="fas fa-drafting-compass"></i>
-                </a>
-                {% endif %}
-                
-                {% if not plan.filename.startswith('designer_thumb_') %}
-                <a href="{{ url_for('stage_designer.uploaded_file', filename=plan.filename) }}" 
-                   download="{{ plan.filename }}" 
-                   class="btn btn-success" 
-                   style="text-align: center; padding: 0.5rem; font-size: 0.85rem;"
-                   title="Download">
-                    <i class="fas fa-download"></i>
-                </a>
-                {% else %}
-                <a href="{{ url_for('stage_designer.uploaded_file', filename=plan.filename) }}" 
-                   download="{{ plan.filename }}" 
-                   class="btn btn-success" 
-                   style="text-align: center; padding: 0.5rem; font-size: 0.85rem;"
-                   title="Download Preview">
-                    <i class="fas fa-download"></i>
-                </a>
-                {% endif %}
-                
-                <button onclick="deletePlan({{ plan.id }})" 
-                        class="btn btn-danger" 
-                        style="padding: 0.5rem; font-size: 0.85rem;"
-                        title="Delete">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>
+    </header>
+
+    <section class="sp-toolbar" aria-label="Stage plan filters">
+        <div class="sp-filter">
+            <label for="eventFilter">Production / event</label>
+            <select id="eventFilter">
+                <option value="" {% if not current_event %}selected{% endif %}>All productions</option>
+                {% for event in events %}
+                <option value="{{ event.id }}" {% if current_event and current_event.id == event.id %}selected{% endif %}>
+                    {{ event.title }} — {{ event.event_date.strftime('%b %d, %Y') }}
+                </option>
+                {% endfor %}
+            </select>
         </div>
+        <div class="sp-search-wrap">
+            <i class="fas fa-search" aria-hidden="true"></i>
+            <input class="sp-search" id="planSearch" type="search" placeholder="Search stage plans…" aria-label="Search stage plans">
+        </div>
+    </section>
+
+    {% if current_event %}
+    <section class="sp-event-banner">
+        <div class="sp-event-icon"><i class="fas fa-calendar-days"></i></div>
+        <div>
+            <strong>{{ current_event.title }}</strong>
+            <small>{{ current_event.event_date.strftime('%A, %d %B %Y · %I:%M %p') }}</small>
+        </div>
+    </section>
+    {% endif %}
+
+    {% if plans %}
+    <div class="sp-results">
+        <span id="planCount">{{ plans|length }} stage plan{% if plans|length != 1 %}s{% endif %}</span>
+        <span>Newest plans are ready to preview</span>
+    </div>
+    <section class="sp-grid" id="planGrid" aria-label="Stage plans">
+        {% for plan in plans %}
+        {% set is_designer = plan.filename.startswith('designer_thumb_') %}
+        {% set is_image = plan.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')) %}
+        {% set file_url = url_for('stage_designer.uploaded_file', filename=plan.filename) %}
+        <article class="sp-card" data-plan-card data-search="{{ (plan.title ~ ' ' ~ plan.filename ~ ' ' ~ plan.uploaded_by)|lower }}">
+            <div class="sp-preview" {% if is_image %}role="button" tabindex="0" data-preview-src="{{ file_url }}" data-preview-title="{{ plan.title|e }}" aria-label="Preview {{ plan.title|e }}"{% endif %}>
+                {% if is_image %}
+                <img src="{{ file_url }}" alt="Preview of {{ plan.title }}" loading="lazy">
+                {% else %}
+                <i class="fas fa-file-pdf sp-file-icon" aria-hidden="true"></i>
+                {% endif %}
+                <span class="sp-file-type">{% if is_designer %}Designer{% elif plan.filename.lower().endswith('.pdf') %}PDF{% else %}File{% endif %}</span>
+            </div>
+            <div class="sp-card-body">
+                <div class="sp-card-heading">
+                    <h2 class="sp-card-title">{{ plan.title }}</h2>
+                    {% if is_designer %}<span class="sp-badge"><i class="fas fa-pen-ruler"></i> Designed</span>{% endif %}
+                </div>
+                <div class="sp-meta">
+                    <span><i class="fas fa-user" aria-hidden="true"></i> {{ plan.uploaded_by }}</span>
+                    <span><i class="fas fa-clock" aria-hidden="true"></i> {{ plan.created_at.strftime('%d %b %Y') }}</span>
+                </div>
+                <div class="sp-card-actions">
+                    {% if is_designer %}
+                    <button type="button" class="sp-btn sp-btn-primary" data-open-designer="{{ plan.filename }}" title="Edit in designer"><i class="fas fa-pen-to-square"></i> Edit</button>
+                    {% else %}
+                    <a href="{{ url_for('stage_designer.stage_designer') }}" class="sp-btn sp-btn-primary" title="Open designer"><i class="fas fa-drafting-compass"></i> Designer</a>
+                    {% endif %}
+                    <a href="{{ file_url }}" download="{{ plan.filename }}" class="sp-btn sp-btn-secondary" title="Download file"><i class="fas fa-download"></i> Download</a>
+                    <button type="button" class="sp-btn sp-btn-danger" data-delete-plan="{{ plan.id }}" title="Delete stage plan" aria-label="Delete {{ plan.title|e }}"><i class="fas fa-trash"></i></button>
+                </div>
+            </div>
+        </article>
         {% endfor %}
+    </section>
+    <div class="sp-empty sp-hidden" id="noSearchResults">
+        <div class="sp-empty-icon"><i class="fas fa-magnifying-glass"></i></div>
+        <h3>No matching stage plans</h3>
+        <p>Try a different title, filename or uploader name.</p>
     </div>
     {% else %}
-    <div style="text-align: center; padding: 3rem; color: #9ca3af;">
-        <i class="fas fa-drafting-compass" style="font-size: 4rem; margin-bottom: 1rem; opacity: 0.3;"></i>
-        <h3 style="margin-bottom: 0.5rem;">No Stage Plans Yet</h3>
-        <p>Create your first stage plan using the designer or upload an existing file</p>
-        <div style="display: flex; gap: 1rem; justify-content: center; margin-top: 1.5rem;">
-            <a href="{{ url_for('stage_designer.stage_designer') }}" class="btn btn-primary">
-                <i class="fas fa-drafting-compass"></i> Open Designer
-            </a>
-            <button onclick="showModal('uploadModal')" class="btn btn-success">
-                <i class="fas fa-upload"></i> Upload File
-            </button>
+    <section class="sp-empty">
+        <div class="sp-empty-icon"><i class="fas fa-ruler-combined"></i></div>
+        <h3>No stage plans yet</h3>
+        <p>Start with a drawing in the Stage Plan Designer, or upload an existing ground plan, lighting plot or PDF for your crew.</p>
+        <div class="sp-empty-actions">
+            <a href="{{ url_for('stage_designer.stage_designer') }}" class="sp-btn sp-btn-primary"><i class="fas fa-drafting-compass"></i> Open designer</a>
+            <button type="button" class="sp-btn sp-btn-secondary" data-open-modal="uploadModal"><i class="fas fa-upload"></i> Upload a file</button>
+        </div>
+    </section>
+    {% endif %}
+
+    <!-- Upload dialog -->
+    <div class="sp-modal" id="uploadModal" role="dialog" aria-modal="true" aria-labelledby="uploadTitle">
+        <div class="sp-modal-panel">
+            <div class="sp-modal-head">
+                <div>
+                    <h2 id="uploadTitle"><i class="fas fa-cloud-arrow-up"></i> Add a stage plan</h2>
+                    <p>Upload a reference file for your production crew.</p>
+                </div>
+                <button type="button" class="sp-close" data-close-modal aria-label="Close dialog">&times;</button>
+            </div>
+            <form id="uploadForm" enctype="multipart/form-data">
+                <div class="sp-form-group">
+                    <label for="title">Plan title <span aria-hidden="true">*</span></label>
+                    <input type="text" name="title" id="title" maxlength="200" required placeholder="e.g. Act 1 lighting plot">
+                </div>
+                <div class="sp-form-group">
+                    <label for="eventId">Production / event</label>
+                    <select name="event_id" id="eventId">
+                        <option value="">No specific production</option>
+                        {% for event in events %}
+                        <option value="{{ event.id }}" {% if current_event and current_event.id == event.id %}selected{% endif %}>
+                            {{ event.title }} — {{ event.event_date.strftime('%b %d, %Y') }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <span class="sp-help">Assigning an event makes the plan easier for the right crew to find.</span>
+                </div>
+                <div class="sp-form-group">
+                    <label for="file">Plan file <span aria-hidden="true">*</span></label>
+                    <div class="sp-upload-drop">
+                        <input type="file" name="file" id="file" required accept="image/*,.pdf">
+                        <p class="sp-help">Accepted: images and PDF files. Choose a clear, readable export where possible.</p>
+                    </div>
+                </div>
+                <div class="sp-modal-actions">
+                    <button type="button" class="sp-btn sp-btn-secondary" data-close-modal>Cancel</button>
+                    <button type="submit" class="sp-btn sp-btn-primary" id="uploadSubmit"><i class="fas fa-upload"></i> Upload plan</button>
+                </div>
+            </form>
         </div>
     </div>
-    {% endif %}
-</div>
 
-<!-- Upload Modal -->
-<div id="uploadModal" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="hideModal('uploadModal')">&times;</span>
-        <h2><i class="fas fa-upload"></i> Upload Stage Plan</h2>
-        <form id="uploadForm" enctype="multipart/form-data">
-            <div class="form-group">
-                <label>Title *</label>
-                <input type="text" name="title" id="title" required>
+    <!-- Image preview dialog -->
+    <div class="sp-modal" id="imageModal" role="dialog" aria-modal="true" aria-labelledby="imageTitle">
+        <div class="sp-modal-panel sp-modal-wide">
+            <div class="sp-modal-head">
+                <div><h2 id="imageTitle">Stage plan preview</h2><p>Preview only — download the file for a full-resolution copy.</p></div>
+                <button type="button" class="sp-close" data-close-modal aria-label="Close preview">&times;</button>
             </div>
-            <div class="form-group">
-                <label>Assign to Event (Optional)</label>
-                <select name="event_id" id="eventId">
-                    <option value="">No specific event</option>
-                    {% for event in events %}
-                    <option value="{{ event.id }}" {% if current_event and current_event.id == event.id %}selected{% endif %}>
-                        {{ event.title }} - {{ event.event_date.strftime('%b %d, %Y') }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="form-group">
-                <label>File * (Images, PDFs accepted)</label>
-                <input type="file" name="file" id="file" required accept="image/*,.pdf">
-            </div>
-            <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
-                <button type="button" onclick="hideModal('uploadModal')" class="btn" style="background: #6b7280; color: white;">Cancel</button>
-                <button type="submit" class="btn btn-success">
-                    <i class="fas fa-upload"></i> Upload
-                </button>
-            </div>
-        </form>
+            <img id="imagePreview" src="" alt="" style="display:block;max-width:100%;max-height:72vh;margin:auto;object-fit:contain;border-radius:8px;">
+        </div>
     </div>
+    <div id="spAlertRegion" aria-live="polite" aria-atomic="true"></div>
 </div>
-
-<!-- Image Preview Modal -->
-<div id="imageModal" class="modal">
-    <div class="modal-content" style="max-width: 90%; max-height: 90vh;">
-        <span class="close" onclick="hideModal('imageModal')">&times;</span>
-        <h2 id="imageTitle" style="margin-bottom: 1rem;"></h2>
-        <img id="imagePreview" src="" alt="" style="width: 100%; height: auto; border-radius: 6px;">
-    </div>
-</div>
-
 {% endblock %}
 
 {% block scripts %}
 <script>
-document.getElementById('uploadForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    const formData = new FormData(this);
-    const submitBtn = this.querySelector('button[type="submit"]');
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
-    
-    fetch('/stageplans/upload', {
-        method: 'POST',
-        body: formData
-    })
-    .then(r => r.json())
-    .then(result => {
-        if (result.success) {
-            location.reload();
-        } else {
-            alert('Upload failed: ' + (result.error || 'Unknown error'));
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = '<i class="fas fa-upload"></i> Upload';
-        }
-    })
-    .catch(err => {
-        alert('Upload failed: ' + err.message);
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = '<i class="fas fa-upload"></i> Upload';
+(() => {
+    const root = document.querySelector('.stageplans-page');
+    if (!root) return;
+
+    const openModal = (id) => {
+        const modal = document.getElementById(id);
+        if (!modal) return;
+        modal.classList.add('is-open');
+        document.body.style.overflow = 'hidden';
+        const focusable = modal.querySelector('input, select, button, a');
+        if (focusable) focusable.focus();
+    };
+    const closeModal = (modal) => {
+        modal.classList.remove('is-open');
+        if (!root.querySelector('.sp-modal.is-open')) document.body.style.overflow = '';
+    };
+
+    root.querySelectorAll('[data-open-modal]').forEach(button => {
+        button.addEventListener('click', () => openModal(button.dataset.openModal));
     });
-});
+    root.querySelectorAll('[data-close-modal]').forEach(button => {
+        button.addEventListener('click', () => closeModal(button.closest('.sp-modal')));
+    });
+    root.querySelectorAll('.sp-modal').forEach(modal => {
+        modal.addEventListener('click', event => {
+            if (event.target === modal) closeModal(modal);
+        });
+    });
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+            root.querySelectorAll('.sp-modal.is-open').forEach(closeModal);
+        }
+    });
 
-function showImageModal(src, title) {
-    document.getElementById('imagePreview').src = src;
-    document.getElementById('imageTitle').textContent = title;
-    showModal('imageModal');
-}
+    const eventFilter = document.getElementById('eventFilter');
+    eventFilter?.addEventListener('change', () => {
+        const url = new URL(window.location.href);
+        if (eventFilter.value) url.searchParams.set('event_id', eventFilter.value);
+        else url.searchParams.delete('event_id');
+        window.location.href = url.toString();
+    });
 
-function openDesignerPlan(filename) {
-    // Extract timestamp from filename to find matching design
-    // Filename format: designer_thumb_1234567890_name.png
-    const parts = filename.split('_');
-    if (parts.length >= 3) {
-        const timestamp = parts[2];
-        // Fetch designs and find one with matching timestamp in thumbnail
-        fetch('/stage-designer/designs')
-            .then(r => r.json())
-            .then(designs => {
-                const matchingDesign = designs.find(d => d.thumbnail && d.thumbnail.includes(timestamp));
-                if (matchingDesign) {
-                    window.location.href = `/stage-designer?design_id=${matchingDesign.id}`;
-                } else {
-                    showAlert('Could not find matching design', 'error');
-                }
-            })
-            .catch(err => {
-                console.error('Error finding design:', err);
-                showAlert('Error opening designer', 'error');
-            });
-    }
-}
+    const search = document.getElementById('planSearch');
+    const cards = [...root.querySelectorAll('[data-plan-card]')];
+    const count = document.getElementById('planCount');
+    const noResults = document.getElementById('noSearchResults');
+    search?.addEventListener('input', () => {
+        const term = search.value.trim().toLowerCase();
+        let visible = 0;
+        cards.forEach(card => {
+            const match = (card.dataset.search || '').includes(term);
+            card.classList.toggle('sp-hidden', !match);
+            if (match) visible++;
+        });
+        if (count) count.textContent = `${visible} stage plan${visible === 1 ? '' : 's'}`;
+        noResults?.classList.toggle('sp-hidden', visible !== 0);
+    });
 
-function deletePlan(id) {
-    if (!confirm('Delete this stage plan? This cannot be undone.')) return;
-    
-    fetch(`/stageplans/delete/${id}`, {method: 'DELETE'})
-        .then(r => r.json())
-        .then(result => {
-            if (result.success) {
-                showAlert('Stage plan deleted');
-                setTimeout(() => location.reload(), 1000);
+    const showAlert = (message, isError = false) => {
+        const region = document.getElementById('spAlertRegion');
+        const alert = document.createElement('div');
+        alert.className = `sp-alert${isError ? ' error' : ''}`;
+        alert.textContent = message;
+        region.replaceChildren(alert);
+        window.setTimeout(() => alert.remove(), 4000);
+    };
+
+    const imagePreview = document.getElementById('imagePreview');
+    const imageTitle = document.getElementById('imageTitle');
+    const preview = (src, title) => {
+        imagePreview.src = src;
+        imagePreview.alt = title;
+        imageTitle.textContent = title;
+        openModal('imageModal');
+    };
+    root.querySelectorAll('[data-preview-src]').forEach(element => {
+        element.addEventListener('click', () => preview(element.dataset.previewSrc, element.dataset.previewTitle || 'Stage plan'));
+        element.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                preview(element.dataset.previewSrc, element.dataset.previewTitle || 'Stage plan');
             }
         });
-}
+    });
 
-function showAlert(message, type = 'success') {
-    const alert = document.createElement('div');
-    alert.className = `alert alert-${type}`;
-    alert.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i> ${message}`;
-    document.querySelector('.main-content').insertBefore(alert, document.querySelector('.main-content').firstChild);
-    setTimeout(() => alert.remove(), 3000);
-}
+    root.querySelectorAll('[data-open-designer]').forEach(button => {
+        button.addEventListener('click', async () => {
+            const filename = button.dataset.openDesigner || '';
+            const parts = filename.split('_');
+            const timestamp = parts.length >= 3 ? parts[2] : '';
+            if (!timestamp) {
+                showAlert('Could not identify the saved design for this preview.', true);
+                return;
+            }
+            button.disabled = true;
+            try {
+                const response = await fetch('/stage-designer/designs');
+                if (!response.ok) throw new Error('Could not load saved designs.');
+                const designs = await response.json();
+                const matching = designs.find(design => (design.thumbnail || '').includes(timestamp));
+                if (!matching) throw new Error('Could not find the saved design. It may have been deleted.');
+                window.location.href = `/stage-designer?design_id=${encodeURIComponent(matching.id)}`;
+            } catch (error) {
+                showAlert(error.message || 'Error opening designer.', true);
+                button.disabled = false;
+            }
+        });
+    });
+
+    root.querySelectorAll('[data-delete-plan]').forEach(button => {
+        button.addEventListener('click', async () => {
+            const id = button.dataset.deletePlan;
+            const card = button.closest('[data-plan-card]');
+            const title = card?.querySelector('.sp-card-title')?.textContent?.trim() || 'this stage plan';
+            if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return;
+            button.disabled = true;
+            try {
+                const response = await fetch(`/stageplans/delete/${encodeURIComponent(id)}`, { method: 'DELETE' });
+                const result = await response.json();
+                if (!response.ok || !result.success) throw new Error(result.error || 'Could not delete this stage plan.');
+                card?.remove();
+                const remaining = root.querySelectorAll('[data-plan-card]').length;
+                if (count) count.textContent = `${remaining} stage plan${remaining === 1 ? '' : 's'}`;
+                if (remaining === 0) window.location.reload();
+                else showAlert('Stage plan deleted.');
+            } catch (error) {
+                showAlert(error.message || 'Delete failed.', true);
+                button.disabled = false;
+            }
+        });
+    });
+
+    const form = document.getElementById('uploadForm');
+    form?.addEventListener('submit', async event => {
+        event.preventDefault();
+        const submit = document.getElementById('uploadSubmit');
+        const file = document.getElementById('file');
+        if (!file.files.length) {
+            showAlert('Choose a file to upload.', true);
+            return;
+        }
+        submit.disabled = true;
+        submit.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading…';
+        try {
+            const response = await fetch('/stageplans/upload', { method: 'POST', body: new FormData(form) });
+            const result = await response.json();
+            if (!response.ok || !result.success) throw new Error(result.error || 'Upload failed.');
+            window.location.reload();
+        } catch (error) {
+            showAlert(error.message || 'Upload failed.', true);
+            submit.disabled = false;
+            submit.innerHTML = '<i class="fas fa-upload"></i> Upload plan';
+        }
+    });
+})();
 </script>
 {% endblock %}

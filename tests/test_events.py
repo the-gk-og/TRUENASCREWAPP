@@ -53,6 +53,10 @@ def alice(app): return client_for(app, 'alice')
 
 
 def uid(name): return User.query.filter_by(username=name).first().id
+def ics_path(c):
+    """The signed-in person's private feed path, e.g. /calendar/ics/<long-slug>."""
+    url = c.get('/api/calendar/sync-link').get_json()['url']
+    return '/' + url.split('/', 3)[3]
 def mk(c, **kw):
     body = {'title': 'Show', 'event_date': '2026-11-10T18:00', 'event_end_date': '2026-11-10T22:00'}
     body.update(kw)
@@ -238,7 +242,7 @@ def test_pages_render(app, admin, alice):
     admin.post(f'/events/{eid}/crew-run/add', json={'title': 'Cue 1'})
     admin.post(f'/events/{eid}/notes/add', json={'content': 'note'})
     for c in (admin, alice):
-        for url in (f'/events/{eid}', '/events', '/calendar', '/crew/my-schedule', '/calendar/ics'):
+        for url in (f'/events/{eid}', '/events', '/calendar', '/crew/my-schedule', ics_path(c)):
             r = c.get(url)
             assert r.status_code == 200, (url, r.status_code)
     assert b'<h1>Hello</h1>' in admin.get(f'/events/{eid}').data
@@ -248,7 +252,7 @@ def test_pages_render(app, admin, alice):
 
 def test_ics_escaping_and_folding(app, admin):
     mk(admin, title='A, B; C', description='line1\nline2 \\ x ' + 'y' * 120, location='Hall, North')
-    body = admin.get('/calendar/ics').data.decode()
+    body = admin.get(ics_path(admin)).data.decode()
     assert 'SUMMARY:A\\, B\\; C' in body and 'LOCATION:Hall\\, North' in body
     assert '\\nline2' in body.replace('\r\n ', '')
     assert all(len(l.encode()) <= 75 for l in body.split('\r\n'))
@@ -261,3 +265,126 @@ def test_schema_upgrade(app):
     db.session.commit()
     ensure_schema(app)
     assert 'all_day' in {c['name'] for c in db.inspect(db.engine).get_columns('event')}
+
+
+# ---------------------------------------------------------------------------
+# Logged-out visitors, private calendar feed, shift emails
+# ---------------------------------------------------------------------------
+
+def test_logged_out_goes_to_login_not_home_page(app, alice):
+    anon = app.test_client()
+    r = anon.get('/')
+    assert r.status_code == 302 and r.headers['Location'].endswith('/login')
+    assert 'showwise.app' not in r.headers['Location']
+    r = anon.get('/calendar')                         # protected page -> login too
+    assert r.status_code == 302 and '/login' in r.headers['Location']
+    r = alice.get('/')                                # signed in -> dashboard
+    assert r.status_code == 302 and r.headers['Location'].endswith('/dashboard')
+
+
+def test_private_ics_feed(app, admin, alice):
+    anon = app.test_client()
+    eid = mk(admin, title='Gala')
+    admin.post(f'/events/{eid}/team/add', json={'user_id': uid('alice'), 'role': 'Sound', 'notes': 'Bring XLR'})
+    admin.post(f'/events/{eid}/team/add', json={'user_id': uid('bob'), 'role': 'Lights'})
+
+    path = ics_path(alice)
+    token = path.rsplit('/', 1)[1]
+    assert path.startswith('/calendar/ics/') and len(token) >= 40
+    assert ics_path(alice) == path                    # stable between visits
+    assert ics_path(admin) != path                    # different per person
+
+    r = anon.get(path)                                # no login needed (calendar apps can't)
+    assert r.status_code == 200 and r.mimetype == 'text/calendar'
+    assert 'no-store' not in r.headers.get('Cache-Control', '') and 'private' in r.headers['Cache-Control']
+    body = r.data.decode().replace('\r\n ', '')
+    assert 'SUMMARY:Gala' in body                                   # the event
+    assert 'SUMMARY:Sound shift \u00b7 Gala' in body               # alice's shift
+    assert 'Lights' not in body                                     # bob's shift is not in alice's feed
+    assert 'STATUS:TENTATIVE' in body and 'Bring XLR' in body
+    assert 'X-WR-CALNAME:ShowWise - alice' in body
+
+    # a declined shift drops out of the feed
+    a = ShiftAssignment.query.filter_by(user_id=uid('alice')).first()
+    a.status = 'rejected'; db.session.commit()
+    assert 'Sound shift' not in anon.get(path).data.decode()
+
+    # accepted shifts are CONFIRMED
+    a.status = 'accepted'; db.session.commit()
+    assert 'STATUS:CONFIRMED' in anon.get(path).data.decode()
+
+
+def test_ics_bad_and_old_urls(app, alice):
+    anon = app.test_client()
+    assert anon.get('/calendar/ics/' + 'x' * 43).status_code == 404
+    assert anon.get('/calendar/ics/short').status_code == 404
+    assert anon.get('/calendar/ics/1').status_code == 404
+    r = anon.get('/calendar/ics')                     # the old open feed needs a login now
+    assert r.status_code == 302 and '/login' in r.headers['Location']
+    r = alice.get('/calendar/ics')                    # signed in: sent to your own private link
+    assert r.status_code == 302 and r.headers['Location'].endswith(ics_path(alice))
+
+
+def test_ics_link_reset_and_cast_blocked(app, alice):
+    anon = app.test_client()
+    old = ics_path(alice)
+    assert anon.get(old).status_code == 200
+    new_url = alice.post('/api/calendar/sync-link/reset').get_json()
+    assert new_url['webcal_url'].startswith('webcal://') and new_url['url'].startswith('http')
+    assert anon.get(old).status_code == 404                           # old slug is dead
+    assert anon.get('/' + new_url['url'].split('/', 3)[3]).status_code == 200
+    # cast-only accounts never get a crew feed
+    cast = User(username='cassie', is_cast=True, user_role='cast', calendar_token='c' * 43)
+    db.session.add(cast); db.session.commit()
+    assert anon.get('/calendar/ics/' + 'c' * 43).status_code == 404
+
+
+def _outbox(app):
+    from extensions import mail
+    app.config['MAIL_USERNAME'] = 'sender@x.test'
+    return mail.record_messages()
+
+
+def test_shift_assignment_sends_email(app, admin):
+    eid = mk(admin, title='Gala', location='Main Hall')
+    with _outbox(app) as outbox:
+        r = admin.post(f'/events/{eid}/team/add',
+                       json={'user_id': uid('alice'), 'role': 'Sound', 'notes': '<b>Bring</b> XLR\nbag'})
+        assert r.status_code == 200
+        assert len(outbox) == 1
+        m = outbox[0]
+        assert m.recipients == ['alice@x.test'] and 'New shift assigned' in m.subject
+        assert 'Gala' in m.html and 'Sound' in m.html and 'Main Hall' in m.html
+        assert 'View my shifts' in m.html and '/crew/my-schedule' in m.html
+        assert '&lt;b&gt;Bring&lt;/b&gt;' in m.html and '<b>Bring</b>' not in m.html     # user text is escaped
+        assert '{%' not in m.html and 'Positions' not in m.html
+        # assigning yourself does not email you
+        admin.post(f'/events/{eid}/team/add', json={'user_id': uid('boss'), 'role': 'Lead'})
+        assert len(outbox) == 1
+
+
+def test_add_all_crew_emails_everyone_but_you(app, admin):
+    eid = mk(admin, title='Gala')
+    with _outbox(app) as outbox:
+        assert admin.post(f'/events/{eid}/team/add-all').get_json()['added'] == 3
+        assert sorted(m.recipients[0] for m in outbox) == ['alice@x.test', 'bob@x.test']
+
+
+def test_no_email_when_mail_not_configured(app, admin):
+    from extensions import mail
+    eid = mk(admin)
+    with mail.record_messages() as outbox:           # MAIL_USERNAME is empty in tests
+        assert admin.post(f'/events/{eid}/team/add', json={'user_id': uid('alice'), 'role': 'Sound'}).status_code == 200
+        assert outbox == []
+
+
+def test_calendar_token_schema_upgrade(app):
+    from sqlalchemy import text
+    from app import ensure_schema
+    db.session.execute(text('DROP INDEX IF EXISTS ix_user_calendar_token'))
+    db.session.execute(text('ALTER TABLE user DROP COLUMN calendar_token'))
+    db.session.commit()
+    ensure_schema(app)
+    insp = db.inspect(db.engine)
+    assert 'calendar_token' in {c['name'] for c in insp.get_columns('user')}
+    assert any(i['name'] == 'ix_user_calendar_token' and i['unique'] for i in insp.get_indexes('user'))
