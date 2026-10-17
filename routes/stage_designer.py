@@ -20,17 +20,40 @@ UPLOAD_FOLDER = 'uploads'
 
 
 def _save_thumbnail(name: str, b64: str) -> str | None:
+    """Decode a PNG data-URI/base64 string into uploads/. Returns the filename or None."""
     try:
-        raw      = b64.split(',')[1] if ',' in b64 else b64
-        data     = base64.b64decode(raw)
-        safe     = ''.join(c if c.isalnum() or c in ' -_' else '_' for c in name)
-        filename = f"designer_thumb_{int(datetime.now().timestamp())}_{safe}.png"
+        raw  = b64.split(',', 1)[1] if ',' in b64 else b64
+        data = base64.b64decode(raw, validate=True)
+        if not data.startswith(b'\x89PNG'):
+            raise ValueError('thumbnail is not a PNG image')
+        safe     = ''.join(c if c.isalnum() or c in '-_' else '_' for c in name)[:60]
+        filename = f"designer_thumb_{int(datetime.now().timestamp() * 1000)}_{safe}.png"
+        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
         with open(os.path.join(UPLOAD_FOLDER, filename), 'wb') as f:
             f.write(data)
         return filename
     except Exception as exc:
         print(f"⚠️  Could not save thumbnail: {exc}")
         return None
+
+
+def _to_int(value):
+    """Form/JSON ids arrive as strings ('3') or ''/None; normalise to int or None."""
+    try:
+        return int(value) if value not in (None, '') else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _remove_upload(filename: str | None):
+    if not filename:
+        return
+    path = os.path.join(UPLOAD_FOLDER, filename)
+    if os.path.exists(path):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 
 @stage_designer_bp.route('/stage-designer')
@@ -56,23 +79,31 @@ def stage_designer():
 @crew_required
 def create_stage_design():
     try:
-        data      = request.json
-        thumbnail = _save_thumbnail(data['name'], data['thumbnail']) if data.get('thumbnail') else None
+        data = request.get_json(silent=True) or {}
+        name = (data.get('name') or '').strip()
+        if not name:
+            return jsonify({'success': False, 'error': 'A name is required.'}), 400
+        if not data.get('design_data'):
+            return jsonify({'success': False, 'error': 'No design data was received.'}), 400
+
+        event_id  = _to_int(data.get('event_id'))
+        thumbnail = _save_thumbnail(name, data['thumbnail']) if data.get('thumbnail') else None
         design    = StagePlanDesign(
-            name=data['name'], design_data=json.dumps(data['design_data']),
-            thumbnail=thumbnail, event_id=data.get('event_id'),
+            name=name, design_data=json.dumps(data['design_data']),
+            thumbnail=thumbnail, event_id=event_id,
             created_by=current_user.username,
         )
         db.session.add(design)
         db.session.flush()
-        if data.get('save_to_stageplans'):
+        # Only list on the Stage Plans page when there is a real image to show.
+        if data.get('save_to_stageplans') and thumbnail:
             db.session.add(StagePlan(
-                title=data['name'],
-                filename=thumbnail or f"designer_{design.id}.json",
-                uploaded_by=current_user.username, event_id=data.get('event_id'),
+                title=name, filename=thumbnail,
+                uploaded_by=current_user.username, event_id=event_id,
             ))
         db.session.commit()
-        return jsonify({'success': True, 'design_id': design.id})
+        return jsonify({'success': True, 'design_id': design.id,
+                        'preview_saved': bool(thumbnail)})
     except Exception as exc:
         db.session.rollback()
         import traceback; traceback.print_exc()
@@ -83,24 +114,47 @@ def create_stage_design():
 @login_required
 @crew_required
 def update_stage_design(id):
+    old_thumbnail = None
     try:
-        design    = StagePlanDesign.query.get_or_404(id)
-        data      = request.json
-        thumbnail = design.thumbnail
-        if data.get('thumbnail'):
-            if thumbnail and os.path.exists(os.path.join(UPLOAD_FOLDER, thumbnail)):
-                try: os.remove(os.path.join(UPLOAD_FOLDER, thumbnail))
-                except Exception: pass
-            thumbnail = _save_thumbnail(data['name'], data['thumbnail'])
-        design.name        = data.get('name', design.name)
+        design = StagePlanDesign.query.get_or_404(id)
+        data   = request.get_json(silent=True) or {}
+        name   = (data.get('name') or design.name).strip()
+        if not data.get('design_data'):
+            return jsonify({'success': False, 'error': 'No design data was received.'}), 400
+
+        event_id      = _to_int(data.get('event_id'))
+        old_thumbnail = design.thumbnail
+        new_thumbnail = _save_thumbnail(name, data['thumbnail']) if data.get('thumbnail') else None
+        thumbnail     = new_thumbnail or old_thumbnail
+
+        # Keep any Stage Plans entry that points at the old preview in sync,
+        # otherwise it ends up referencing a file that no longer exists.
+        linked = StagePlan.query.filter_by(filename=old_thumbnail).all() if old_thumbnail else []
+        for plan in linked:
+            if new_thumbnail:
+                plan.filename = new_thumbnail
+            plan.title    = name
+            plan.event_id = event_id
+        if data.get('save_to_stageplans') and thumbnail and not linked:
+            db.session.add(StagePlan(
+                title=name, filename=thumbnail,
+                uploaded_by=current_user.username, event_id=event_id,
+            ))
+
+        design.name        = name
         design.design_data = json.dumps(data['design_data'])
         design.thumbnail   = thumbnail
-        design.event_id    = data.get('event_id')
+        design.event_id    = event_id
         design.updated_at  = datetime.utcnow()
         db.session.commit()
-        return jsonify({'success': True, 'design_id': design.id})
+
+        if new_thumbnail and old_thumbnail and new_thumbnail != old_thumbnail:
+            _remove_upload(old_thumbnail)   # only after the DB no longer points at it
+        return jsonify({'success': True, 'design_id': design.id,
+                        'preview_saved': bool(new_thumbnail)})
     except Exception as exc:
         db.session.rollback()
+        import traceback; traceback.print_exc()
         return jsonify({'success': False, 'error': str(exc)}), 500
 
 
@@ -112,7 +166,7 @@ def list_stage_designs():
     return jsonify([{
         'id': d.id, 'name': d.name, 'event_id': d.event_id,
         'event_name': d.event.title if d.event else None,
-        'thumbnail': url_for('uploaded_file', filename=d.thumbnail) if d.thumbnail else None,
+        'thumbnail': url_for('stage_designer.uploaded_file', filename=d.thumbnail) if d.thumbnail else None,
         'created_by': d.created_by,
         'created_at': d.created_at.isoformat(), 'updated_at': d.updated_at.isoformat(),
     } for d in designs])
@@ -123,8 +177,12 @@ def list_stage_designs():
 @crew_required
 def get_stage_design(id):
     design = StagePlanDesign.query.get_or_404(id)
+    try:
+        design_data = json.loads(design.design_data)
+    except (TypeError, ValueError):
+        design_data = {}
     return jsonify({'id': design.id, 'name': design.name,
-                    'design_data': json.loads(design.design_data),
+                    'design_data': design_data,
                     'event_id': design.event_id, 'thumbnail': design.thumbnail})
 
 
@@ -175,7 +233,7 @@ def get_stage_templates():
     ).order_by(StagePlanTemplate.created_at.desc()).all()
     return jsonify([{
         'id': t.id, 'name': t.name, 'description': t.description,
-        'thumbnail': url_for('uploaded_file', filename=t.thumbnail) if t.thumbnail else None,
+        'thumbnail': url_for('stage_designer.uploaded_file', filename=t.thumbnail) if t.thumbnail else None,
         'created_by': t.created_by, 'created_at': t.created_at.isoformat(),
     } for t in templates])
 
@@ -302,9 +360,12 @@ def uploaded_file(filename):
 @crew_required
 def delete_stageplan(id):
     plan = StagePlan.query.get_or_404(id)
-    path = os.path.join(UPLOAD_FOLDER, plan.filename)
-    if os.path.exists(path):
-        os.remove(path)
+    filename = plan.filename
     db.session.delete(plan)
     db.session.commit()
+    # A designer preview is shared with its saved design; keep the file in that case.
+    in_use = (StagePlanDesign.query.filter_by(thumbnail=filename).first()
+              or StagePlan.query.filter_by(filename=filename).first())
+    if not in_use:
+        _remove_upload(filename)
     return jsonify({'success': True})
