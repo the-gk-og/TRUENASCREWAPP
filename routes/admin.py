@@ -36,6 +36,10 @@ from models import (
     EmailOTP, OAuthConnection, CastMember,
 )
 from utils import generate_invite_code, log_security_event, get_organization
+from services.user_names import (
+    clean_display_name, username_problem, username_taken, email_taken,
+    rename_user_references, sync_cast_names, name_for,
+)
 from constants import DEFAULT_ORG, USER_ROLES
 from services.email_service import send_invite_email, send_html_email
 from services.settings_service import get_setting, set_setting
@@ -72,7 +76,8 @@ def serialize_user(user: User, tfa=None) -> dict:
     if tfa is None:
         tfa = TwoFactorAuth.query.filter_by(user_id=user.id).first()
     return {
-        'id': user.id, 'username': user.username, 'email': user.email or '',
+        'id': user.id, 'username': user.username, 'name': user.shown_name,
+        'display_name': user.display_name or '', 'email': user.email or '',
         'user_role': user.user_role or 'crew', 'is_admin': bool(user.is_admin),
         'is_cast': bool(user.is_cast),
         'discord_username': user.discord_username or '',
@@ -93,10 +98,10 @@ def serialize_invite(inv: InviteCode) -> dict:
     else:
         state = 'active'
     return {
-        'id': inv.id, 'code': inv.code, 'role': inv.role, 'created_by': inv.created_by,
+        'id': inv.id, 'code': inv.code, 'role': inv.role, 'created_by': name_for(inv.created_by),
         'created_at': inv.created_at.isoformat(), 'expires_at': inv.expires_at.isoformat(),
         'max_uses': inv.max_uses, 'use_count': inv.use_count, 'is_active': inv.is_active,
-        'note': inv.note or '', 'used_by': [u.username for u in inv.used_by_users], 'state': state,
+        'note': inv.note or '', 'used_by': [u.shown_name for u in inv.used_by_users], 'state': state,
     }
 
 
@@ -128,7 +133,7 @@ def admin_panel():
                 .order_by(ShiftAssignment.responded_at.desc()).limit(10).all())
 
     def row(a, s, e, u):
-        return {'assignment_id': a.id, 'username': u.username, 'event_id': e.id, 'event': e.title,
+        return {'assignment_id': a.id, 'username': u.username, 'name': u.shown_name, 'event_id': e.id, 'event': e.title,
                 'role': s.role or 'Shift', 'start': s.shift_date, 'end': s.shift_end_date,
                 'reason': a.decline_reason or '', 'responded': a.responded_at}
 
@@ -172,23 +177,23 @@ def _validate_user_fields(data: dict, user: User | None = None):
     out = {}
     if 'username' in data or user is None:
         name = str(data.get('username') or '').strip()
-        if not (2 <= len(name) <= 80):
-            return None, 'Username must be 2–80 characters'
-        clash = User.query.filter(db.func.lower(User.username) == name.lower())
-        if user:
-            clash = clash.filter(User.id != user.id)
-        if clash.first():
+        problem = username_problem(name, minimum=2, maximum=80)
+        if problem:
+            return None, problem
+        if username_taken(name, exclude_id=user.id if user else None):
             return None, 'That username is already taken'
         out['username'] = name
+    if 'display_name' in data:
+        display, problem = clean_display_name(data.get('display_name'))
+        if problem:
+            return None, problem
+        out['display_name'] = display
     if 'email' in data:
-        email = str(data.get('email') or '').strip() or None
+        email = (str(data.get('email') or '').strip().lower()) or None
         if email:
             if not _EMAIL.match(email):
                 return None, 'That email address does not look valid'
-            clash = User.query.filter(db.func.lower(User.email) == email.lower())
-            if user:
-                clash = clash.filter(User.id != user.id)
-            if clash.first():
+            if email_taken(email, exclude_id=user.id if user else None):
                 return None, 'That email is already used by another account'
         out['email'] = email
     if 'user_role' in data:
@@ -221,7 +226,7 @@ def add_user():
     if problem:
         return err(problem)
     role = clean.get('user_role', 'crew')
-    user = User(username=clean['username'], email=clean.get('email'),
+    user = User(username=clean['username'], display_name=clean.get('display_name'), email=clean.get('email'),
                 password_hash=generate_password_hash(clean['password']),
                 is_admin=bool(data.get('is_admin', False)) and role != 'cast',
                 is_cast=(role == 'cast'), user_role=role)
@@ -249,8 +254,14 @@ def edit_user(id):
         return err(problem)
     if 'is_admin' in data and id == current_user.id and not data['is_admin']:
         return err('You cannot remove your own admin access', 403)
-    if 'username' in clean:
+    if 'username' in clean and clean['username'] != user.username:
+        old_username = user.username
         user.username = clean['username']
+        rename_user_references(old_username, user.username)     # keep their shifts, notes, events attached
+    if 'display_name' in clean:
+        user.display_name = clean['display_name']
+        db.session.flush()
+        sync_cast_names(user)
     if 'email' in clean:
         user.email = clean['email']
     if 'user_role' in clean:
@@ -335,7 +346,7 @@ def _notification_state() -> dict:
         'enabled': bool(get_setting('notify.shift_declined.enabled')),
         'include_event_creator': bool(get_setting('notify.shift_declined.include_event_creator')),
         'user_ids': chosen,
-        'people': [{'id': u.id, 'username': u.username, 'email': u.email or '',
+        'people': [{'id': u.id, 'username': u.username, 'name': u.shown_name, 'email': u.email or '',
                     'is_admin': bool(u.is_admin), 'suggested': u in candidates} for u in everyone],
     }
 
@@ -523,8 +534,8 @@ def export_events_csv():
             w.writerow([e.title, f(e.event_date), f(e.event_end_date), e.location or '', 'No crew assigned'])
         for name, info in people.items():
             user = User.query.filter_by(username=name).first()
-            base = [e.title, f(e.event_date), f(e.event_end_date), e.location or '', name,
-                    user.email if user and user.email else '']
+            base = [e.title, f(e.event_date), f(e.event_end_date), e.location or '',
+                    user.shown_name if user else name, user.email if user and user.email else '']
             if not info['shifts']:
                 w.writerow(base + [info['role'] or '', '', '', 'no shift times'])
             for a, s in info['shifts']:

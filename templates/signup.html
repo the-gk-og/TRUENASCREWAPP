@@ -228,10 +228,17 @@
       </div>
 
       <div class="form-group">
+        <label><i class="fas fa-id-card"></i> Your name *</label>
+        <input type="text" name="display_name" id="display_name" required
+               placeholder="e.g. Sam Taylor" autocomplete="name" minlength="2" maxlength="60">
+        <div class="input-hint">This is what other crew members see on shifts and events.</div>
+      </div>
+
+      <div class="form-group">
         <label><i class="fas fa-user"></i> Username *</label>
         <input type="text" name="username" id="username" required
-               placeholder="Choose a username" autocomplete="username" minlength="3" maxlength="40">
-        <div class="input-hint" id="usernameHint"></div>
+               placeholder="Choose a username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" minlength="3" maxlength="40">
+        <div class="input-hint" id="usernameHint">You use this (or your email) to log in. Not case-sensitive.</div>
       </div>
 
       <div class="form-group">

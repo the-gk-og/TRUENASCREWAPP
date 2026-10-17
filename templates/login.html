@@ -291,10 +291,10 @@
       {{ form.hidden_tag() if form is defined }}
 
       <div class="form-group">
-        <label><i class="fas fa-user"></i> Username</label>
+        <label><i class="fas fa-user"></i> Username or email</label>
         <input type="text" name="username" id="username" required
-               placeholder="Your username"
-               autocomplete="username"
+               placeholder="Username or email"
+               autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false"
                autofocus>
       </div>
 

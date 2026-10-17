@@ -89,7 +89,7 @@
             <div style="flex-shrink: 0;">
                 <img
                     id="profilePreview"
-                    src="{% if current_user.profile_picture %}/profile/picture/{{ current_user.username }}{% else %}https://via.placeholder.com/120/6366f1/ffffff?text={{ current_user.username[:1] }}{% endif %}"
+                    src="{% if current_user.profile_picture %}/profile/picture/{{ current_user.username }}{% else %}https://via.placeholder.com/120/6366f1/ffffff?text={{ current_user.shown_name[:1] }}{% endif %}"
                     alt="Profile Picture"
                     style="width: 120px; height: 120px; border-radius: 50%; border: 3px solid var(--primary); object-fit: cover;"
                 >
@@ -130,9 +130,13 @@
         </div>
 
         <div id="accountInfoView" style="display: grid; gap: 0.75rem; max-width: 400px;">
-            <div style="display: flex; justify-content: space-between; padding: 0.75rem; background: var(--bg-table-head); border-radius: 8px;">
-                <span style="color: var(--text-secondary);">Username</span>
-                <strong id="usernameDisplay">{{ current_user.username }}</strong>
+            <div style="display: flex; justify-content: space-between; gap: 1rem; padding: 0.75rem; background: var(--bg-table-head); border-radius: 8px;">
+                <span style="color: var(--text-secondary);">Name <small>(shown to others)</small></span>
+                <strong id="nameDisplay" style="text-align: right; overflow-wrap: anywhere;">{{ current_user.shown_name }}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; gap: 1rem; padding: 0.75rem; background: var(--bg-table-head); border-radius: 8px;">
+                <span style="color: var(--text-secondary);">Username <small>(for login)</small></span>
+                <strong id="usernameDisplay" style="text-align: right; overflow-wrap: anywhere;">{{ current_user.username }}</strong>
             </div>
             <div style="display: flex; justify-content: space-between; padding: 0.75rem; background: var(--bg-table-head); border-radius: 8px;">
                 <span style="color: var(--text-secondary);">Email</span>
@@ -154,20 +158,28 @@
         <form id="accountInfoForm" style="display: none; margin-top: 1.5rem;">
             <div style="background: var(--bg-nav-active); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--primary); margin-bottom: 1.5rem;">
                 <p style="margin: 0; color: var(--text-primary); font-size: 0.95rem;">
-                    <i class="fas fa-info-circle"></i> <strong>Note:</strong> Leave fields blank to keep current values.
+                    <i class="fas fa-info-circle"></i> <strong>Note:</strong> Leave username and email blank to keep them as they are.
                 </p>
             </div>
 
             <div class="form-group">
+                <label for="editName"><i class="fas fa-id-card"></i> Name</label>
+                <input type="text" id="editName" value="{{ current_user.display_name or '' }}" maxlength="60" autocomplete="name"
+                       placeholder="e.g. Sam Taylor">
+                <small style="color: var(--text-secondary);">This is what other people see on shifts, events and notes. Leave empty to show your username.</small>
+            </div>
+
+            <div class="form-group">
                 <label for="editUsername"><i class="fas fa-user"></i> Username</label>
-                <input type="text" id="editUsername" placeholder="Enter new username (min 3 chars, leave blank to keep)" minlength="3">
-                <small style="color: var(--text-secondary);">Minimum 3 characters</small>
+                <input type="text" id="editUsername" placeholder="Enter new username (leave blank to keep)" minlength="3"
+                       autocapitalize="none" autocorrect="off" spellcheck="false">
+                <small style="color: var(--text-secondary);">Only used to log in (not case-sensitive). You can also log in with your email.</small>
             </div>
 
             <div class="form-group">
                 <label for="editEmail"><i class="fas fa-envelope"></i> Email Address</label>
-                <input type="email" id="editEmail" placeholder="Enter email (leave blank to remove)">
-                <small style="color: var(--text-secondary);">Used for notifications and password reset</small>
+                <input type="email" id="editEmail" placeholder="Enter a new email (leave blank to keep)">
+                <small style="color: var(--text-secondary);">Used for notifications, password reset and logging in</small>
             </div>
 
             <div style="display: flex; gap: 1rem;">
@@ -1041,10 +1053,12 @@ function toggleAccountEdit() {
 }
 document.getElementById('accountInfoForm').addEventListener('submit', async function(e) {
     e.preventDefault();
+    const name     = document.getElementById('editName').value.trim();
     const username = document.getElementById('editUsername').value.trim();
     const email    = document.getElementById('editEmail').value.trim();
-    if (!username && !email) { showAlert('Enter at least one field to update', 'error'); return; }
+    if (name && name.length < 2) { showAlert('Name must be at least 2 characters', 'error'); return; }
     if (username && username.length < 3) { showAlert('Username must be at least 3 characters', 'error'); return; }
+    if (username.includes('@')) { showAlert('Usernames cannot contain "@" - you can log in with your email instead', 'error'); return; }
     const btn = document.getElementById('saveAccountBtn');
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
@@ -1052,13 +1066,14 @@ document.getElementById('accountInfoForm').addEventListener('submit', async func
         const response = await fetch('/settings/update-account', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: username || null, email: email || null })
+            body: JSON.stringify({ display_name: name, username: username || null, email: email || null })
         });
         const data = await response.json();
         if (response.ok) {
             showAlert('✓ Account information updated!', 'success');
-            if (username) document.getElementById('usernameDisplay').textContent = username;
-            if (email) document.getElementById('emailDisplay').textContent = email;
+            document.getElementById('nameDisplay').textContent = data.name;
+            document.getElementById('usernameDisplay').textContent = data.username;
+            if (data.email) document.getElementById('emailDisplay').textContent = data.email;
             setTimeout(() => location.reload(), 1500);
         } else showAlert(data.error || 'Update failed', 'error');
     } catch { showAlert('Network error', 'error'); }

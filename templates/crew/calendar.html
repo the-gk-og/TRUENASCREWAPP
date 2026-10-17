@@ -24,7 +24,7 @@
       {% if can_manage %}
       <option value="all">Everyone's shifts</option>
       <optgroup label="One person">
-        {% for u in crew_users %}<option value="user:{{ u.id }}">{{ u.username }}</option>{% endfor %}
+        {% for u in crew_users %}<option value="user:{{ u.id }}">{{ u.shown_name }}</option>{% endfor %}
       </optgroup>
       {% endif %}
     </select>
@@ -143,10 +143,10 @@ function showDetail(ev) {
   const d = SW.dialog({ title: x.kind === 'event' ? ev.title : x.kind === 'shift' ? 'Shift' : 'Unavailable' });
   const rows = [];
   if (x.kind === 'shift') {
-    rows.push(['Person', x.username + (x.mine ? ' (you)' : '')], ['Event', x.event_title]);
+    rows.push(['Person', (x.name || x.username) + (x.mine ? ' (you)' : '')], ['Event', x.event_title]);
     if (x.role) rows.push(['Role', x.role]);
   }
-  if (x.kind === 'unavailability') rows.push(['Person', x.username || 'You'], ['Reason', ev.title.replace(/^Unavailable – /, '')]);
+  if (x.kind === 'unavailability') rows.push(['Person', x.name || x.username || 'You'], ['Reason', ev.title.replace(/^Unavailable – /, '')]);
   rows.push(['When', x.when]);
   if (x.location) rows.push(['Where', x.location]);
   if (x.kind === 'shift') {
@@ -183,12 +183,12 @@ function showDetail(ev) {
     if (CAN_MANAGE) {
       add('Remove', 'btn-danger sw-left', async () => {
         d.close();
-        if (!(await SW.confirm(`Delete ${x.username}'s shift?`, { danger: true, okText: 'Delete' }))) return;
+        if (!(await SW.confirm(`Delete ${x.name || x.username}'s shift?`, { danger: true, okText: 'Delete' }))) return;
         if (await SW.run(() => SW.api('DELETE', `/events/shift-assignments/${x.assignment_id}`), 'Shift deleted')) cal.refetchEvents();
       });
       add('Edit shift', 'btn-secondary', async () => {
         d.close();
-        const shift = { assignment_id: x.assignment_id, username: x.username, role: x.role, status: x.status, notes: x.notes,
+        const shift = { assignment_id: x.assignment_id, username: x.username, name: x.name, role: x.role, status: x.status, notes: x.notes,
           start: SW.toInput(ev.start), end: SW.toInput(ev.end) };
         if (await SW.shiftForm({ shift, event: { id: x.event_id } })) { SW.toast('Shift saved'); cal.refetchEvents(); }
       });
@@ -206,9 +206,40 @@ $('btnNew').onclick = async () => {
   if (r) { SW.toast('Event created'); cal.refetchEvents(); }
 };
 $('btnSubscribe').onclick = async () => {
-  const url = `${location.protocol}//${location.host}/calendar/ics`;
-  try { await navigator.clipboard.writeText(url); SW.toast('Calendar link copied - paste it into Google Calendar → Add by URL'); }
-  catch (_) { await SW.confirm(url, { title: 'Calendar link (copy this)', okText: 'Done' }); }
+  let link;
+  try { link = await SW.api('GET', '/api/calendar/sync-link'); }
+  catch (e) { SW.toast(e.message, 'error'); return; }
+
+  const d = SW.dialog({ title: 'Sync to your calendar' });
+  const copy = async (input) => {
+    try { await navigator.clipboard.writeText(input.value); }
+    catch (_) { input.select(); document.execCommand('copy'); }
+    SW.toast('Link copied');
+  };
+  const render = (l) => {
+    d.body.innerHTML = `
+      <p class="sw-confirm-text">This is <b>your</b> private calendar link. It contains every event plus your own shifts,
+        and your calendar app keeps it up to date. Anyone who has the link can see your schedule, so don't share it.</p>
+      <div class="sw-field"><input type="text" id="syncUrl" readonly value="${SW.esc(l.url)}" style="width:100%"></div>
+      <div class="sw-actions">
+        <button type="button" class="btn btn-danger" id="syncReset">Reset link</button>
+        <a class="btn btn-secondary" href="${SW.esc(l.webcal_url)}">Open in Apple / Outlook</a>
+        <button type="button" class="btn btn-primary" id="syncCopy">Copy link</button>
+      </div>
+      <p class="sw-confirm-text" style="margin:1rem 0 0;font-size:.85rem;opacity:.8">
+        Google Calendar: <i>Other calendars → From URL</i> and paste the link (Google can take a few hours to refresh).</p>`;
+    const input = d.body.querySelector('#syncUrl');
+    input.onclick = () => input.select();
+    d.body.querySelector('#syncCopy').onclick = () => copy(input);
+    d.body.querySelector('#syncReset').onclick = async () => {
+      const ok = await SW.confirm('Make a new link? The old one stops working straight away, so you will need to add the new one to your calendar app again.',
+        { title: 'Reset calendar link', danger: true, okText: 'Reset link' });
+      if (!ok) return;
+      try { render(await SW.api('POST', '/api/calendar/sync-link/reset')); SW.toast('New link created'); }
+      catch (e) { SW.toast(e.message, 'error'); }
+    };
+  };
+  render(link);
 };
 
 // ---- my unavailability ----

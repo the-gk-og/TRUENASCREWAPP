@@ -18,6 +18,9 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from extensions import db
 from models import User, TwoFactorAuth, InviteCode, EmailOTP
 from utils import get_organization, generate_invite_code, log_security_event
+from services.user_names import (
+    find_user_by_login, username_taken, username_problem, email_taken, clean_display_name,
+)
 from constants import DEFAULT_ORG
 from config import SESSION_DURATION
 from services.email_service import (
@@ -34,10 +37,10 @@ GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
 
 @auth_bp.route('/')
 def index():
-    from config import BaseConfig
+    """Signed-in people go to their dashboard; everyone else goes to the login page."""
     if current_user.is_authenticated:
         return redirect(url_for('crew.dashboard'))
-    return redirect(BaseConfig.MAIN_SERVER_URL)
+    return redirect(url_for('auth.login'))
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
@@ -48,13 +51,14 @@ def login():
         return redirect(url_for('crew.dashboard'))
 
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
+        username = (request.form.get('username') or '').strip()
+        password = request.form.get('password') or ''
         remember = request.form.get('remember', 'off') == 'on'
 
-        user = User.query.filter_by(username=username).first()
+        # Username or email, in any letter case
+        user = find_user_by_login(username)
 
-        if user and check_password_hash(user.password_hash, password):
+        if user and user.password_hash and check_password_hash(user.password_hash, password):
             # --- TOTP 2FA check ---
             tfa = TwoFactorAuth.query.filter_by(user_id=user.id).first()
             if tfa and tfa.enabled:
@@ -81,7 +85,7 @@ def login():
 
             return redirect(url_for('cast.cast_events') if user.is_cast else url_for('crew.dashboard'))
 
-        flash('Invalid username or password')
+        flash('Invalid username, email or password')
 
     org = get_organization() or DEFAULT_ORG
     return render_template(
@@ -111,7 +115,8 @@ def signup():
     if request.method == 'POST':
         invite_code_str  = request.form.get('invite_code', '').strip().upper()
         username         = request.form.get('username', '').strip()
-        email            = request.form.get('email', '').strip() or None
+        display_raw      = request.form.get('display_name', '')
+        email            = (request.form.get('email', '').strip().lower()) or None
         password         = request.form.get('password', '')
         confirm_password = request.form.get('confirm_password', '')
 
@@ -130,15 +135,21 @@ def signup():
             flash('This invite code has already been used the maximum number of times.', 'error')
             return render_template('signup.html', organization=org, prefill_code=invite_code_str)
 
-        if len(username) < 3:
-            flash('Username must be at least 3 characters.', 'error')
+        problem = username_problem(username, minimum=3, maximum=40)
+        if problem:
+            flash(problem, 'error')
             return render_template('signup.html', organization=org, prefill_code=invite_code_str)
 
-        if User.query.filter_by(username=username).first():
+        if username_taken(username):
             flash('That username is already taken.', 'error')
             return render_template('signup.html', organization=org, prefill_code=invite_code_str)
 
-        if email and User.query.filter_by(email=email).first():
+        display_name, name_error = clean_display_name(display_raw)
+        if name_error:
+            flash(name_error, 'error')
+            return render_template('signup.html', organization=org, prefill_code=invite_code_str)
+
+        if email and email_taken(email):
             flash('An account with that email already exists.', 'error')
             return render_template('signup.html', organization=org, prefill_code=invite_code_str)
 
@@ -155,6 +166,7 @@ def signup():
 
         new_user = User(
             username=username,
+            display_name=display_name,
             email=email,
             password_hash=generate_password_hash(password),
             is_admin=False,
@@ -174,6 +186,7 @@ def signup():
             send_welcome_email(
                 recipient_email=email,
                 username=username,
+                display_name=new_user.shown_name,
                 user_role=user_role,
                 login_url=request.url_root.rstrip('/') + '/login',
                 org=org,
@@ -182,7 +195,7 @@ def signup():
         log_security_event('SIGNUP', username=username,
                            description=f'Signed up via invite code {invite_code_str}')
         login_user(new_user, remember=False)
-        flash(f'Welcome, {username}! Your account has been created.', 'success')
+        flash(f'Welcome, {new_user.shown_name}! Your account has been created.', 'success')
         return redirect(url_for('cast.cast_events') if is_cast else url_for('crew.dashboard'))
 
     return render_template('signup.html', organization=org, prefill_code=prefill_code)
@@ -204,9 +217,7 @@ def forgot_password():
     if not username_or_email:
         return jsonify({'error': 'Username or email required'}), 400
 
-    user = User.query.filter(
-        (User.username == username_or_email) | (User.email == username_or_email)
-    ).first()
+    user = find_user_by_login(username_or_email)
 
     if not user:
         return jsonify({'success': True,
@@ -284,7 +295,7 @@ def reset_password(token):
         if user.email:
             send_password_changed_email(
                 recipient_email=user.email,
-                username=user.username,
+                username=user.shown_name,
                 changed_at=datetime.now().strftime('%B %d, %Y at %I:%M %p'),
             )
 
@@ -300,6 +311,7 @@ def reset_password(token):
 def session_info():
     return jsonify({
         'username':     current_user.username,
+        'name':         current_user.shown_name,
         'is_permanent': session.permanent,
         'logged_in':    current_user.is_authenticated,
     })

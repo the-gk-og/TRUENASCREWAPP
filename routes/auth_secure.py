@@ -79,9 +79,8 @@ def secure_login():
         return jsonify({'error': 'Too many login attempts. Please try again later.'}), 429
     
     # Perform authentication
-    user = User.query.filter(
-        (User.username == username) | (User.email == username)
-    ).first()
+    from services.user_names import find_user_by_login
+    user = find_user_by_login(username)
     
     if not user or not check_password_hash(user.password_hash, password):
         session['login_attempts'] = attempt_count + 1

@@ -37,7 +37,7 @@
     <div class="card">
       <div class="sw-card-head"><h3><i class="fas fa-user-times"></i> Declined shifts</h3></div>
       {% for d in declined %}
-      <div class="adm-item"><a href="{{ url_for('events.event_detail', id=d.event_id) }}"><div class="t">{{ d.username }} · {{ d.role }}</div>
+      <div class="adm-item"><a href="{{ url_for('events.event_detail', id=d.event_id) }}"><div class="t">{{ d.name }} · {{ d.role }}</div>
         <div class="m">{{ d.event }} · {{ d.start.strftime('%a %d %b, %I:%M %p') }}</div>
         {% if d.reason %}<div class="m">“{{ d.reason }}”</div>{% endif %}</a>
         <a class="btn btn-sm btn-ghost" href="{{ url_for('events.event_detail', id=d.event_id) }}">Find cover</a></div>
@@ -46,7 +46,7 @@
     <div class="card">
       <div class="sw-card-head"><h3><i class="fas fa-hourglass-half"></i> Awaiting response</h3></div>
       {% for d in pending %}
-      <div class="adm-item"><a href="{{ url_for('events.event_detail', id=d.event_id) }}"><div class="t">{{ d.username }} · {{ d.role }}</div>
+      <div class="adm-item"><a href="{{ url_for('events.event_detail', id=d.event_id) }}"><div class="t">{{ d.name }} · {{ d.role }}</div>
         <div class="m">{{ d.event }} · {{ d.start.strftime('%a %d %b, %I:%M %p') }}</div></a></div>
       {% else %}<div class="adm-empty">Everyone has responded.</div>{% endfor %}
       {% if stats.pending > pending|length %}<div class="m sw-muted">+ {{ stats.pending - pending|length }} more</div>{% endif %}
@@ -182,11 +182,12 @@ window.addEventListener('hashchange', () => openTab(location.hash.slice(1)));
 function renderUsers() {
   const q = $('uSearch').value.trim().toLowerCase(), role = $('uRole').value;
   const rows = USERS.filter((u) => (!role || u.user_role === role) &&
-    (!q || (u.username + ' ' + u.email + ' ' + u.discord_username).toLowerCase().includes(q)));
+    (!q || (u.name + ' ' + u.username + ' ' + u.email + ' ' + u.discord_username).toLowerCase().includes(q)));
   $('uBody').innerHTML = rows.map((u) => {
     const tfa = u.tfa_enabled ? '<span class="adm-badge ok">On</span>' : u.force_2fa ? '<span class="adm-badge warn">Required</span>' : '<span class="adm-badge">Off</span>';
     const roleBadge = `<span class="adm-badge ${u.user_role}">${esc(u.user_role)}</span>` + (u.is_admin ? ' <span class="adm-badge admin">admin</span>' : '');
-    return `<tr><td><strong>${esc(u.username)}</strong>${u.id === A.me ? ' <span class="sw-muted">(you)</span>' : ''}</td>
+    return `<tr><td><strong>${esc(u.name)}</strong>${u.id === A.me ? ' <span class="sw-muted">(you)</span>' : ''}
+        ${u.name !== u.username ? `<div class="sw-muted" style="font-size:.78rem">login: ${esc(u.username)}</div>` : ''}</td>
       <td>${u.email ? esc(u.email) : '<span class="sw-muted">—</span>'}</td><td>${roleBadge}</td><td>${tfa}</td>
       <td>${esc(u.discord_username) || '<span class="sw-muted">—</span>'}</td><td>${esc(u.created_at)}</td>
       <td><div class="acts">
@@ -202,8 +203,9 @@ async function refreshUsers() { USERS = await SW.api('GET', '/admin/api/users');
 $('uSearch').addEventListener('input', renderUsers); $('uRole').addEventListener('change', renderUsers);
 
 const userFields = (edit) => [
-  { name: 'username', label: 'Username', required: true, maxLength: 80, half: true },
-  { name: 'email', label: 'Email', type: 'email', half: true },
+  { name: 'display_name', label: 'Name (shown to others)', maxLength: 60, half: true, hint: 'Leave empty to show the username' },
+  { name: 'username', label: 'Username (for login)', required: true, maxLength: 80, half: true, hint: 'Not case-sensitive' },
+  { name: 'email', label: 'Email (can also be used to log in)', type: 'email', half: true },
   { name: 'user_role', label: 'Role', type: 'select', options: ROLE_OPTS, half: true },
   { name: 'password', label: edit ? 'New password (leave blank to keep)' : 'Password', type: 'password', required: !edit, half: true, hint: 'At least 6 characters' },
   { name: 'is_admin', label: 'Administrator (full access to this console)', type: 'checkbox', show: (v) => v.user_role !== 'cast' },
@@ -219,11 +221,11 @@ $('uBody').addEventListener('click', async (e) => {
   const id = Number(b.dataset.id), u = USERS.find((x) => x.id === id);
   if (b.dataset.u === 'edit') {
     const full = await SW.run(() => SW.api('GET', `/admin/users/get/${id}`)); if (!full) return;
-    const r = await SW.form({ title: `Edit ${u.username}`, values: full, fields: userFields(true), submitText: 'Save changes',
+    const r = await SW.form({ title: `Edit ${u.name}`, values: full, fields: userFields(true), submitText: 'Save changes',
       onSubmit: (v) => { if (!v.password) delete v.password; return SW.api('PUT', `/admin/users/edit/${id}`, v); } });
     if (r) { SW.toast('Saved'); refreshUsers(); }
   } else if (b.dataset.u === 'del') {
-    if (!(await SW.confirm(`Delete ${u.username}? Their shifts, availability and sign-in settings are removed too. This can't be undone.`, { danger: true, okText: 'Delete user' }))) return;
+    if (!(await SW.confirm(`Delete ${u.name}? Their shifts, availability and sign-in settings are removed too. This can't be undone.`, { danger: true, okText: 'Delete user' }))) return;
     if (await SW.run(() => SW.api('DELETE', `/admin/users/delete/${id}`), 'User deleted')) refreshUsers();
   } else if (await SW.run(() => SW.api('POST', `/admin/users/${id}/${b.dataset.u === 'force' ? 'force-2fa' : 'clear-force-2fa'}`), 'Updated')) refreshUsers();
 });
@@ -300,7 +302,7 @@ async function loadNotif() {
   $('nEnabled').checked = NOTIF.enabled; $('nCreator').checked = NOTIF.include_event_creator;
   $('nPeople').innerHTML = NOTIF.people.map((p) => `<label class="adm-person ${NOTIF.user_ids.includes(p.id) ? 'on' : ''}">
     <input type="checkbox" value="${p.id}" ${NOTIF.user_ids.includes(p.id) ? 'checked' : ''}>
-    <div><div class="n">${esc(p.username)} ${p.is_admin ? '<span class="adm-badge admin">admin</span>' : ''}</div>
+    <div><div class="n">${esc(p.name)} ${p.is_admin ? '<span class="adm-badge admin">admin</span>' : ''}</div>
     <div class="e">${p.email ? esc(p.email) : '<span style="color:var(--danger)">no email address</span>'}</div></div></label>`).join('');
   syncNotif();
 }

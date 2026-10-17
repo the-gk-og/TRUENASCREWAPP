@@ -19,6 +19,11 @@ from werkzeug.utils import secure_filename
 from extensions import db
 from models import User, TwoFactorAuth, OAuthConnection, EmailOTP
 from utils import get_organization, log_security_event
+from services.user_names import (
+    clean_display_name, username_problem, username_taken, email_taken, valid_email,
+    find_user_by_username,
+    rename_user_references, sync_cast_names,
+)
 
 profile_bp = Blueprint('profile', __name__)
 
@@ -125,7 +130,7 @@ def change_password():
 def serve_profile_picture(username):
     """Serve a user's profile picture."""
     from flask import send_file, abort
-    user = User.query.filter_by(username=username).first_or_404()
+    user = (find_user_by_username(username)) or abort(404)
     if not user.profile_picture:
         abort(404)
     pic_path = os.path.join(current_app.config['UPLOAD_FOLDER'], 'users', user.profile_picture)
@@ -209,34 +214,49 @@ def delete_profile_picture():
 @profile_bp.route('/settings/update-account', methods=['POST'])
 @login_required
 def update_account_info():
-    data     = request.json or {}
-    username = (data.get('username') or '').strip() or None
-    email    = (data.get('email') or '').strip() or None
+    """Change Name (what others see), username (login) and/or email.
 
-    if not username and email is None:
+    ``display_name``: omit/None = leave alone, "" = clear it (people then see your username).
+    ``username`` / ``email``: blank or omitted = leave alone.
+    """
+    data     = request.json or {}
+    name_raw = data.get('display_name')
+    username = (data.get('username') or '').strip()
+    email    = (data.get('email') or '').strip().lower()
+
+    if name_raw is None and not username and not email:
         return jsonify({'error': 'Nothing to update'}), 400
 
     try:
-        if username:
-            if len(username) < 3:
-                return jsonify({'error': 'Username must be at least 3 characters'}), 400
-            existing = User.query.filter_by(username=username).first()
-            if existing and existing.id != current_user.id:
+        if name_raw is not None:
+            name, problem = clean_display_name(name_raw)
+            if problem:
+                return jsonify({'error': problem}), 400
+            current_user.display_name = name
+
+        if username and username != current_user.username:
+            problem = username_problem(username, minimum=3)
+            if problem:
+                return jsonify({'error': problem}), 400
+            if username_taken(username, exclude_id=current_user.id):
                 return jsonify({'error': 'That username is already taken'}), 400
+            old = current_user.username
             current_user.username = username
+            rename_user_references(old, username)      # keep shifts, notes, events pointing at this person
 
-        if email is not None:
-            if email == '':
-                current_user.email = None
-            else:
-                existing = User.query.filter_by(email=email).first()
-                if existing and existing.id != current_user.id:
-                    return jsonify({'error': 'An account with that email already exists'}), 400
-                current_user.email = email
+        if email and email != (current_user.email or '').lower():
+            if not valid_email(email):
+                return jsonify({'error': 'That email address does not look valid'}), 400
+            if email_taken(email, exclude_id=current_user.id):
+                return jsonify({'error': 'An account with that email already exists'}), 400
+            current_user.email = email
 
+        db.session.flush()
+        sync_cast_names(current_user)
         db.session.commit()
         log_security_event('ACCOUNT_INFO_UPDATED', username=current_user.username)
-        return jsonify({'success': True}), 200
+        return jsonify({'success': True, 'name': current_user.shown_name,
+                        'username': current_user.username, 'email': current_user.email or ''}), 200
 
     except Exception as exc:
         db.session.rollback()
