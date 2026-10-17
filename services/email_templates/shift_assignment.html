@@ -77,11 +77,13 @@
                                    text-transform:uppercase;letter-spacing:0.5px;">📍 Location</td>
                         <td style="padding:6px 0;font-size:14px;color:#1f2937;">{{ location }}</td>
                       </tr>
+                      {% if show_positions %}
                       <tr>
                         <td style="padding:6px 0;font-size:13px;color:#6b7280;font-weight:600;
                                    text-transform:uppercase;letter-spacing:0.5px;">👥 Positions</td>
                         <td style="padding:6px 0;font-size:14px;color:#1f2937;">{{ positions_needed }}</td>
                       </tr>
+                      {% endif %}
                       {% if description %}
                       <tr>
                         <td style="padding:6px 0;font-size:13px;color:#6b7280;font-weight:600;
@@ -96,6 +98,13 @@
                 </tr>
               </table>
 
+              {% if shifts_url %}
+              <p style="margin:0 0 20px;text-align:center;">
+                <a href="{{ shifts_url }}"
+                   style="display:inline-block;background:#3b82f6;color:#ffffff;text-decoration:none;
+                          font-weight:700;font-size:15px;padding:14px 28px;border-radius:10px;">View my shifts</a>
+              </p>
+              {% endif %}
               <p style="margin:0 0 6px;font-size:14px;color:#6b7280;line-height:1.6;">
                 Please log in to <strong>ShowWise</strong> to accept or reject this shift assignment.
               </p>

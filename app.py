@@ -59,6 +59,10 @@ def create_app(config_name: str | None = None):
     from services.markdown_service import render_markdown
     app.jinja_env.filters['md'] = render_markdown
 
+    # {{ note.created_by|person }} - turn a stored username into the person's display name
+    from services.user_names import name_for
+    app.jinja_env.filters['person'] = name_for
+
     # Context processor
     @app.context_processor
     def inject_globals():
@@ -138,6 +142,8 @@ def create_app(config_name: str | None = None):
 _NEW_COLUMNS = [
     ('event',            'all_day',        'BOOLEAN DEFAULT 0'),
     ('shift_assignment', 'decline_reason', 'VARCHAR(500)'),
+    ('user',             'calendar_token', 'VARCHAR(64)'),
+    ('user',             'display_name',   'VARCHAR(100)'),
 ]
 
 
@@ -159,6 +165,12 @@ def ensure_schema(app):
                     db.session.execute(text(f'ALTER TABLE {quote(table)} ADD COLUMN {quote(column)} {ddl}'))
                     db.session.commit()
                     print(f"✓ Added {table}.{column} column")
+            # ALTER TABLE can't add a UNIQUE column, so the calendar-token index is created separately
+            if 'user' in insp.get_table_names():
+                db.session.execute(text(
+                    f'CREATE UNIQUE INDEX IF NOT EXISTS ix_user_calendar_token '
+                    f'ON {quote("user")} (calendar_token)'))
+                db.session.commit()
     except Exception as exc:
         db.session.rollback()
         print(f"⚠️  Schema check failed: {exc}")

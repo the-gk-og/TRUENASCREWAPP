@@ -2,850 +2,611 @@
 
 {% block title %}Stage Plan Designer - ShowWise{% endblock %}
 
-{% block content %}
+{% block head_extra %}
 <style>
-    .designer-container {
-        display: grid;
-        grid-template-columns: 280px 1fr 300px;
-        gap: 1rem;
-        height: calc(100vh - 140px);
+    .drawio-page { max-width: 1800px; margin: 0 auto; }
+    .drawio-header { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:1rem; margin-bottom:1rem; }
+    .drawio-header h1 { margin:0 0 .35rem; }
+    .drawio-subtitle { color:var(--muted, #6b7280); margin:0; }
+    .drawio-actions { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
+    .drawio-actions .btn, .drawio-actions button { white-space:nowrap; }
+    .drawio-workspace { background:var(--card, #fff); border:1px solid var(--border, #e5e7eb); border-radius:14px; overflow:hidden; box-shadow:0 6px 24px rgba(15,23,42,.06); }
+    .drawio-toolbar { display:flex; flex-wrap:wrap; gap:.75rem; align-items:center; justify-content:space-between; padding:.85rem 1rem; border-bottom:1px solid var(--border, #e5e7eb); background:var(--surface, #f8fafc); }
+    .drawio-status { display:flex; align-items:center; gap:.5rem; font-size:.9rem; color:var(--muted, #6b7280); }
+    .drawio-dot { width:.55rem; height:.55rem; border-radius:50%; background:#94a3b8; display:inline-block; }
+    .drawio-dot.ready { background:#16a34a; }
+    .drawio-dot.dirty { background:#f59e0b; }
+    .drawio-frame-wrap { position:relative; height:calc(100vh - 270px); min-height:520px; background:#f1f5f9; }
+    #drawioFrame { display:block; width:100%; height:100%; border:0; background:white; }
+    .drawio-loading { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:.8rem; background:var(--card, #fff); z-index:2; text-align:center; padding:2rem; }
+    .drawio-loading.hidden { display:none; }
+    .drawio-footer { padding:.75rem 1rem; border-top:1px solid var(--border, #e5e7eb); display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.5rem; color:var(--muted, #6b7280); font-size:.85rem; }
+    .drawio-modal { display:none; position:fixed; inset:0; z-index:1500; background:rgba(15,23,42,.58); padding:2vh 2vw; overflow:auto; }
+    .drawio-modal.open { display:flex; align-items:center; justify-content:center; }
+    .drawio-modal-card { width:min(850px,100%); max-height:92vh; overflow:auto; background:var(--card, #fff); border-radius:14px; padding:1.25rem; box-shadow:0 20px 60px rgba(0,0,0,.25); }
+    .drawio-modal-head { display:flex; justify-content:space-between; align-items:center; gap:1rem; margin-bottom:1rem; }
+    .drawio-modal-head h2 { margin:0; font-size:1.2rem; }
+    .drawio-close { border:0; background:transparent; font-size:1.7rem; cursor:pointer; line-height:1; }
+    .drawio-form-row { display:grid; gap:.4rem; margin-bottom:1rem; }
+    .drawio-form-row label { font-weight:600; font-size:.9rem; }
+    .drawio-form-row input, .drawio-form-row select { width:100%; min-height:42px; padding:.6rem .75rem; border:1px solid var(--border, #d1d5db); border-radius:8px; background:var(--card, #fff); color:inherit; }
+    .drawio-check { display:flex; gap:.6rem; align-items:flex-start; margin:1rem 0; }
+    .drawio-check input { margin-top:.3rem; }
+    .drawio-saved-list { display:grid; gap:.75rem; }
+    .drawio-saved-item { display:flex; align-items:center; gap:1rem; border:1px solid var(--border, #e5e7eb); border-radius:10px; padding:.75rem; }
+    .drawio-saved-thumb { width:100px; height:70px; object-fit:contain; background:#f8fafc; border-radius:6px; flex-shrink:0; }
+    .drawio-saved-meta { flex:1; min-width:0; }
+    .drawio-saved-meta strong { display:block; overflow-wrap:anywhere; }
+    .drawio-saved-meta small { color:var(--muted, #6b7280); }
+    .drawio-saved-buttons { display:flex; flex-wrap:wrap; gap:.4rem; }
+    .drawio-message { display:none; margin:.75rem 0; padding:.75rem 1rem; border-radius:8px; }
+    .drawio-message.show { display:block; }
+    .drawio-message.error { background:#fee2e2; color:#991b1b; }
+    .drawio-message.success { background:#dcfce7; color:#166534; }
+    .drawio-message.info { background:#dbeafe; color:#1e40af; }
+    .drawio-hint { font-size:.85rem; color:var(--muted, #6b7280); margin:.25rem 0 0; }
+    @media(max-width:700px) {
+        .drawio-frame-wrap { height:calc(100vh - 300px); min-height:440px; }
+        .drawio-saved-item { align-items:flex-start; flex-wrap:wrap; }
+        .drawio-saved-buttons { width:100%; }
     }
-    
-    .designer-panel {
-        background: white;
-        border-radius: 12px;
-        border: 1px solid var(--border);
-        overflow: hidden;
-        display: flex;
-        flex-direction: column;
-    }
-    
-    .panel-header {
-        padding: 1rem;
-        background: #f9fafb;
-        border-bottom: 2px solid var(--border);
-        font-weight: 600;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    
-    .panel-content {
-        padding: 1rem;
-        overflow-y: auto;
-        flex: 1;
-    }
-    
-    /* NEW: Panel toggle buttons */
-    .panel-toggle-btn {
-        position: fixed;
-        top: 50%;
-        transform: translateY(-50%);
-        background: var(--primary);
-        color: white;
-        border: none;
-        padding: 0.75rem 0.5rem;
-        cursor: pointer;
-        z-index: 100;
-        transition: all 0.3s;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-    }
-    
-    .panel-toggle-btn:hover {
-        background: var(--primary-dark);
-        padding-right: 0.75rem;
-    }
-    
-    .panel-toggle-left {
-        left: 0;
-        border-radius: 0 8px 8px 0;
-    }
-    
-    .panel-toggle-right {
-        right: 0;
-        border-radius: 8px 0 0 8px;
-    }
-    
-    /* Toolbar */
-    .toolbar {
-        display: flex;
-        gap: 0.5rem;
-        padding: 1rem;
-        background: white;
-        border-radius: 12px;
-        border: 1px solid var(--border);
-        margin-bottom: 1rem;
-        flex-wrap: wrap;
-        align-items: center;
-    }
-    
-    /* NEW: Zoom controls */
-    .zoom-controls {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.5rem;
-        background: #f9fafb;
-        border-radius: 8px;
-        margin-left: auto;
-    }
-    
-    .zoom-btn {
-        padding: 0.5rem 0.75rem;
-        border: 1px solid var(--border);
-        background: white;
-        border-radius: 6px;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-    
-    .zoom-btn:hover {
-        background: var(--primary);
-        color: white;
-        border-color: var(--primary);
-    }
-    
-    .zoom-level {
-        font-weight: 600;
-        min-width: 60px;
-        text-align: center;
-        color: var(--dark);
-    }
-    
-    .tool-btn {
-        padding: 0.75rem 1rem;
-        border: 2px solid var(--border);
-        background: white;
-        border-radius: 8px;
-        cursor: pointer;
-        transition: all 0.2s;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        font-weight: 500;
-    }
-    
-    .tool-btn:hover {
-        border-color: var(--primary);
-        color: var(--primary);
-        transform: translateY(-2px);
-    }
-    
-    .tool-btn.active {
-        background: var(--primary);
-        color: white;
-        border-color: var(--primary);
-    }
-    
-    /* Canvas */
-    .canvas-container {
-        position: relative;
-        background: #fff;
-        border: 2px solid var(--border);
-        border-radius: 12px;
-        overflow: hidden;
-        height: 100%;
-    }
-    
-    #stageCanvas {
-        cursor: crosshair;
-        background: 
-            linear-gradient(to right, #f0f0f0 1px, transparent 1px),
-            linear-gradient(to bottom, #f0f0f0 1px, transparent 1px);
-        background-size: 20px 20px;
-        background-position: -1px -1px;
-    }
-    
-    .selection-box {
-        position: absolute;
-        border: 2px dashed var(--primary);
-        background: rgba(99, 102, 241, 0.1);
-        pointer-events: none;
-        display: none;
-    }
-    
-    /* Object Library */
-    .object-category {
-        margin-bottom: 1.5rem;
-    }
-    
-    .category-title {
-        font-weight: 600;
-        color: var(--dark);
-        margin-bottom: 0.5rem;
-        padding-bottom: 0.5rem;
-        border-bottom: 2px solid var(--border);
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    
-    .object-grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 0.5rem;
-    }
-    
-    .object-item {
-        padding: 0.75rem;
-        border: 2px solid var(--border);
-        border-radius: 8px;
-        text-align: center;
-        cursor: grab;
-        transition: all 0.2s;
-        background: white;
-        position: relative;
-    }
-    
-    .object-item:hover {
-        border-color: var(--primary);
-        transform: scale(1.05);
-        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
-    }
-    
-    .object-item:active {
-        cursor: grabbing;
-    }
-    
-    .object-delete-btn {
-        position: absolute;
-        top: 0.25rem;
-        right: 0.25rem;
-        background: var(--danger);
-        color: white;
-        border: none;
-        border-radius: 50%;
-        width: 20px;
-        height: 20px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 14px;
-        line-height: 1;
-        opacity: 0;
-        transition: opacity 0.2s;
-        z-index: 10;
-    }
-    
-    .object-item:hover .object-delete-btn {
-        opacity: 1;
-    }
-    
-    .object-delete-btn:hover {
-        background: #dc2626;
-        transform: scale(1.1);
-    }
-    
-    .object-item img {
-        max-width: 60px;
-        max-height: 60px;
-        margin-bottom: 0.5rem;
-        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
-    }
-    
-    .object-item span {
-        display: block;
-        font-size: 0.75rem;
-        color: var(--dark);
-        font-weight: 500;
-    }
-    
-    /* Properties Panel */
-    .property-group {
-        margin-bottom: 1.5rem;
-        padding: 1rem;
-        background: #f9fafb;
-        border-radius: 8px;
-    }
-    
-    .property-group h4 {
-        margin-bottom: 0.75rem;
-        color: var(--dark);
-        font-size: 0.9rem;
-    }
-    
-    .property-row {
-        display: flex;
-        gap: 0.5rem;
-        margin-bottom: 0.75rem;
-    }
-    
-    .property-row label {
-        flex: 0 0 70px;
-        font-size: 0.85rem;
-        color: #6b7280;
-        display: flex;
-        align-items: center;
-    }
-    
-    .property-row input,
-    .property-row select {
-        flex: 1;
-        padding: 0.5rem;
-        border: 1px solid var(--border);
-        border-radius: 6px;
-        font-size: 0.85rem;
-    }
-    
-    .color-picker-wrapper {
-        display: flex;
-        gap: 0.5rem;
-        align-items: center;
-    }
-    
-    .color-picker-wrapper input[type="color"] {
-        width: 50px;
-        height: 35px;
-        border: none;
-        border-radius: 6px;
-        cursor: pointer;
-    }
-    
-    /* Action buttons */
-    .action-buttons {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 0.5rem;
-        margin-top: 1rem;
-    }
-    
-    .action-btn {
-        padding: 0.75rem;
-        border: none;
-        border-radius: 8px;
-        cursor: pointer;
-        font-weight: 600;
-        transition: all 0.2s;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0.5rem;
-    }
-    
-    .action-btn-primary {
-        background: var(--primary);
-        color: white;
-    }
-    
-    .action-btn-danger {
-        background: var(--danger);
-        color: white;
-    }
-    
-    .action-btn:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-    }
-    
-    /* Templates */
-    .template-grid {
-        display: grid;
-        gap: 1rem;
-    }
-    
-    .template-card {
-        border: 2px solid var(--border);
-        border-radius: 8px;
-        padding: 1rem;
-        cursor: pointer;
-        transition: all 0.2s;
-        position: relative;
-    }
-    
-    .template-card:hover {
-        border-color: var(--primary);
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
-    }
-    
-    .template-thumbnail {
-        width: 100%;
-        height: 120px;
-        background: #f3f4f6;
-        border-radius: 6px;
-        margin-bottom: 0.5rem;
-        overflow: hidden;
-    }
-    
-    .template-thumbnail img {
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-    }
-    
-    .template-name {
-        font-weight: 600;
-        margin-bottom: 0.25rem;
-    }
-    
-    .template-meta {
-        font-size: 0.75rem;
-        color: #6b7280;
-    }
-    
-    .template-delete {
-        position: absolute;
-        top: 0.5rem;
-        right: 0.5rem;
-        background: var(--danger);
-        color: white;
-        border: none;
-        border-radius: 50%;
-        width: 24px;
-        height: 24px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.8rem;
-    }
-    
-    /* Canvas objects */
-    .canvas-object, .canvas-label {
-        position: absolute;
-        cursor: move;
-        user-select: none;
-        border: 2px solid transparent;
-        transition: border-color 0.2s;
-    }
-    
-    .canvas-object.selected, .canvas-label.selected {
-        border: 2px solid var(--primary);
-        box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
-    }
-    
-    .canvas-object img {
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-        pointer-events: none;
-    }
-    
-    .canvas-label {
-        background: rgba(255, 255, 255, 0.95);
-        padding: 0.25rem 0.5rem;
-        border-radius: 4px;
-        font-weight: 600;
-        color: var(--dark);
-        border: 1px solid var(--border);
-        white-space: nowrap;
-    }
-    
-    .canvas-drawing {
-        cursor: pointer;
-    }
-    
-    .canvas-drawing.selected {
-        filter: drop-shadow(0 0 3px var(--primary));
-        stroke-width: 4;
-    }
-    
-    .resize-handle {
-        position: absolute;
-        width: 10px;
-        height: 10px;
-        background: white;
-        border: 2px solid var(--primary);
-        border-radius: 50%;
-        display: none;
-    }
-    
-    .canvas-object.selected .resize-handle,
-    .canvas-label.selected .resize-handle {
-        display: block;
-    }
-    
-    .resize-handle.nw { top: -5px; left: -5px; cursor: nw-resize; }
-    .resize-handle.ne { top: -5px; right: -5px; cursor: ne-resize; }
-    .resize-handle.sw { bottom: -5px; left: -5px; cursor: sw-resize; }
-    .resize-handle.se { bottom: -5px; right: -5px; cursor: se-resize; }
-    
-    .canvas-line {
-        stroke: #1f2937;
-        stroke-width: 2;
-        stroke-linecap: round;
-    }
-    
-    .canvas-line.selected {
-        stroke: var(--primary);
-        stroke-width: 3;
-    }
-    
-    .line-handle {
-        fill: white;
-        stroke: var(--primary);
-        stroke-width: 2;
-        cursor: move;
-        display: none;
-    }
-    
-    .canvas-line.selected + .line-handle {
-        display: block;
-    }
-    
-    /* Saved designs list */
-    .design-card {
-        border: 2px solid var(--border);
-        border-radius: 8px;
-        padding: 1rem;
-        margin-bottom: 1rem;
-        cursor: pointer;
-        transition: all 0.2s;
-        position: relative;
-    }
-    
-    .design-card:hover {
-        border-color: var(--primary);
-        transform: translateY(-2px);
-    }
-    
-    .design-thumbnail {
-        width: 100%;
-        height: 100px;
-        background: #f3f4f6;
-        border-radius: 6px;
-        margin-bottom: 0.5rem;
-        overflow: hidden;
-    }
-    
-    .design-thumbnail img {
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-    }
-    
-    .design-actions {
-        display: flex;
-        gap: 0.5rem;
-        margin-top: 0.5rem;
-    }
-    
-    /* Mobile responsive */
-    @media (max-width: 1200px) {
-        .designer-container {
-            grid-template-columns: 1fr;
-            grid-template-rows: auto 1fr auto;
-        }
-        
-        .designer-panel {
-            max-height: 300px;
-        }
-    }
-    
-    /* FIXED: Higher z-index for left panel toggle to appear above sidebar */
-    .panel-toggle-btn {
-        position: fixed;
-        top: 50%;
-        transform: translateY(-50%);
-        background: var(--primary);
-        color: white;
-        border: none;
-        padding: 0.75rem 0.5rem;
-        cursor: pointer;
-        transition: all 0.3s;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-        border-radius: 0 8px 8px 0;
-    }
-    
-    .panel-toggle-btn:hover {
-        background: var(--primary-dark);
-        padding-right: 0.75rem;
-    }
-    
-    .panel-toggle-left {
-        left: 0;
-        z-index: 1100; /* FIXED: Higher than sidebar (1000) */
-    }
-    
-    .panel-toggle-right {
-        right: 0;
-        z-index: 100;
-        border-radius: 8px 0 0 8px;
-    }
-
-    /* Ensure the designer container respects the sidebar */
-    .main-content {
-        position: relative;
-        z-index: 1;
-    }
-
-    .designer-container {
-        position: relative;
-        z-index: 10;
-    }
-
 </style>
+{% endblock %}
 
-<div class="page-header">
-    <h1 class="page-title">
-        <i class="fas fa-drafting-compass"></i>
-        Stage Plan Designer
-    </h1>
-    <p class="page-subtitle">Create professional stage plans with drag-and-drop simplicity</p>
+{% block content %}
+<div class="drawio-page">
+    <div class="drawio-header">
+        <div>
+            <h1 class="page-title"><i class="fas fa-drafting-compass"></i> Stage Plan Designer</h1>
+            <p class="drawio-subtitle">Design stage layouts, lighting plots, audio plans, and production diagrams with diagrams.net.</p>
+        </div>
+        <div class="drawio-actions">
+            <button class="btn" type="button" id="newDesignBtn"><i class="fas fa-file"></i> New</button>
+            <button class="btn" type="button" id="openDesignsBtn"><i class="fas fa-folder-open"></i> Open</button>
+            <button class="btn btn-primary" type="button" id="saveDesignBtn"><i class="fas fa-save"></i> Save</button>
+            <button class="btn" type="button" id="saveAsBtn"><i class="fas fa-file-signature"></i> Save As</button>
+            <a class="btn" href="{{ url_for('stage_designer.stageplans') }}"><i class="fas fa-images"></i> Stage Plans</a>
+        </div>
+    </div>
+
+    <div id="drawioMessage" class="drawio-message" role="status" aria-live="polite"></div>
+
+    <section class="drawio-workspace" aria-label="diagrams.net stage plan editor">
+        <div class="drawio-toolbar">
+            <div class="drawio-status">
+                <span class="drawio-dot" id="statusDot"></span>
+                <span id="statusText">Connecting to diagrams.net…</span>
+                <span aria-hidden="true">·</span>
+                <strong id="currentDesignName">Untitled stage plan</strong>
+            </div>
+            <div class="drawio-actions">
+                <button class="btn" type="button" id="downloadXmlBtn"><i class="fas fa-file-code"></i> Download .drawio</button>
+                <button class="btn" type="button" id="downloadPngBtn"><i class="fas fa-file-image"></i> Export PNG</button>
+                <button class="btn" type="button" id="fullscreenBtn"><i class="fas fa-expand"></i> Fullscreen</button>
+            </div>
+        </div>
+        <div class="drawio-frame-wrap" id="frameWrap">
+            <div class="drawio-loading" id="drawioLoading">
+                <i class="fas fa-spinner fa-spin fa-2x" aria-hidden="true"></i>
+                <strong id="drawioLoadingTitle">Loading diagrams.net editor…</strong>
+                <span id="drawioLoadingDetail">It may take a few seconds to initialise.</span>
+                <button class="btn btn-primary" type="button" id="drawioRetryBtn" hidden><i class="fas fa-rotate-right"></i> Try again</button>
+            </div>
+            <iframe
+                id="drawioFrame"
+                title="Stage plan editor powered by diagrams.net"
+                allow="clipboard-read; clipboard-write"
+                referrerpolicy="strict-origin-when-cross-origin">
+            </iframe>
+        </div>
+        <div class="drawio-footer">
+            <span><i class="fas fa-cloud"></i> Saved designs are stored in your ShowWise database.</span>
+            <span>Use diagrams.net’s File menu to access its diagram tools and shapes.</span>
+        </div>
+    </section>
 </div>
 
-<!-- Toolbar -->
-<div class="toolbar">
-    <button class="tool-btn active" id="selectTool" onclick="setTool('select')" title="Select (V)">
-        <i class="fas fa-mouse-pointer"></i> Select
-    </button>
-    <button class="tool-btn" id="lineTool" onclick="setTool('line')" title="Draw Line (L)">
-        <i class="fas fa-grip-lines"></i> Line
-    </button>
-    <button class="tool-btn" id="penTool" onclick="setTool('pen')" title="Pen Tool (P)">
-        <i class="fas fa-pen"></i> Pen
-    </button>
-    <button class="tool-btn" id="brushTool" onclick="setTool('brush')" title="Brush Tool (B)">
-        <i class="fas fa-paint-brush"></i> Brush
-    </button>
-    <button class="tool-btn" id="labelTool" onclick="setTool('label')" title="Add Label (T)">
-        <i class="fas fa-font"></i> Label
-    </button>
-    
-    <div style="border-left: 2px solid var(--border); height: 30px; margin: 0 0.5rem;"></div>
-    
-    <button class="tool-btn" onclick="undo()" title="Undo (Ctrl+Z)">
-        <i class="fas fa-undo"></i>
-    </button>
-    <button class="tool-btn" onclick="redo()" title="Redo (Ctrl+Y)">
-        <i class="fas fa-redo"></i>
-    </button>
-    <button class="tool-btn" onclick="clearCanvas()">
-        <i class="fas fa-trash"></i>
-    </button>
-    <button class="tool-btn" onclick="showLoadModal()">
-        <i class="fas fa-folder-open"></i> Load
-    </button>
-    <button class="tool-btn" onclick="showSaveModal()">
-        <i class="fas fa-save"></i> Save As
-    </button>
-    <button class="tool-btn" onclick="quickSave()" title="Quick Save (Ctrl+S)">
-        <i class="fas fa-save"></i> Save
-    </button>
-    <button class="tool-btn" onclick="exportToPNG()">
-        <i class="fas fa-download"></i> Export
-    </button>
-    
-    <!-- NEW: Zoom Controls -->
-    <div class="zoom-controls">
-        <button class="zoom-btn" onclick="zoomOut()" title="Zoom Out (Ctrl+-)">
-            <i class="fas fa-search-minus"></i>
-        </button>
-        <span class="zoom-level" id="zoomLevel">100%</span>
-        <button class="zoom-btn" onclick="zoomIn()" title="Zoom In (Ctrl++)">
-            <i class="fas fa-search-plus"></i>
-        </button>
-        <button class="zoom-btn" onclick="resetZoom()" title="Reset Zoom (Ctrl+0)">
-            <i class="fas fa-compress"></i>
-        </button>
-    </div>
-</div>
-
-<!-- Designer Layout -->
-<div class="designer-container">
-    <!-- NEW: Left Panel Toggle Button (shown when panel is hidden) -->
-    <button class="panel-toggle-btn panel-toggle-left" id="leftPanelToggle" onclick="togglePanel('leftPanel')" style="display: none;">
-        <i class="fas fa-chevron-right"></i>
-    </button>
-    
-    <!-- Left Panel: Object Library & Templates -->
-    <div class="designer-panel" id="leftPanel">
-        <div class="panel-header">
-            <span><i class="fas fa-shapes"></i> Library</span>
-            <div style="display: flex; gap: 0.5rem;">
-                {% if current_user.is_admin %}
-                <button class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="showUploadObjectModal()">
-                    <i class="fas fa-plus"></i>
-                </button>
-                {% endif %}
-                <button class="btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background: #6b7280; color: white;" onclick="togglePanel('leftPanel')" title="Hide panel">
-                    <i class="fas fa-chevron-left"></i>
-                </button>
-            </div>
+<div class="drawio-modal" id="saveModal" role="dialog" aria-modal="true" aria-labelledby="saveModalTitle">
+    <div class="drawio-modal-card">
+        <div class="drawio-modal-head">
+            <h2 id="saveModalTitle"><i class="fas fa-save"></i> Save stage plan</h2>
+            <button class="drawio-close" type="button" data-close-modal="saveModal" aria-label="Close">&times;</button>
         </div>
-        <div class="panel-content">
-            <div style="margin-bottom: 1rem;">
-                <button class="btn btn-primary" style="width: 100%; margin-bottom: 0.5rem;" onclick="showTab('objects')">
-                    <i class="fas fa-shapes"></i> Objects
-                </button>
-                <button class="btn btn-primary" style="width: 100%;" onclick="showTab('templates')">
-                    <i class="fas fa-bookmark"></i> Templates
-                </button>
-            </div>
-            
-            <div id="objectsTab">
-                <div id="objectLibrary">
-                    <div class="object-category">
-                        <div class="category-title">
-                            <span>Loading objects...</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div id="templatesTab" style="display: none;">
-                <div id="templateLibrary">
-                    <p style="text-align: center; color: #9ca3af;">Loading templates...</p>
-                </div>
-            </div>
+        <div class="drawio-form-row">
+            <label for="saveName">Plan name</label>
+            <input id="saveName" type="text" maxlength="200" placeholder="e.g. Main stage lighting plot" required>
         </div>
-    </div>
-    
-    <!-- Center Panel: Canvas -->
-    <div class="designer-panel" style="position: relative;">
-        <div class="panel-header">
-            <span><i class="fas fa-draw-polygon"></i> Stage Canvas</span>
-            <div style="display: flex; gap: 0.5rem; align-items: center;">
-                <label style="font-size: 0.85rem; font-weight: normal;">
-                    Grid: <input type="checkbox" id="gridToggle" checked onchange="toggleGrid()">
-                </label>
-                <label style="font-size: 0.85rem; font-weight: normal;">
-                    Snap: <input type="checkbox" id="snapToggle" checked>
-                </label>
-            </div>
-        </div>
-        <div class="canvas-container">
-            <svg id="stageCanvas" width="100%" height="100%">
-                <g id="linesLayer"></g>
-            </svg>
-            <div id="objectsLayer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"></div>
-            <div id="selectionBox" class="selection-box"></div>
-        </div>
-    </div>
-    
-    <!-- NEW: Right Panel Toggle Button (shown when panel is hidden) -->
-    <button class="panel-toggle-btn panel-toggle-right" id="rightPanelToggle" onclick="togglePanel('rightPanel')" style="display: none;">
-        <i class="fas fa-chevron-left"></i>
-    </button>
-    
-    <!-- Right Panel: Properties -->
-    <div class="designer-panel" id="rightPanel">
-        <div class="panel-header">
-            <span><i class="fas fa-sliders-h"></i> Properties</span>
-            <button class="btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background: #6b7280; color: white;" onclick="togglePanel('rightPanel')" title="Hide panel">
-                <i class="fas fa-chevron-right"></i>
-            </button>
-        </div>
-        <div class="panel-content" id="propertiesPanel">
-            <div id="noSelection" style="text-align: center; color: #9ca3af; padding: 2rem 0;">
-                <i class="fas fa-hand-pointer" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.3;"></i>
-                <p>Select an object to edit its properties</p>
-                <p style="font-size: 0.85rem; margin-top: 1rem;">
-                    <strong>Tip:</strong> Drag to select multiple objects
-                </p>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Save Modal -->
-<div id="saveModal" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="hideModal('saveModal')">&times;</span>
-        <h2><i class="fas fa-save"></i> Save Stage Plan</h2>
-        
-        <div class="form-group">
-            <label>Plan Name *</label>
-            <input type="text" id="saveName" placeholder="e.g., Main Stage Setup">
-        </div>
-        
-        <div class="form-group">
-            <label>Link to Event (Optional)</label>
+        <div class="drawio-form-row">
+            <label for="saveEvent">Production / event</label>
             <select id="saveEvent">
-                <option value="">-- No Event --</option>
+                <option value="">No event linked</option>
                 {% for event in events %}
-                <option value="{{ event.id }}">{{ event.title }} - {{ event.event_date.strftime('%b %d, %Y') }}</option>
+                <option value="{{ event.id }}">{{ event.title }}{% if event.event_date %} — {{ event.event_date.strftime('%b %d, %Y') }}{% endif %}</option>
                 {% endfor %}
             </select>
         </div>
-        
-        <div class="form-group">
-            <label style="display: flex; align-items: center; gap: 0.5rem;">
-                <input type="checkbox" id="saveToStagePlans" checked>
-                <span>Also save to Stage Plans page</span>
-            </label>
-            <p style="font-size: 0.85rem; color: #6b7280; margin-top: 0.5rem;">
-                This will create a PNG export in the Stage Plans section for easy reference
-            </p>
-        </div>
-        
-        <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
-            <button class="btn btn-primary" onclick="saveDesign()">
-                <i class="fas fa-save"></i> Save Design
-            </button>
-            {% if current_user.is_admin %}
-            <button class="btn btn-success" onclick="saveAsTemplate()">
-                <i class="fas fa-bookmark"></i> Save as Template
-            </button>
-            {% endif %}
+        <label class="drawio-check">
+            <input type="checkbox" id="saveToStagePlans" checked>
+            <span><strong>Also show on the Stage Plans page</strong><br><small>Creates a PNG preview there, so crew can quickly reference the plan.</small></span>
+        </label>
+        <div class="drawio-hint">Save stores an editable diagrams.net XML document in ShowWise. PNG export is used for the Stage Plans preview.</div>
+        <div class="drawio-actions" style="justify-content:flex-end;margin-top:1.25rem">
+            <button class="btn" type="button" data-close-modal="saveModal">Cancel</button>
+            <button class="btn btn-primary" type="button" id="confirmSaveBtn"><i class="fas fa-save"></i> Save design</button>
         </div>
     </div>
 </div>
 
-<!-- Load Design Modal -->
-<div id="loadModal" class="modal">
-    <div class="modal-content" style="max-width: 800px;">
-        <span class="close" onclick="hideModal('loadModal')">&times;</span>
-        <h2><i class="fas fa-folder-open"></i> Load Saved Design</h2>
-        <div id="designsList" style="max-height: 500px; overflow-y: auto;">
-            <p style="text-align: center; color: #9ca3af;">Loading...</p>
+<div class="drawio-modal" id="openModal" role="dialog" aria-modal="true" aria-labelledby="openModalTitle">
+    <div class="drawio-modal-card">
+        <div class="drawio-modal-head">
+            <h2 id="openModalTitle"><i class="fas fa-folder-open"></i> Open saved design</h2>
+            <button class="drawio-close" type="button" data-close-modal="openModal" aria-label="Close">&times;</button>
+        </div>
+        <div id="savedDesignsList" class="drawio-saved-list">
+            <p>Loading saved designs…</p>
         </div>
     </div>
 </div>
 
-<!-- Upload Object Modal -->
-<div id="uploadObjectModal" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="hideModal('uploadObjectModal')">&times;</span>
-        <h2><i class="fas fa-upload"></i> Upload New Object</h2>
-        
-        <div class="form-group">
-            <label>Object Name *</label>
-            <input type="text" id="objectName" placeholder="e.g., Speaker">
-        </div>
-        
-        <div class="form-group">
-            <label>Category</label>
-            <select id="objectCategory">
-                <option value="Lighting">Lighting</option>
-                <option value="Audio">Audio</option>
-                <option value="Props">Props</option>
-                <option value="Furniture">Furniture</option>
-                <option value="Structure">Structure</option>
-                <option value="Other">Other</option>
-            </select>
-        </div>
-        
-        <div class="form-group">
-            <label>Upload Image (PNG recommended) *</label>
-            <input type="file" id="objectImage" accept="image/*">
-        </div>
-        
-        <div class="form-group">
-            <label>Default Size</label>
-            <div class="property-row">
-                <label style="flex: 0 0 auto;">Width:</label>
-                <input type="number" id="objectDefaultWidth" value="100" min="20" max="500">
-                <label style="flex: 0 0 auto;">Height:</label>
-                <input type="number" id="objectDefaultHeight" value="100" min="20" max="500">
-            </div>
-        </div>
-        
-        <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
-            <button class="btn btn-primary" onclick="uploadObject()">
-                <i class="fas fa-upload"></i> Upload Object
-            </button>
-        </div>
-    </div>
-</div>
-
-{% block scripts %}
 <script>
-// Pass admin status to JavaScript
-document.body.dataset.userIsAdmin = '{{ current_user.is_admin|lower }}';
-</script>
-<script src="/static/stage-designer.js"></script>
-{% endblock %}
+(() => {
+    'use strict';
 
+    // To self-host draw.io later, change only this URL (the origin is derived from it).
+    const DRAWIO_URL = 'https://embed.diagrams.net/?embed=1&proto=json&spin=1&ui=kennedy&libraries=1&saveAndExit=0&noSaveBtn=1&noExitBtn=1&autosave=1';
+    const DRAWIO_ORIGIN = new URL(DRAWIO_URL).origin;
+    const LOAD_TIMEOUT_MS = 12000;
+    const MAX_LOAD_ATTEMPTS = 3;
+    const frame = document.getElementById('drawioFrame');
+    const loading = document.getElementById('drawioLoading');
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const currentDesignName = document.getElementById('currentDesignName');
+    const messageBox = document.getElementById('drawioMessage');
+    const loadingTitle = document.getElementById('drawioLoadingTitle');
+    const loadingDetail = document.getElementById('drawioLoadingDetail');
+    const retryBtn = document.getElementById('drawioRetryBtn');
+    let loadAttempts = 0;
+    let loadWatchdog = null;
+
+    let editorReady = false;
+    let dirty = false;
+    let currentDesignId = null;
+    let currentXml = null;
+    let pendingExport = null;
+    let exportTimer = null;
+    let saveAsMode = false;
+    let ignoreDirtyUntil = 0;
+    const initialDesignId = new URLSearchParams(window.location.search).get('design_id');
+
+    function setStatus(text, state = 'ready') {
+        statusText.textContent = text;
+        statusDot.classList.toggle('ready', state === 'ready');
+        statusDot.classList.toggle('dirty', state === 'dirty');
+    }
+
+    function showMessage(text, type = 'info') {
+        messageBox.textContent = text;
+        messageBox.className = `drawio-message show ${type}`;
+        if (exportTimer) clearTimeout(exportTimer);
+        exportTimer = setTimeout(() => messageBox.classList.remove('show'), 6000);
+    }
+
+    function postToEditor(message) {
+        if (!frame.contentWindow) throw new Error('The diagrams.net editor is not available yet.');
+        frame.contentWindow.postMessage(JSON.stringify(message), DRAWIO_ORIGIN);
+    }
+
+    function setDirty(value = true) {
+        dirty = value;
+        setStatus(value ? 'Unsaved changes' : 'All changes saved', value ? 'dirty' : 'ready');
+    }
+
+    function openModal(id) {
+        document.getElementById(id).classList.add('open');
+    }
+
+    function closeModal(id) {
+        document.getElementById(id).classList.remove('open');
+        if (id === 'saveModal') saveAsMode = false;
+    }
+
+    // Load XML into the editor; if it is not ready yet, the 'init' handler loads currentXml.
+    function loadIntoEditor(xml) {
+        currentXml = xml || null;
+        ignoreDirtyUntil = Date.now() + 1000;
+        if (editorReady) postToEditor({ action: 'load', xml: xml || '' });
+    }
+
+    document.querySelectorAll('[data-close-modal]').forEach(button => {
+        button.addEventListener('click', () => closeModal(button.dataset.closeModal));
+    });
+    document.querySelectorAll('.drawio-modal').forEach(modal => {
+        modal.addEventListener('click', event => {
+            if (event.target === modal) closeModal(modal.id);
+        });
+    });
+
+    function requestExport(format) {
+        return new Promise((resolve, reject) => {
+            if (!editorReady) {
+                reject(new Error('The editor is still loading.'));
+                return;
+            }
+            if (pendingExport) {
+                reject(new Error('Another export is already in progress. Please try again.'));
+                return;
+            }
+            const timeout = setTimeout(() => {
+                if (pendingExport && pendingExport.format === format) {
+                    pendingExport = null;
+                    reject(new Error(`Timed out exporting ${format.toUpperCase()}.`));
+                }
+            }, 30000);
+            pendingExport = { format, resolve, reject, timeout };
+            const request = { action: 'export', format, spinKey: 'showwise-export' };
+            if (format === 'png') { request.background = '#ffffff'; request.border = 10; }
+            postToEditor(request);
+        });
+    }
+
+    function downloadBlob(content, filename, type) {
+        const blob = new Blob([content], { type });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+    }
+
+    function xmlToSafeText(value) {
+        return typeof value === 'string' ? value : '';
+    }
+
+    function base64ToUtf8(b64) {
+        const bytes = Uint8Array.from(atob(b64), ch => ch.charCodeAt(0));
+        return new TextDecoder('utf-8').decode(bytes);
+    }
+
+    // Images (png) are kept as data URIs. Text formats (xml/svg) may arrive as a
+    // data URI or as plain text, so normalise them to a plain string.
+    function parseExportData(data, format) {
+        if (typeof data !== 'string') return data;
+        if (format === 'png' || !data.startsWith('data:')) return data;
+        const comma = data.indexOf(',');
+        if (comma < 0) return data;
+        const meta = data.slice(0, comma);
+        const payload = data.slice(comma + 1);
+        try {
+            return meta.includes(';base64') ? base64ToUtf8(payload) : decodeURIComponent(payload);
+        } catch (_) {
+            return payload;
+        }
+    }
+
+    async function getExport(format) {
+        const result = await requestExport(format);
+        return result;
+    }
+
+    async function downloadXml() {
+        try {
+            const xml = await getExport('xml');
+            downloadBlob(xmlToSafeText(xml), `${safeFilename(currentDesignName.textContent)}.drawio`, 'application/xml;charset=utf-8');
+        } catch (error) {
+            showMessage(error.message, 'error');
+        }
+    }
+
+    function safeFilename(name) {
+        return (name || 'stage-plan').trim().replace(/[^a-z0-9 _-]/gi, '_').replace(/\s+/g, '-').slice(0, 100) || 'stage-plan';
+    }
+
+    async function downloadPng() {
+        try {
+            const data = await getExport('png');
+            const link = document.createElement('a');
+            link.href = data.startsWith('data:') ? data : `data:image/png;base64,${data}`;
+            link.download = `${safeFilename(currentDesignName.textContent)}.png`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (error) {
+            showMessage(error.message, 'error');
+        }
+    }
+
+    async function createSavePayload() {
+        const xml = await getExport('xml');
+        let thumbnail = null;
+        try {
+            const png = await getExport('png');
+            thumbnail = png.startsWith('data:') ? png : `data:image/png;base64,${png}`;
+        } catch (error) {
+            console.warn('PNG preview export failed; saving without a preview.', error);
+        }
+        currentXml = xml;
+        return {
+            design_data: { format: 'drawio-xml', version: 1, xml },
+            thumbnail
+        };
+    }
+
+    async function saveDesign(forceSaveAs = false) {
+        const nameInput = document.getElementById('saveName');
+        const eventId = document.getElementById('saveEvent').value || null;
+        const name = nameInput.value.trim() || currentDesignName.textContent.trim();
+
+        if (!name || name === 'Untitled stage plan') {
+            openModal('saveModal');
+            nameInput.focus();
+            showMessage('Enter a name for this stage plan before saving.', 'info');
+            return;
+        }
+
+        const confirmButton = document.getElementById('confirmSaveBtn');
+        confirmButton.disabled = true;
+        confirmButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…';
+        try {
+            const exported = await createSavePayload();
+            const payload = {
+                name,
+                event_id: eventId,
+                design_data: exported.design_data,
+                thumbnail: exported.thumbnail,
+                save_to_stageplans: document.getElementById('saveToStagePlans').checked
+            };
+
+            let response;
+            if (currentDesignId && !forceSaveAs) {
+                response = await fetch(`/stage-designer/design/${currentDesignId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            } else {
+                response = await fetch('/stage-designer/design', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            }
+            const result = await response.json();
+            if (!response.ok || !result.success) throw new Error(result.error || 'The server could not save this design.');
+
+            currentDesignId = result.design_id;
+            currentDesignName.textContent = name;
+            nameInput.value = name;
+            document.getElementById('saveEvent').value = eventId || '';
+            setDirty(false);
+            closeModal('saveModal');
+            const previewFailed = !payload.thumbnail || result.preview_saved === false;
+            showMessage(previewFailed && payload.save_to_stageplans
+                ? 'Saved, but the PNG preview could not be created, so it will not show on the Stage Plans page.'
+                : 'Stage plan saved to ShowWise.', 'success');
+        } catch (error) {
+            showMessage(`Could not save stage plan: ${error.message}`, 'error');
+        } finally {
+            confirmButton.disabled = false;
+            confirmButton.innerHTML = '<i class="fas fa-save"></i> Save design';
+        }
+    }
+
+    function newDesign() {
+        if (dirty && !window.confirm('You have unsaved changes. Start a new stage plan anyway?')) return;
+        currentDesignId = null;
+        currentXml = null;
+        currentDesignName.textContent = 'Untitled stage plan';
+        document.getElementById('saveName').value = '';
+        document.getElementById('saveEvent').value = '';
+        setDirty(false);
+        loadIntoEditor('');
+    }
+
+    async function loadDesign(id, skipConfirm = false) {
+        try {
+            const response = await fetch(`/stage-designer/design/${id}/data`);
+            const design = await response.json();
+            if (!response.ok) throw new Error(design.error || 'Could not load that design.');
+            let data = design.design_data;
+            if (typeof data === 'string') {
+                try { data = JSON.parse(data); } catch (_) { data = { xml: data }; }
+            }
+            const xml = data && data.xml ? data.xml : (typeof data === 'string' ? data : '');
+            if (!xml) throw new Error('This saved design has no diagrams.net XML. It may have been created with the previous designer.');
+            if (!skipConfirm && dirty && !window.confirm('Discard your unsaved changes and open this design?')) return;
+            currentDesignId = design.id;
+            currentDesignName.textContent = design.name;
+            document.getElementById('saveName').value = design.name;
+            document.getElementById('saveEvent').value = design.event_id || '';
+            loadIntoEditor(xml);
+            setDirty(false);
+            closeModal('openModal');
+            showMessage(`Opened “${design.name}”.`, 'success');
+        } catch (error) {
+            showMessage(error.message, 'error');
+        }
+    }
+
+    async function listDesigns() {
+        const container = document.getElementById('savedDesignsList');
+        container.innerHTML = '<p>Loading saved designs…</p>';
+        openModal('openModal');
+        try {
+            const response = await fetch('/stage-designer/designs');
+            const designs = await response.json();
+            if (!response.ok) throw new Error('Could not retrieve saved designs.');
+            if (!designs.length) {
+                container.innerHTML = '<p>No saved designs yet. Create a plan and use <strong>Save</strong>.</p>';
+                return;
+            }
+            container.replaceChildren();
+            designs.forEach(design => {
+                const row = document.createElement('div');
+                row.className = 'drawio-saved-item';
+                if (design.thumbnail) {
+                    const img = document.createElement('img');
+                    img.className = 'drawio-saved-thumb';
+                    img.src = design.thumbnail;
+                    img.alt = '';
+                    row.appendChild(img);
+                }
+                const meta = document.createElement('div');
+                meta.className = 'drawio-saved-meta';
+                const title = document.createElement('strong');
+                title.textContent = design.name;
+                const small = document.createElement('small');
+                small.textContent = `${design.event_name || 'No event'} · Updated ${new Date(design.updated_at).toLocaleString()}`;
+                meta.append(title, small);
+                row.appendChild(meta);
+                const actions = document.createElement('div');
+                actions.className = 'drawio-saved-buttons';
+                const openButton = document.createElement('button');
+                openButton.className = 'btn btn-primary';
+                openButton.type = 'button';
+                openButton.textContent = 'Open';
+                openButton.addEventListener('click', () => loadDesign(design.id));
+                actions.appendChild(openButton);
+                row.appendChild(actions);
+                container.appendChild(row);
+            });
+        } catch (error) {
+            container.textContent = error.message;
+        }
+    }
+
+    frame.addEventListener('load', () => {
+        // The editor sends its "init" message after the embedded editor is ready.
+        if (!editorReady) setStatus('Waiting for diagrams.net…', 'idle');
+    });
+
+    window.addEventListener('message', event => {
+        if (event.origin !== DRAWIO_ORIGIN) return;
+        if (event.source !== frame.contentWindow) return;
+
+        let message = event.data;
+        if (typeof message === 'string') {
+            try { message = JSON.parse(message); } catch (_) { return; }
+        }
+        if (!message || typeof message !== 'object') return;
+
+        if (message.event === 'init') {
+            editorReady = true;
+            clearTimeout(loadWatchdog);
+            loading.classList.add('hidden');
+            setStatus('Editor ready');
+            if (initialDesignId && !currentDesignId) {
+                loadDesign(initialDesignId, true);   // opened via ?design_id= (e.g. Edit on Stage Plans)
+            } else if (currentXml) {
+                postToEditor({ action: 'load', xml: currentXml });
+            }
+            return;
+        }
+
+        if (message.event === 'configure') {
+            postToEditor({ action: 'configure', config: {} });
+            return;
+        }
+
+        if (message.event === 'save') {
+            // Ctrl/Cmd+S inside the editor: behave like our Save button.
+            if (message.xml) currentXml = message.xml;
+            quickSave();
+            return;
+        }
+
+        if (message.event === 'autosave' || message.event === 'edit') {
+            if (message.xml) currentXml = message.xml;
+            if (Date.now() >= ignoreDirtyUntil) setDirty(true);
+            return;
+        }
+
+        if (message.event === 'export' && pendingExport) {
+            const expected = pendingExport;
+            if (message.format && message.format !== expected.format) return;
+            pendingExport = null;
+            clearTimeout(expected.timeout);
+            if (message.error) expected.reject(new Error(String(message.error)));
+            else expected.resolve(parseExportData(message.data || '', expected.format));
+        }
+    });
+
+    document.getElementById('newDesignBtn').addEventListener('click', newDesign);
+    document.getElementById('openDesignsBtn').addEventListener('click', listDesigns);
+    // Save: update an existing design straight away; otherwise ask for a name first.
+    function quickSave() {
+        if (currentDesignId && currentDesignName.textContent !== 'Untitled stage plan') {
+            document.getElementById('saveName').value = currentDesignName.textContent;
+            saveDesign(false);
+        } else {
+            openSaveModal(false);
+        }
+    }
+
+    function openSaveModal(asCopy) {
+        saveAsMode = asCopy;
+        const title = currentDesignName.textContent;
+        const untitled = title === 'Untitled stage plan';
+        document.getElementById('saveName').value = untitled ? '' : (asCopy ? `${title} copy` : title);
+        openModal('saveModal');
+        document.getElementById('saveName').focus();
+    }
+
+    document.getElementById('saveDesignBtn').addEventListener('click', quickSave);
+    document.getElementById('saveAsBtn').addEventListener('click', () => openSaveModal(true));
+    document.getElementById('confirmSaveBtn').addEventListener('click', () => saveDesign(saveAsMode));
+    document.getElementById('downloadXmlBtn').addEventListener('click', downloadXml);
+    document.getElementById('downloadPngBtn').addEventListener('click', downloadPng);
+    document.getElementById('fullscreenBtn').addEventListener('click', async () => {
+        const wrap = document.getElementById('frameWrap');
+        try {
+            if (!document.fullscreenElement) await wrap.requestFullscreen();
+            else await document.exitFullscreen();
+        } catch (_) {
+            showMessage('Fullscreen is not available in this browser.', 'error');
+        }
+    });
+
+    // Start (or restart) the editor. The iframe src is assigned here, after every
+    // listener above exists, so draw.io's one-time 'init' message can't be missed.
+    function loadEditorFrame() {
+        clearTimeout(loadWatchdog);
+        editorReady = false;
+        loadAttempts += 1;
+        retryBtn.hidden = true;
+        loading.classList.remove('hidden');
+        loadingTitle.textContent = 'Loading diagrams.net editor…';
+        loadingDetail.textContent = loadAttempts > 1
+            ? `Still waiting (attempt ${loadAttempts} of ${MAX_LOAD_ATTEMPTS})…`
+            : 'It may take a few seconds to initialise.';
+        setStatus('Connecting to diagrams.net…', 'idle');
+        frame.src = 'about:blank';
+        frame.src = DRAWIO_URL;
+        loadWatchdog = setTimeout(() => {
+            if (editorReady) return;
+            if (loadAttempts < MAX_LOAD_ATTEMPTS) { loadEditorFrame(); return; }
+            console.error('[stage-designer] diagrams.net sent no "init" message after', loadAttempts, 'attempts');
+            loadingTitle.textContent = 'The diagrams.net editor did not start';
+            loadingDetail.textContent = 'Check that embed.diagrams.net is reachable from this network and not blocked by an ad blocker, firewall or content filter, then try again. Details are in the browser console (F12).';
+            retryBtn.hidden = false;
+            setStatus('Editor failed to load', 'idle');
+        }, LOAD_TIMEOUT_MS);
+    }
+
+    retryBtn.addEventListener('click', () => { loadAttempts = 0; loadEditorFrame(); });
+
+    window.addEventListener('beforeunload', event => {
+        if (dirty) {
+            event.preventDefault();
+            event.returnValue = '';
+        }
+    });
+
+    loadEditorFrame();
+})();
+</script>
 {% endblock %}

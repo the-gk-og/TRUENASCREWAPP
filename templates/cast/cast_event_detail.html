@@ -281,7 +281,7 @@
             <div style="display: flex; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
                 <div style="flex: 1; min-width: 0;">
                     <p style="margin: 0.25rem 0; color: #555; font-size: 0.85rem;">
-                        <strong>{{ note.created_by }}</strong> • {{ note.created_at.strftime('%b %d, %Y at %I:%M %p') }}
+                        <strong>{{ note.created_by|person }}</strong> • {{ note.created_at.strftime('%b %d, %Y at %I:%M %p') }}
                     </p>
                     <p id="cast-note-content-{{ note.id }}" style="margin: 0.5rem 0; color: #333; word-break: break-word;">{{ note.content }}</p>
                     {% if current_user.is_admin %}

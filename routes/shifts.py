@@ -17,6 +17,7 @@ from flask_login import login_required, current_user
 
 from extensions import db
 from models import Shift, ShiftAssignment, ShiftNote, ShiftTask
+from services.user_names import name_for
 from decorators import crew_required
 from services.shift_notifications import notify_shift_declined
 
@@ -54,6 +55,7 @@ def get_shifts():
             'assignments': [{
                 'id': a.id, 'user_id': a.user_id,
                 'username': a.user.username if a.user else '?',
+                'name': a.user.shown_name if a.user else '?',
                 'status': a.status, 'notes': a.notes,
             } for a in rows],
         })
@@ -130,7 +132,7 @@ def get_shift_notes(shift_id):
     Shift.query.get_or_404(shift_id)
     notes = ShiftNote.query.filter_by(shift_id=shift_id).order_by(ShiftNote.created_at.desc()).all()
     return jsonify({'success': True, 'notes': [
-        {'id': n.id, 'content': n.content, 'created_by': n.created_by,
+        {'id': n.id, 'content': n.content, 'created_by': n.created_by, 'created_by_name': name_for(n.created_by),
          'created_at': n.created_at.isoformat()} for n in notes]})
 
 
@@ -167,8 +169,8 @@ def get_shift_tasks(shift_id):
     tasks = ShiftTask.query.filter_by(shift_id=shift_id).order_by(ShiftTask.created_at).all()
     return jsonify({'success': True, 'tasks': [
         {'id': t.id, 'title': t.title, 'description': t.description,
-         'is_complete': t.is_complete, 'assigned_to': t.assigned_to,
-         'created_by': t.created_by, 'created_at': t.created_at.isoformat()} for t in tasks]})
+         'is_complete': t.is_complete, 'assigned_to': t.assigned_to, 'assigned_to_name': name_for(t.assigned_to),
+         'created_by': t.created_by, 'created_by_name': name_for(t.created_by), 'created_at': t.created_at.isoformat()} for t in tasks]})
 
 
 @shifts_bp.route('/shifts/tasks/<int:task_id>', methods=['PUT'])

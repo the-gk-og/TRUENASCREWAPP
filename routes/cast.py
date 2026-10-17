@@ -6,6 +6,9 @@ from flask_login import login_required, current_user
 from werkzeug.security import generate_password_hash
 from extensions import db
 from models import Event, CastMember, CastSchedule, CastNote, User
+from services.user_names import (
+    find_user_by_username, username_problem, username_taken, email_taken, clean_display_name, name_for,
+)
 from decorators import crew_required
 from services.email_service import send_cast_assignment_email, send_cast_welcome_email
 
@@ -80,14 +83,14 @@ def add_cast():
         return jsonify({'error': 'Admin access required'}), 403
     data = request.json
     user = (User.query.get(data['user_id']) if data.get('user_id')
-            else User.query.filter_by(username=data.get('actor_name')).first())
+            else find_user_by_username(data.get('actor_name')))
     if not user:
         return jsonify({'error': 'User not found'}), 404
     if not user.is_cast:
         user.is_cast = True
         user.user_role = 'cast'
     cast = CastMember(
-        actor_name=user.username, character_name=data['character_name'],
+        actor_name=user.shown_name, character_name=data['character_name'],
         role_type=data.get('role_type', 'lead'),
         contact_email=data.get('contact_email') or user.email,
         contact_phone=data.get('contact_phone'),
@@ -100,7 +103,7 @@ def add_cast():
         event = Event.query.get(cast.event_id)
         if event:
             send_cast_assignment_email(
-                recipient_email=user.email, username=user.username,
+                recipient_email=user.email, username=user.shown_name,
                 event_title=event.title,
                 event_date=event.event_date.strftime('%B %d, %Y at %I:%M %p'),
                 event_location=event.location or 'TBD',
@@ -143,16 +146,25 @@ def create_cast_account():
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
     data     = request.json
-    username = data.get('username')
+    username = (data.get('username') or '').strip()
     password = data.get('password')
-    email    = data.get('email')
+    email    = (data.get('email') or '').strip().lower() or None
     if not username or not password:
         return jsonify({'error': 'Username and password are required'}), 400
-    if User.query.filter_by(username=username).first():
+    problem = username_problem(username, minimum=2, maximum=80)
+    if problem:
+        return jsonify({'error': problem}), 400
+    if username_taken(username):
         return jsonify({'error': 'Username already exists'}), 400
+    display_name, name_problem = clean_display_name(data.get('display_name'))
+    if name_problem:
+        return jsonify({'error': name_problem}), 400
+    if email and email_taken(email):
+        return jsonify({'error': 'An account with that email already exists'}), 400
     # FIX: must set user_role='cast' so login flow works correctly
     user = User(
         username=username,
+        display_name=display_name,
         password_hash=generate_password_hash(password),
         email=email,
         is_cast=True,
@@ -163,7 +175,7 @@ def create_cast_account():
     db.session.commit()
     if email:
         send_cast_welcome_email(recipient_email=email, username=username, password=password)
-    return jsonify({'success': True, 'user_id': user.id, 'username': username})
+    return jsonify({'success': True, 'user_id': user.id, 'username': username, 'name': user.shown_name})
 
 
 @cast_bp.route('/cast/users')
@@ -172,7 +184,7 @@ def get_cast_users():
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
     cast_users = User.query.filter_by(is_cast=True).all()
-    return jsonify({'users': [{'id': u.id, 'username': u.username, 'email': u.email}
+    return jsonify({'users': [{'id': u.id, 'username': u.username, 'name': u.shown_name, 'email': u.email}
                                for u in cast_users]})
 
 
@@ -221,7 +233,7 @@ def add_cast_note(event_id):
     db.session.add(note)
     db.session.commit()
     return jsonify({'success': True, 'id': note.id, 'note': {
-        'id': note.id, 'content': note.content, 'created_by': note.created_by,
+        'id': note.id, 'content': note.content, 'created_by': note.created_by, 'created_by_name': name_for(note.created_by),
         'created_at': note.created_at.strftime('%b %d, %Y at %I:%M %p'),
     }})
 

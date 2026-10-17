@@ -1,0 +1,506 @@
+diff --git a/routes/stage_designer.py b/routes/stage_designer.py
+index f598c79..d24683d 100644
+--- a/routes/stage_designer.py
++++ b/routes/stage_designer.py
+@@ -20,11 +20,15 @@ UPLOAD_FOLDER = 'uploads'
+ 
+ 
+ def _save_thumbnail(name: str, b64: str) -> str | None:
++    """Decode a PNG data-URI/base64 string into uploads/. Returns the filename or None."""
+     try:
+-        raw      = b64.split(',')[1] if ',' in b64 else b64
+-        data     = base64.b64decode(raw)
+-        safe     = ''.join(c if c.isalnum() or c in ' -_' else '_' for c in name)
+-        filename = f"designer_thumb_{int(datetime.now().timestamp())}_{safe}.png"
++        raw  = b64.split(',', 1)[1] if ',' in b64 else b64
++        data = base64.b64decode(raw, validate=True)
++        if not data.startswith(b'\x89PNG'):
++            raise ValueError('thumbnail is not a PNG image')
++        safe     = ''.join(c if c.isalnum() or c in '-_' else '_' for c in name)[:60]
++        filename = f"designer_thumb_{int(datetime.now().timestamp() * 1000)}_{safe}.png"
++        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+         with open(os.path.join(UPLOAD_FOLDER, filename), 'wb') as f:
+             f.write(data)
+         return filename
+@@ -33,6 +37,25 @@ def _save_thumbnail(name: str, b64: str) -> str | None:
+         return None
+ 
+ 
++def _to_int(value):
++    """Form/JSON ids arrive as strings ('3') or ''/None; normalise to int or None."""
++    try:
++        return int(value) if value not in (None, '') else None
++    except (TypeError, ValueError):
++        return None
++
++
++def _remove_upload(filename: str | None):
++    if not filename:
++        return
++    path = os.path.join(UPLOAD_FOLDER, filename)
++    if os.path.exists(path):
++        try:
++            os.remove(path)
++        except OSError:
++            pass
++
++
+ @stage_designer_bp.route('/stage-designer')
+ @login_required
+ @crew_required
+@@ -56,23 +79,31 @@ def stage_designer():
+ @crew_required
+ def create_stage_design():
+     try:
+-        data      = request.json
+-        thumbnail = _save_thumbnail(data['name'], data['thumbnail']) if data.get('thumbnail') else None
++        data = request.get_json(silent=True) or {}
++        name = (data.get('name') or '').strip()
++        if not name:
++            return jsonify({'success': False, 'error': 'A name is required.'}), 400
++        if not data.get('design_data'):
++            return jsonify({'success': False, 'error': 'No design data was received.'}), 400
++
++        event_id  = _to_int(data.get('event_id'))
++        thumbnail = _save_thumbnail(name, data['thumbnail']) if data.get('thumbnail') else None
+         design    = StagePlanDesign(
+-            name=data['name'], design_data=json.dumps(data['design_data']),
+-            thumbnail=thumbnail, event_id=data.get('event_id'),
++            name=name, design_data=json.dumps(data['design_data']),
++            thumbnail=thumbnail, event_id=event_id,
+             created_by=current_user.username,
+         )
+         db.session.add(design)
+         db.session.flush()
+-        if data.get('save_to_stageplans'):
++        # Only list on the Stage Plans page when there is a real image to show.
++        if data.get('save_to_stageplans') and thumbnail:
+             db.session.add(StagePlan(
+-                title=data['name'],
+-                filename=thumbnail or f"designer_{design.id}.json",
+-                uploaded_by=current_user.username, event_id=data.get('event_id'),
++                title=name, filename=thumbnail,
++                uploaded_by=current_user.username, event_id=event_id,
+             ))
+         db.session.commit()
+-        return jsonify({'success': True, 'design_id': design.id})
++        return jsonify({'success': True, 'design_id': design.id,
++                        'preview_saved': bool(thumbnail)})
+     except Exception as exc:
+         db.session.rollback()
+         import traceback; traceback.print_exc()
+@@ -83,24 +114,47 @@ def create_stage_design():
+ @login_required
+ @crew_required
+ def update_stage_design(id):
++    old_thumbnail = None
+     try:
+-        design    = StagePlanDesign.query.get_or_404(id)
+-        data      = request.json
+-        thumbnail = design.thumbnail
+-        if data.get('thumbnail'):
+-            if thumbnail and os.path.exists(os.path.join(UPLOAD_FOLDER, thumbnail)):
+-                try: os.remove(os.path.join(UPLOAD_FOLDER, thumbnail))
+-                except Exception: pass
+-            thumbnail = _save_thumbnail(data['name'], data['thumbnail'])
+-        design.name        = data.get('name', design.name)
++        design = StagePlanDesign.query.get_or_404(id)
++        data   = request.get_json(silent=True) or {}
++        name   = (data.get('name') or design.name).strip()
++        if not data.get('design_data'):
++            return jsonify({'success': False, 'error': 'No design data was received.'}), 400
++
++        event_id      = _to_int(data.get('event_id'))
++        old_thumbnail = design.thumbnail
++        new_thumbnail = _save_thumbnail(name, data['thumbnail']) if data.get('thumbnail') else None
++        thumbnail     = new_thumbnail or old_thumbnail
++
++        # Keep any Stage Plans entry that points at the old preview in sync,
++        # otherwise it ends up referencing a file that no longer exists.
++        linked = StagePlan.query.filter_by(filename=old_thumbnail).all() if old_thumbnail else []
++        for plan in linked:
++            if new_thumbnail:
++                plan.filename = new_thumbnail
++            plan.title    = name
++            plan.event_id = event_id
++        if data.get('save_to_stageplans') and thumbnail and not linked:
++            db.session.add(StagePlan(
++                title=name, filename=thumbnail,
++                uploaded_by=current_user.username, event_id=event_id,
++            ))
++
++        design.name        = name
+         design.design_data = json.dumps(data['design_data'])
+         design.thumbnail   = thumbnail
+-        design.event_id    = data.get('event_id')
++        design.event_id    = event_id
+         design.updated_at  = datetime.utcnow()
+         db.session.commit()
+-        return jsonify({'success': True, 'design_id': design.id})
++
++        if new_thumbnail and old_thumbnail and new_thumbnail != old_thumbnail:
++            _remove_upload(old_thumbnail)   # only after the DB no longer points at it
++        return jsonify({'success': True, 'design_id': design.id,
++                        'preview_saved': bool(new_thumbnail)})
+     except Exception as exc:
+         db.session.rollback()
++        import traceback; traceback.print_exc()
+         return jsonify({'success': False, 'error': str(exc)}), 500
+ 
+ 
+@@ -112,7 +166,7 @@ def list_stage_designs():
+     return jsonify([{
+         'id': d.id, 'name': d.name, 'event_id': d.event_id,
+         'event_name': d.event.title if d.event else None,
+-        'thumbnail': url_for('uploaded_file', filename=d.thumbnail) if d.thumbnail else None,
++        'thumbnail': url_for('stage_designer.uploaded_file', filename=d.thumbnail) if d.thumbnail else None,
+         'created_by': d.created_by,
+         'created_at': d.created_at.isoformat(), 'updated_at': d.updated_at.isoformat(),
+     } for d in designs])
+@@ -123,8 +177,12 @@ def list_stage_designs():
+ @crew_required
+ def get_stage_design(id):
+     design = StagePlanDesign.query.get_or_404(id)
++    try:
++        design_data = json.loads(design.design_data)
++    except (TypeError, ValueError):
++        design_data = {}
+     return jsonify({'id': design.id, 'name': design.name,
+-                    'design_data': json.loads(design.design_data),
++                    'design_data': design_data,
+                     'event_id': design.event_id, 'thumbnail': design.thumbnail})
+ 
+ 
+@@ -175,7 +233,7 @@ def get_stage_templates():
+     ).order_by(StagePlanTemplate.created_at.desc()).all()
+     return jsonify([{
+         'id': t.id, 'name': t.name, 'description': t.description,
+-        'thumbnail': url_for('uploaded_file', filename=t.thumbnail) if t.thumbnail else None,
++        'thumbnail': url_for('stage_designer.uploaded_file', filename=t.thumbnail) if t.thumbnail else None,
+         'created_by': t.created_by, 'created_at': t.created_at.isoformat(),
+     } for t in templates])
+ 
+@@ -302,9 +360,12 @@ def uploaded_file(filename):
+ @crew_required
+ def delete_stageplan(id):
+     plan = StagePlan.query.get_or_404(id)
+-    path = os.path.join(UPLOAD_FOLDER, plan.filename)
+-    if os.path.exists(path):
+-        os.remove(path)
++    filename = plan.filename
+     db.session.delete(plan)
+     db.session.commit()
++    # A designer preview is shared with its saved design; keep the file in that case.
++    in_use = (StagePlanDesign.query.filter_by(thumbnail=filename).first()
++              or StagePlan.query.filter_by(filename=filename).first())
++    if not in_use:
++        _remove_upload(filename)
+     return jsonify({'success': True})
+diff --git a/templates/crew/stage_designer.html b/templates/crew/stage_designer.html
+index 2288fc8..7959b24 100644
+--- a/templates/crew/stage_designer.html
++++ b/templates/crew/stage_designer.html
+@@ -88,13 +88,13 @@
+         <div class="drawio-frame-wrap" id="frameWrap">
+             <div class="drawio-loading" id="drawioLoading">
+                 <i class="fas fa-spinner fa-spin fa-2x" aria-hidden="true"></i>
+-                <strong>Loading diagrams.net editor…</strong>
+-                <span>It may take a few seconds to initialise.</span>
++                <strong id="drawioLoadingTitle">Loading diagrams.net editor…</strong>
++                <span id="drawioLoadingDetail">It may take a few seconds to initialise.</span>
++                <button class="btn btn-primary" type="button" id="drawioRetryBtn" hidden><i class="fas fa-rotate-right"></i> Try again</button>
+             </div>
+             <iframe
+                 id="drawioFrame"
+                 title="Stage plan editor powered by diagrams.net"
+-                src="https://embed.diagrams.net/?embed=1&proto=json&spin=1&ui=kennedy&libraries=1&saveAndExit=0&noSaveBtn=1"
+                 allow="clipboard-read; clipboard-write"
+                 referrerpolicy="strict-origin-when-cross-origin">
+             </iframe>
+@@ -153,13 +153,22 @@
+ (() => {
+     'use strict';
+ 
+-    const DRAWIO_ORIGIN = 'https://embed.diagrams.net';
++    // To self-host draw.io later, change only this URL (the origin is derived from it).
++    const DRAWIO_URL = 'https://embed.diagrams.net/?embed=1&proto=json&spin=1&ui=kennedy&libraries=1&saveAndExit=0&noSaveBtn=1&noExitBtn=1&autosave=1';
++    const DRAWIO_ORIGIN = new URL(DRAWIO_URL).origin;
++    const LOAD_TIMEOUT_MS = 12000;
++    const MAX_LOAD_ATTEMPTS = 3;
+     const frame = document.getElementById('drawioFrame');
+     const loading = document.getElementById('drawioLoading');
+     const statusDot = document.getElementById('statusDot');
+     const statusText = document.getElementById('statusText');
+     const currentDesignName = document.getElementById('currentDesignName');
+     const messageBox = document.getElementById('drawioMessage');
++    const loadingTitle = document.getElementById('drawioLoadingTitle');
++    const loadingDetail = document.getElementById('drawioLoadingDetail');
++    const retryBtn = document.getElementById('drawioRetryBtn');
++    let loadAttempts = 0;
++    let loadWatchdog = null;
+ 
+     let editorReady = false;
+     let dirty = false;
+@@ -167,6 +176,9 @@
+     let currentXml = null;
+     let pendingExport = null;
+     let exportTimer = null;
++    let saveAsMode = false;
++    let ignoreDirtyUntil = 0;
++    const initialDesignId = new URLSearchParams(window.location.search).get('design_id');
+ 
+     function setStatus(text, state = 'ready') {
+         statusText.textContent = text;
+@@ -197,6 +209,14 @@
+ 
+     function closeModal(id) {
+         document.getElementById(id).classList.remove('open');
++        if (id === 'saveModal') saveAsMode = false;
++    }
++
++    // Load XML into the editor; if it is not ready yet, the 'init' handler loads currentXml.
++    function loadIntoEditor(xml) {
++        currentXml = xml || null;
++        ignoreDirtyUntil = Date.now() + 1000;
++        if (editorReady) postToEditor({ action: 'load', xml: xml || '' });
+     }
+ 
+     document.querySelectorAll('[data-close-modal]').forEach(button => {
+@@ -204,7 +224,7 @@
+     });
+     document.querySelectorAll('.drawio-modal').forEach(modal => {
+         modal.addEventListener('click', event => {
+-            if (event.target === modal) modal.classList.remove('open');
++            if (event.target === modal) closeModal(modal.id);
+         });
+     });
+ 
+@@ -225,7 +245,9 @@
+                 }
+             }, 30000);
+             pendingExport = { format, resolve, reject, timeout };
+-            postToEditor({ action: 'export', format, spinKey: 'showwise-export' });
++            const request = { action: 'export', format, spinKey: 'showwise-export' };
++            if (format === 'png') { request.background = '#ffffff'; request.border = 10; }
++            postToEditor(request);
+         });
+     }
+ 
+@@ -245,23 +267,25 @@
+         return typeof value === 'string' ? value : '';
+     }
+ 
+-    function parseExportData(data) {
++    function base64ToUtf8(b64) {
++        const bytes = Uint8Array.from(atob(b64), ch => ch.charCodeAt(0));
++        return new TextDecoder('utf-8').decode(bytes);
++    }
++
++    // Images (png) are kept as data URIs. Text formats (xml/svg) may arrive as a
++    // data URI or as plain text, so normalise them to a plain string.
++    function parseExportData(data, format) {
+         if (typeof data !== 'string') return data;
+-        if (data.startsWith('data:')) {
+-            const comma = data.indexOf(',');
+-            if (comma >= 0) {
+-                const meta = data.slice(0, comma);
+-                const payload = data.slice(comma + 1);
+-                try {
+-                    return meta.includes(';base64')
+-                        ? atob(payload)
+-                        : decodeURIComponent(payload);
+-                } catch (_) {
+-                    return payload;
+-                }
+-            }
++        if (format === 'png' || !data.startsWith('data:')) return data;
++        const comma = data.indexOf(',');
++        if (comma < 0) return data;
++        const meta = data.slice(0, comma);
++        const payload = data.slice(comma + 1);
++        try {
++            return meta.includes(';base64') ? base64ToUtf8(payload) : decodeURIComponent(payload);
++        } catch (_) {
++            return payload;
+         }
+-        return data;
+     }
+ 
+     async function getExport(format) {
+@@ -360,7 +384,10 @@
+             document.getElementById('saveEvent').value = eventId || '';
+             setDirty(false);
+             closeModal('saveModal');
+-            showMessage('Stage plan saved to ShowWise.', 'success');
++            const previewFailed = !payload.thumbnail || result.preview_saved === false;
++            showMessage(previewFailed && payload.save_to_stageplans
++                ? 'Saved, but the PNG preview could not be created, so it will not show on the Stage Plans page.'
++                : 'Stage plan saved to ShowWise.', 'success');
+         } catch (error) {
+             showMessage(`Could not save stage plan: ${error.message}`, 'error');
+         } finally {
+@@ -377,10 +404,10 @@
+         document.getElementById('saveName').value = '';
+         document.getElementById('saveEvent').value = '';
+         setDirty(false);
+-        postToEditor({ action: 'load', xml: '' });
++        loadIntoEditor('');
+     }
+ 
+-    async function loadDesign(id) {
++    async function loadDesign(id, skipConfirm = false) {
+         try {
+             const response = await fetch(`/stage-designer/design/${id}/data`);
+             const design = await response.json();
+@@ -391,13 +418,12 @@
+             }
+             const xml = data && data.xml ? data.xml : (typeof data === 'string' ? data : '');
+             if (!xml) throw new Error('This saved design has no diagrams.net XML. It may have been created with the previous designer.');
+-            if (dirty && !window.confirm('Discard your unsaved changes and open this design?')) return;
++            if (!skipConfirm && dirty && !window.confirm('Discard your unsaved changes and open this design?')) return;
+             currentDesignId = design.id;
+-            currentXml = xml;
+             currentDesignName.textContent = design.name;
+             document.getElementById('saveName').value = design.name;
+             document.getElementById('saveEvent').value = design.event_id || '';
+-            postToEditor({ action: 'load', xml });
++            loadIntoEditor(xml);
+             setDirty(false);
+             closeModal('openModal');
+             showMessage(`Opened “${design.name}”.`, 'success');
+@@ -455,7 +481,7 @@
+ 
+     frame.addEventListener('load', () => {
+         // The editor sends its "init" message after the embedded editor is ready.
+-        setStatus('Waiting for diagrams.net…');
++        if (!editorReady) setStatus('Waiting for diagrams.net…', 'idle');
+     });
+ 
+     window.addEventListener('message', event => {
+@@ -470,9 +496,14 @@
+ 
+         if (message.event === 'init') {
+             editorReady = true;
++            clearTimeout(loadWatchdog);
+             loading.classList.add('hidden');
+             setStatus('Editor ready');
+-            if (currentXml) postToEditor({ action: 'load', xml: currentXml });
++            if (initialDesignId && !currentDesignId) {
++                loadDesign(initialDesignId, true);   // opened via ?design_id= (e.g. Edit on Stage Plans)
++            } else if (currentXml) {
++                postToEditor({ action: 'load', xml: currentXml });
++            }
+             return;
+         }
+ 
+@@ -482,13 +513,15 @@
+         }
+ 
+         if (message.event === 'save') {
++            // Ctrl/Cmd+S inside the editor: behave like our Save button.
+             if (message.xml) currentXml = message.xml;
+-            setDirty(true);
++            quickSave();
+             return;
+         }
+ 
+         if (message.event === 'autosave' || message.event === 'edit') {
+-            setDirty(true);
++            if (message.xml) currentXml = message.xml;
++            if (Date.now() >= ignoreDirtyUntil) setDirty(true);
+             return;
+         }
+ 
+@@ -498,30 +531,34 @@
+             pendingExport = null;
+             clearTimeout(expected.timeout);
+             if (message.error) expected.reject(new Error(String(message.error)));
+-            else expected.resolve(parseExportData(message.data || ''));
++            else expected.resolve(parseExportData(message.data || '', expected.format));
+         }
+     });
+ 
+     document.getElementById('newDesignBtn').addEventListener('click', newDesign);
+     document.getElementById('openDesignsBtn').addEventListener('click', listDesigns);
+-    document.getElementById('saveDesignBtn').addEventListener('click', () => {
+-        if (!document.getElementById('saveName').value.trim() && currentDesignName.textContent !== 'Untitled stage plan') {
++    // Save: update an existing design straight away; otherwise ask for a name first.
++    function quickSave() {
++        if (currentDesignId && currentDesignName.textContent !== 'Untitled stage plan') {
+             document.getElementById('saveName').value = currentDesignName.textContent;
++            saveDesign(false);
++        } else {
++            openSaveModal(false);
+         }
+-        openModal('saveModal');
+-    });
+-    document.getElementById('saveAsBtn').addEventListener('click', () => {
+-        document.getElementById('saveName').value = currentDesignName.textContent === 'Untitled stage plan' ? '' : `${currentDesignName.textContent} copy`;
++    }
++
++    function openSaveModal(asCopy) {
++        saveAsMode = asCopy;
++        const title = currentDesignName.textContent;
++        const untitled = title === 'Untitled stage plan';
++        document.getElementById('saveName').value = untitled ? '' : (asCopy ? `${title} copy` : title);
+         openModal('saveModal');
+         document.getElementById('saveName').focus();
+-        // Save As creates a new record rather than updating the current one.
+-        document.getElementById('confirmSaveBtn').dataset.forceSaveAs = 'true';
+-    });
+-    document.getElementById('confirmSaveBtn').addEventListener('click', () => {
+-        const force = document.getElementById('confirmSaveBtn').dataset.forceSaveAs === 'true';
+-        document.getElementById('confirmSaveBtn').dataset.forceSaveAs = 'false';
+-        saveDesign(force);
+-    });
++    }
++
++    document.getElementById('saveDesignBtn').addEventListener('click', quickSave);
++    document.getElementById('saveAsBtn').addEventListener('click', () => openSaveModal(true));
++    document.getElementById('confirmSaveBtn').addEventListener('click', () => saveDesign(saveAsMode));
+     document.getElementById('downloadXmlBtn').addEventListener('click', downloadXml);
+     document.getElementById('downloadPngBtn').addEventListener('click', downloadPng);
+     document.getElementById('fullscreenBtn').addEventListener('click', async () => {
+@@ -534,12 +571,42 @@
+         }
+     });
+ 
++    // Start (or restart) the editor. The iframe src is assigned here, after every
++    // listener above exists, so draw.io's one-time 'init' message can't be missed.
++    function loadEditorFrame() {
++        clearTimeout(loadWatchdog);
++        editorReady = false;
++        loadAttempts += 1;
++        retryBtn.hidden = true;
++        loading.classList.remove('hidden');
++        loadingTitle.textContent = 'Loading diagrams.net editor…';
++        loadingDetail.textContent = loadAttempts > 1
++            ? `Still waiting (attempt ${loadAttempts} of ${MAX_LOAD_ATTEMPTS})…`
++            : 'It may take a few seconds to initialise.';
++        setStatus('Connecting to diagrams.net…', 'idle');
++        frame.src = 'about:blank';
++        frame.src = DRAWIO_URL;
++        loadWatchdog = setTimeout(() => {
++            if (editorReady) return;
++            if (loadAttempts < MAX_LOAD_ATTEMPTS) { loadEditorFrame(); return; }
++            console.error('[stage-designer] diagrams.net sent no "init" message after', loadAttempts, 'attempts');
++            loadingTitle.textContent = 'The diagrams.net editor did not start';
++            loadingDetail.textContent = 'Check that embed.diagrams.net is reachable from this network and not blocked by an ad blocker, firewall or content filter, then try again. Details are in the browser console (F12).';
++            retryBtn.hidden = false;
++            setStatus('Editor failed to load', 'idle');
++        }, LOAD_TIMEOUT_MS);
++    }
++
++    retryBtn.addEventListener('click', () => { loadAttempts = 0; loadEditorFrame(); });
++
+     window.addEventListener('beforeunload', event => {
+         if (dirty) {
+             event.preventDefault();
+             event.returnValue = '';
+         }
+     });
++
++    loadEditorFrame();
+ })();
+ </script>
+ {% endblock %}

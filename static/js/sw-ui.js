@@ -506,7 +506,7 @@
   SW.shiftForm = function ({ event, users, shift, user_id }) {
     const edit = !!shift;
     const fields = [];
-    if (edit) fields.push({ type: 'info', text: `Shift for ${shift.username}` });
+    if (edit) fields.push({ type: 'info', text: `Shift for ${shift.name || shift.username}` });
     else fields.push({
       name: 'user_id', label: 'Person', type: 'select', required: true,
       options: [{ value: '', label: 'Choose a person…' }].concat(users.map((u) => ({ value: u.id, label: u.name }))),
