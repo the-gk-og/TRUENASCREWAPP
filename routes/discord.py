@@ -6,6 +6,7 @@ from flask import Blueprint, jsonify, request
 from werkzeug.security import generate_password_hash, check_password_hash
 from extensions import db
 from models import User, Event, CrewAssignment, Equipment, PickListItem
+from services.user_names import find_user_by_login, find_user_by_username, username_problem, username_taken, clean_display_name, name_for
 
 discord_bp = Blueprint('discord', __name__)
 DISCORD_BOT_SECRET = os.environ.get('DISCORD_BOT_SECRET', 'change-this-secret')
@@ -43,19 +44,19 @@ def discord_leave_event():
 def discord_link_existing():
     data = request.json
     if not _auth(data): return jsonify({'error': 'Unauthorized'}), 401
-    user = User.query.filter_by(username=data.get('username')).first()
+    user = find_user_by_login(data.get('username'))          # username or email, any letter case
     if not user or not check_password_hash(user.password_hash, data.get('password', '')):
         return jsonify({'error': 'Invalid username or password'}), 401
     user.discord_id       = data.get('discord_id')
     user.discord_username = data.get('discord_username')
     db.session.commit()
-    return jsonify({'success': True, 'username': user.username})
+    return jsonify({'success': True, 'username': user.username, 'name': user.shown_name})
 
 @discord_bp.route('/discord/check-link/<discord_id>')
 def discord_check_link(discord_id):
     user = User.query.filter_by(discord_id=discord_id).first()
     if user:
-        return jsonify({'linked': True, 'username': user.username,
+        return jsonify({'linked': True, 'username': user.username, 'name': user.shown_name,
                         'event_count': CrewAssignment.query.filter_by(crew_member=user.username).count()})
     return jsonify({'linked': False}), 404
 
@@ -84,7 +85,7 @@ def discord_list_events():
 def discord_event_crew(event_id):
     event = Event.query.get_or_404(event_id)
     return jsonify({'event_title': event.title,
-                    'crew': [{'name': a.crew_member, 'role': a.role or 'Crew Member'}
+                    'crew': [{'name': name_for(a.crew_member), 'role': a.role or 'Crew Member'}
                              for a in event.crew_assignments]})
 
 @discord_bp.route('/discord/add-event', methods=['POST'])
@@ -105,10 +106,17 @@ def discord_add_event():
 def discord_create_account():
     data = request.json
     if not _auth(data): return jsonify({'error': 'Unauthorized'}), 401
-    username = data.get('username')
-    if User.query.filter_by(username=username).first():
+    username = (data.get('username') or '').strip()
+    problem = username_problem(username, minimum=2, maximum=80)
+    if problem:
+        return jsonify({'error': problem}), 400
+    if username_taken(username):
         return jsonify({'error': 'Username already exists'}), 400
-    user = User(username=username, password_hash=generate_password_hash(data.get('password', '')), is_admin=False)
+    display_name, name_problem = clean_display_name(data.get('display_name'))
+    if name_problem:
+        return jsonify({'error': name_problem}), 400
+    user = User(username=username, display_name=display_name,
+                password_hash=generate_password_hash(data.get('password', '')), is_admin=False)
     db.session.add(user)
     db.session.commit()
     return jsonify({'success': True, 'username': username})

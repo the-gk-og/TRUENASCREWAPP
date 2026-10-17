@@ -43,13 +43,14 @@ def schedule_event_notifications(event) -> None:
             from app import app as _app
             with _app.app_context():
                 from models import Event, User, CrewAssignment
+                from services.user_names import find_user_by_username
                 ev = Event.query.get(event_id)
                 if not ev:
                     return
                 crew_names = [a.crew_member for a in ev.crew_assignments]
                 mentions   = []
                 for name in crew_names:
-                    u = User.query.filter_by(username=name).first()
+                    u = find_user_by_username(name)
                     if u and u.discord_id:
                         mentions.append(f"<@{u.discord_id}>")
                 if notification_tracker.get(event_id, {}).get(notification_type):

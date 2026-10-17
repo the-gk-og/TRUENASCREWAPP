@@ -37,6 +37,7 @@ from decorators import crew_required
 from services.markdown_service import render_markdown
 from services.availability_service import find_conflicts
 from services.email_service import send_shift_assignment_emails_async
+from services.user_names import name_for
 from services.notification_service import (
     send_discord_event_announcement, schedule_event_notifications,
 )
@@ -169,7 +170,7 @@ def serialize_event(e: Event) -> dict:
         'event_date': e.event_date.isoformat(timespec='minutes'),
         'event_end_date': event_end(e).isoformat(timespec='minutes'),
         'is_recurring': is_series(e),
-        'created_by': e.created_by,
+        'created_by': e.created_by, 'created_by_name': name_for(e.created_by),
     }
 
 
@@ -311,7 +312,7 @@ def event_detail(id):
     for assignment, shift in shift_rows:
         if assignment.user:
             person(assignment.user)['shifts'].append({'a': assignment, 's': shift})
-    team = sorted(people.values(), key=lambda p: p['user'].username.lower())
+    team = sorted(people.values(), key=lambda p: p['user'].shown_name.lower())
 
     schedules = EventSchedule.query.filter_by(event_id=id).order_by(EventSchedule.scheduled_time).all()
     notes = EventNote.query.filter_by(event_id=id).order_by(EventNote.created_at.desc()).all()
@@ -323,12 +324,13 @@ def event_detail(id):
         assignable = (User.query.filter(User.user_role.in_(['crew', 'staff']))
                       .filter(or_(User.is_cast.is_(False), User.is_cast.is_(None)))
                       .order_by(User.username).all())
+        assignable.sort(key=lambda u: u.shown_name.lower())
 
     all_assignments = [x['a'] for p in team for x in p['shifts']]
     page_data = {
         'me': current_user.id,
         'event': {**serialize_event(event), 'series_count': len(series_members(event, 'all'))},
-        'users': [{'id': u.id, 'name': u.username} for u in assignable],
+        'users': [{'id': u.id, 'name': u.shown_name} for u in assignable],
         'assignments': {a.id: serialize_assignment(a) for a in all_assignments},
         'schedules': {s.id: {'id': s.id, 'title': s.title, 'time': s.scheduled_time.isoformat(timespec='minutes'),
                              'description': s.description or ''}
@@ -544,7 +546,8 @@ def serialize_assignment(a: ShiftAssignment) -> dict:
     s = a.shift
     return {
         'assignment_id': a.id, 'shift_id': s.id, 'user_id': a.user_id,
-        'username': a.user.username if a.user else '?', 'role': s.role or '',
+        'username': a.user.username if a.user else '?',
+        'name': a.user.shown_name if a.user else '?', 'role': s.role or '',
         'start': s.shift_date.isoformat(timespec='minutes'),
         'end': s.shift_end_date.isoformat(timespec='minutes'),
         'status': a.status, 'notes': a.notes or '',
@@ -575,7 +578,7 @@ def _split_shared_shift(a: ShiftAssignment, start, end, role) -> Shift:
 def _shift_email_job(user: User, event: Event, shift: Shift, notes: str = '') -> dict:
     """Plain-string arguments for send_shift_assignment_email (it runs after the request ends)."""
     return dict(
-        recipient_email=user.email, username=user.username,
+        recipient_email=user.email, username=user.shown_name,
         event_title=event.title, shift_title=shift.title,
         shift_date=shift.shift_date.strftime('%a %d %b %Y, %I:%M %p'),
         shift_end_time=shift.shift_end_date.strftime('%I:%M %p'),
@@ -611,7 +614,7 @@ def add_team_shift(event_id):
 
     conflicts = find_conflicts(user.id, start, end)
     if conflicts and not data.get('force'):
-        raise ApiError(f'{user.username} has a clash', 409, conflicts=conflicts)
+        raise ApiError(f'{user.shown_name} has a clash', 409, conflicts=conflicts)
 
     try:
         ca = CrewAssignment.query.filter_by(event_id=event.id, crew_member=user.username).first()
@@ -691,7 +694,7 @@ def edit_team_shift(aid):
     conflicts = [] if status == 'rejected' else \
         find_conflicts(a.user_id, start, end, exclude_assignment_id=a.id)
     if conflicts and not data.get('force'):
-        raise ApiError(f'{a.user.username} has a clash', 409, conflicts=conflicts)
+        raise ApiError(f'{a.user.shown_name} has a clash', 409, conflicts=conflicts)
 
     try:
         if len(shift.assignments) > 1:
@@ -730,7 +733,7 @@ def move_team_shift(aid):
         raise ApiError('End must be after the start')
     conflicts = find_conflicts(a.user_id, start, end, exclude_assignment_id=a.id)
     if conflicts and not data.get('force'):
-        raise ApiError(f'{a.user.username} has a clash', 409, conflicts=conflicts)
+        raise ApiError(f'{a.user.shown_name} has a clash', 409, conflicts=conflicts)
     if len(a.shift.assignments) > 1:
         _split_shared_shift(a, start, end, a.shift.role)
     else:
@@ -846,7 +849,7 @@ def delete_event_schedule(schedule_id):
 
 def _note_json(n: EventNote) -> dict:
     return {'id': n.id, 'content': n.content, 'html': str(render_markdown(n.content)),
-            'created_by': n.created_by,
+            'created_by': n.created_by, 'created_by_name': name_for(n.created_by),
             'created_at': n.created_at.strftime('%d %b %Y, %I:%M %p')}
 
 

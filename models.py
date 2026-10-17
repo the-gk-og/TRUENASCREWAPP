@@ -30,6 +30,14 @@ class User(UserMixin, db.Model):
     password_reset_expiry = db.Column(db.DateTime, nullable=True)
     # Secret slug for this user's private calendar-sync (.ics) URL; see routes/calendar.py
     calendar_token        = db.Column(db.String(64), unique=True, nullable=True, index=True)
+    # "Name": what other people see (shifts, events, notes). username is for logging in only.
+    display_name          = db.Column(db.String(100), nullable=True)
+
+
+    @property
+    def shown_name(self) -> str:
+        """The name other people see: their Name if they set one, otherwise their username."""
+        return (self.display_name or '').strip() or self.username
 
 
 class TwoFactorAuth(db.Model):

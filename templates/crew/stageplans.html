@@ -133,7 +133,7 @@
         {% set is_designer = plan.filename.startswith('designer_thumb_') %}
         {% set is_image = plan.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')) %}
         {% set file_url = url_for('stage_designer.uploaded_file', filename=plan.filename) %}
-        <article class="sp-card" data-plan-card data-search="{{ (plan.title ~ ' ' ~ plan.filename ~ ' ' ~ plan.uploaded_by)|lower }}">
+        <article class="sp-card" data-plan-card data-search="{{ (plan.title ~ ' ' ~ plan.filename ~ ' ' ~ plan.uploaded_by ~ ' ' ~ (plan.uploaded_by|person))|lower }}">
             <div class="sp-preview" {% if is_image %}role="button" tabindex="0" data-preview-src="{{ file_url }}" data-preview-title="{{ plan.title|e }}" aria-label="Preview {{ plan.title|e }}"{% endif %}>
                 {% if is_image %}
                 <img src="{{ file_url }}" alt="Preview of {{ plan.title }}" loading="lazy">
@@ -148,7 +148,7 @@
                     {% if is_designer %}<span class="sp-badge"><i class="fas fa-pen-ruler"></i> Designed</span>{% endif %}
                 </div>
                 <div class="sp-meta">
-                    <span><i class="fas fa-user" aria-hidden="true"></i> {{ plan.uploaded_by }}</span>
+                    <span><i class="fas fa-user" aria-hidden="true"></i> {{ plan.uploaded_by|person }}</span>
                     <span><i class="fas fa-clock" aria-hidden="true"></i> {{ plan.created_at.strftime('%d %b %Y') }}</span>
                 </div>
                 <div class="sp-card-actions">

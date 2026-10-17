@@ -13,6 +13,7 @@ from models import (
     Shift, ShiftAssignment, UserUnavailability, RecurringUnavailability,
 )
 from decorators import crew_required
+from services.user_names import find_user_by_username
 from services.email_service import (
     send_crew_assignment_email, send_event_reminder_email,
 )
@@ -80,11 +81,11 @@ def assign_crew():
     db.session.add(assignment)
     db.session.commit()
 
-    user  = User.query.filter_by(username=data['crew_member']).first()
+    user  = find_user_by_username(data['crew_member'])
     event = Event.query.get(data['event_id'])
     if user and user.email and event:
         send_crew_assignment_email(
-            recipient_email=user.email, username=user.username,
+            recipient_email=user.email, username=user.shown_name,
             event_title=event.title,
             event_date=event.event_date.strftime('%B %d, %Y at %I:%M %p'),
             event_location=event.location or 'TBD',
@@ -121,7 +122,7 @@ def assign_all_crew():
             added += 1
             if user.email:
                 send_crew_assignment_email(
-                    recipient_email=user.email, username=user.username,
+                    recipient_email=user.email, username=user.shown_name,
                     event_title=event.title,
                     event_date=event.event_date.strftime('%B %d, %Y at %I:%M %p'),
                     event_location=event.location or 'TBD',
@@ -140,10 +141,10 @@ def resend_notification():
     event      = Event.query.get(data.get('event_id'))
     if not assignment or not event:
         return jsonify({'error': 'Not found'}), 404
-    user = User.query.filter_by(username=assignment.crew_member).first()
+    user = find_user_by_username(assignment.crew_member)
     if user and user.email:
         send_event_reminder_email(
-            recipient_email=user.email, username=user.username,
+            recipient_email=user.email, username=user.shown_name,
             event_title=event.title,
             event_date=event.event_date.strftime('%B %d, %Y at %I:%M %p'),
             event_location=event.location or 'TBD',

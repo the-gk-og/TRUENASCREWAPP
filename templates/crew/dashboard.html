@@ -306,13 +306,13 @@
         <div class="dash-avatar" id="dashAvatar">
             {% if current_user.profile_picture %}
             <img src="/profile/picture/{{ current_user.username }}" alt=""
-                 onerror="this.remove(); document.getElementById('dashAvatar').textContent = '{{ current_user.username[0].upper() }}';">
+                 onerror="this.remove(); document.getElementById('dashAvatar').textContent = '{{ current_user.shown_name[0].upper() }}';">
             {% else %}
-            {{ current_user.username[0].upper() }}
+            {{ current_user.shown_name[0].upper() }}
             {% endif %}
         </div>
         <div class="dash-head-text">
-            <h1>Hi, {{ current_user.username }} 👋</h1>
+            <h1>Hi, {{ current_user.shown_name }} 👋</h1>
             <p class="dash-date" id="currentDate">{{ now.strftime('%A, %d %B %Y') }}</p>
         </div>
     </header>

@@ -58,6 +58,7 @@ def calendar():
     if is_manager():
         crew_users = User.query.filter(User.user_role.in_(['crew', 'staff'])) \
             .order_by(User.username).all()
+        crew_users.sort(key=lambda u: u.shown_name.lower())
     return render_template('/crew/calendar.html', crew_users=crew_users,
                            can_manage=is_manager(), now=datetime.now())
 
@@ -154,7 +155,7 @@ def _shift_items(start, end, mode: str, manager: bool) -> list[dict]:
         declined = a.status == 'rejected'
         confirmed = a.status in ('accepted', 'confirmed')
         role = shift.role or 'Shift'
-        title = f'{role} · {event.title}' if scope == 'mine' else f'{user.username}: {role}'
+        title = f'{role} · {event.title}' if scope == 'mine' else f'{user.shown_name}: {role}'
         classes = ['cal-shift', 'cal-shift-confirmed' if confirmed else
                    'cal-shift-declined' if declined else 'cal-shift-pending']
         if shift.shift_end_date < datetime.now():
@@ -168,7 +169,7 @@ def _shift_items(start, end, mode: str, manager: bool) -> list[dict]:
             'classNames': classes,
             'extendedProps': {
                 'kind': 'shift', 'assignment_id': a.id, 'event_id': event.id,
-                'event_title': event.title, 'username': user.username, 'role': shift.role or '',
+                'event_title': event.title, 'username': user.username, 'name': user.shown_name, 'role': shift.role or '',
                 'status': a.status, 'notes': a.notes or '', 'location': shift.location or event.location or '',
                 'mine': user.id == current_user.id,
                 'when': fmt_range(shift.shift_date, shift.shift_end_date),
@@ -183,7 +184,7 @@ def _unavail_items(start, end, mode: str, manager: bool) -> list[dict]:
         ids = [u.id for u in User.query.filter(User.user_role.in_(['crew', 'staff'])).all()]
     else:
         ids = [current_user.id]
-    names = {u.id: u.username for u in User.query.filter(User.id.in_(ids)).all()} if ids else {}
+    names = {u.id: u.shown_name for u in User.query.filter(User.id.in_(ids)).all()} if ids else {}
     items = []
     for w in expand_unavailability(ids, start, end):
         mine = w['user_id'] == current_user.id
@@ -306,7 +307,7 @@ def _build_ics(user: User, site_url: str) -> str:
     stamp = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
     lines = [
         'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//ShowWise//EN', 'CALSCALE:GREGORIAN',
-        'METHOD:PUBLISH', f'X-WR-CALNAME:{_esc("ShowWise - " + user.username)}',
+        'METHOD:PUBLISH', f'X-WR-CALNAME:{_esc("ShowWise - " + user.shown_name)}',
         'X-WR-TIMEZONE:Australia/Sydney',
         'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H',
     ]

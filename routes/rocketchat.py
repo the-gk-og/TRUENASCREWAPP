@@ -20,7 +20,7 @@ def api_rocketchat_info():
 
     try:
         rc_user_id = rc.get_or_create_user(
-            current_user.username, email=current_user.email, name=current_user.username
+            current_user.username, email=current_user.email, name=current_user.shown_name
         )
         if not rc_user_id:
             return jsonify({'success': False, 'error': 'Could not create Rocket.Chat user', 'connected': False}), 500

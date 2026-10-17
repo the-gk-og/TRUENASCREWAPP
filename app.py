@@ -59,6 +59,10 @@ def create_app(config_name: str | None = None):
     from services.markdown_service import render_markdown
     app.jinja_env.filters['md'] = render_markdown
 
+    # {{ note.created_by|person }} - turn a stored username into the person's display name
+    from services.user_names import name_for
+    app.jinja_env.filters['person'] = name_for
+
     # Context processor
     @app.context_processor
     def inject_globals():
@@ -139,6 +143,7 @@ _NEW_COLUMNS = [
     ('event',            'all_day',        'BOOLEAN DEFAULT 0'),
     ('shift_assignment', 'decline_reason', 'VARCHAR(500)'),
     ('user',             'calendar_token', 'VARCHAR(64)'),
+    ('user',             'display_name',   'VARCHAR(100)'),
 ]
 
 
