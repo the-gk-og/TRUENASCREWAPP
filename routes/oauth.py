@@ -11,6 +11,7 @@ from flask_login import login_user, login_required, current_user
 
 from extensions import db, oauth
 from models import User, OAuthConnection, TwoFactorAuth
+from services.user_names import find_user_by_email
 from utils import log_security_event
 
 oauth_bp = Blueprint("oauth", __name__)
@@ -132,13 +133,13 @@ def google_callback():
 
             login_user(user, remember=False)
             log_security_event("GOOGLE_LOGIN", username=user.username)
-            flash(f"Welcome back, {user.username}!")
+            flash(f"Welcome back, {user.shown_name}!")
             return redirect(url_for("cast.cast_events") if user.is_cast else url_for("crew.dashboard"))
 
         # -----------------------
         # Email match fallback
         # -----------------------
-        existing_user = User.query.filter_by(email=email).first()
+        existing_user = find_user_by_email(email)
         if existing_user:
             conn = OAuthConnection(
                 user_id=existing_user.id,
@@ -155,7 +156,7 @@ def google_callback():
 
             login_user(existing_user, remember=False)
             log_security_event("GOOGLE_LOGIN", username=existing_user.username)
-            flash(f"Google account linked and signed in, {existing_user.username}!")
+            flash(f"Google account linked and signed in, {existing_user.shown_name}!")
             return redirect(url_for("cast.cast_events") if existing_user.is_cast else url_for("crew.dashboard"))
 
         flash("No ShowWise account found for that Google account. Sign up first, then link Google from settings.")

@@ -78,12 +78,12 @@
     {% for p in team %}
     <div class="sw-person {{ 'me' if p.user.id == current_user.id }}">
       <div class="sw-person-head">
-        <div class="sw-person-name"><span class="sw-avatar">{{ p.user.username[0]|upper }}</span>{{ p.user.username }}
+        <div class="sw-person-name"><span class="sw-avatar">{{ p.user.shown_name[0]|upper }}</span>{{ p.user.shown_name }}
           {% if p.crew and p.crew.role and not p.shifts %}<span class="sw-chip plain">{{ p.crew.role }}</span>{% endif %}</div>
         {% if can_manage %}
         <div class="sw-shift-btns">
           <button class="btn btn-sm btn-ghost" data-act="add-shift" data-user="{{ p.user.id }}"><i class="fas fa-plus"></i>Shift</button>
-          <button class="btn btn-sm btn-ghost" data-act="remove-person" data-user="{{ p.user.id }}" data-name="{{ p.user.username }}" title="Remove from event"><i class="fas fa-user-minus"></i></button>
+          <button class="btn btn-sm btn-ghost" data-act="remove-person" data-user="{{ p.user.id }}" data-name="{{ p.user.shown_name }}" title="Remove from event"><i class="fas fa-user-minus"></i></button>
         </div>
         {% endif %}
       </div>
@@ -162,7 +162,7 @@
       <button class="btn btn-sm btn-primary" data-act="add-note"><i class="fas fa-plus"></i>Add note</button></div>
     {% for n in notes %}
     <div class="sw-note">
-      <div class="sw-note-head"><span><strong>{{ n.created_by }}</strong> · {{ n.created_at.strftime('%d %b %Y, %I:%M %p') }}</span>
+      <div class="sw-note-head"><span><strong>{{ n.created_by|person }}</strong> · {{ n.created_at.strftime('%d %b %Y, %I:%M %p') }}</span>
         {% if can_manage or n.created_by == current_user.username %}<span class="sw-shift-btns">
           <button class="btn btn-ghost btn-icon" data-act="edit-note" data-id="{{ n.id }}" title="Edit"><i class="fas fa-pen"></i></button>
           <button class="btn btn-ghost btn-icon" data-act="del-note" data-id="{{ n.id }}" title="Delete"><i class="fas fa-trash"></i></button></span>{% endif %}</div>
@@ -186,7 +186,7 @@
     <dl class="sw-detail-grid">
       <dt>Starts</dt><dd>{{ event.event_date.strftime('%a %d %b %Y') }}{% if not event.all_day %}, {{ event.event_date.strftime('%I:%M %p').lstrip('0') }}{% endif %}</dd>
       <dt>Ends</dt><dd>{{ end.strftime('%a %d %b %Y') }}{% if not event.all_day %}, {{ end.strftime('%I:%M %p').lstrip('0') }}{% endif %}</dd>
-      {% if event.created_by %}<dt>Created by</dt><dd>{{ event.created_by }}</dd>{% endif %}
+      {% if event.created_by %}<dt>Created by</dt><dd>{{ event.created_by|person }}</dd>{% endif %}
     </dl>
   </div>
 </div>

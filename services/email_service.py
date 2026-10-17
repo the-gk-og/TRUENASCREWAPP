@@ -593,13 +593,15 @@ def send_welcome_email(
     user_role: str,
     login_url: str,
     org: Optional[dict] = None,
+    display_name: Optional[str] = None,
 ) -> bool:
     """Send a simple welcome email after signup (invite-code flow)."""
     org_ctx = _org_defaults(org)
+    greeting = _html.escape(display_name or username)     # "Hi Sam" - the username is still shown for logging in
 
     subject   = f"Welcome to {org_ctx['org_name']}!"
     text_body = (
-        f"Hello {username},\n\n"
+        f"Hello {display_name or username},\n\n"
         f"Your account has been created successfully!\n\n"
         f"Username: {username}\n"
         f"Role: {user_role.capitalize()}\n\n"
@@ -620,11 +622,12 @@ def send_welcome_email(
         <h1 style="margin:0;color:#fff;font-size:28px;">🎉 Welcome to ShowWise!</h1>
       </td></tr>
       <tr><td style="padding:36px 44px;">
-        <p style="font-size:16px;color:#374151;">Hi <strong>{username}</strong>,</p>
+        <p style="font-size:16px;color:#374151;">Hi <strong>{greeting}</strong>,</p>
         <p style="font-size:15px;color:#4b5563;line-height:1.7;">
           Your <strong>{org_ctx['org_name']}</strong> account has been created.
           You've joined as <strong>{user_role.capitalize()}</strong>.
         </p>
+        <p style="font-size:14px;color:#4b5563;">Sign in with your username <strong>{_html.escape(username)}</strong> or your email address.</p>
         <p style="margin:28px 0 0;font-size:14px;color:#6b7280;">
           Log in at: <a href="{login_url}" style="color:{org_ctx['primary_color']};">{login_url}</a>
         </p>

@@ -24,7 +24,7 @@
       {% if can_manage %}
       <option value="all">Everyone's shifts</option>
       <optgroup label="One person">
-        {% for u in crew_users %}<option value="user:{{ u.id }}">{{ u.username }}</option>{% endfor %}
+        {% for u in crew_users %}<option value="user:{{ u.id }}">{{ u.shown_name }}</option>{% endfor %}
       </optgroup>
       {% endif %}
     </select>
@@ -143,10 +143,10 @@ function showDetail(ev) {
   const d = SW.dialog({ title: x.kind === 'event' ? ev.title : x.kind === 'shift' ? 'Shift' : 'Unavailable' });
   const rows = [];
   if (x.kind === 'shift') {
-    rows.push(['Person', x.username + (x.mine ? ' (you)' : '')], ['Event', x.event_title]);
+    rows.push(['Person', (x.name || x.username) + (x.mine ? ' (you)' : '')], ['Event', x.event_title]);
     if (x.role) rows.push(['Role', x.role]);
   }
-  if (x.kind === 'unavailability') rows.push(['Person', x.username || 'You'], ['Reason', ev.title.replace(/^Unavailable – /, '')]);
+  if (x.kind === 'unavailability') rows.push(['Person', x.name || x.username || 'You'], ['Reason', ev.title.replace(/^Unavailable – /, '')]);
   rows.push(['When', x.when]);
   if (x.location) rows.push(['Where', x.location]);
   if (x.kind === 'shift') {
@@ -183,12 +183,12 @@ function showDetail(ev) {
     if (CAN_MANAGE) {
       add('Remove', 'btn-danger sw-left', async () => {
         d.close();
-        if (!(await SW.confirm(`Delete ${x.username}'s shift?`, { danger: true, okText: 'Delete' }))) return;
+        if (!(await SW.confirm(`Delete ${x.name || x.username}'s shift?`, { danger: true, okText: 'Delete' }))) return;
         if (await SW.run(() => SW.api('DELETE', `/events/shift-assignments/${x.assignment_id}`), 'Shift deleted')) cal.refetchEvents();
       });
       add('Edit shift', 'btn-secondary', async () => {
         d.close();
-        const shift = { assignment_id: x.assignment_id, username: x.username, role: x.role, status: x.status, notes: x.notes,
+        const shift = { assignment_id: x.assignment_id, username: x.username, name: x.name, role: x.role, status: x.status, notes: x.notes,
           start: SW.toInput(ev.start), end: SW.toInput(ev.end) };
         if (await SW.shiftForm({ shift, event: { id: x.event_id } })) { SW.toast('Shift saved'); cal.refetchEvents(); }
       });

@@ -2,6 +2,7 @@
 
 import io, os, re
 from datetime import datetime
+from xml.sax.saxutils import escape
 
 from reportlab.platypus import (
     SimpleDocTemplate, Table, TableStyle, Paragraph,
@@ -17,6 +18,7 @@ from reportlab.lib.enums import TA_CENTER
 def generate_event_pdf(event_id: int):
     """Return (BytesIO, filename) for an event brief PDF."""
     from models import Event, User
+    from services.user_names import name_for, find_user_by_username
     event = Event.query.get_or_404(event_id)
 
     def add_header_footer(canvas, doc):
@@ -80,7 +82,7 @@ def generate_event_pdf(event_id: int):
     ov_data = [
         [Paragraph('<b>Time:</b>',       body_style), Paragraph(time_info, body_style)],
         [Paragraph('<b>Location:</b>',   body_style), Paragraph(event.location or 'TBD', body_style)],
-        [Paragraph('<b>Created By:</b>', body_style), Paragraph(event.created_by or 'N/A', body_style)],
+        [Paragraph('<b>Created By:</b>', body_style), Paragraph(escape(name_for(event.created_by) or 'N/A'), body_style)],
         [Paragraph('<b>Created:</b>',    body_style), Paragraph(event.created_at.strftime('%B %d, %Y'), body_style)],
     ]
     ov_table = Table(ov_data, colWidths=[1.5*inch, 4.5*inch])
@@ -129,7 +131,7 @@ def generate_event_pdf(event_id: int):
         story.append(Paragraph("EVENT NOTES", sec_style))
         for note in sorted(event.notes, key=lambda x: x.created_at, reverse=True):
             nd = [
-                [Paragraph(f"<b>{note.created_by}</b> • {note.created_at.strftime('%b %d, %Y at %I:%M %p')}", note_h_sty)],
+                [Paragraph(f"<b>{escape(name_for(note.created_by))}</b> • {note.created_at.strftime('%b %d, %Y at %I:%M %p')}", note_h_sty)],
                 [Paragraph(note.content, note_b_sty)],
             ]
             nt = Table(nd, colWidths=[5.8*inch])
@@ -149,9 +151,9 @@ def generate_event_pdf(event_id: int):
                  Paragraph('<b>Role</b>', wrap_style),
                  Paragraph('<b>Contact</b>', wrap_style)]]
         for a in event.crew_assignments:
-            u = User.query.filter_by(username=a.crew_member).first()
+            u = find_user_by_username(a.crew_member)
             rows.append([
-                Paragraph(a.crew_member, wrap_style),
+                Paragraph(escape(u.shown_name if u else a.crew_member), wrap_style),
                 Paragraph(a.role or 'Crew Member', wrap_style),
                 Paragraph(u.email if u and u.email else 'N/A', small_style),
             ])

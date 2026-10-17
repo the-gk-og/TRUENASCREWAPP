@@ -12,6 +12,7 @@ Endpoints:
   GET  /login/2fa/email                – the email-OTP login page
 """
 
+import html as _html
 import secrets
 import string
 from datetime import datetime, timedelta
@@ -77,7 +78,7 @@ def _send_otp_email(user: User, otp: str) -> bool:
         <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:15px;">{org_name}</p>
       </td></tr>
       <tr><td style="padding:36px 44px;">
-        <p style="font-size:16px;color:#374151;margin:0 0 8px;">Hi <strong>{user.username}</strong>,</p>
+        <p style="font-size:16px;color:#374151;margin:0 0 8px;">Hi <strong>{_html.escape(user.shown_name)}</strong>,</p>
         <p style="font-size:15px;color:#4b5563;line-height:1.7;margin:0 0 28px;">
           Use the code below to complete your login. It expires in <strong>{OTP_EXPIRY} minutes</strong>.
         </p>
@@ -105,7 +106,7 @@ def _send_otp_email(user: User, otp: str) -> bool:
 </body></html>"""
 
         text_body = (
-            f"Hi {user.username},\n\n"
+            f"Hi {user.shown_name},\n\n"
             f"Your ShowWise login code is: {otp}\n\n"
             f"It expires in {OTP_EXPIRY} minutes.\n\n"
             f"If you didn't request this, ignore this email.\n\nShowWise"

@@ -45,8 +45,8 @@ def build_decline_email(assignment) -> tuple[str, str, str]:
     event = shift.event
     role = shift.role or 'Shift'
     reason = (assignment.decline_reason or '').strip()
-    subject = f"Shift declined: {user.username} – {event.title if event else 'event'}"
-    rows = [('Person', user.username), ('Event', event.title if event else ''), ('Role', role),
+    subject = f"Shift declined: {user.shown_name} – {event.title if event else 'event'}"
+    rows = [('Person', user.shown_name), ('Event', event.title if event else ''), ('Role', role),
             ('When', _when(shift))]
     if event and event.location:
         rows.append(('Where', event.location))
@@ -57,7 +57,7 @@ def build_decline_email(assignment) -> tuple[str, str, str]:
         f'<td style="padding:6px 0;font-weight:600">{escape(v)}</td></tr>' for k, v in rows)
     html = (f'<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:24px">'
             f'<h2 style="margin:0 0 12px;color:#991b1b">Shift declined</h2>'
-            f'<p>{escape(user.username)} has declined a shift. It may need to be covered.</p>'
+            f'<p>{escape(user.shown_name)} has declined a shift. It may need to be covered.</p>'
             f'<table style="border-collapse:collapse">{table}</table>'
             f'<p style="color:#6b7280;font-size:13px;margin-top:24px">Sent by ShowWise. You get this because you are '
             f'listed under Admin Console → Notifications.</p></div>')
