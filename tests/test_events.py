@@ -388,3 +388,29 @@ def test_calendar_token_schema_upgrade(app):
     insp = db.inspect(db.engine)
     assert 'calendar_token' in {c['name'] for c in insp.get_columns('user')}
     assert any(i['name'] == 'ix_user_calendar_token' and i['unique'] for i in insp.get_indexes('user'))
+
+
+# ---------------------------------------------------------------------------
+# Calendar: phones get the mobile layout, everything else the desktop one
+# ---------------------------------------------------------------------------
+
+IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1'
+ANDROID_PHONE = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36'
+IPAD = 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1'
+DESKTOP = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36'
+
+
+def test_calendar_picks_layout_by_device(admin):
+    MOBILE, FULL = b'id="mcal"', b'id="calendar"'
+    assert MOBILE in admin.get('/calendar', headers={'User-Agent': IPHONE}).data
+    assert MOBILE in admin.get('/calendar', headers={'User-Agent': ANDROID_PHONE}).data
+    assert FULL in admin.get('/calendar', headers={'User-Agent': IPAD}).data
+    assert FULL in admin.get('/calendar', headers={'User-Agent': DESKTOP}).data
+
+
+def test_calendar_view_override_is_remembered(admin):
+    r = admin.get('/calendar?view=desktop', headers={'User-Agent': IPHONE})
+    assert b'id="calendar"' in r.data
+    # the choice sticks on the next visit without the query string
+    assert b'id="calendar"' in admin.get('/calendar', headers={'User-Agent': IPHONE}).data
+    assert b'id="mcal"' in admin.get('/calendar?view=mobile', headers={'User-Agent': DESKTOP}).data
