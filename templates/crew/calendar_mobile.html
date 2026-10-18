@@ -7,14 +7,19 @@
 .main-content { padding: 0 !important; }
 
 #mcal { min-height: calc(100vh - var(--topbar-height)); background: var(--bg-body); color: var(--text-primary); padding-bottom: 5.5rem; }
+#mcal [hidden] { display: none !important; }
 
 /* ── Header ── */
-#mcal .mc-top { position: sticky; top: 0; z-index: 80; background: var(--bg-topbar); border-bottom: 2px solid var(--border);
-  display: flex; align-items: center; gap: .4rem; padding: .55rem .75rem; }
-#mcal .mc-title { flex: 1; text-align: center; font-weight: 800; font-size: 1.1rem; color: var(--primary); }
+#mcal .mc-head { position: sticky; top: 0; z-index: 80; background: var(--bg-topbar); border-bottom: 2px solid var(--border); }
+#mcal .mc-top { display: flex; align-items: center; gap: .4rem; padding: .55rem .75rem .4rem; }
+#mcal .mc-title { flex: 1; min-width: 0; text-align: center; font-weight: 800; font-size: 1rem; color: var(--primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #mcal .mc-btn { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border); border-radius: 10px;
   min-width: 42px; height: 42px; font-size: .95rem; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
-#mcal .mc-btn.today { padding: 0 .8rem; font-weight: 700; font-size: .85rem; }
+#mcal .mc-btn.today { padding: 0 .7rem; font-weight: 700; font-size: .85rem; }
+#mcal .mc-views { display: flex; gap: .3rem; padding: 0 .75rem .55rem; }
+#mcal .mc-views button { flex: 1; height: 34px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary);
+  border-radius: 9px; font-weight: 700; font-size: .82rem; cursor: pointer; }
+#mcal .mc-views button.on { background: var(--primary); border-color: var(--primary); color: #fff; }
 
 /* ── Filters ── */
 #mcal .mc-filters { display: none; padding: .75rem; gap: .6rem; flex-direction: column; background: var(--bg-card); border-bottom: 1px solid var(--border); }
@@ -23,7 +28,7 @@
 #mcal .mc-filters select { flex: 1; max-width: 60%; padding: .6rem; border: 1px solid var(--border-input); border-radius: 8px; background: var(--bg-input); color: var(--text-primary); font-size: 1rem; }
 
 /* ── Month grid ── */
-#mcal .mc-grid-wrap { background: var(--bg-card); border-bottom: 1px solid var(--border); touch-action: pan-y; }
+#mcal .mc-grid-wrap { background: var(--bg-card); border-bottom: 1px solid var(--border); }
 #mcal .mc-dow, #mcal .mc-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
 #mcal .mc-dow div { text-align: center; font-size: .7rem; font-weight: 700; padding: .4rem 0; color: var(--text-muted); text-transform: uppercase; }
 #mcal .mc-day { position: relative; height: 54px; border: 0; background: transparent; color: var(--text-primary); display: flex; flex-direction: column;
@@ -35,7 +40,7 @@
 #mcal .mc-dots { display: flex; gap: 3px; height: 6px; }
 #mcal .mc-dots i { width: 6px; height: 6px; border-radius: 50%; display: block; }
 
-/* ── Agenda ── */
+/* ── Agenda / list items ── */
 #mcal .mc-agenda-head { padding: 1rem 1rem .4rem; font-weight: 800; font-size: 1rem; display: flex; justify-content: space-between; align-items: baseline; }
 #mcal .mc-agenda-head small { color: var(--text-muted); font-weight: 600; }
 #mcal .mc-list { padding: 0 .75rem; display: flex; flex-direction: column; gap: .5rem; }
@@ -47,23 +52,64 @@
 #mcal .mc-it-title { font-weight: 700; line-height: 1.25; }
 #mcal .mc-it-sub { font-size: .8rem; color: var(--text-muted); margin-top: .15rem; }
 #mcal .mc-empty { text-align: center; color: var(--text-muted); padding: 2rem 1rem; }
+#mcal .mc-list-day { padding: 1rem .25rem .1rem; font-weight: 800; font-size: .9rem; color: var(--text-muted); }
+#mcal .mc-list-day.today { color: var(--primary); }
+
+/* ── Week / Day time grid ── */
+#mcal .mc-tg { --hh: 48px; --gut: 40px; background: var(--bg-card); border-bottom: 1px solid var(--border); }
+#mcal .mc-tg-row { display: grid; grid-template-columns: var(--gut) repeat(var(--n), minmax(0, 1fr)); }
+#mcal .mc-tg-head { border: 0; background: transparent; color: var(--text-primary); padding: .35rem 0; display: flex; flex-direction: column;
+  align-items: center; gap: 2px; font: inherit; cursor: pointer; }
+#mcal .mc-tg-head span { font-size: .65rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted); }
+#mcal .mc-tg-head b { min-width: 28px; height: 28px; padding: 0 6px; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; font-size: .9rem; }
+#mcal .mc-tg-head.today b { border: 2px solid var(--primary); }
+#mcal .mc-tg-head.sel b { background: var(--primary); color: #fff; }
+#mcal .mc-tg-allday { border-top: 1px solid var(--border); padding: 2px 0; }
+#mcal .mc-tg-allday .lbl { font-size: .58rem; color: var(--text-muted); text-align: center; padding-top: 4px; }
+#mcal .mc-tg-allday .cell { padding: 1px; display: flex; flex-direction: column; gap: 2px; min-width: 0; border-left: 1px solid var(--border); }
+#mcal .mc-pill { border: 0; border-radius: 4px; padding: 1px 4px; font: inherit; font-size: .65rem; font-weight: 600; text-align: left;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+#mcal .mc-tg.one .mc-pill { font-size: .8rem; padding: 3px 6px; }
+#mcal .mc-tg-body { max-height: 64vh; overflow-y: auto; border-top: 1px solid var(--border); -webkit-overflow-scrolling: touch; }
+#mcal .mc-tg-grid { display: grid; grid-template-columns: var(--gut) repeat(var(--n), minmax(0, 1fr)); height: calc(24 * var(--hh)); }
+#mcal .mc-tg-labels { position: relative; }
+#mcal .mc-tg-labels span { position: absolute; right: 4px; font-size: .62rem; color: var(--text-muted); transform: translateY(-50%); }
+#mcal .mc-tg-col { position: relative; border-left: 1px solid var(--border);
+  background-image: repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--hh) - 1px), var(--border) calc(var(--hh) - 1px), var(--border) var(--hh)); }
+#mcal .mc-tg-col.today { background-color: rgba(99, 102, 241, .07); }
+#mcal .mc-blk { position: absolute; border: 0; border-radius: 5px; padding: 2px 3px; overflow: hidden; text-align: left; font: inherit;
+  font-size: .64rem; line-height: 1.15; cursor: pointer; box-shadow: 0 0 0 1px var(--bg-card); }
+#mcal .mc-tg.one .mc-blk { font-size: .82rem; padding: 4px 6px; }
+#mcal .mc-blk b { display: block; font-weight: 700; }
+#mcal .mc-blk small { display: block; opacity: .85; font-size: .9em; }
+#mcal .mc-blk.past { opacity: .6; }
+#mcal .mc-blk.declined b { text-decoration: line-through; }
+#mcal .mc-now { position: absolute; left: 0; right: 0; height: 2px; background: #ef4444; z-index: 3; pointer-events: none; }
+
+/* ── Misc ── */
 #mcal .mc-legend { display: flex; flex-wrap: wrap; gap: .4rem .9rem; padding: .9rem 1rem 0; font-size: .75rem; color: var(--text-muted); }
 #mcal .mc-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: .3rem; }
 #mcal .mc-switch { display: block; text-align: center; margin: 1.25rem 0 0; font-size: .85rem; color: var(--text-muted); }
-
-/* ── Buttons ── */
 #mcal .mc-fab { position: fixed; right: 1rem; bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); z-index: 85; width: 56px; height: 56px; border-radius: 50%;
   border: 0; background: var(--primary); color: #fff; font-size: 1.3rem; box-shadow: 0 6px 18px rgba(0,0,0,.35); cursor: pointer; }
 #mcal .mc-loading { opacity: .55; transition: opacity .15s; }
 </style>
 
 <div id="mcal">
-  <div class="mc-top">
-    <button class="mc-btn" id="mcPrev" aria-label="Previous month"><i class="fas fa-chevron-left"></i></button>
-    <div class="mc-title" id="mcTitle">&nbsp;</div>
-    <button class="mc-btn" id="mcNext" aria-label="Next month"><i class="fas fa-chevron-right"></i></button>
-    <button class="mc-btn today" id="mcToday">Today</button>
-    <button class="mc-btn" id="mcFilterBtn" aria-label="Filters"><i class="fas fa-sliders-h"></i></button>
+  <div class="mc-head">
+    <div class="mc-top">
+      <button class="mc-btn" id="mcPrev" aria-label="Previous"><i class="fas fa-chevron-left"></i></button>
+      <div class="mc-title" id="mcTitle">&nbsp;</div>
+      <button class="mc-btn" id="mcNext" aria-label="Next"><i class="fas fa-chevron-right"></i></button>
+      <button class="mc-btn today" id="mcToday">Today</button>
+      <button class="mc-btn" id="mcFilterBtn" aria-label="Filters"><i class="fas fa-sliders-h"></i></button>
+    </div>
+    <div class="mc-views" id="mcViews" role="tablist">
+      <button data-v="month" role="tab">Month</button>
+      <button data-v="week" role="tab">Week</button>
+      <button data-v="day" role="tab">Day</button>
+      <button data-v="list" role="tab">List</button>
+    </div>
   </div>
 
   <div class="mc-filters" id="mcFilters">
@@ -90,13 +136,23 @@
     <label><span>Calendar sync</span><button class="btn btn-secondary btn-sm" id="btnSubscribe" type="button"><i class="fas fa-rss"></i> Subscribe</button></label>
   </div>
 
-  <div class="mc-grid-wrap" id="mcSwipe">
-    <div class="mc-dow"><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div></div>
-    <div class="mc-grid" id="mcGrid"></div>
-  </div>
+  <div id="mcBody">
+    <!-- Month -->
+    <div id="vMonth" hidden>
+      <div class="mc-grid-wrap">
+        <div class="mc-dow"><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div></div>
+        <div class="mc-grid" id="mcGrid"></div>
+      </div>
+      <div class="mc-agenda-head"><span id="mcDayLabel"></span><small id="mcDayCount"></small></div>
+      <div class="mc-list" id="mcList"></div>
+    </div>
 
-  <div class="mc-agenda-head"><span id="mcDayLabel"></span><small id="mcDayCount"></small></div>
-  <div class="mc-list" id="mcList"></div>
+    <!-- Week + Day share one time grid -->
+    <div id="vTime" hidden><div class="mc-tg" id="mcTG"></div></div>
+
+    <!-- List (one week, grouped by day) -->
+    <div id="vList" hidden><div class="mc-list" id="mcWeekList"></div></div>
+  </div>
 
   <div class="mc-legend">
     <span><i style="background:#6366f1"></i>Event</span>
@@ -116,6 +172,7 @@
 <script>
 const CAN_MANAGE = {{ 'true' if can_manage else 'false' }};
 const KEY = 'sw-cal-filters';           // shared with the desktop calendar, so filters follow the person
+const VIEW_KEY = 'sw-cal-mobile-view';
 const $ = (id) => document.getElementById(id);
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAYNAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -123,6 +180,9 @@ const pad = (n) => String(n).padStart(2, '0');
 const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const dayStart = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const weekStart = (d) => addDays(dayStart(d), -((d.getDay() + 6) % 7));      // Monday-first, like the desktop calendar
+const monthOf = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
+const HH = 48;                                                                // px per hour in the time grid
 
 // The feed sends naive local strings: "YYYY-MM-DD" (all-day) or "YYYY-MM-DDTHH:MM". Parse them as local time.
 function parseLocal(s) {
@@ -130,6 +190,7 @@ function parseLocal(s) {
   return new Date(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0));
 }
 const fmtTime = (d) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(' ', '').toLowerCase();
+const hourLabel = (h) => h === 0 ? '' : h === 12 ? '12pm' : h < 12 ? h + 'am' : (h - 12) + 'pm';
 
 // ---- filters ----
 let filters = { events: true, shifts: 'mine', unavail: 'none' };
@@ -145,62 +206,121 @@ $('fEvents').checked = filters.events; $('fShifts').value = filters.shifts; $('f
 $('mcFilterBtn').onclick = () => $('mcFilters').classList.toggle('open');
 
 // ---- state ----
+const VIEWS = ['month', 'week', 'day', 'list'];
+let view = 'month';
+try { const v = localStorage.getItem(VIEW_KEY); if (VIEWS.includes(v)) view = v; } catch (_) {}
 let today = dayStart(new Date());
-let viewMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-let selected = today;
-let byDay = {};            // 'YYYY-MM-DD' -> [{ev, start, end, allDay, color}]
+let selected = today;                    // the anchor date shared by every view
+let viewMonth = monthOf(today);          // month shown by the month view
+let byDay = {};                          // 'YYYY-MM-DD' -> [entry]
+let loaded = null;                       // { start, end, key } of the data currently held
 let loadToken = 0;
+let tgScroll = null;                     // remembered scroll position of the time grid
+const reg = [];                          // entries behind the buttons on screen (data-r indexes into this)
 
-function colourFor(classes) {
+// bg = fill, fg = text on the fill, dot = month-view dot
+function look(classes) {
   const c = classes || [];
-  if (c.includes('cal-unavail')) return '#f87171';
-  if (c.includes('cal-shift-declined')) return '#9ca3af';
-  if (c.includes('cal-shift-pending')) return '#f59e0b';
-  if (c.includes('cal-shift-confirmed')) return '#059669';
-  if (c.includes('cal-event-mine')) return '#4338ca';
-  return '#6366f1';
+  if (c.includes('cal-unavail')) return { bg: '#fca5a5', fg: '#7f1d1d', dot: '#f87171' };
+  if (c.includes('cal-shift-declined')) return { bg: '#9ca3af', fg: '#fff', dot: '#9ca3af' };
+  if (c.includes('cal-shift-pending')) return { bg: '#f59e0b', fg: '#1f2937', dot: '#f59e0b' };
+  if (c.includes('cal-shift-confirmed')) return { bg: '#059669', fg: '#fff', dot: '#059669' };
+  if (c.includes('cal-event-mine')) return { bg: '#4338ca', fg: '#fff', dot: '#4338ca' };
+  return { bg: '#6366f1', fg: '#fff', dot: '#6366f1' };
 }
 
-// Monday-first grid of 42 days covering the viewed month
-function gridRange() {
-  const first = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1);
-  const offset = (first.getDay() + 6) % 7;
-  const start = addDays(first, -offset);
-  return { start, end: addDays(start, 42) };
+// What range does the current view need?  Week, Day and List all use the surrounding week, so
+// stepping around inside a week (or switching between those views) doesn't refetch.
+function rangeFor() {
+  if (view === 'month') {
+    const first = monthOf(viewMonth);
+    const start = addDays(first, -((first.getDay() + 6) % 7));
+    return { start, end: addDays(start, 42) };
+  }
+  const start = weekStart(selected);
+  return { start, end: addDays(start, 7) };
 }
+const filterKey = () => JSON.stringify(filters);
 
+// Always fetches (used after edits and filter changes).
 async function load() {
-  const { start, end } = gridRange();
-  const token = ++loadToken;
-  $('mcGrid').classList.add('mc-loading');
+  const { start, end } = rangeFor();
+  const token = ++loadToken, key = filterKey();
+  $('mcBody').classList.add('mc-loading');
   const p = new URLSearchParams({ start: SW.toInput(start), end: SW.toInput(end),
     events: filters.events ? '1' : '0', shifts: filters.shifts, unavail: filters.unavail });
   let items = [];
   try { items = await SW.api('GET', '/api/calendar/feed?' + p); }
   catch (e) { SW.toast(e.message, 'error'); }
-  if (token !== loadToken) return;                     // a newer month was requested meanwhile
+  if (token !== loadToken) return;                     // a newer request was made meanwhile
 
   byDay = {};
   for (const ev of items) {
     const s = parseLocal(ev.start);
-    let e = ev.end ? parseLocal(ev.end) : s;
+    const e = ev.end ? parseLocal(ev.end) : s;
     // all-day ends are exclusive; a timed item ending exactly at midnight shouldn't spill into the next day
     const lastDay = (ev.allDay || (e.getHours() === 0 && e.getMinutes() === 0 && e > s)) ? addDays(dayStart(e), -1) : dayStart(e);
-    const entry = { ev, start: s, end: e, allDay: !!ev.allDay, color: colourFor(ev.classNames) };
+    const entry = { ev, start: s, end: e, allDay: !!ev.allDay, col: look(ev.classNames) };
     for (let d = dayStart(s); d <= lastDay && d < end; d = addDays(d, 1)) (byDay[ymd(d)] ||= []).push(entry);
   }
   Object.values(byDay).forEach((a) => a.sort((x, y) => (y.allDay - x.allDay) || (x.start - y.start)));
-  $('mcGrid').classList.remove('mc-loading');
-  renderGrid(); renderAgenda();
+  loaded = { start, end, key };
+  $('mcBody').classList.remove('mc-loading');
+  render();
 }
 
+// Used for navigation: re-render from memory when the data already covers the new range.
+function refresh() {
+  const r = rangeFor();
+  if (loaded && loaded.key === filterKey() && r.start >= loaded.start && r.end <= loaded.end) render(); else load();
+}
+
+// ---- rendering ----
+function titleText() {
+  if (view === 'month') return `${MONTHS[viewMonth.getMonth()]} ${viewMonth.getFullYear()}`;
+  if (view === 'day') return `${DAYNAMES[selected.getDay()].slice(0, 3)} ${selected.getDate()} ${MONTHS[selected.getMonth()].slice(0, 3)}${selected.getFullYear() !== today.getFullYear() ? ' ' + selected.getFullYear() : ''}`;
+  const a = weekStart(selected), b = addDays(a, 6), mo = (d) => MONTHS[d.getMonth()].slice(0, 3);
+  const yr = (a.getFullYear() !== today.getFullYear() || b.getFullYear() !== today.getFullYear()) ? ' ' + b.getFullYear() : '';
+  return a.getMonth() === b.getMonth() ? `${a.getDate()}–${b.getDate()} ${mo(b)}${yr}` : `${a.getDate()} ${mo(a)} – ${b.getDate()} ${mo(b)}${yr}`;
+}
+
+function render() {
+  reg.length = 0;
+  $('mcTitle').textContent = titleText();
+  $('mcViews').querySelectorAll('button').forEach((b) => { const on = b.dataset.v === view; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
+  $('vMonth').hidden = view !== 'month';
+  $('vTime').hidden = !(view === 'week' || view === 'day');
+  $('vList').hidden = view !== 'list';
+  if (view === 'month') { renderGrid(); renderAgenda(); }
+  else if (view === 'list') renderList();
+  else renderTimeGrid();
+}
+
+// One row in an agenda or list.  `day` is the day it is being shown under.
+function itemHtml(x, day) {
+  const k = x.ev.extendedProps || {};
+  const r = reg.push(x) - 1;
+  const sub = [k.kind === 'shift' && k.status === 'pending' ? 'Awaiting your response' : '', k.location].filter(Boolean).join(' · ');
+  let time = 'All day';
+  if (!x.allDay) {
+    const startsToday = +dayStart(x.start) === +day, endsToday = +dayStart(x.end) === +day;
+    time = (startsToday ? fmtTime(x.start) : 'Cont.') + (x.end > x.start ? `<br>${endsToday ? fmtTime(x.end) : 'on'}` : '');
+  }
+  const classes = x.ev.classNames || [];
+  return `<button class="mc-item${classes.includes('cal-past') ? ' past' : ''}${classes.includes('cal-shift-declined') ? ' declined' : ''}" data-r="${r}" style="border-left-color:${x.col.dot}">
+    <div class="mc-time">${time}</div>
+    <div><div class="mc-it-title">${SW.esc(x.ev.title)}</div>${sub ? `<div class="mc-it-sub">${SW.esc(sub)}</div>` : ''}</div></button>`;
+}
+const dayLabel = (d) => `${DAYNAMES[d.getDay()].slice(0, 3)} ${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}`;
+
+// -- Month --
 function renderGrid() {
-  $('mcTitle').textContent = `${MONTHS[viewMonth.getMonth()]} ${viewMonth.getFullYear()}`;
-  const { start } = gridRange();
+  const first = monthOf(viewMonth);
+  const start = addDays(first, -((first.getDay() + 6) % 7));
   const cells = [];
   for (let i = 0; i < 42; i++) {
     const d = addDays(start, i), key = ymd(d), list = byDay[key] || [];
-    const colours = [...new Set(list.map((x) => x.color))].slice(0, 3);
+    const colours = [...new Set(list.map((x) => x.col.dot))].slice(0, 3);
     const cls = ['mc-day', d.getMonth() !== viewMonth.getMonth() && 'out', +d === +today && 'today', +d === +selected && 'sel'].filter(Boolean).join(' ');
     cells.push(`<button class="${cls}" data-d="${key}" aria-label="${d.toDateString()}${list.length ? ', ' + list.length + ' items' : ''}">
       <span class="n">${d.getDate()}</span><span class="mc-dots">${colours.map((c) => `<i style="background:${c}"></i>`).join('')}</span></button>`);
@@ -210,58 +330,143 @@ function renderGrid() {
 
 function renderAgenda() {
   const list = byDay[ymd(selected)] || [];
-  const rel = +selected === +today ? 'Today · ' : '';
-  $('mcDayLabel').textContent = `${rel}${DAYNAMES[selected.getDay()]} ${selected.getDate()} ${MONTHS[selected.getMonth()].slice(0, 3)}`;
+  $('mcDayLabel').textContent = (+selected === +today ? 'Today · ' : '') + dayLabel(selected);
   $('mcDayCount').textContent = list.length ? `${list.length} item${list.length === 1 ? '' : 's'}` : '';
-  if (!list.length) { $('mcList').innerHTML = '<div class="mc-empty">Nothing scheduled</div>'; return; }
-  const now = new Date();
-  $('mcList').innerHTML = list.map((x, i) => {
-    const k = x.ev.extendedProps || {};
-    const sub = [k.kind === 'shift' && k.status === 'pending' ? 'Awaiting your response' : '', k.location].filter(Boolean).join(' · ');
-    let time = 'All day';
-    if (!x.allDay) {
-      const sameDay = +dayStart(x.start) === +selected, endsToday = +dayStart(x.end) === +selected;
-      time = (sameDay ? fmtTime(x.start) : 'Cont.') + (x.end > x.start ? `<br>${endsToday ? fmtTime(x.end) : 'on'}` : '');
-    }
-    const classes = x.ev.classNames || [];
-    return `<button class="mc-item${classes.includes('cal-past') ? ' past' : ''}${classes.includes('cal-shift-declined') ? ' declined' : ''}" data-i="${i}" style="border-left-color:${x.color}">
-      <div class="mc-time">${time}</div>
-      <div><div class="mc-it-title">${SW.esc(x.ev.title)}</div>${sub ? `<div class="mc-it-sub">${SW.esc(sub)}</div>` : ''}</div></button>`;
-  }).join('');
+  $('mcList').innerHTML = list.length ? list.map((x) => itemHtml(x, selected)).join('') : '<div class="mc-empty">Nothing scheduled</div>';
 }
 
-// ---- interactions ----
+// -- List: the selected week, grouped by day --
+function renderList() {
+  const start = weekStart(selected), out = [];
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(start, i), list = byDay[ymd(d)] || [];
+    if (!list.length) continue;
+    out.push(`<div class="mc-list-day${+d === +today ? ' today' : ''}">${+d === +today ? 'Today · ' : ''}${dayLabel(d)}</div>` + list.map((x) => itemHtml(x, d)).join(''));
+  }
+  $('mcWeekList').innerHTML = out.join('') || '<div class="mc-empty">Nothing scheduled this week</div>';
+}
+
+// -- Week / Day time grid --
+// Lay out overlapping blocks side by side: group them into clusters, then give each block a lane within its cluster.
+function packLanes(segs) {
+  segs.sort((a, b) => a.sm - b.sm || b.em - a.em);
+  let cluster = [], clusterEnd = -1;
+  const flush = () => {
+    const lanes = [];
+    cluster.forEach((sg) => {
+      let i = lanes.findIndex((end) => end <= sg.sm);
+      if (i < 0) { i = lanes.length; lanes.push(0); }
+      lanes[i] = sg.em; sg.lane = i;
+    });
+    cluster.forEach((sg) => { sg.lanes = lanes.length; });
+    cluster = []; clusterEnd = -1;
+  };
+  segs.forEach((sg) => {
+    if (cluster.length && sg.sm >= clusterEnd) flush();
+    cluster.push(sg); clusterEnd = Math.max(clusterEnd, sg.em);
+  });
+  if (cluster.length) flush();
+  return segs;
+}
+
+const nowTop = () => { const n = new Date(); return (n.getHours() * 60 + n.getMinutes()) / 60 * HH; };
+
+function renderTimeGrid() {
+  const one = view === 'day';
+  const days = one ? [selected] : Array.from({ length: 7 }, (_, i) => addDays(weekStart(selected), i));
+  const n = days.length, cols = `--n:${n}`;
+
+  // day headers (tap one in week view to open that day)
+  const heads = days.map((d) => `<button class="mc-tg-head${+d === +today ? ' today' : ''}${+d === +selected && !one ? ' sel' : ''}" data-day="${ymd(d)}">
+    <span>${one ? DAYNAMES[d.getDay()] : DAYNAMES[d.getDay()].slice(0, 3)}</span><b>${d.getDate()}</b></button>`).join('');
+
+  // all-day items
+  const allDay = days.map((d) => (byDay[ymd(d)] || []).filter((x) => x.allDay));
+  const allDayRow = allDay.some((a) => a.length)
+    ? `<div class="mc-tg-row mc-tg-allday" style="${cols}"><div class="lbl">all-day</div>${allDay.map((list) => `<div class="cell">${
+        list.map((x) => `<button class="mc-pill" data-r="${reg.push(x) - 1}" style="background:${x.col.bg};color:${x.col.fg}">${SW.esc(x.ev.title)}</button>`).join('')}</div>`).join('')}</div>`
+    : '';
+
+  // timed items
+  const dayCols = days.map((d) => {
+    const dayBegin = dayStart(d), dayEnd = addDays(dayBegin, 1);
+    const segs = (byDay[ymd(d)] || []).filter((x) => !x.allDay).map((x) => {
+      const s = x.start > dayBegin ? x.start : dayBegin, e = x.end < dayEnd ? x.end : dayEnd;
+      const sm = (s - dayBegin) / 60000;
+      return { x, sm, em: Math.min(1440, Math.max((e - dayBegin) / 60000, sm + 30)) };
+    });
+    const blocks = packLanes(segs).map((sg) => {
+      const h = (sg.em - sg.sm) / 60 * HH - 1, classes = sg.x.ev.classNames || [];
+      const time = h >= 36 ? `<small>${fmtTime(sg.x.start)}${sg.x.end > sg.x.start ? '–' + fmtTime(sg.x.end) : ''}</small>` : '';
+      return `<button class="mc-blk${classes.includes('cal-past') ? ' past' : ''}${classes.includes('cal-shift-declined') ? ' declined' : ''}" data-r="${reg.push(sg.x) - 1}"
+        style="top:${sg.sm / 60 * HH}px;height:${h}px;left:calc(${sg.lane} / ${sg.lanes} * 100% + 1px);width:calc(100% / ${sg.lanes} - 2px);background:${sg.x.col.bg};color:${sg.x.col.fg}">
+        <b>${SW.esc(sg.x.ev.title)}</b>${time}</button>`;
+    }).join('');
+    const isToday = +d === +today;
+    return `<div class="mc-tg-col${isToday ? ' today' : ''}">${blocks}${isToday ? `<div class="mc-now" style="top:${nowTop()}px"></div>` : ''}</div>`;
+  }).join('');
+
+  const labels = Array.from({ length: 23 }, (_, i) => `<span style="top:${(i + 1) * HH}px">${hourLabel(i + 1)}</span>`).join('');
+  $('mcTG').className = 'mc-tg' + (one ? ' one' : '');
+  $('mcTG').innerHTML = `<div class="mc-tg-row" style="${cols}"><div></div>${heads}</div>${allDayRow}
+    <div class="mc-tg-body" id="mcTGBody"><div class="mc-tg-grid" style="${cols}"><div class="mc-tg-labels">${labels}</div>${dayCols}</div></div>`;
+
+  // keep the scroll position between renders; first time, start around the working day (or just before "now")
+  const body = $('mcTGBody');
+  if (tgScroll === null) tgScroll = (days.some((d) => +d === +today) ? Math.max(0, nowTop() - HH * 1.5) : 7.5 * HH);
+  body.scrollTop = tgScroll;
+  body.addEventListener('scroll', () => { tgScroll = body.scrollTop; }, { passive: true });
+}
+setInterval(() => document.querySelectorAll('#mcal .mc-now').forEach((el) => { el.style.top = nowTop() + 'px'; }), 60000);
+
+// ---- navigation ----
+function setView(v) {
+  view = v;
+  try { localStorage.setItem(VIEW_KEY, v); } catch (_) {}
+  if (v === 'month') viewMonth = monthOf(selected);
+  refresh();
+}
+function step(dir) {
+  if (view === 'month') {
+    viewMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + dir, 1);
+    selected = (viewMonth.getMonth() === today.getMonth() && viewMonth.getFullYear() === today.getFullYear()) ? today : viewMonth;
+  } else {
+    selected = addDays(selected, dir * (view === 'day' ? 1 : 7));
+    viewMonth = monthOf(selected);
+  }
+  refresh();
+}
+$('mcPrev').onclick = () => step(-1);
+$('mcNext').onclick = () => step(1);
+$('mcToday').onclick = () => { today = dayStart(new Date()); selected = today; viewMonth = monthOf(today); refresh(); };
+$('mcViews').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b && b.dataset.v !== view) setView(b.dataset.v); });
+
+// tapping a day in the month grid
 $('mcGrid').addEventListener('click', (e) => {
   const b = e.target.closest('.mc-day'); if (!b) return;
   const [y, m, d] = b.dataset.d.split('-').map(Number);
-  const picked = new Date(y, m - 1, d);
-  const monthChanged = picked.getMonth() !== viewMonth.getMonth();
-  selected = picked;
-  if (monthChanged) { viewMonth = new Date(y, m - 1, 1); load(); } else { renderGrid(); renderAgenda(); }
+  selected = new Date(y, m - 1, d);
+  if (selected.getMonth() !== viewMonth.getMonth()) { viewMonth = monthOf(selected); refresh(); }
+  else { renderGrid(); renderAgenda(); }
 });
-$('mcList').addEventListener('click', (e) => {
-  const b = e.target.closest('.mc-item'); if (!b) return;
-  showDetail((byDay[ymd(selected)] || [])[+b.dataset.i]);
+// tapping an item/block/pill anywhere opens its detail; tapping a week-view day header opens that day
+$('mcal').addEventListener('click', (e) => {
+  const r = e.target.closest('[data-r]');
+  if (r) { showDetail(reg[+r.dataset.r]); return; }
+  const h = e.target.closest('.mc-tg-head');
+  if (h && view === 'week') { const [y, m, d] = h.dataset.day.split('-').map(Number); selected = new Date(y, m - 1, d); setView('day'); }
 });
-function gotoMonth(delta) {
-  viewMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + delta, 1);
-  selected = viewMonth.getMonth() === today.getMonth() && viewMonth.getFullYear() === today.getFullYear() ? today : viewMonth;
-  load();
-}
-$('mcPrev').onclick = () => gotoMonth(-1);
-$('mcNext').onclick = () => gotoMonth(1);
-$('mcToday').onclick = () => { today = dayStart(new Date()); viewMonth = new Date(today.getFullYear(), today.getMonth(), 1); selected = today; load(); };
 
-// swipe left/right on the grid to change month
+// swipe left/right to step (a mostly-horizontal gesture, so vertical scrolling is untouched)
 (() => {
   let x0 = null, y0 = null;
-  const el = $('mcSwipe');
+  const el = $('mcBody');
   el.addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, { passive: true });
   el.addEventListener('touchend', (e) => {
     if (x0 === null) return;
     const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0;
     x0 = null;
-    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) gotoMonth(dx < 0 ? 1 : -1);
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) step(dx < 0 ? 1 : -1);
   }, { passive: true });
 })();
 
@@ -275,6 +480,7 @@ $('btnNew').onclick = async () => {
 
 // ---- detail sheet (same actions as the desktop popup, minus drag-to-move) ----
 function showDetail(entry) {
+  if (!entry) return;
   const ev = entry.ev, x = ev.extendedProps || {}, esc = SW.esc;
   const d = SW.dialog({ title: x.kind === 'event' ? ev.title : x.kind === 'shift' ? 'Shift' : 'Unavailable' });
   const rows = [];

@@ -211,6 +211,10 @@
 .sw-cal .fc-list-event.cal-event .fc-list-event-dot,.sw-cal .fc-list-event.cal-event-mine .fc-list-event-dot,
 .sw-cal .fc-list-event.cal-shift-confirmed .fc-list-event-dot,.sw-cal .fc-list-event.cal-shift-pending .fc-list-event-dot,
 .sw-cal .fc-list-event.cal-shift-declined .fc-list-event-dot,.sw-cal .fc-list-event.cal-unavail .fc-list-event-dot { border-color:var(--fc-event-bg-color); }
+/* Timed events in month view are drawn as dots, and FullCalendar colours the dot with the *border* colour.
+   "Event you're on" has a pale border, so its dot looked lighter than a regular event's - the reverse of the legend.
+   Colour every dot from the fill colour instead. */
+.sw-cal .fc-daygrid-event-dot { border-color:var(--fc-event-bg-color); }
 .sw-cal .fc-event.cal-shift-pending .fc-event-time,.sw-cal .fc-event.cal-shift-pending .fc-event-title { color:#1f2937; }
 
 @media (max-width:700px) {
