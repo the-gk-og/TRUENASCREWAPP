@@ -1091,6 +1091,12 @@
             <i class="fas fa-calendar-alt"></i>
             <span>My Schedule</span>
         </a>
+        {% if current_user.is_admin %}
+        <a href="{{ url_for('roster.roster_page') }}" class="nav-item {% if request.endpoint == 'roster.roster_page' %}active{% endif %}">
+            <i class="fas fa-table"></i>
+            <span>Roster</span>
+        </a>
+        {% endif %}
     </div>
 
     <div class="nav-section">
