@@ -223,7 +223,7 @@
     function loadIntoEditor(xml) {
         currentXml = xml || null;
         ignoreDirtyUntil = Date.now() + 1000;
-        if (editorReady) postToEditor({ action: 'load', xml: xml || '' });
+        if (editorReady) postToEditor({ action: 'load', autosave: 1, xml: xml || '' });
     }
 
     document.querySelectorAll('[data-close-modal]').forEach(button => {
@@ -235,7 +235,7 @@
         });
     });
 
-    function requestExport(format) {
+    function requestExport(format, timeoutMs = 30000) {
         return new Promise((resolve, reject) => {
             if (!editorReady) {
                 reject(new Error('The editor is still loading.'));
@@ -250,7 +250,7 @@
                     pendingExport = null;
                     reject(new Error(`Timed out exporting ${format.toUpperCase()}.`));
                 }
-            }, 30000);
+            }, timeoutMs);
             pendingExport = { format, resolve, reject, timeout };
             const request = { action: 'export', format, spinKey: 'showwise-export' };
             if (format === 'png') { request.background = '#ffffff'; request.border = 10; }
@@ -295,14 +295,60 @@
         }
     }
 
+    // draw.io may label a reply with a related name (xmlsvg -> svg, png -> xmlpng).
+    const EXPORT_FORMAT_ALIASES = { xml: ['xml'], xmlsvg: ['xmlsvg', 'svg'], svg: ['svg', 'xmlsvg'], png: ['png', 'xmlpng'] };
+    function exportFormatMatches(expected, received) {
+        if (!received) return true;
+        return (EXPORT_FORMAT_ALIASES[expected] || [expected]).includes(received);
+    }
+
     async function getExport(format) {
         const result = await requestExport(format);
         return result;
     }
 
+    const looksLikeDiagramXml = value =>
+        typeof value === 'string' && (value.includes('<mxfile') || value.includes('<mxGraphModel'));
+
+    // draw.io embeds the diagram XML in the 'content' attribute of an xmlsvg export.
+    function extractXmlFromSvg(svgData) {
+        try {
+            const svgText = parseExportData(svgData, 'xmlsvg');
+            const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+            const content = doc.documentElement && doc.documentElement.getAttribute('content');
+            return looksLikeDiagramXml(content) ? content : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    // Get the diagram XML, trying progressively more indirect sources so one
+    // unsupported export format cannot stop saving.
+    async function getDiagramXml() {
+        try {
+            const xml = await requestExport('xml', 8000);
+            if (looksLikeDiagramXml(xml)) return xml;
+            console.warn('[stage-designer] "xml" export returned something that is not diagram XML');
+        } catch (error) {
+            console.warn('[stage-designer] "xml" export failed:', error.message);
+        }
+        try {
+            const xml = extractXmlFromSvg(await requestExport('xmlsvg', 8000));
+            if (xml) return xml;
+            console.warn('[stage-designer] "xmlsvg" export had no embedded XML');
+        } catch (error) {
+            console.warn('[stage-designer] "xmlsvg" export failed:', error.message);
+        }
+        if (looksLikeDiagramXml(currentXml)) {
+            console.warn('[stage-designer] using the most recent autosaved XML');
+            return currentXml;
+        }
+        throw new Error('diagrams.net did not return the diagram. Make a small change in the editor and try again.');
+    }
+
     async function downloadXml() {
         try {
-            const xml = await getExport('xml');
+            const xml = await getDiagramXml();
             downloadBlob(xmlToSafeText(xml), `${safeFilename(currentDesignName.textContent)}.drawio`, 'application/xml;charset=utf-8');
         } catch (error) {
             showMessage(error.message, 'error');
@@ -328,7 +374,7 @@
     }
 
     async function createSavePayload() {
-        const xml = await getExport('xml');
+        const xml = await getDiagramXml();
         let thumbnail = null;
         try {
             const png = await getExport('png');
@@ -501,6 +547,10 @@
         }
         if (!message || typeof message !== 'object') return;
 
+        if (message.event !== 'autosave') {
+            console.debug('[stage-designer] draw.io event:', message.event, message.format || '');
+        }
+
         if (message.event === 'init') {
             editorReady = true;
             clearTimeout(loadWatchdog);
@@ -508,8 +558,8 @@
             setStatus('Editor ready');
             if (initialDesignId && !currentDesignId) {
                 loadDesign(initialDesignId, true);   // opened via ?design_id= (e.g. Edit on Stage Plans)
-            } else if (currentXml) {
-                postToEditor({ action: 'load', xml: currentXml });
+            } else {
+                postToEditor({ action: 'load', autosave: 1, xml: currentXml || '' });
             }
             return;
         }
@@ -534,11 +584,11 @@
 
         if (message.event === 'export' && pendingExport) {
             const expected = pendingExport;
-            if (message.format && message.format !== expected.format) return;
+            if (!exportFormatMatches(expected.format, message.format)) return;   // late reply to an earlier request
             pendingExport = null;
             clearTimeout(expected.timeout);
             if (message.error) expected.reject(new Error(String(message.error)));
-            else expected.resolve(parseExportData(message.data || '', expected.format));
+            else expected.resolve(parseExportData(message.data || message.xml || '', expected.format));
         }
     });
 
