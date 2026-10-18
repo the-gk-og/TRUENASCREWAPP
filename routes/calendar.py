@@ -19,7 +19,7 @@ import secrets
 from datetime import datetime, timedelta
 from functools import lru_cache
 
-from flask import Blueprint, render_template, request, jsonify, Response, abort, redirect, url_for
+from flask import Blueprint, render_template, request, jsonify, Response, abort, redirect, url_for, make_response
 from flask_login import login_required, current_user
 from sqlalchemy import or_
 
@@ -50,6 +50,24 @@ def _iso(dt: datetime, all_day: bool = False) -> str:
 # Page
 # ---------------------------------------------------------------------------
 
+def _is_phone(ua_string: str) -> bool:
+    """Phones get the mobile calendar; tablets are big enough for the full one."""
+    ua = (ua_string or '').lower()
+    if 'ipad' in ua or 'tablet' in ua:
+        return False
+    if 'android' in ua and 'mobile' not in ua:      # Android tablets omit the "Mobile" token
+        return False
+    return any(t in ua for t in ('android', 'iphone', 'ipod', 'mobile', 'windows phone'))
+
+
+def _calendar_view() -> str:
+    """'mobile' or 'desktop'. ?view= wins (and is remembered in a cookie), then the cookie, then the device."""
+    for choice in (request.args.get('view'), request.cookies.get('cal_view')):
+        if choice in ('mobile', 'desktop'):
+            return choice
+    return 'mobile' if _is_phone(request.user_agent.string) else 'desktop'
+
+
 @calendar_bp.route('/calendar')
 @login_required
 @crew_required
@@ -59,8 +77,16 @@ def calendar():
         crew_users = User.query.filter(User.user_role.in_(['crew', 'staff'])) \
             .order_by(User.username).all()
         crew_users.sort(key=lambda u: u.shown_name.lower())
-    return render_template('/crew/calendar.html', crew_users=crew_users,
-                           can_manage=is_manager(), now=datetime.now())
+
+    view = _calendar_view()
+    template = '/crew/calendar_mobile.html' if view == 'mobile' else '/crew/calendar.html'
+    resp = make_response(render_template(template, crew_users=crew_users,
+                                         can_manage=is_manager(), now=datetime.now()))
+    if request.args.get('view') in ('mobile', 'desktop'):
+        resp.set_cookie('cal_view', view, max_age=60 * 60 * 24 * 365, samesite='Lax', httponly=True)
+    # the response depends on the User-Agent, so caches must not mix the two versions up
+    resp.headers['Vary'] = 'User-Agent, Cookie'
+    return resp
 
 
 # ---------------------------------------------------------------------------

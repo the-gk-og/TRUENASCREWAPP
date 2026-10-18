@@ -1,0 +1,359 @@
+{% extends "base.html" %}
+{% block title %}Calendar - ShowWise{% endblock %}
+{% block head_extra %}<link rel="stylesheet" href="{{ url_for('static', filename='css/events.css') }}">{% endblock %}
+
+{% block content %}
+<style>
+.main-content { padding: 0 !important; }
+
+#mcal { min-height: calc(100vh - var(--topbar-height)); background: var(--bg-body); color: var(--text-primary); padding-bottom: 5.5rem; }
+
+/* ── Header ── */
+#mcal .mc-top { position: sticky; top: 0; z-index: 80; background: var(--bg-topbar); border-bottom: 2px solid var(--border);
+  display: flex; align-items: center; gap: .4rem; padding: .55rem .75rem; }
+#mcal .mc-title { flex: 1; text-align: center; font-weight: 800; font-size: 1.1rem; color: var(--primary); }
+#mcal .mc-btn { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border); border-radius: 10px;
+  min-width: 42px; height: 42px; font-size: .95rem; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+#mcal .mc-btn.today { padding: 0 .8rem; font-weight: 700; font-size: .85rem; }
+
+/* ── Filters ── */
+#mcal .mc-filters { display: none; padding: .75rem; gap: .6rem; flex-direction: column; background: var(--bg-card); border-bottom: 1px solid var(--border); }
+#mcal .mc-filters.open { display: flex; }
+#mcal .mc-filters label { display: flex; align-items: center; justify-content: space-between; gap: .75rem; font-size: .9rem; }
+#mcal .mc-filters select { flex: 1; max-width: 60%; padding: .6rem; border: 1px solid var(--border-input); border-radius: 8px; background: var(--bg-input); color: var(--text-primary); font-size: 1rem; }
+
+/* ── Month grid ── */
+#mcal .mc-grid-wrap { background: var(--bg-card); border-bottom: 1px solid var(--border); touch-action: pan-y; }
+#mcal .mc-dow, #mcal .mc-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+#mcal .mc-dow div { text-align: center; font-size: .7rem; font-weight: 700; padding: .4rem 0; color: var(--text-muted); text-transform: uppercase; }
+#mcal .mc-day { position: relative; height: 54px; border: 0; background: transparent; color: var(--text-primary); display: flex; flex-direction: column;
+  align-items: center; justify-content: flex-start; gap: 4px; padding-top: 6px; font-size: .95rem; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+#mcal .mc-day .n { width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
+#mcal .mc-day.out { opacity: .38; }
+#mcal .mc-day.today .n { border: 2px solid var(--primary); font-weight: 800; }
+#mcal .mc-day.sel .n { background: var(--primary); color: #fff; font-weight: 800; }
+#mcal .mc-dots { display: flex; gap: 3px; height: 6px; }
+#mcal .mc-dots i { width: 6px; height: 6px; border-radius: 50%; display: block; }
+
+/* ── Agenda ── */
+#mcal .mc-agenda-head { padding: 1rem 1rem .4rem; font-weight: 800; font-size: 1rem; display: flex; justify-content: space-between; align-items: baseline; }
+#mcal .mc-agenda-head small { color: var(--text-muted); font-weight: 600; }
+#mcal .mc-list { padding: 0 .75rem; display: flex; flex-direction: column; gap: .5rem; }
+#mcal .mc-item { display: flex; gap: .75rem; text-align: left; width: 100%; background: var(--bg-card); color: var(--text-primary);
+  border: 1px solid var(--border); border-left-width: 6px; border-radius: 10px; padding: .75rem; cursor: pointer; font: inherit; }
+#mcal .mc-item.past { opacity: .6; }
+#mcal .mc-item.declined .mc-it-title { text-decoration: line-through; }
+#mcal .mc-time { min-width: 64px; font-size: .8rem; font-weight: 700; color: var(--text-muted); line-height: 1.3; }
+#mcal .mc-it-title { font-weight: 700; line-height: 1.25; }
+#mcal .mc-it-sub { font-size: .8rem; color: var(--text-muted); margin-top: .15rem; }
+#mcal .mc-empty { text-align: center; color: var(--text-muted); padding: 2rem 1rem; }
+#mcal .mc-legend { display: flex; flex-wrap: wrap; gap: .4rem .9rem; padding: .9rem 1rem 0; font-size: .75rem; color: var(--text-muted); }
+#mcal .mc-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: .3rem; }
+#mcal .mc-switch { display: block; text-align: center; margin: 1.25rem 0 0; font-size: .85rem; color: var(--text-muted); }
+
+/* ── Buttons ── */
+#mcal .mc-fab { position: fixed; right: 1rem; bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); z-index: 85; width: 56px; height: 56px; border-radius: 50%;
+  border: 0; background: var(--primary); color: #fff; font-size: 1.3rem; box-shadow: 0 6px 18px rgba(0,0,0,.35); cursor: pointer; }
+#mcal .mc-loading { opacity: .55; transition: opacity .15s; }
+</style>
+
+<div id="mcal">
+  <div class="mc-top">
+    <button class="mc-btn" id="mcPrev" aria-label="Previous month"><i class="fas fa-chevron-left"></i></button>
+    <div class="mc-title" id="mcTitle">&nbsp;</div>
+    <button class="mc-btn" id="mcNext" aria-label="Next month"><i class="fas fa-chevron-right"></i></button>
+    <button class="mc-btn today" id="mcToday">Today</button>
+    <button class="mc-btn" id="mcFilterBtn" aria-label="Filters"><i class="fas fa-sliders-h"></i></button>
+  </div>
+
+  <div class="mc-filters" id="mcFilters">
+    <label><span>Events</span><input type="checkbox" id="fEvents" checked></label>
+    <label><span>Shifts</span>
+      <select id="fShifts">
+        <option value="mine">My shifts</option>
+        <option value="none">Hide shifts</option>
+        {% if can_manage %}
+        <option value="all">Everyone's shifts</option>
+        <optgroup label="One person">
+          {% for u in crew_users %}<option value="user:{{ u.id }}">{{ u.shown_name }}</option>{% endfor %}
+        </optgroup>
+        {% endif %}
+      </select>
+    </label>
+    <label><span>Unavailability</span>
+      <select id="fUnavail">
+        <option value="none">Hidden</option>
+        <option value="mine">Mine</option>
+        {% if can_manage %}<option value="all">Everyone</option>{% endif %}
+      </select>
+    </label>
+    <label><span>Calendar sync</span><button class="btn btn-secondary btn-sm" id="btnSubscribe" type="button"><i class="fas fa-rss"></i> Subscribe</button></label>
+  </div>
+
+  <div class="mc-grid-wrap" id="mcSwipe">
+    <div class="mc-dow"><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div></div>
+    <div class="mc-grid" id="mcGrid"></div>
+  </div>
+
+  <div class="mc-agenda-head"><span id="mcDayLabel"></span><small id="mcDayCount"></small></div>
+  <div class="mc-list" id="mcList"></div>
+
+  <div class="mc-legend">
+    <span><i style="background:#6366f1"></i>Event</span>
+    <span><i style="background:#4338ca"></i>You're on it</span>
+    <span><i style="background:#059669"></i>Shift</span>
+    <span><i style="background:#f59e0b"></i>Awaiting reply</span>
+    <span><i style="background:#fca5a5"></i>Unavailable</span>
+  </div>
+  <a class="mc-switch" href="{{ url_for('calendar.calendar', view='desktop') }}">Switch to desktop view</a>
+
+  <button class="mc-fab" id="btnNew" aria-label="New event"><i class="fas fa-plus"></i></button>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/sw-ui.js') }}"></script>
+<script>
+const CAN_MANAGE = {{ 'true' if can_manage else 'false' }};
+const KEY = 'sw-cal-filters';           // shared with the desktop calendar, so filters follow the person
+const $ = (id) => document.getElementById(id);
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DAYNAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const pad = (n) => String(n).padStart(2, '0');
+const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const dayStart = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+
+// The feed sends naive local strings: "YYYY-MM-DD" (all-day) or "YYYY-MM-DDTHH:MM". Parse them as local time.
+function parseLocal(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/.exec(s);
+  return new Date(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0));
+}
+const fmtTime = (d) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(' ', '').toLowerCase();
+
+// ---- filters ----
+let filters = { events: true, shifts: 'mine', unavail: 'none' };
+try { Object.assign(filters, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (_) {}
+if (![...$('fShifts').options].some((o) => o.value === filters.shifts)) filters.shifts = 'mine';
+if (![...$('fUnavail').options].some((o) => o.value === filters.unavail)) filters.unavail = 'none';
+$('fEvents').checked = filters.events; $('fShifts').value = filters.shifts; $('fUnavail').value = filters.unavail;
+['fEvents', 'fShifts', 'fUnavail'].forEach((id) => $(id).addEventListener('change', () => {
+  filters = { events: $('fEvents').checked, shifts: $('fShifts').value, unavail: $('fUnavail').value };
+  try { localStorage.setItem(KEY, JSON.stringify(filters)); } catch (_) {}
+  load();
+}));
+$('mcFilterBtn').onclick = () => $('mcFilters').classList.toggle('open');
+
+// ---- state ----
+let today = dayStart(new Date());
+let viewMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+let selected = today;
+let byDay = {};            // 'YYYY-MM-DD' -> [{ev, start, end, allDay, color}]
+let loadToken = 0;
+
+function colourFor(classes) {
+  const c = classes || [];
+  if (c.includes('cal-unavail')) return '#f87171';
+  if (c.includes('cal-shift-declined')) return '#9ca3af';
+  if (c.includes('cal-shift-pending')) return '#f59e0b';
+  if (c.includes('cal-shift-confirmed')) return '#059669';
+  if (c.includes('cal-event-mine')) return '#4338ca';
+  return '#6366f1';
+}
+
+// Monday-first grid of 42 days covering the viewed month
+function gridRange() {
+  const first = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1);
+  const offset = (first.getDay() + 6) % 7;
+  const start = addDays(first, -offset);
+  return { start, end: addDays(start, 42) };
+}
+
+async function load() {
+  const { start, end } = gridRange();
+  const token = ++loadToken;
+  $('mcGrid').classList.add('mc-loading');
+  const p = new URLSearchParams({ start: SW.toInput(start), end: SW.toInput(end),
+    events: filters.events ? '1' : '0', shifts: filters.shifts, unavail: filters.unavail });
+  let items = [];
+  try { items = await SW.api('GET', '/api/calendar/feed?' + p); }
+  catch (e) { SW.toast(e.message, 'error'); }
+  if (token !== loadToken) return;                     // a newer month was requested meanwhile
+
+  byDay = {};
+  for (const ev of items) {
+    const s = parseLocal(ev.start);
+    let e = ev.end ? parseLocal(ev.end) : s;
+    // all-day ends are exclusive; a timed item ending exactly at midnight shouldn't spill into the next day
+    const lastDay = (ev.allDay || (e.getHours() === 0 && e.getMinutes() === 0 && e > s)) ? addDays(dayStart(e), -1) : dayStart(e);
+    const entry = { ev, start: s, end: e, allDay: !!ev.allDay, color: colourFor(ev.classNames) };
+    for (let d = dayStart(s); d <= lastDay && d < end; d = addDays(d, 1)) (byDay[ymd(d)] ||= []).push(entry);
+  }
+  Object.values(byDay).forEach((a) => a.sort((x, y) => (y.allDay - x.allDay) || (x.start - y.start)));
+  $('mcGrid').classList.remove('mc-loading');
+  renderGrid(); renderAgenda();
+}
+
+function renderGrid() {
+  $('mcTitle').textContent = `${MONTHS[viewMonth.getMonth()]} ${viewMonth.getFullYear()}`;
+  const { start } = gridRange();
+  const cells = [];
+  for (let i = 0; i < 42; i++) {
+    const d = addDays(start, i), key = ymd(d), list = byDay[key] || [];
+    const colours = [...new Set(list.map((x) => x.color))].slice(0, 3);
+    const cls = ['mc-day', d.getMonth() !== viewMonth.getMonth() && 'out', +d === +today && 'today', +d === +selected && 'sel'].filter(Boolean).join(' ');
+    cells.push(`<button class="${cls}" data-d="${key}" aria-label="${d.toDateString()}${list.length ? ', ' + list.length + ' items' : ''}">
+      <span class="n">${d.getDate()}</span><span class="mc-dots">${colours.map((c) => `<i style="background:${c}"></i>`).join('')}</span></button>`);
+  }
+  $('mcGrid').innerHTML = cells.join('');
+}
+
+function renderAgenda() {
+  const list = byDay[ymd(selected)] || [];
+  const rel = +selected === +today ? 'Today · ' : '';
+  $('mcDayLabel').textContent = `${rel}${DAYNAMES[selected.getDay()]} ${selected.getDate()} ${MONTHS[selected.getMonth()].slice(0, 3)}`;
+  $('mcDayCount').textContent = list.length ? `${list.length} item${list.length === 1 ? '' : 's'}` : '';
+  if (!list.length) { $('mcList').innerHTML = '<div class="mc-empty">Nothing scheduled</div>'; return; }
+  const now = new Date();
+  $('mcList').innerHTML = list.map((x, i) => {
+    const k = x.ev.extendedProps || {};
+    const sub = [k.kind === 'shift' && k.status === 'pending' ? 'Awaiting your response' : '', k.location].filter(Boolean).join(' · ');
+    let time = 'All day';
+    if (!x.allDay) {
+      const sameDay = +dayStart(x.start) === +selected, endsToday = +dayStart(x.end) === +selected;
+      time = (sameDay ? fmtTime(x.start) : 'Cont.') + (x.end > x.start ? `<br>${endsToday ? fmtTime(x.end) : 'on'}` : '');
+    }
+    const classes = x.ev.classNames || [];
+    return `<button class="mc-item${classes.includes('cal-past') ? ' past' : ''}${classes.includes('cal-shift-declined') ? ' declined' : ''}" data-i="${i}" style="border-left-color:${x.color}">
+      <div class="mc-time">${time}</div>
+      <div><div class="mc-it-title">${SW.esc(x.ev.title)}</div>${sub ? `<div class="mc-it-sub">${SW.esc(sub)}</div>` : ''}</div></button>`;
+  }).join('');
+}
+
+// ---- interactions ----
+$('mcGrid').addEventListener('click', (e) => {
+  const b = e.target.closest('.mc-day'); if (!b) return;
+  const [y, m, d] = b.dataset.d.split('-').map(Number);
+  const picked = new Date(y, m - 1, d);
+  const monthChanged = picked.getMonth() !== viewMonth.getMonth();
+  selected = picked;
+  if (monthChanged) { viewMonth = new Date(y, m - 1, 1); load(); } else { renderGrid(); renderAgenda(); }
+});
+$('mcList').addEventListener('click', (e) => {
+  const b = e.target.closest('.mc-item'); if (!b) return;
+  showDetail((byDay[ymd(selected)] || [])[+b.dataset.i]);
+});
+function gotoMonth(delta) {
+  viewMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + delta, 1);
+  selected = viewMonth.getMonth() === today.getMonth() && viewMonth.getFullYear() === today.getFullYear() ? today : viewMonth;
+  load();
+}
+$('mcPrev').onclick = () => gotoMonth(-1);
+$('mcNext').onclick = () => gotoMonth(1);
+$('mcToday').onclick = () => { today = dayStart(new Date()); viewMonth = new Date(today.getFullYear(), today.getMonth(), 1); selected = today; load(); };
+
+// swipe left/right on the grid to change month
+(() => {
+  let x0 = null, y0 = null;
+  const el = $('mcSwipe');
+  el.addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, { passive: true });
+  el.addEventListener('touchend', (e) => {
+    if (x0 === null) return;
+    const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0;
+    x0 = null;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) gotoMonth(dx < 0 ? 1 : -1);
+  }, { passive: true });
+})();
+
+// ---- new event ----
+$('btnNew').onclick = async () => {
+  const s = new Date(selected); s.setHours(+selected === +today ? Math.min(new Date().getHours() + 1, 23) : 9, 0, 0, 0);
+  const si = SW.toInput(s);
+  const r = await SW.eventForm({ defaults: { event_date: si, event_end_date: SW.addHours(si, 3) }, canRecur: CAN_MANAGE });
+  if (r) { SW.toast('Event created'); load(); }
+};
+
+// ---- detail sheet (same actions as the desktop popup, minus drag-to-move) ----
+function showDetail(entry) {
+  const ev = entry.ev, x = ev.extendedProps || {}, esc = SW.esc;
+  const d = SW.dialog({ title: x.kind === 'event' ? ev.title : x.kind === 'shift' ? 'Shift' : 'Unavailable' });
+  const rows = [];
+  if (x.kind === 'shift') {
+    rows.push(['Person', (x.name || x.username) + (x.mine ? ' (you)' : '')], ['Event', x.event_title]);
+    if (x.role) rows.push(['Role', x.role]);
+  }
+  if (x.kind === 'unavailability') rows.push(['Person', x.name || x.username || 'You'], ['Reason', ev.title.replace(/^Unavailable – /, '')]);
+  rows.push(['When', x.when]);
+  if (x.location) rows.push(['Where', x.location]);
+  if (x.kind === 'shift') {
+    const label = { pending: 'Awaiting response', accepted: 'Confirmed', confirmed: 'Confirmed', rejected: 'Declined' }[x.status] || x.status;
+    rows.push(['Status', label]);
+  }
+  let html = '<dl class="sw-detail-grid">' + rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('') + '</dl>';
+  if (x.kind === 'event') {
+    if (x.on_team) html += '<p><span class="sw-chip ok">You\'re on this event</span></p>';
+    if (x.description_html) html += `<div class="md-content" style="margin-bottom:1rem">${x.description_html}</div>`;
+  }
+  if (x.kind === 'shift' && x.notes) html += `<p class="sw-muted" style="white-space:pre-line">${esc(x.notes)}</p>`;
+  d.body.innerHTML = html;
+
+  const bar = document.createElement('div'); bar.className = 'sw-actions';
+  const add = (label, cls, fn) => { const b = document.createElement('button'); b.className = 'btn ' + cls; b.type = 'button'; b.textContent = label; b.onclick = fn; bar.appendChild(b); };
+  if (x.kind === 'event') {
+    if (CAN_MANAGE) add('Delete', 'btn-danger sw-left', async () => {
+      d.close();
+      let scope = 'this';
+      if (x.recurring) { scope = await SW.seriesScope('Delete', (await SW.api('GET', `/api/events/${x.event_id}`)).series_count); if (!scope) return; }
+      else if (!(await SW.confirm('Delete this event and everything attached to it?', { danger: true, okText: 'Delete' }))) return;
+      if (await SW.run(() => SW.api('DELETE', `/events/${x.event_id}?scope=${scope}`), 'Event deleted')) load();
+    });
+    if (x.can_edit) add('Edit', 'btn-secondary', async () => {
+      d.close();
+      const data = await SW.run(() => SW.api('GET', `/api/events/${x.event_id}`));
+      if (data && await SW.eventForm({ event: data })) { SW.toast('Event saved'); load(); }
+    });
+  }
+  if (x.kind === 'shift') {
+    if (x.mine && x.status !== 'accepted' && x.status !== 'confirmed') add('Accept', 'btn-success', () => SW.respondShift(x.assignment_id, 'accepted'));
+    if (x.mine && x.status !== 'rejected') add("Can't make it", 'btn-secondary', () => SW.respondShift(x.assignment_id, 'rejected'));
+    if (CAN_MANAGE) {
+      add('Remove', 'btn-danger sw-left', async () => {
+        d.close();
+        if (!(await SW.confirm(`Delete ${x.name || x.username}'s shift?`, { danger: true, okText: 'Delete' }))) return;
+        if (await SW.run(() => SW.api('DELETE', `/events/shift-assignments/${x.assignment_id}`), 'Shift deleted')) load();
+      });
+      add('Edit shift', 'btn-secondary', async () => {
+        d.close();
+        const shift = { assignment_id: x.assignment_id, username: x.username, name: x.name, role: x.role, status: x.status, notes: x.notes,
+          start: SW.toInput(entry.start), end: SW.toInput(entry.end) };
+        if (await SW.shiftForm({ shift, event: { id: x.event_id } })) { SW.toast('Shift saved'); load(); }
+      });
+    }
+  }
+  if (x.url) { const a = document.createElement('a'); a.className = 'btn btn-primary'; a.href = x.url; a.textContent = 'Open event'; bar.appendChild(a); }
+  d.body.appendChild(bar);
+}
+
+// ---- calendar sync link ----
+$('btnSubscribe').onclick = async () => {
+  let link;
+  try { link = await SW.api('GET', '/api/calendar/sync-link'); }
+  catch (e) { SW.toast(e.message, 'error'); return; }
+  const d = SW.dialog({ title: 'Sync to your calendar' });
+  d.body.innerHTML = `
+    <p class="sw-confirm-text">This is <b>your</b> private calendar link: every event plus your own shifts. Anyone with the link can see your schedule, so don't share it.</p>
+    <div class="sw-field"><input type="text" id="syncUrl" readonly value="${SW.esc(link.url)}" style="width:100%"></div>
+    <div class="sw-actions">
+      <a class="btn btn-secondary" href="${SW.esc(link.webcal_url)}">Open in calendar app</a>
+      <button type="button" class="btn btn-primary" id="syncCopy">Copy link</button>
+    </div>`;
+  const input = d.body.querySelector('#syncUrl');
+  d.body.querySelector('#syncCopy').onclick = async () => {
+    try { await navigator.clipboard.writeText(input.value); } catch (_) { input.select(); document.execCommand('copy'); }
+    SW.toast('Link copied');
+  };
+};
+
+load();
+</script>
+{% endblock %}
