@@ -5,7 +5,7 @@ from datetime import datetime
 
 from flask import (
     Blueprint, render_template, request, jsonify,
-    redirect, url_for, send_from_directory,
+    redirect, url_for, send_from_directory, current_app,
 )
 from flask_login import login_required, current_user
 
@@ -70,7 +70,8 @@ def stage_designer():
         (StagePlanObject.created_by == current_user.username)
     ).order_by(StagePlanObject.category, StagePlanObject.name).all()
     return render_template('crew/stage_designer.html',
-                           events=events, templates=templates, objects=objects)
+                           events=events, templates=templates, objects=objects,
+                           drawio_url=current_app.config.get('DRAWIO_URL', 'https://embed.diagrams.net/'))
 
 
 # Designs

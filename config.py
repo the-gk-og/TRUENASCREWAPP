@@ -48,6 +48,9 @@ class BaseConfig:
 
     # Uploads
     UPLOAD_FOLDER = 'uploads'
+    # Base URL of the draw.io editor used by the stage plan designer. Point this at a
+    # self-hosted draw.io (https only) if embed.diagrams.net is blocked on your network.
+    DRAWIO_URL = os.environ.get('DRAWIO_URL', 'https://embed.diagrams.net/')
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16 MB
 
     # Session / Remember-me
