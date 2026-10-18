@@ -523,6 +523,52 @@ tr.pl-bsel .pl-bdot { background: var(--warning); border-color: var(--warning); 
 .pl-confirm-title { font-weight: 900; font-size: 1.3rem; color: var(--danger); margin-bottom: 0.5rem; text-transform: uppercase; }
 .pl-confirm-body  { color: var(--text-secondary); font-size: 0.92rem; line-height: 1.55; }
 
+
+/* Sidebar search + archive */
+.pl-ev-searchwrap { padding: 0 0.75rem 0.6rem; }
+.pl-ev-search { width: 100%; max-width: none !important; min-width: 0 !important; box-sizing: border-box; }
+.pl-arch { margin-top: 0.4rem; }
+.pl-arch > summary {
+  cursor: pointer; list-style: none; user-select: none;
+  font-weight: 800; font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-muted); padding: 0.9rem 1.25rem 0.5rem;
+}
+.pl-arch > summary::-webkit-details-marker { display: none; }
+.pl-arch > summary::after { content: '▸'; float: right; transition: transform 0.15s; }
+.pl-arch[open] > summary::after { transform: rotate(90deg); }
+.pl-ev-item.pl-ev-archived { opacity: 0.78; }
+.pl-ev-item.pl-ev-archived.pl-cur { opacity: 1; }
+.pl-ev-divider {
+  font-weight: 800; font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-muted); padding: 0.9rem 1.25rem 0.5rem;
+}
+.pl-ev-none { padding: 0.75rem 1.25rem; font-size: 0.85rem; color: var(--text-muted); }
+.pl-arch-pill {
+  font-size: 0.7rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  background: var(--bg-nav-active); color: var(--text-muted);
+  border: 1px solid var(--border); border-radius: 999px; padding: 0.15rem 0.55rem; margin-left: 0.4rem;
+}
+
+/* Live updates */
+@keyframes plFlash { from { background: rgba(99,102,241,0.28); } to { background: transparent; } }
+tr.pl-flash > td { animation: plFlash 1.2s ease-out; }
+.pl-live {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  font-size: 0.72rem; font-weight: 700; color: var(--text-muted);
+}
+.pl-live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
+.pl-live.pl-off .pl-live-dot { background: var(--warning); }
+#pl-newbanner {
+  display: none; align-items: center; justify-content: space-between; gap: 0.75rem;
+  margin: 0 0 0.6rem; padding: 0.55rem 0.9rem; border-radius: 8px;
+  background: var(--primary); color: #fff; font-weight: 700; font-size: 0.85rem;
+}
+#pl-newbanner.pl-show { display: flex; }
+#pl-newbanner button {
+  background: rgba(255,255,255,0.2); color: #fff; border: 0; border-radius: 6px;
+  padding: 0.25rem 0.7rem; font-weight: 700; cursor: pointer;
+}
+
 /* ── Toast ── */
 #pl-toasts {
   position: fixed; top: 72px; right: 1.5rem;
@@ -564,6 +610,7 @@ tr.pl-bsel .pl-bdot { background: var(--warning); border-color: var(--warning); 
       <i class="fas fa-calendar-alt" style="color:var(--primary);"></i>
       <b>{{ current_event.title }}</b>
       <span>· {{ current_event.event_date.strftime('%d %b %Y') }}</span>
+      {% if current_event_archived %}<span class="pl-arch-pill">Archived</span>{% endif %}
     </div>
     {% else %}
     <div class="pl-event-pill">
@@ -573,6 +620,7 @@ tr.pl-bsel .pl-bdot { background: var(--warning); border-color: var(--warning); 
     {% endif %}
 
     <div class="pl-header-right">
+      <span class="pl-live" id="pl-live" title="Changes from other people appear automatically"><span class="pl-live-dot"></span>Live</span>
       <!-- Progress -->
       <div class="pl-prog-wrap">
         <div class="pl-prog-track">
@@ -594,6 +642,8 @@ tr.pl-bsel .pl-bdot { background: var(--warning); border-color: var(--warning); 
 
     <!-- ── Left: toolbar + table ── -->
     <div class="pl-left">
+
+      <div id="pl-newbanner"><span>Items were added or removed by someone else.</span><button onclick="location.reload()">Refresh</button></div>
 
       <!-- Normal toolbar -->
       <div class="pl-toolbar" id="pl-toolbar">
@@ -760,21 +810,40 @@ tr.pl-bsel .pl-bdot { background: var(--warning); border-color: var(--warning); 
         </div>
       </div>
 
-      <div class="pl-panel-title" style="margin-top:0.5rem;">Events</div>
-      <a href="/picklist" class="pl-ev-item {% if not current_event %}pl-cur{% endif %}">
-        <div class="pl-ev-name">📋 General List</div>
-        <div class="pl-ev-meta">No event filter</div>
-      </a>
-      {% for event in events %}
+      <div class="pl-panel-title" style="margin-top:0.5rem;">Pick Lists</div>
+      <div class="pl-ev-searchwrap">
+        <input type="search" id="pl-evsearch" class="pl-search pl-ev-search"
+               placeholder="🔍  Search all lists, incl. archive…" autocomplete="off"
+               oninput="plEvSearch(this.value)">
+      </div>
+
+      {% macro ev_card(event, archived=False) %}
       <a href="/picklist?event_id={{ event.id }}"
-         class="pl-ev-item {% if current_event and current_event.id == event.id %}pl-cur{% endif %}">
-        <div class="pl-ev-name">🎭 {{ event.title }}</div>
+         class="pl-ev-item {% if archived %}pl-ev-archived{% endif %} {% if current_event and current_event.id == event.id %}pl-cur{% endif %}">
+        <div class="pl-ev-name">{% if archived %}🗄{% else %}🎭{% endif %} {{ event.title }}</div>
         <div class="pl-ev-meta">
           {{ event.event_date.strftime('%d %b %Y, %H:%M') }}
           {% if event.location %}<br>📍 {{ event.location }}{% endif %}
         </div>
       </a>
-      {% endfor %}
+      {% endmacro %}
+
+      <div id="pl-ev-browse">
+        <a href="/picklist" class="pl-ev-item {% if not current_event %}pl-cur{% endif %}">
+          <div class="pl-ev-name">📋 General List</div>
+          <div class="pl-ev-meta">No event filter</div>
+        </a>
+        {% for event in current_events %}{{ ev_card(event) }}{% endfor %}
+
+        {% if archived_events %}
+        <details class="pl-arch" {% if current_event_archived %}open{% endif %}>
+          <summary>🗄 Archive ({{ archived_events|length }})</summary>
+          {% for event in archived_events %}{{ ev_card(event, True) }}{% endfor %}
+        </details>
+        {% endif %}
+      </div>
+
+      <div id="pl-ev-results" style="display:none;"></div>
     </div>
 
   </div><!-- .pl-body -->
@@ -1039,17 +1108,117 @@ tr.pl-bsel .pl-bdot { background: var(--warning); border-color: var(--warning); 
   }
 
   /* ── Toggle ── */
+  const inflight = new Set();   // ids being toggled by this user right now
   window.plToggle = async function(id) {
+    const row = document.getElementById(`pl-row-${id}`);
+    if (!row) return;
+    const want = row.dataset.ck !== 'true';
+    inflight.add(id);
     try {
-      const data = await fetch(`/picklist/toggle/${id}`, { method: 'POST' }).then(r => r.json());
+      // Send the state we want (not "flip it") so two people tapping together can't cancel out
+      const data = await fetch(`/picklist/toggle/${id}`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ checked: want })
+      }).then(r => r.json());
       if (!data.success) throw new Error(data.error);
-      const row = document.getElementById(`pl-row-${id}`);
-      const now = data.is_checked;
-      row.dataset.ck = now ? 'true' : 'false';
-      row.classList.toggle('pl-done', now);
+      setRowChecked(row, data.is_checked, false);
       plUpdateStats();
       applyVisibility();
     } catch(e) { plToast('Error: ' + e.message, 'err'); }
+    finally { inflight.delete(id); }
+  };
+
+  function setRowChecked(row, now, flash) {
+    row.dataset.ck = now ? 'true' : 'false';
+    row.classList.toggle('pl-done', now);
+    if (flash) {
+      row.classList.remove('pl-flash'); void row.offsetWidth; row.classList.add('pl-flash');
+      setTimeout(() => row.classList.remove('pl-flash'), 1300);
+    }
+  }
+
+  /* ── Live sync: poll so everyone prepping the same list sees ticks as they happen ── */
+  const EVENT_ID = {{ current_event.id if current_event else 'null' }};
+  const POLL_MS  = 3000;
+  const liveEl   = document.getElementById('pl-live');
+  let pollFails  = 0;
+
+  function userIsBusy() {
+    if (bulkMode) return true;
+    if (document.querySelector('.pl-overlay.pl-open')) return true;
+    const a = document.activeElement;
+    return !!(a && ['INPUT','TEXTAREA','SELECT'].includes(a.tagName));
+  }
+
+  async function plPoll() {
+    if (document.hidden) return;
+    try {
+      const url = '/picklist/state' + (EVENT_ID !== null ? `?event_id=${EVENT_ID}` : '');
+      const res = await fetch(url, { cache: 'no-store', credentials: 'same-origin' });
+      if (res.redirected || !res.ok) throw new Error('bad response');   // logged out / server hiccup
+      const data = await res.json();
+      pollFails = 0; liveEl.classList.remove('pl-off');
+
+      const server = new Map(data.items.map(i => [i.id, i.checked]));
+      let changed = false, structural = false;
+
+      document.querySelectorAll('#pl-tbody tr[data-id]').forEach(row => {
+        const id = parseInt(row.dataset.id);
+        if (!server.has(id)) {                       // deleted by someone else
+          if (!pendingIds.includes(id)) { row.remove(); changed = true; }
+          return;
+        }
+        if (inflight.has(id)) return;                // don't fight our own tap
+        const now = server.get(id);
+        if ((row.dataset.ck === 'true') !== now) { setRowChecked(row, now, true); changed = true; }
+      });
+
+      const have = new Set([...document.querySelectorAll('#pl-tbody tr[data-id]')].map(r => parseInt(r.dataset.id)));
+      for (const id of server.keys()) if (!have.has(id)) structural = true;   // added by someone else
+
+      if (changed) { plUpdateStats(); applyVisibility(); }
+      if (structural) {
+        if (userIsBusy()) document.getElementById('pl-newbanner').classList.add('pl-show');
+        else location.reload();
+      }
+    } catch (e) {
+      if (++pollFails >= 2) liveEl.classList.add('pl-off');
+    }
+  }
+  setInterval(plPoll, POLL_MS);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) plPoll(); });
+
+  /* ── Sidebar search (events + archive) ── */
+  let evSearchTimer = null, evSearchSeq = 0;
+  const esc = t => String(t).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  window.plEvSearch = function(q) {
+    clearTimeout(evSearchTimer);
+    const browse  = document.getElementById('pl-ev-browse');
+    const results = document.getElementById('pl-ev-results');
+    q = q.trim();
+    if (!q) { results.style.display = 'none'; results.innerHTML = ''; browse.style.display = ''; return; }
+    evSearchTimer = setTimeout(async () => {
+      const seq = ++evSearchSeq;
+      try {
+        const data = await fetch('/picklist/search?q=' + encodeURIComponent(q)).then(r => r.json());
+        if (seq !== evSearchSeq) return;               // a newer search superseded this one
+        let html = '', shownArchiveHeader = false;
+        data.results.forEach(ev => {
+          if (ev.archived && !shownArchiveHeader) {
+            html += '<div class="pl-ev-divider">🗄 Archive</div>'; shownArchiveHeader = true;
+          }
+          const cur = EVENT_ID === ev.id ? ' pl-cur' : '';
+          html += `<a href="/picklist?event_id=${ev.id}" class="pl-ev-item${ev.archived ? ' pl-ev-archived' : ''}${cur}">
+            <div class="pl-ev-name">${ev.archived ? '🗄' : '🎭'} ${esc(ev.title)}</div>
+            <div class="pl-ev-meta">${esc(ev.date)}${ev.location ? '<br>📍 ' + esc(ev.location) : ''}</div></a>`;
+        });
+        if (!html) html = '<div class="pl-ev-none">No pick lists match.</div>';
+        browse.style.display = 'none';
+        results.innerHTML = html;
+        results.style.display = '';
+      } catch (e) { /* leave current view */ }
+    }, 200);
   };
 
   /* ── Delete one ── */

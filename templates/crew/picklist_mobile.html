@@ -532,6 +532,45 @@
   margin-bottom: 0.5rem; transition: background 0.15s;
 }
 .mp-evlink.mp-cur { background: var(--primary) !important; color: #fff !important; border-color: var(--primary) !important; }
+
+/* Event sheet search + archive */
+.mp-evsearch {
+  width: 100%; box-sizing: border-box; margin-bottom: 0.75rem;
+  background: var(--bg-input) !important; border: 1.5px solid var(--border-input) !important;
+  border-radius: 10px !important; color: var(--text-primary) !important;
+  font-size: 1rem !important; padding: 0.7rem 0.9rem !important; outline: none; font-family: inherit;
+}
+.mp-evsearch:focus { border-color: var(--border-focus) !important; }
+.mp-evlink.mp-archived { opacity: 0.78; }
+.mp-evlink.mp-archived.mp-cur { opacity: 1; }
+.mp-evdivider {
+  font-weight: 800; font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-muted); padding: 0.6rem 0.25rem 0.5rem;
+}
+.mp-arch > summary { cursor: pointer; list-style: none; user-select: none; }
+.mp-arch > summary::-webkit-details-marker { display: none; }
+.mp-arch > summary::after { content: '▸'; float: right; }
+.mp-arch[open] > summary::after { content: '▾'; }
+.mp-evsheet-scroll { max-height: 60vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.mp-arch-pill {
+  font-size: 0.68rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  background: var(--bg-nav-active); color: var(--text-muted);
+  border: 1px solid var(--border); border-radius: 999px; padding: 0.1rem 0.5rem; margin-left: 0.4rem;
+}
+
+/* Live updates */
+@keyframes mpFlash { from { background: rgba(99,102,241,0.28); } to { background: transparent; } }
+.mp-item.mp-flash { animation: mpFlash 1.2s ease-out; }
+#mp-newbanner {
+  display: none; align-items: center; justify-content: space-between; gap: 0.75rem;
+  margin: 0 0.75rem 0.6rem; padding: 0.6rem 0.9rem; border-radius: 10px;
+  background: var(--primary); color: #fff; font-weight: 700; font-size: 0.88rem;
+}
+#mp-newbanner.mp-show { display: flex; }
+#mp-newbanner button {
+  background: rgba(255,255,255,0.2); color: #fff; border: 0; border-radius: 8px;
+  padding: 0.35rem 0.8rem; font-weight: 700;
+}
 </style>
 
 <div id="mpl">
@@ -541,7 +580,7 @@
     <span class="mp-top-title">
       {% if current_event %}📋 {{ current_event.title|truncate(22,True,'…') }}{% else %}📋 PICK LIST{% endif %}
     </span>
-    <span class="mp-count-badge"><b id="mp-checked">{{ items|selectattr('is_checked')|list|length }}</b> / {{ items|length }}</span>
+    <span class="mp-count-badge"><b id="mp-checked">{{ items|selectattr('is_checked')|list|length }}</b> / <span id="mp-total">{{ items|length }}</span></span>
     <button class="mp-gear" onclick="mpOpenSheet('mp-evsheet')">
       <i class="fas fa-calendar-alt"></i> Event
     </button>
@@ -557,13 +596,15 @@
   <!-- Event banner -->
   {% if current_event %}
   <div class="mp-event-banner">
-    <div class="mp-event-title">🎭 {{ current_event.title }}</div>
+    <div class="mp-event-title">{% if current_event_archived %}🗄{% else %}🎭{% endif %} {{ current_event.title }}{% if current_event_archived %}<span class="mp-arch-pill">Archived</span>{% endif %}</div>
     <div class="mp-event-meta">
       <span>📅 {{ current_event.event_date.strftime('%d %b, %H:%M') }}</span>
       {% if current_event.location %}<span>📍 {{ current_event.location }}</span>{% endif %}
     </div>
   </div>
   {% endif %}
+
+  <div id="mp-newbanner"><span>Items were added or removed by someone else.</span><button onclick="location.reload()">Refresh</button></div>
 
   <!-- Filter tabs -->
   <div class="mp-ftabs">
@@ -814,14 +855,31 @@
   <div class="mp-sheet">
     <div class="mp-handle"></div>
     <div class="mp-sheet-title">Select Event</div>
-    <a href="/picklist" class="mp-evlink {% if not current_event %}mp-cur{% endif %}">📋 General Pick List</a>
-    {% for event in events %}
+    <input type="search" id="mp-evsearch" class="mp-evsearch"
+           placeholder="🔍  Search lists, incl. archive…" autocomplete="off" oninput="mpEvSearch(this.value)">
+
+    {% macro ev_link(event, archived=False) %}
     <a href="/picklist?event_id={{ event.id }}"
-       class="mp-evlink {% if current_event and current_event.id == event.id %}mp-cur{% endif %}">
-      🎭 {{ event.title }}
+       class="mp-evlink {% if archived %}mp-archived{% endif %} {% if current_event and current_event.id == event.id %}mp-cur{% endif %}">
+      {% if archived %}🗄{% else %}🎭{% endif %} {{ event.title }}
       <span style="font-size:0.8rem;font-weight:400;opacity:0.7;"> — {{ event.event_date.strftime('%d %b %Y') }}</span>
     </a>
-    {% endfor %}
+    {% endmacro %}
+
+    <div class="mp-evsheet-scroll">
+      <div id="mp-ev-browse">
+        <a href="/picklist" class="mp-evlink {% if not current_event %}mp-cur{% endif %}">📋 General Pick List</a>
+        {% for event in current_events %}{{ ev_link(event) }}{% endfor %}
+
+        {% if archived_events %}
+        <details class="mp-arch" {% if current_event_archived %}open{% endif %}>
+          <summary class="mp-evdivider">🗄 Archive ({{ archived_events|length }})</summary>
+          {% for event in archived_events %}{{ ev_link(event, True) }}{% endfor %}
+        </details>
+        {% endif %}
+      </div>
+      <div id="mp-ev-results" style="display:none;"></div>
+    </div>
   </div>
 </div>
 
@@ -850,7 +908,6 @@
 <script>
 (function() {
 
-  const TOTAL  = {{ items|length }};
   let checked  = {{ items|selectattr('is_checked')|list|length }};
   let bulkMode = false;
   const bulkSel = new Set();
@@ -874,13 +931,18 @@
 
   /* ── Progress ── */
   function mpUpdateProg() {
-    const pct = TOTAL ? Math.round(checked / TOTAL * 100) : 0;
+    const cards = document.querySelectorAll('#mp-list .mp-item[data-id]');
+    const total = cards.length;
+    checked = [...cards].filter(c => c.dataset.ck === 'true').length;
+    const pct = total ? Math.round(checked / total * 100) : 0;
     document.getElementById('mp-prog').style.width = pct + '%';
     document.getElementById('mp-checked').textContent = checked;
+    document.getElementById('mp-total').textContent = total;
   }
 
   /* ── Filter ── */
   window.mpFilter = function(f) {
+    activeFilter = f;
     document.querySelectorAll('.mp-ftab').forEach(t =>
       t.classList.toggle('mp-on', t.dataset.f === f));
     document.querySelectorAll('.mp-item').forEach(card => {
@@ -893,17 +955,115 @@
   };
 
   /* ── Toggle ── */
+  const inflight = new Set();   // ids this user is toggling right now
+  let activeFilter = 'all';
+
   window.mpToggle = async function(id) {
+    const card = document.getElementById(`mp-item-${id}`);
+    if (!card) return;
+    const want = card.dataset.ck !== 'true';
+    inflight.add(id);
     try {
-      const data = await fetch(`/picklist/toggle/${id}`, { method: 'POST' }).then(r => r.json());
+      // Send the state we want (not "flip it") so two people tapping together can't cancel out
+      const data = await fetch(`/picklist/toggle/${id}`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ checked: want })
+      }).then(r => r.json());
       if (!data.success) throw new Error(data.error);
-      const card = document.getElementById(`mp-item-${id}`);
-      const now  = data.is_checked;
-      card.dataset.ck = now ? 'true' : 'false';
-      card.classList.toggle('mp-done', now);
-      if (now) checked++; else checked--;
+      setCardChecked(card, data.is_checked, false);
       mpUpdateProg();
     } catch(e) { mpToast('Error: ' + e.message, 'err'); }
+    finally { inflight.delete(id); }
+  };
+
+  function setCardChecked(card, now, flash) {
+    card.dataset.ck = now ? 'true' : 'false';
+    card.classList.toggle('mp-done', now);
+    if (flash) {
+      card.classList.remove('mp-flash'); void card.offsetWidth; card.classList.add('mp-flash');
+      setTimeout(() => card.classList.remove('mp-flash'), 1300);
+    }
+  }
+
+  /* ── Live sync: poll so everyone prepping the same list sees ticks as they happen ── */
+  const EVENT_ID = {{ current_event.id if current_event else 'null' }};
+  const POLL_MS  = 3000;
+  let pollFails  = 0;
+
+  function userIsBusy() {
+    if (bulkMode) return true;
+    if (document.querySelector('.mp-overlay.mp-open')) return true;
+    const a = document.activeElement;
+    return !!(a && ['INPUT','TEXTAREA','SELECT'].includes(a.tagName));
+  }
+
+  async function mpPoll() {
+    if (document.hidden) return;
+    try {
+      const url = '/picklist/state' + (EVENT_ID !== null ? `?event_id=${EVENT_ID}` : '');
+      const res = await fetch(url, { cache: 'no-store', credentials: 'same-origin' });
+      if (res.redirected || !res.ok) throw new Error('bad response');
+      const data = await res.json();
+      pollFails = 0;
+
+      const server = new Map(data.items.map(i => [i.id, i.checked]));
+      let changed = false, structural = false;
+
+      document.querySelectorAll('#mp-list .mp-item[data-id]').forEach(card => {
+        const id = parseInt(card.dataset.id);
+        if (!server.has(id)) {                       // deleted by someone else
+          if (!pendingIds.includes(id)) { card.remove(); changed = true; }
+          return;
+        }
+        if (inflight.has(id)) return;                // don't fight our own tap
+        const now = server.get(id);
+        if ((card.dataset.ck === 'true') !== now) { setCardChecked(card, now, true); changed = true; }
+      });
+
+      const have = new Set([...document.querySelectorAll('#mp-list .mp-item[data-id]')].map(c => parseInt(c.dataset.id)));
+      for (const id of server.keys()) if (!have.has(id)) structural = true;   // added by someone else
+
+      if (changed) { mpUpdateProg(); mpFilter(activeFilter); }
+      if (structural) {
+        if (userIsBusy()) document.getElementById('mp-newbanner').classList.add('mp-show');
+        else location.reload();
+      }
+    } catch (e) { pollFails++; }
+  }
+  setInterval(mpPoll, POLL_MS);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) mpPoll(); });
+
+  /* ── Event sheet search (events + archive) ── */
+  let evSearchTimer = null, evSearchSeq = 0;
+  const esc = t => String(t).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  window.mpEvSearch = function(q) {
+    clearTimeout(evSearchTimer);
+    const browse  = document.getElementById('mp-ev-browse');
+    const results = document.getElementById('mp-ev-results');
+    q = q.trim();
+    if (!q) { results.style.display = 'none'; results.innerHTML = ''; browse.style.display = ''; return; }
+    evSearchTimer = setTimeout(async () => {
+      const seq = ++evSearchSeq;
+      try {
+        const data = await fetch('/picklist/search?q=' + encodeURIComponent(q)).then(r => r.json());
+        if (seq !== evSearchSeq) return;
+        let html = '', shownArchiveHeader = false;
+        data.results.forEach(ev => {
+          if (ev.archived && !shownArchiveHeader) {
+            html += '<div class="mp-evdivider">🗄 Archive</div>'; shownArchiveHeader = true;
+          }
+          const cur = EVENT_ID === ev.id ? ' mp-cur' : '';
+          html += `<a href="/picklist?event_id=${ev.id}" class="mp-evlink${ev.archived ? ' mp-archived' : ''}${cur}">
+            ${ev.archived ? '🗄' : '🎭'} ${esc(ev.title)}
+            <span style="font-size:0.8rem;font-weight:400;opacity:0.7;"> — ${esc(ev.date_short)}</span></a>`;
+        });
+        if (!html) html = '<div class="mp-evdivider">No pick lists match.</div>';
+        browse.style.display = 'none';
+        results.innerHTML = html;
+        results.style.display = '';
+      } catch (e) { /* leave current view */ }
+    }, 200);
   };
 
   /* ── Delete one ── */
