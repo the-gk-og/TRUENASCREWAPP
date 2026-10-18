@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Roster - ShowWise{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/events.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/roster.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="sw-page-head">
+  <div><h1>Roster</h1><div class="page-subtitle">Who is working when. Click a box to add a shift, click a shift to edit it, drag to move it.</div></div>
+  <div class="sw-actions-bar">
+    <button class="btn btn-primary" id="rsNew"><i class="fas fa-plus"></i>New shift</button>
+  </div>
+</div>
+
+<div class="rs-toolbar">
+  <div class="rs-nav">
+    <button class="btn btn-ghost btn-sm" id="rsPrev" aria-label="Previous"><i class="fas fa-chevron-left"></i></button>
+    <button class="btn btn-ghost btn-sm" id="rsToday">Today</button>
+    <button class="btn btn-ghost btn-sm" id="rsNext" aria-label="Next"><i class="fas fa-chevron-right"></i></button>
+    <input type="date" id="rsJump" class="rs-input" aria-label="Jump to date">
+    <select id="rsSpan" class="rs-input" aria-label="Days shown">
+      <option value="7">1 week</option>
+      <option value="14">2 weeks</option>
+    </select>
+  </div>
+  <div class="rs-range" id="rsRange"></div>
+  <input type="search" id="rsSearch" class="rs-input rs-search" placeholder="Search people…" aria-label="Search people">
+</div>
+
+<div class="rs-legend">
+  <span><i class="rs-key st-accepted"></i>Confirmed</span>
+  <span><i class="rs-key st-pending"></i>Awaiting response</span>
+  <span><i class="rs-key st-rejected"></i>Declined</span>
+  <span><i class="rs-key rs-key-unavail"></i>Unavailable</span>
+</div>
+
+<div class="rs-wrap"><div id="rsGrid" class="rs-grid" role="grid"><div class="sw-empty">Loading…</div></div></div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/sw-ui.js') }}"></script>
+<script src="{{ url_for('static', filename='js/roster.js') }}"></script>
+{% endblock %}
