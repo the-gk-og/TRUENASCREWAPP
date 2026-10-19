@@ -30,6 +30,7 @@ def register_blueprints(app):
     from routes.hired_equipment  import hired_equipment_bp
     from routes.email_otp import email_otp_bp
     from routes.roster           import roster_bp
+    from routes.event_io         import event_io_bp
 
 
     app.register_blueprint(auth_bp)
@@ -51,3 +52,4 @@ def register_blueprints(app):
     app.register_blueprint(hired_equipment_bp)
     app.register_blueprint(email_otp_bp)
     app.register_blueprint(roster_bp)
+    app.register_blueprint(event_io_bp)

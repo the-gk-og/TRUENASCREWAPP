@@ -326,7 +326,9 @@ def event_detail(id):
                       .order_by(User.username).all())
         assignable.sort(key=lambda u: u.shown_name.lower())
 
+    from routes.event_io import attachments_for_event     # imported here: event_io imports this module
     all_assignments = [x['a'] for p in team for x in p['shifts']]
+    attachments = attachments_for_event(id)
     page_data = {
         'me': current_user.id,
         'event': {**serialize_event(event), 'series_count': len(series_members(event, 'all'))},
@@ -340,6 +342,8 @@ def event_detail(id):
                         'duration': r.duration or '', 'cue_type': r.cue_type or '', 'notes': r.notes or ''}
                  for r in run_items},
         'notes': {n.id: {'id': n.id, 'content': n.content} for n in notes},
+        'attachments': attachments,
+        'can_manage': manager,
     }
 
     return render_template(
@@ -347,6 +351,7 @@ def event_detail(id):
         event=event, now=datetime.now(), team=team,
         my_shifts=mine['shifts'] if mine else [], on_team=mine is not None,
         schedules=schedules, notes=notes, run_items=run_items, page_data=page_data,
+        attachments=attachments,
         hired=HiredEquipment.query.filter_by(event_id=id).all(),
         assignable=assignable, can_manage=manager, can_edit=can_edit_event(event),
         series_count=len(series_members(event, 'all')),

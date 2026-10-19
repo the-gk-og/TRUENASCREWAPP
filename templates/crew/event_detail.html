@@ -26,6 +26,7 @@
     {% if can_edit %}<button class="btn btn-primary" data-act="edit-event"><i class="fas fa-edit"></i>Edit</button>{% endif %}
     {% if can_manage %}<button class="btn btn-secondary" data-act="duplicate"><i class="fas fa-copy"></i>Duplicate</button>{% endif %}
     <a class="btn btn-secondary" href="{{ url_for('events.export_event_pdf', event_id=event.id) }}"><i class="fas fa-file-pdf"></i>PDF</a>
+    <button class="btn btn-secondary btn-icon" data-act="io" title="Import / export" aria-label="Import / export" aria-haspopup="dialog"><i class="fas fa-ellipsis-h"></i></button>
     {% if can_manage %}<button class="btn btn-danger" data-act="delete-event"><i class="fas fa-trash"></i>Delete</button>{% endif %}
   </div>
 </div>
@@ -128,6 +129,7 @@
       {% endfor %}
     </div>
     {% else %}<div class="sw-empty">No schedule items.</div>{% endif %}
+    <div class="sw-gallery" data-gallery="schedule" hidden></div>
   </div>
 
   <!-- RUN LIST -->
@@ -155,6 +157,7 @@
     {% endfor %}
     </div>
     {% if not run_items %}<div class="sw-empty">No run list items.</div>{% endif %}
+    <div class="sw-gallery" data-gallery="run" hidden></div>
   </div>
 
   <!-- NOTES -->
@@ -198,11 +201,16 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/sw-ui.js') }}"></script>
+<script src="{{ url_for('static', filename='js/event-io.js') }}"></script>
 <script>
 const D = JSON.parse(document.getElementById('page-data').textContent);
 const EV = D.event;
 const RANGE = { id: EV.id, start: EV.event_date, end: EV.event_end_date };
 const done = (msg) => { SW.toast(msg); SW.reloadSoon(); };
+EventIO.init({
+  eventId: EV.id, canManage: !!D.can_manage, attachments: D.attachments,
+  counts: { schedule: Object.keys(D.schedules).length, run: Object.keys(D.runs).length },
+});
 
 async function removeWith(path, what) {
   if (!(await SW.confirm(`Delete ${what}?`, { danger: true, okText: 'Delete' }))) return;
@@ -238,6 +246,7 @@ const actions = {
     if (await SW.run(() => SW.api('DELETE', `/events/${EV.id}/team/${D.me}`))) done('You left the event');
   },
   respond(b) { SW.respondShift(b.dataset.id, b.dataset.status); },
+  io() { EventIO.openMenu(); },
 
   async 'add-person'() { if (await SW.shiftForm({ event: RANGE, users: D.users })) done('Shift added'); },
   async 'add-shift'(b) { if (await SW.shiftForm({ event: RANGE, users: D.users, user_id: b.dataset.user })) done('Shift added'); },
