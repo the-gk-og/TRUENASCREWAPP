@@ -11,6 +11,7 @@
  *   SW.shiftForm({...})            add / edit a person's shift
  *   SW.bulkShiftForm({...})        pick many people and give them all the same shift
  *   SW.scheduleForm / SW.runForm   schedule + run-list items
+ *   SW.taskForm({...})             add / edit an event task, shift task or assigned task
  *
  * Everything user-supplied is escaped with SW.esc before touching innerHTML.
  * Markdown HTML comes from the server, already sanitised.
@@ -721,6 +722,58 @@
       submitText: edit ? 'Save note' : 'Post note',
       onSubmit: (v) => edit ? SW.api('PUT', `/events/notes/${note.id}/edit`, v)
         : SW.api('POST', `/events/${eventId}/notes/add`, v),
+    });
+  };
+
+  /**
+   * Add or edit a task.
+   * Event / shift task:  { eventId, users:[{id,name}], shifts:[{id,label,user_id}], task?, shift_id?, user_id? }
+   *   users = people on the event; blank person = "anyone on the event".
+   * Assigned task (no event):  { users:[{id,name}], task? }  - a person is required.
+   * Resolves with the API response or null.
+   */
+  SW.taskForm = function ({ eventId, users, shifts, task, shift_id, user_id }) {
+    const edit = !!task;
+    const forEvent = !!eventId || (edit && !!task.event_id);
+    const people = (users || []).map((u) => ({ value: u.id, label: u.name }));
+    const fields = [
+      { name: 'title', label: 'Task', required: true, maxLength: 200, placeholder: 'e.g. Tape out the stage' },
+      { name: 'description', label: 'Details', type: 'textarea', rows: 3 },
+      {
+        name: 'assigned_user_id', label: forEvent ? 'Assigned to' : 'Person', type: 'select', required: !forEvent,
+        options: [{ value: '', label: forEvent ? 'Anyone on the event' : 'Choose a person…' }].concat(people),
+        hint: forEvent ? 'Only people on the event can be given a task.' : '',
+      },
+    ];
+    if (forEvent) {
+      fields.push({
+        name: 'shift_id', label: 'Attach to a shift', type: 'select',
+        options: [{ value: '', label: 'The whole event' }].concat((shifts || []).map((x) => ({ value: x.id, label: x.label }))),
+      });
+    }
+    fields.push(
+      { name: 'priority', label: 'Priority', type: 'select', half: true,
+        options: [{ value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' }, { value: 'high', label: 'High' }] },
+      { name: 'due_date', label: 'Due', type: 'date', half: true },
+    );
+    const values = edit
+      ? { title: task.title, description: task.description, assigned_user_id: task.assignee_id || '',
+          shift_id: task.shift_id || '', priority: task.priority, due_date: task.due }
+      : { priority: 'medium', shift_id: shift_id || '', assigned_user_id: user_id || '' };
+
+    return SW.form({
+      title: edit ? 'Edit task' : (forEvent ? 'Add task' : 'Assign a task'), values, fields,
+      submitText: edit ? 'Save task' : (forEvent ? 'Add task' : 'Assign task'),
+      onSubmit: (v) => {
+        const body = {
+          title: v.title, description: v.description, priority: v.priority, due_date: v.due_date || null,
+          assigned_user_id: v.assigned_user_id ? Number(v.assigned_user_id) : null,
+        };
+        if (forEvent) body.shift_id = v.shift_id ? Number(v.shift_id) : null;
+        if (edit) return SW.api('PUT', `/event-tasks/${task.id}`, body);
+        return forEvent ? SW.api('POST', `/events/${eventId}/tasks/add`, body)
+          : SW.api('POST', '/tasks/assign', body);
+      },
     });
   };
 

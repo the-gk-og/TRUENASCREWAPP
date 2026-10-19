@@ -1,0 +1,31 @@
+{# Shared task rows for the event page and the Tasks page.
+   `tasks` are dicts from routes/event_tasks.serialize_task. #}
+{% macro task_list(tasks, manage=False, show_event=False, today='') -%}
+<ul class="sw-tasklist">
+  {% for t in tasks %}
+  <li class="sw-task p-{{ t.priority }}{{ ' done' if t.done }}" data-task="{{ t.id }}" data-shift="{{ t.shift_id or '' }}">
+    <button type="button" class="sw-tick" data-task-toggle="{{ t.id }}" aria-pressed="{{ 'true' if t.done else 'false' }}"
+            aria-label="Tick off: {{ t.title }}"><i class="fas fa-check"></i></button>
+    <div class="sw-task-main">
+      <div class="sw-task-title">{{ t.title }}</div>
+      {% if t.description %}<div class="sw-task-desc">{{ t.description }}</div>{% endif %}
+      <div class="sw-task-meta">
+        {% if show_event and t.event_title %}<a class="sw-chip plain" href="/events/{{ t.event_id }}"><i class="fas fa-calendar"></i>{{ t.event_title }}</a>{% endif %}
+        {% if t.assignee %}<span class="sw-chip{{ ' me' if t.mine else ' plain' }}"><i class="fas fa-user"></i>{{ 'You' if t.mine else t.assignee }}</span>
+        {% elif t.event_id %}<span class="sw-chip plain"><i class="fas fa-users"></i>Anyone</span>{% endif %}
+        {% if t.shift %}<span class="sw-chip plain"><i class="fas fa-clock"></i>{{ t.shift }}</span>{% endif %}
+        {% if t.due %}<span class="sw-chip {{ 'bad' if (today and t.due < today and not t.done) else 'plain' }}" data-due="{{ t.due }}"><i class="fas fa-flag"></i>Due {{ t.due }}</span>{% endif %}
+        {% if t.priority == 'high' %}<span class="sw-chip warn">High priority</span>{% endif %}
+        <span class="sw-task-by" data-task-by>{% if t.done and t.completed_by %}Done by {{ t.completed_by }}{% endif %}</span>
+      </div>
+    </div>
+    {% if manage %}
+    <div class="sw-shift-btns">
+      <button class="btn btn-sm btn-ghost btn-icon" data-act="edit-task" data-id="{{ t.id }}" title="Edit task"><i class="fas fa-pen"></i></button>
+      <button class="btn btn-sm btn-ghost btn-icon" data-act="del-task" data-id="{{ t.id }}" title="Delete task"><i class="fas fa-trash"></i></button>
+    </div>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{%- endmacro %}

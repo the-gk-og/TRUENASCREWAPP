@@ -8,6 +8,7 @@ from flask_login import login_required, current_user
 from extensions import db
 from models import Event, TodoItem
 from decorators import crew_required
+from routes.event_tasks import tasks_page_data
 
 todos_bp = Blueprint('todos', __name__)
 
@@ -23,7 +24,8 @@ def todos():
         .all()
     )
     events = Event.query.order_by(Event.event_date.desc()).all()
-    return render_template('crew/todos.html', todos=user_todos, events=events)
+    return render_template('crew/todos.html', todos=user_todos, events=events,
+                           et=tasks_page_data(current_user))
 
 
 @todos_bp.route('/todos/add', methods=['POST'])

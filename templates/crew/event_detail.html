@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "crew/_event_tasks.html" import task_list %}
 {% block title %}{{ event.title }} - ShowWise{% endblock %}
 {% block head_extra %}<link rel="stylesheet" href="{{ url_for('static', filename='css/events.css') }}">{% endblock %}
 
@@ -96,9 +97,11 @@
           <div class="sw-shift-meta">{% if x.s.role %}<span class="sw-chip plain">{{ x.s.role }}</span>{% endif %}{{ status_chip(x.a.status) }}</div>
           {% if x.a.notes %}<div class="md-content" style="margin-top:.3rem;font-size:.88rem">{{ x.a.notes|md }}</div>{% endif %}
           {% if x.a.status == 'rejected' and x.a.decline_reason %}<div class="sw-muted" style="font-size:.85rem;margin-top:.25rem">Reason: {{ x.a.decline_reason }}</div>{% endif %}
+          {% if task_shifts.get(x.s.id) %}<div class="sw-shift-tasks"><a class="sw-chip plain" href="#tasks"><i class="fas fa-list-check"></i><span data-shift-tasks="{{ x.s.id }}">{{ task_shifts[x.s.id][0] }}/{{ task_shifts[x.s.id][1] }} tasks</span></a></div>{% endif %}
         </div>
         {% if can_manage %}
         <div class="sw-shift-btns">
+          {% if can_tasks %}<button class="btn btn-sm btn-ghost btn-icon" data-act="add-shift-task" data-shift="{{ x.s.id }}" data-user="{{ p.user.id }}" title="Add a task to this shift"><i class="fas fa-list-check"></i></button>{% endif %}
           <button class="btn btn-sm btn-ghost btn-icon" data-act="edit-shift" data-id="{{ x.a.id }}" title="Edit shift"><i class="fas fa-pen"></i></button>
           <button class="btn btn-sm btn-ghost btn-icon" data-act="del-shift" data-id="{{ x.a.id }}" title="Delete shift"><i class="fas fa-trash"></i></button>
         </div>
@@ -109,6 +112,18 @@
     {% else %}
     <div class="sw-empty">Nobody is on this event yet.{% if can_manage %} Use “Add person” to give someone a shift.{% endif %}</div>
     {% endfor %}
+  </div>
+
+  <!-- TASKS -->
+  <div class="card" id="tasks" data-task-group>
+    <div class="sw-card-head">
+      <h3><i class="fas fa-list-check"></i> Tasks (<span data-task-count>{{ tasks|selectattr('done')|list|length }}/{{ tasks|length }}</span>)</h3>
+      {% if can_tasks %}<button class="btn btn-sm btn-primary" data-act="add-task"><i class="fas fa-plus"></i>Add task</button>{% endif %}
+    </div>
+    {% if tasks %}
+    <div class="sw-progress" aria-hidden="true"><span data-task-bar></span></div>
+    {{ task_list(tasks, manage=can_tasks, today=today) }}
+    {% else %}<div class="sw-empty">No tasks yet.{% if can_tasks %} Use “Add task” to make one, or the <i class="fas fa-list-check"></i> button on a shift to add one to that shift.{% endif %}</div>{% endif %}
   </div>
 
   <!-- SCHEDULE -->
@@ -202,6 +217,7 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/sw-ui.js') }}"></script>
 <script src="{{ url_for('static', filename='js/event-io.js') }}"></script>
+<script src="{{ url_for('static', filename='js/event-tasks.js') }}"></script>
 <script>
 const D = JSON.parse(document.getElementById('page-data').textContent);
 const EV = D.event;
@@ -275,6 +291,15 @@ const actions = {
   async 'add-run'() { if (await SW.runForm({ eventId: EV.id })) done('Added'); },
   async 'edit-run'(b) { if (await SW.runForm({ eventId: EV.id, item: D.runs[b.dataset.id] })) done('Saved'); },
   'del-run'(b) { return removeWith(`/events/crew-run/${b.dataset.id}/delete`, 'this run item'); },
+
+  async 'add-task'() { if (await SW.taskForm({ eventId: EV.id, users: D.task_users, shifts: D.task_shifts })) done('Task added'); },
+  async 'add-shift-task'(b) {
+    const r = await SW.taskForm({ eventId: EV.id, users: D.task_users, shifts: D.task_shifts,
+                                  shift_id: b.dataset.shift, user_id: b.dataset.user });
+    if (r) done('Task added to the shift');
+  },
+  async 'edit-task'(b) { if (await SW.taskForm({ eventId: EV.id, users: D.task_users, shifts: D.task_shifts, task: D.tasks[b.dataset.id] })) done('Task saved'); },
+  'del-task'(b) { return removeWith(`/event-tasks/${b.dataset.id}`, 'this task'); },
 
   async 'add-note'() { if (await SW.noteForm({ eventId: EV.id })) done('Note added'); },
   async 'edit-note'(b) { if (await SW.noteForm({ eventId: EV.id, note: D.notes[b.dataset.id] })) done('Note saved'); },

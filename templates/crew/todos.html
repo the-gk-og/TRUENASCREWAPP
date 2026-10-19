@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 
+{% from "crew/_event_tasks.html" import task_list %}
 {% block title %}My To-Do List - ShowWise{% endblock %}
+{% block head_extra %}<link rel="stylesheet" href="{{ url_for('static', filename='css/events.css') }}">{% endblock %}
 
 {% block content %}
 <style>
@@ -11,6 +13,24 @@
     .td { max-width: 760px; margin: 0 auto; padding-bottom: 6rem; }
     .td * { box-sizing: border-box; }
     .td button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
+
+    /* ---------- Event & assigned tasks ---------- */
+    .et { margin: 1rem 0 1.25rem; display: grid; gap: .6rem; }
+    .et-head { display: flex; justify-content: space-between; align-items: center; gap: .75rem; flex-wrap: wrap; }
+    .et-head h2 { margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--text-primary); }
+    .et-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-sm); }
+    .et-box > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: .6rem; min-height: 48px; padding: .6rem .9rem; font-weight: 600; color: var(--text-primary); }
+    .et-box > summary::-webkit-details-marker { display: none; }
+    .et-box > summary::before { content: '\25B8'; color: var(--text-muted); transition: transform .15s; }
+    .et-box[open] > summary::before { transform: rotate(90deg); }
+    .et-box > summary .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .et-box > summary small { font-weight: 500; color: var(--text-secondary); }
+    .et-count { font-size: .85rem; font-weight: 600; color: var(--text-secondary); }
+    .et-n { min-width: 22px; padding: 0 .4rem; border-radius: 999px; background: var(--primary); color: #fff; font-size: .78rem; text-align: center; line-height: 22px; }
+    .et-body { padding: 0 .75rem .75rem; }
+    .et-body .sw-progress { margin: 0 0 .7rem; }
+    .et-link { display: inline-block; margin-top: .6rem; font-size: .85rem; color: var(--primary); text-decoration: none; }
+    .et-empty { margin: 0; padding: .9rem 1rem; border: 1px dashed var(--border); border-radius: 12px; color: var(--text-muted); font-size: .9rem; text-align: center; }
 
     /* ---------- Header + progress ---------- */
     .td-head h1 { margin: 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: .6rem; }
@@ -238,6 +258,47 @@
         <p>Your personal production tasks</p>
     </header>
 
+    <!-- Event & assigned tasks -->
+    <section class="et" id="eventTasks" aria-label="Event and assigned tasks">
+        <div class="et-head">
+            <h2><i class="fas fa-calendar-check" style="color: var(--primary);"></i> Event tasks</h2>
+            {% if current_user.is_admin %}<button type="button" class="btn btn-sm btn-primary" data-et="assign"><i class="fas fa-user-plus"></i>Assign a task</button>{% endif %}
+        </div>
+
+        {% if et.mine %}
+        <details class="et-box" open data-task-group>
+            <summary><span class="grow">Assigned to you</span><span class="et-n" data-task-open>{{ et.open_mine }}</span></summary>
+            <div class="et-body">{{ task_list(et.mine, show_event=True, today=et.today) }}</div>
+        </details>
+        {% endif %}
+
+        {% for g in et.groups %}
+        <details class="et-box" data-task-group{% if g.upcoming and g.done < g.total and loop.index <= 2 %} open{% endif %}>
+            <summary>
+                <span class="grow">{{ g.title }} <small>· {{ g.date.strftime('%a %d %b') }}</small></span>
+                <span class="et-count" data-task-count>{{ g.done }}/{{ g.total }}</span>
+            </summary>
+            <div class="et-body">
+                <div class="sw-progress" aria-hidden="true"><span data-task-bar></span></div>
+                {{ task_list(g.tasks, today=et.today) }}
+                <a class="et-link" href="{{ url_for('events.event_detail', id=g.id) }}">Open event →</a>
+            </div>
+        </details>
+        {% endfor %}
+
+        {% if current_user.is_admin and et.assigned %}
+        <details class="et-box" data-task-group>
+            <summary><span class="grow">Assigned outside events</span><span class="et-count" data-task-count>0/0</span></summary>
+            <div class="et-body">{{ task_list(et.assigned, manage=True, today=et.today) }}</div>
+        </details>
+        {% endif %}
+
+        {% if not (et.mine or et.groups or et.assigned) %}
+        <p class="et-empty">No event tasks yet. Tasks added to events you are on will show up here.</p>
+        {% endif %}
+    </section>
+    <script type="application/json" id="et-data">{{ et.admin_json|tojson }}</script>
+
     <!-- Progress -->
     <section class="td-progress" aria-label="Progress">
         <div class="td-progress-row">
@@ -356,6 +417,27 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/sw-ui.js') }}"></script>
+<script src="{{ url_for('static', filename='js/event-tasks.js') }}"></script>
+<script>
+(function () {
+    const box = document.getElementById('et-data');
+    const D = box ? JSON.parse(box.textContent) : { users: [], tasks: {} };
+    document.addEventListener('click', async (e) => {
+        const b = e.target.closest('[data-et], [data-act]');
+        if (!b || !b.closest('#eventTasks')) return;
+        const act = b.dataset.et || b.dataset.act;
+        if (act === 'assign') {
+            if (await SW.taskForm({ users: D.users })) { SW.toast('Task assigned'); SW.reloadSoon(); }
+        } else if (act === 'edit-task') {
+            if (await SW.taskForm({ users: D.users, task: D.tasks[b.dataset.id] })) { SW.toast('Task saved'); SW.reloadSoon(); }
+        } else if (act === 'del-task') {
+            if (!(await SW.confirm('Delete this task?', { danger: true, okText: 'Delete' }))) return;
+            if (await SW.run(() => SW.api('DELETE', `/event-tasks/${b.dataset.id}`))) { SW.toast('Deleted'); SW.reloadSoon(); }
+        }
+    });
+})();
+</script>
 <script>
 (function () {
     const $  = (s, r = document) => r.querySelector(s);
