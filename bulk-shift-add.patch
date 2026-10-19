@@ -1,0 +1,345 @@
+diff --git a/routes/events.py b/routes/events.py
+index 698d310..f2ff374 100644
+--- a/routes/events.py
++++ b/routes/events.py
+@@ -330,7 +330,8 @@ def event_detail(id):
+     page_data = {
+         'me': current_user.id,
+         'event': {**serialize_event(event), 'series_count': len(series_members(event, 'all'))},
+-        'users': [{'id': u.id, 'name': u.shown_name} for u in assignable],
++        'users': [{'id': u.id, 'name': u.shown_name, 'role': u.user_role,
++                   'on_event': u.id in people} for u in assignable],
+         'assignments': {a.id: serialize_assignment(a) for a in all_assignments},
+         'schedules': {s.id: {'id': s.id, 'title': s.title, 'time': s.scheduled_time.isoformat(timespec='minutes'),
+                              'description': s.description or ''}
+@@ -647,12 +648,13 @@ def add_team_shift(event_id):
+ @crew_required
+ @manager_required
+ def add_all_crew(event_id):
+-    """Add every crew member who isn't on the event yet, using the event's times."""
++    """Add every crew member (not staff) who isn't on the event yet, using the event's times."""
+     event = Event.query.get_or_404(event_id)
+     on_team = {c.crew_member for c in event.crew_assignments}
+     added = 0
+     emails = []
+-    users = (User.query.filter(User.user_role.in_(['crew', 'staff']))
++    # Crew only - staff are never added in bulk (use "Bulk add shifts" to pick them).
++    users = (User.query.filter(User.user_role == 'crew')
+              .filter(or_(User.is_cast.is_(False), User.is_cast.is_(None))).all())
+     for user in users:
+         if user.username in on_team:
+@@ -675,6 +677,77 @@ def add_all_crew(event_id):
+     return jsonify({'success': True, 'added': added})
+ 
+ 
++@events_bp.route('/events/<int:event_id>/team/bulk-add', methods=['POST'])
++@login_required
++@crew_required
++@manager_required
++def bulk_add_team_shifts(event_id):
++    """Give the same shift to many people at once (picked in the bulk-add window).
++
++    People with a clash are skipped and reported back unless ``force`` is set,
++    so the page can ask "add them anyway?" and call again for just those people.
++    """
++    event = Event.query.get_or_404(event_id)
++    data = body()
++    raw_ids = data.get('user_ids')
++    if not isinstance(raw_ids, list) or not raw_ids:
++        raise ApiError('Choose at least one person')
++    try:
++        ids = list(dict.fromkeys(int(i) for i in raw_ids))
++    except (TypeError, ValueError):
++        raise ApiError('Invalid people selected')
++    if len(ids) > 300:
++        raise ApiError('Too many people selected at once')
++
++    start, end = _shift_window(data, event)
++    role = clean_text(data.get('role'), 'Role', 100)
++    notes = str(data.get('notes') or '').strip()
++    status = data.get('status') or 'pending'
++    if status not in ('pending', 'accepted', 'confirmed'):
++        raise ApiError('Invalid status')
++    force = bool(data.get('force'))
++
++    users = {u.id: u for u in User.query.filter(User.id.in_(ids)).all()}
++    added, skipped, emails = 0, [], []
++    try:
++        for uid in ids:
++            user = users.get(uid)
++            if not user or user.user_role not in ('crew', 'staff') or (user.is_cast and not user.is_admin):
++                skipped.append({'user_id': uid, 'name': user.shown_name if user else '?',
++                                'reason': 'Cannot be added to events', 'clash': False})
++                continue
++            conflicts = find_conflicts(user.id, start, end)
++            if conflicts and not force:
++                skipped.append({'user_id': user.id, 'name': user.shown_name, 'clash': True,
++                                'reason': 'Has a clash',
++                                'conflicts': [c.get('title') if isinstance(c, dict) else str(c)
++                                              for c in conflicts]})
++                continue
++            ca = CrewAssignment.query.filter_by(event_id=event.id, crew_member=user.username).first()
++            if not ca:
++                db.session.add(CrewAssignment(event_id=event.id, crew_member=user.username,
++                                              role=role or 'Crew Member', assigned_via='webapp'))
++            elif role:
++                ca.role = role
++            shift = Shift(event_id=event.id, title=role or 'Crew', role=role,
++                          shift_date=start, shift_end_date=end, location=event.location,
++                          positions_needed=1, is_open=False, created_by=current_user.username)
++            db.session.add(shift)
++            db.session.flush()
++            db.session.add(ShiftAssignment(shift_id=shift.id, user_id=user.id, status=status,
++                                           assigned_by=current_user.username, notes=notes))
++            added += 1
++            if user.email and user.id != current_user.id:
++                emails.append(_shift_email_job(user, event, shift, notes))
++        db.session.commit()
++    except Exception as exc:
++        db.session.rollback()
++        raise ApiError(f'Could not add shifts: {exc}', 500)
++
++    send_shift_assignment_emails_async(emails)
++    return jsonify({'success': True, 'added': added, 'skipped': skipped})
++
++
+ @events_bp.route('/events/shift-assignments/<int:aid>', methods=['PUT'])
+ @login_required
+ @crew_required
+diff --git a/static/css/events.css b/static/css/events.css
+index 2e41b88..0427c0f 100644
+--- a/static/css/events.css
++++ b/static/css/events.css
+@@ -228,3 +228,13 @@
+ .sw-detail-grid dt { color:var(--text-secondary); } .sw-detail-grid dd { margin:0; color:var(--text-primary); word-break:break-word; }
+ .sw-una-item { display:flex; justify-content:space-between; gap:.75rem; align-items:center; padding:.6rem .8rem; border:1px solid var(--border);
+                border-left:4px solid var(--warning); border-radius:8px; margin-bottom:.5rem; }
++
++/* bulk shift picker */
++.sw-bulk-tools { display:flex; gap:.4rem; flex-wrap:wrap; align-items:center; margin-bottom:.5rem; }
++.sw-bulk-tools input[type=search] { flex:1 1 160px; min-width:0; }
++.sw-bulk-list { max-height:min(40vh,320px); overflow-y:auto; border:1px solid var(--border); border-radius:8px; padding:.25rem; }
++.sw-bulk-row { display:flex; align-items:center; gap:.6rem; padding:.5rem .6rem; border-radius:6px; cursor:pointer; font-weight:500; margin:0; }
++.sw-bulk-row[hidden] { display:none; }
++.sw-bulk-row:hover { background:var(--bg-nav-hover); }
++.sw-bulk-row input { width:auto; margin:0; flex:none; }
++.sw-bulk-name { flex:1; min-width:0; word-break:break-word; color:var(--text-primary); }
+diff --git a/static/js/sw-ui.js b/static/js/sw-ui.js
+index c997de4..fc1d4de 100644
+--- a/static/js/sw-ui.js
++++ b/static/js/sw-ui.js
+@@ -9,6 +9,7 @@
+  *   SW.mdEditor(textarea)          Markdown toolbar + live preview
+  *   SW.eventForm({...})            create / edit an event
+  *   SW.shiftForm({...})            add / edit a person's shift
++ *   SW.bulkShiftForm({...})        pick many people and give them all the same shift
+  *   SW.scheduleForm / SW.runForm   schedule + run-list items
+  *
+  * Everything user-supplied is escaped with SW.esc before touching innerHTML.
+@@ -548,6 +549,134 @@
+     });
+   };
+ 
++  /** Window with everyone listed: tick people, set one shift, add it to all of them. */
++  SW.bulkShiftForm = function ({ event, users }) {
++    return new Promise((resolve) => {
++      let result = null;
++      const d = openDialog({ title: 'Bulk add shifts', wide: true, onClose: () => resolve(result) });
++      const uid = 'b' + Math.random().toString(36).slice(2, 7);
++      const form = el('form', 'sw-form');
++
++      const picker = el('div', 'sw-field');
++      picker.innerHTML =
++        `<label for="${uid}-q">People <span class="req">*</span></label>
++         <div class="sw-bulk-tools">
++           <input type="search" id="${uid}-q" placeholder="Search people…" autocomplete="off">
++           <button type="button" class="btn btn-sm btn-ghost" data-bulk="all">Select all</button>
++           <button type="button" class="btn btn-sm btn-ghost" data-bulk="crew">Crew only</button>
++           <button type="button" class="btn btn-sm btn-ghost" data-bulk="none">Clear</button>
++         </div>
++         <div class="sw-bulk-list" role="group" aria-label="People"></div>
++         <div class="sw-hint sw-bulk-count"></div>`;
++      const list = picker.querySelector('.sw-bulk-list');
++      const count = picker.querySelector('.sw-bulk-count');
++      const search = picker.querySelector('input[type=search]');
++
++      users.forEach((u) => {
++        const row = el('label', 'sw-bulk-row');
++        row.dataset.name = String(u.name).toLowerCase();
++        row.dataset.role = u.role || '';
++        const cb = el('input'); cb.type = 'checkbox'; cb.value = u.id;
++        const nm = el('span', 'sw-bulk-name'); nm.textContent = u.name;
++        row.append(cb, nm);
++        if (u.role === 'staff') row.appendChild(el('span', 'sw-chip plain', 'Staff'));
++        if (u.on_event) row.appendChild(el('span', 'sw-chip ok', 'On event'));
++        list.appendChild(row);
++      });
++      if (!users.length) list.appendChild(el('div', 'sw-empty', 'There is nobody to add.'));
++
++      const boxes = () => [...list.querySelectorAll('input[type=checkbox]')];
++      const visibleRows = () => [...list.querySelectorAll('.sw-bulk-row')].filter((r) => !r.hidden);
++      const chosen = () => boxes().filter((b) => b.checked).map((b) => Number(b.value));
++      const refreshCount = () => {
++        const n = chosen().length;
++        count.textContent = `${n} selected`;
++        submit.disabled = n === 0;
++        submit.textContent = n ? `Add shift for ${n} ${n === 1 ? 'person' : 'people'}` : 'Add shifts';
++      };
++      search.addEventListener('input', () => {
++        const q = search.value.trim().toLowerCase();
++        list.querySelectorAll('.sw-bulk-row').forEach((r) => { r.hidden = !!q && !r.dataset.name.includes(q); });
++      });
++      picker.addEventListener('click', (e) => {
++        const b = e.target.closest('[data-bulk]');
++        if (!b) return;
++        if (b.dataset.bulk === 'none') boxes().forEach((c) => { c.checked = false; });
++        else visibleRows().forEach((r) => {
++          if (b.dataset.bulk === 'all' || r.dataset.role === 'crew') r.querySelector('input').checked = true;
++        });
++        refreshCount();
++      });
++      list.addEventListener('change', refreshCount);
++
++      const fields = el('div');
++      fields.innerHTML =
++        `<div class="sw-field"><label for="${uid}-role">Role</label>
++           <input id="${uid}-role" name="role" list="${uid}-dl" maxlength="100" placeholder="e.g. Sound">
++           <datalist id="${uid}-dl">${ROLE_SUGGESTIONS.map((r) => `<option value="${SW.esc(r)}">`).join('')}</datalist></div>
++         <div class="sw-row">
++           <div class="sw-field half"><label for="${uid}-start">Shift starts <span class="req">*</span></label>
++             <input id="${uid}-start" name="start" type="datetime-local" required value="${SW.esc(SW.toInput(event.start))}"></div>
++           <div class="sw-field half"><label for="${uid}-end">Shift ends <span class="req">*</span></label>
++             <input id="${uid}-end" name="end" type="datetime-local" required value="${SW.esc(SW.toInput(event.end))}"></div>
++         </div>
++         <div class="sw-field"><label for="${uid}-status">Status</label>
++           <select id="${uid}-status" name="status">${STATUS.slice(0, 3).map((o) =>
++             `<option value="${o.value}">${SW.esc(o.label)}</option>`).join('')}</select></div>
++         <div class="sw-field"><label for="${uid}-notes">Notes for this shift</label>
++           <textarea id="${uid}-notes" name="notes" rows="2"></textarea></div>`;
++
++      const err = el('div', 'sw-error'); err.hidden = true; err.setAttribute('role', 'alert');
++      const foot = el('div', 'sw-actions');
++      const cancel = el('button', 'btn btn-secondary', 'Cancel'); cancel.type = 'button';
++      cancel.onclick = () => d.close();
++      const submit = el('button', 'btn btn-primary', 'Add shifts'); submit.type = 'submit';
++      foot.append(cancel, submit);
++      form.append(picker, fields, err, foot);
++      d.body.appendChild(form);
++      refreshCount();
++      setTimeout(() => search.focus(), 30);
++
++      form.addEventListener('submit', async (e) => {
++        e.preventDefault();
++        if (!form.reportValidity()) return;
++        const val = (n) => form.querySelector(`[name=${n}]`).value;
++        const ids = chosen();
++        if (!ids.length) { err.textContent = 'Choose at least one person'; err.hidden = false; return; }
++        if (val('end') <= val('start')) { err.textContent = 'The shift must end after it starts'; err.hidden = false; return; }
++        err.hidden = true; submit.disabled = true;
++        const label = submit.textContent;
++        submit.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding…';
++        const send = (who, force) => SW.api('POST', `/events/${event.id}/team/bulk-add`, {
++          user_ids: who, role: val('role'), start: val('start'), end: val('end'),
++          status: val('status'), notes: val('notes'), force,
++        });
++        try {
++          const first = await send(ids, false);
++          let added = first.added;
++          let skipped = first.skipped || [];
++          const clashes = skipped.filter((s) => s.clash);
++          if (clashes.length) {
++            const names = clashes.map((c) => '• ' + c.name).join('\n');
++            const ok = await SW.confirm(
++              `${clashes.length} ${clashes.length === 1 ? 'person has' : 'people have'} a clash and ${clashes.length === 1 ? 'was' : 'were'} not added:\n\n${names}\n\nAdd ${clashes.length === 1 ? 'them' : 'them'} anyway?`,
++              { title: 'Scheduling clash', okText: 'Add anyway', danger: true });
++            if (ok) {
++              const again = await send(clashes.map((c) => c.user_id), true);
++              added += again.added;
++              skipped = skipped.filter((s) => !s.clash).concat(again.skipped || []);
++            }
++          }
++          result = { added, skipped };
++          d.close();
++        } catch (ex) {
++          err.textContent = ex.message || 'Something went wrong'; err.hidden = false;
++          submit.disabled = false; submit.textContent = label;
++        }
++      });
++    });
++  };
++
+   SW.scheduleForm = function ({ eventId, item, defaultTime }) {
+     const edit = !!item;
+     return SW.form({
+diff --git a/templates/crew/event_detail.html b/templates/crew/event_detail.html
+index 9d8296b..c917187 100644
+--- a/templates/crew/event_detail.html
++++ b/templates/crew/event_detail.html
+@@ -71,6 +71,7 @@
+       {% if can_manage %}
+       <div class="sw-actions-bar">
+         <button class="btn btn-sm btn-primary" data-act="add-person"><i class="fas fa-user-plus"></i>Add person</button>
++        <button class="btn btn-sm btn-ghost" data-act="bulk-add"><i class="fas fa-layer-group"></i>Bulk add shifts</button>
+         <button class="btn btn-sm btn-ghost" data-act="add-all">Add all crew</button>
+       </div>
+       {% endif %}
+@@ -246,8 +247,14 @@ const actions = {
+     if (!(await SW.confirm(`Remove ${b.dataset.name} and all of their shifts from this event?`, { danger: true, okText: 'Remove' }))) return;
+     if (await SW.run(() => SW.api('DELETE', `/events/${EV.id}/team/${b.dataset.user}`))) done('Removed');
+   },
++  async 'bulk-add'() {
++    const r = await SW.bulkShiftForm({ event: RANGE, users: D.users });
++    if (!r) return;
++    if (r.added) done(`${r.added} ${r.added === 1 ? 'shift' : 'shifts'} added`);
++    else SW.toast('Nobody was added', 'error');
++  },
+   async 'add-all'() {
+-    if (!(await SW.confirm('Add every crew member who is not on this event yet, using the event times? They will be asked to accept.', { okText: 'Add everyone' }))) return;
++    if (!(await SW.confirm('Add every crew member (not staff) who is not on this event yet, using the event times? They will be asked to accept.', { okText: 'Add everyone' }))) return;
+     const r = await SW.run(() => SW.api('POST', `/events/${EV.id}/team/add-all`));
+     if (r) done(`${r.added} added`);
+   },
+diff --git a/tests/test_events.py b/tests/test_events.py
+index 44ac767..716b356 100644
+--- a/tests/test_events.py
++++ b/tests/test_events.py
+@@ -370,6 +370,39 @@ def test_add_all_crew_emails_everyone_but_you(app, admin):
+         assert sorted(m.recipients[0] for m in outbox) == ['alice@x.test', 'bob@x.test']
+ 
+ 
++def test_add_all_crew_skips_staff(app, admin):
++    db.session.add(User(username='stan', user_role='staff', email='stan@x.test'))
++    db.session.commit()
++    eid = mk(admin, title='Gala')
++    assert admin.post(f'/events/{eid}/team/add-all').get_json()['added'] == 3        # boss, alice, bob
++    assert CrewAssignment.query.filter_by(event_id=eid, crew_member='stan').first() is None
++
++
++def test_bulk_add_shifts(app, admin, alice):
++    db.session.add(User(username='stan', user_role='staff', email='stan@x.test'))
++    db.session.commit()
++    eid = mk(admin, title='Gala')
++    ids = [uid('alice'), uid('bob'), uid('stan')]
++    with _outbox(app) as outbox:
++        r = admin.post(f'/events/{eid}/team/bulk-add', json={
++            'user_ids': ids, 'role': 'Sound', 'start': '2026-11-10T17:00', 'end': '2026-11-10T21:00'})
++        assert r.status_code == 200 and r.get_json()['added'] == 3 and r.get_json()['skipped'] == []
++        assert len(outbox) == 3
++    assert Shift.query.filter_by(event_id=eid, role='Sound').count() == 3
++    assert CrewAssignment.query.filter_by(event_id=eid, crew_member='stan').first() is not None
++    # same window again: everyone clashes -> skipped, nothing added, until forced
++    r = admin.post(f'/events/{eid}/team/bulk-add', json={
++        'user_ids': ids, 'start': '2026-11-10T17:00', 'end': '2026-11-10T21:00'}).get_json()
++    assert r['added'] == 0 and len(r['skipped']) == 3 and all(s['clash'] for s in r['skipped'])
++    r = admin.post(f'/events/{eid}/team/bulk-add', json={
++        'user_ids': ids[:1], 'force': True, 'start': '2026-11-10T17:00', 'end': '2026-11-10T21:00'}).get_json()
++    assert r['added'] == 1
++    # validation + permissions
++    assert admin.post(f'/events/{eid}/team/bulk-add', json={'user_ids': []}).status_code == 400
++    assert admin.post(f'/events/{eid}/team/bulk-add', json={'user_ids': ['x']}).status_code == 400
++    assert alice.post(f'/events/{eid}/team/bulk-add', json={'user_ids': ids}).status_code == 403
++
++
+ def test_no_email_when_mail_not_configured(app, admin):
+     from extensions import mail
+     eid = mk(admin)

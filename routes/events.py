@@ -330,7 +330,8 @@ def event_detail(id):
     page_data = {
         'me': current_user.id,
         'event': {**serialize_event(event), 'series_count': len(series_members(event, 'all'))},
-        'users': [{'id': u.id, 'name': u.shown_name} for u in assignable],
+        'users': [{'id': u.id, 'name': u.shown_name, 'role': u.user_role,
+                   'on_event': u.id in people} for u in assignable],
         'assignments': {a.id: serialize_assignment(a) for a in all_assignments},
         'schedules': {s.id: {'id': s.id, 'title': s.title, 'time': s.scheduled_time.isoformat(timespec='minutes'),
                              'description': s.description or ''}
@@ -647,12 +648,13 @@ def add_team_shift(event_id):
 @crew_required
 @manager_required
 def add_all_crew(event_id):
-    """Add every crew member who isn't on the event yet, using the event's times."""
+    """Add every crew member (not staff) who isn't on the event yet, using the event's times."""
     event = Event.query.get_or_404(event_id)
     on_team = {c.crew_member for c in event.crew_assignments}
     added = 0
     emails = []
-    users = (User.query.filter(User.user_role.in_(['crew', 'staff']))
+    # Crew only - staff are never added in bulk (use "Bulk add shifts" to pick them).
+    users = (User.query.filter(User.user_role == 'crew')
              .filter(or_(User.is_cast.is_(False), User.is_cast.is_(None))).all())
     for user in users:
         if user.username in on_team:
@@ -673,6 +675,77 @@ def add_all_crew(event_id):
     db.session.commit()
     send_shift_assignment_emails_async(emails)
     return jsonify({'success': True, 'added': added})
+
+
+@events_bp.route('/events/<int:event_id>/team/bulk-add', methods=['POST'])
+@login_required
+@crew_required
+@manager_required
+def bulk_add_team_shifts(event_id):
+    """Give the same shift to many people at once (picked in the bulk-add window).
+
+    People with a clash are skipped and reported back unless ``force`` is set,
+    so the page can ask "add them anyway?" and call again for just those people.
+    """
+    event = Event.query.get_or_404(event_id)
+    data = body()
+    raw_ids = data.get('user_ids')
+    if not isinstance(raw_ids, list) or not raw_ids:
+        raise ApiError('Choose at least one person')
+    try:
+        ids = list(dict.fromkeys(int(i) for i in raw_ids))
+    except (TypeError, ValueError):
+        raise ApiError('Invalid people selected')
+    if len(ids) > 300:
+        raise ApiError('Too many people selected at once')
+
+    start, end = _shift_window(data, event)
+    role = clean_text(data.get('role'), 'Role', 100)
+    notes = str(data.get('notes') or '').strip()
+    status = data.get('status') or 'pending'
+    if status not in ('pending', 'accepted', 'confirmed'):
+        raise ApiError('Invalid status')
+    force = bool(data.get('force'))
+
+    users = {u.id: u for u in User.query.filter(User.id.in_(ids)).all()}
+    added, skipped, emails = 0, [], []
+    try:
+        for uid in ids:
+            user = users.get(uid)
+            if not user or user.user_role not in ('crew', 'staff') or (user.is_cast and not user.is_admin):
+                skipped.append({'user_id': uid, 'name': user.shown_name if user else '?',
+                                'reason': 'Cannot be added to events', 'clash': False})
+                continue
+            conflicts = find_conflicts(user.id, start, end)
+            if conflicts and not force:
+                skipped.append({'user_id': user.id, 'name': user.shown_name, 'clash': True,
+                                'reason': 'Has a clash',
+                                'conflicts': [c.get('title') if isinstance(c, dict) else str(c)
+                                              for c in conflicts]})
+                continue
+            ca = CrewAssignment.query.filter_by(event_id=event.id, crew_member=user.username).first()
+            if not ca:
+                db.session.add(CrewAssignment(event_id=event.id, crew_member=user.username,
+                                              role=role or 'Crew Member', assigned_via='webapp'))
+            elif role:
+                ca.role = role
+            shift = Shift(event_id=event.id, title=role or 'Crew', role=role,
+                          shift_date=start, shift_end_date=end, location=event.location,
+                          positions_needed=1, is_open=False, created_by=current_user.username)
+            db.session.add(shift)
+            db.session.flush()
+            db.session.add(ShiftAssignment(shift_id=shift.id, user_id=user.id, status=status,
+                                           assigned_by=current_user.username, notes=notes))
+            added += 1
+            if user.email and user.id != current_user.id:
+                emails.append(_shift_email_job(user, event, shift, notes))
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        raise ApiError(f'Could not add shifts: {exc}', 500)
+
+    send_shift_assignment_emails_async(emails)
+    return jsonify({'success': True, 'added': added, 'skipped': skipped})
 
 
 @events_bp.route('/events/shift-assignments/<int:aid>', methods=['PUT'])

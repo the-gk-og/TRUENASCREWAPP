@@ -370,6 +370,39 @@ def test_add_all_crew_emails_everyone_but_you(app, admin):
         assert sorted(m.recipients[0] for m in outbox) == ['alice@x.test', 'bob@x.test']
 
 
+def test_add_all_crew_skips_staff(app, admin):
+    db.session.add(User(username='stan', user_role='staff', email='stan@x.test'))
+    db.session.commit()
+    eid = mk(admin, title='Gala')
+    assert admin.post(f'/events/{eid}/team/add-all').get_json()['added'] == 3        # boss, alice, bob
+    assert CrewAssignment.query.filter_by(event_id=eid, crew_member='stan').first() is None
+
+
+def test_bulk_add_shifts(app, admin, alice):
+    db.session.add(User(username='stan', user_role='staff', email='stan@x.test'))
+    db.session.commit()
+    eid = mk(admin, title='Gala')
+    ids = [uid('alice'), uid('bob'), uid('stan')]
+    with _outbox(app) as outbox:
+        r = admin.post(f'/events/{eid}/team/bulk-add', json={
+            'user_ids': ids, 'role': 'Sound', 'start': '2026-11-10T17:00', 'end': '2026-11-10T21:00'})
+        assert r.status_code == 200 and r.get_json()['added'] == 3 and r.get_json()['skipped'] == []
+        assert len(outbox) == 3
+    assert Shift.query.filter_by(event_id=eid, role='Sound').count() == 3
+    assert CrewAssignment.query.filter_by(event_id=eid, crew_member='stan').first() is not None
+    # same window again: everyone clashes -> skipped, nothing added, until forced
+    r = admin.post(f'/events/{eid}/team/bulk-add', json={
+        'user_ids': ids, 'start': '2026-11-10T17:00', 'end': '2026-11-10T21:00'}).get_json()
+    assert r['added'] == 0 and len(r['skipped']) == 3 and all(s['clash'] for s in r['skipped'])
+    r = admin.post(f'/events/{eid}/team/bulk-add', json={
+        'user_ids': ids[:1], 'force': True, 'start': '2026-11-10T17:00', 'end': '2026-11-10T21:00'}).get_json()
+    assert r['added'] == 1
+    # validation + permissions
+    assert admin.post(f'/events/{eid}/team/bulk-add', json={'user_ids': []}).status_code == 400
+    assert admin.post(f'/events/{eid}/team/bulk-add', json={'user_ids': ['x']}).status_code == 400
+    assert alice.post(f'/events/{eid}/team/bulk-add', json={'user_ids': ids}).status_code == 403
+
+
 def test_no_email_when_mail_not_configured(app, admin):
     from extensions import mail
     eid = mk(admin)
