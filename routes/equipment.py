@@ -186,6 +186,9 @@ def upload_equipment_picture(id):
         return jsonify({'error': 'No file selected'}), 400
     if not _allowed_image(file.filename):
         return jsonify({'error': 'Invalid file type. Allowed: png, jpg, jpeg, gif, webp'}), 400
+    from services.upload_security import is_real_image
+    if not is_real_image(file):
+        return jsonify({'error': 'That file is not a valid image'}), 400
 
     os.makedirs(EQUIPMENT_PICS_FOLDER, exist_ok=True)
 
@@ -245,6 +248,9 @@ def upload_equipment_location_picture(id):
         return jsonify({'error': 'No file selected'}), 400
     if not _allowed_image(file.filename):
         return jsonify({'error': 'Invalid file type. Allowed: png, jpg, jpeg, gif, webp'}), 400
+    from services.upload_security import is_real_image
+    if not is_real_image(file):
+        return jsonify({'error': 'That file is not a valid image'}), 400
 
     os.makedirs(EQUIPMENT_PICS_FOLDER, exist_ok=True)
 

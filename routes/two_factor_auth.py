@@ -22,6 +22,7 @@ from utils import (
     verify_backup_code, log_security_event, get_organization,
 )
 from constants import DEFAULT_ORG
+from services.security import throttle
 
 tfa_bp = Blueprint('tfa', __name__)
 
@@ -159,6 +160,10 @@ def verify_totp_login():
     if not tfa or not tfa.enabled:
         return jsonify({'error': '2FA not enabled'}), 400
 
+    if throttle.is_blocked('2fa', str(user.id), 5, 300):
+        session.pop('pending_2fa_user_id', None)       # force a fresh password login
+        return jsonify({'error': 'Too many attempts. Please sign in again in a few minutes.'}), 429
+
     verified = False
     if is_backup:
         backup_codes = json.loads(tfa.backup_codes) if tfa.backup_codes else []
@@ -172,6 +177,7 @@ def verify_totp_login():
         verified = pyotp.TOTP(tfa.secret).verify(code, valid_window=1)
 
     if verified:
+        throttle.reset('2fa', str(user.id))
         session.pop('pending_2fa_user_id', None)
         login_user(user, remember=session.pop('pending_2fa_remember', False))
         log_security_event('2FA_LOGIN_SUCCESS', username=user.username)
@@ -180,6 +186,7 @@ def verify_totp_login():
             'redirect': url_for('cast.cast_events') if user.is_cast else url_for('crew.dashboard'),
         })
 
+    throttle.record_failure('2fa', str(user.id), 300)
     return jsonify({'error': 'Invalid code. Please try again.'}), 400
 
 

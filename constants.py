@@ -14,6 +14,8 @@ DEFAULT_ORG = {
     'website':         'https://showwise.app',
 }
 
+MIN_PASSWORD_LENGTH = 8
+
 ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
 USER_ROLES = ('crew', 'staff', 'cast')

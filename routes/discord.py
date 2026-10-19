@@ -1,22 +1,38 @@
 """routes/discord.py — Discord bot integration endpoints."""
 
+import hmac
 import os
 from datetime import datetime
 from flask import Blueprint, jsonify, request
 from werkzeug.security import generate_password_hash, check_password_hash
 from extensions import db
 from models import User, Event, CrewAssignment, Equipment, PickListItem
+from constants import MIN_PASSWORD_LENGTH
+from services.security import throttle
 from services.user_names import find_user_by_login, find_user_by_username, username_problem, username_taken, clean_display_name, name_for
 
 discord_bp = Blueprint('discord', __name__)
-DISCORD_BOT_SECRET = os.environ.get('DISCORD_BOT_SECRET', 'change-this-secret')
+DISCORD_BOT_SECRET = os.environ.get('DISCORD_BOT_SECRET', '')
 
-def _auth(data):
-    return data.get('secret') == DISCORD_BOT_SECRET
+
+def _auth(data=None):
+    """
+    Bot authentication: shared secret from the X-Bot-Secret header (or, for older bots, the JSON body).
+    Fails closed when DISCORD_BOT_SECRET is unset, and compares in constant time.
+    """
+    if not DISCORD_BOT_SECRET or DISCORD_BOT_SECRET == 'change-this-secret':
+        return False
+    supplied = request.headers.get('X-Bot-Secret') or (data or {}).get('secret') or ''
+    return hmac.compare_digest(str(supplied), DISCORD_BOT_SECRET)
+
+
+def _unauthorized():
+    return jsonify({'error': 'Unauthorized'}), 401
+
 
 @discord_bp.route('/discord/join-event', methods=['POST'])
 def discord_join_event():
-    data = request.json
+    data = request.get_json(silent=True) or {}
     if not _auth(data): return jsonify({'error': 'Unauthorized'}), 401
     event = Event.query.get(data.get('event_id'))
     if not event: return jsonify({'error': 'Event not found'}), 404
@@ -30,7 +46,7 @@ def discord_join_event():
 
 @discord_bp.route('/discord/leave-event', methods=['POST'])
 def discord_leave_event():
-    data = request.json
+    data = request.get_json(silent=True) or {}
     if not _auth(data): return jsonify({'error': 'Unauthorized'}), 401
     user = User.query.filter_by(discord_id=data.get('discord_id')).first()
     if not user: return jsonify({'error': 'User not found'}), 404
@@ -42,11 +58,16 @@ def discord_leave_event():
 
 @discord_bp.route('/discord/link-existing', methods=['POST'])
 def discord_link_existing():
-    data = request.json
+    data = request.get_json(silent=True) or {}
     if not _auth(data): return jsonify({'error': 'Unauthorized'}), 401
+    login_key = str(data.get('username') or '').lower()
+    if throttle.is_blocked('discord_link', login_key, 5, 900):
+        return jsonify({'error': 'Too many attempts. Try again later.'}), 429
     user = find_user_by_login(data.get('username'))          # username or email, any letter case
-    if not user or not check_password_hash(user.password_hash, data.get('password', '')):
+    if not user or not user.password_hash or not check_password_hash(user.password_hash, data.get('password', '')):
+        throttle.record_failure('discord_link', login_key)
         return jsonify({'error': 'Invalid username or password'}), 401
+    throttle.reset('discord_link', login_key)
     user.discord_id       = data.get('discord_id')
     user.discord_username = data.get('discord_username')
     db.session.commit()
@@ -54,6 +75,7 @@ def discord_link_existing():
 
 @discord_bp.route('/discord/check-link/<discord_id>')
 def discord_check_link(discord_id):
+    if not _auth(): return _unauthorized()
     user = User.query.filter_by(discord_id=discord_id).first()
     if user:
         return jsonify({'linked': True, 'username': user.username, 'name': user.shown_name,
@@ -62,6 +84,7 @@ def discord_check_link(discord_id):
 
 @discord_bp.route('/discord/user-events/<discord_id>')
 def discord_user_events(discord_id):
+    if not _auth(): return _unauthorized()
     user = User.query.filter_by(discord_id=discord_id).first()
     if not user: return jsonify({'error': 'User not found'}), 404
     events = []
@@ -75,6 +98,7 @@ def discord_user_events(discord_id):
 
 @discord_bp.route('/discord/list-events')
 def discord_list_events():
+    if not _auth(): return _unauthorized()
     events = Event.query.filter(Event.event_date >= datetime.now()).order_by(Event.event_date).limit(10).all()
     return jsonify({'events': [{'id': e.id, 'title': e.title,
                                 'date': e.event_date.strftime('%B %d, %Y at %I:%M %p'),
@@ -83,6 +107,7 @@ def discord_list_events():
 
 @discord_bp.route('/discord/event-crew/<int:event_id>')
 def discord_event_crew(event_id):
+    if not _auth(): return _unauthorized()
     event = Event.query.get_or_404(event_id)
     return jsonify({'event_title': event.title,
                     'crew': [{'name': name_for(a.crew_member), 'role': a.role or 'Crew Member'}
@@ -90,7 +115,7 @@ def discord_event_crew(event_id):
 
 @discord_bp.route('/discord/add-event', methods=['POST'])
 def discord_add_event():
-    data = request.json
+    data = request.get_json(silent=True) or {}
     if not _auth(data): return jsonify({'error': 'Unauthorized'}), 401
     try:
         event_date = datetime.strptime(data['date'], '%Y-%m-%d %H:%M')
@@ -104,7 +129,7 @@ def discord_add_event():
 
 @discord_bp.route('/discord/create-account', methods=['POST'])
 def discord_create_account():
-    data = request.json
+    data = request.get_json(silent=True) or {}
     if not _auth(data): return jsonify({'error': 'Unauthorized'}), 401
     username = (data.get('username') or '').strip()
     problem = username_problem(username, minimum=2, maximum=80)
@@ -112,6 +137,8 @@ def discord_create_account():
         return jsonify({'error': problem}), 400
     if username_taken(username):
         return jsonify({'error': 'Username already exists'}), 400
+    if len(data.get('password') or '') < MIN_PASSWORD_LENGTH:
+        return jsonify({'error': f'Password must be at least {MIN_PASSWORD_LENGTH} characters'}), 400
     display_name, name_problem = clean_display_name(data.get('display_name'))
     if name_problem:
         return jsonify({'error': name_problem}), 400
@@ -123,6 +150,7 @@ def discord_create_account():
 
 @discord_bp.route('/discord/search-equipment/<query>')
 def discord_search_equipment(query):
+    if not _auth(): return _unauthorized()
     items = Equipment.query.filter(
         (Equipment.name.contains(query)) | (Equipment.barcode.contains(query))
     ).limit(10).all()
@@ -130,6 +158,7 @@ def discord_search_equipment(query):
 
 @discord_bp.route('/discord/pick-list/<int:event_id>')
 def discord_pick_list(event_id):
+    if not _auth(): return _unauthorized()
     event = Event.query.get_or_404(event_id)
     items = PickListItem.query.filter_by(event_id=event_id).all()
     return jsonify({'event_title': event.title, 'items': [{
