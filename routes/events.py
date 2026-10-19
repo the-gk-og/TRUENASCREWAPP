@@ -124,6 +124,10 @@ def _d(dt: datetime) -> str:
     return f"{dt.strftime('%a')} {dt.day} {dt.strftime('%b')}"
 
 
+def now_str() -> str:
+    return datetime.now().strftime('%Y-%m-%d')
+
+
 def fmt_range(start: datetime, end: datetime | None, all_day: bool = False) -> str:
     if all_day:
         if end and end.date() != start.date():
@@ -327,8 +331,16 @@ def event_detail(id):
         assignable.sort(key=lambda u: u.shown_name.lower())
 
     from routes.event_io import attachments_for_event     # imported here: event_io imports this module
+    from routes.event_tasks import tasks_for_event, shift_label   # imported here: event_tasks imports this module
     all_assignments = [x['a'] for p in team for x in p['shifts']]
     attachments = attachments_for_event(id)
+    tasks = tasks_for_event(event)
+    task_shifts = {}                       # shift_id -> [done, total], for the chip on each shift
+    for t in tasks:
+        if t['shift_id']:
+            c = task_shifts.setdefault(t['shift_id'], [0, 0])
+            c[1] += 1
+            c[0] += 1 if t['done'] else 0
     page_data = {
         'me': current_user.id,
         'event': {**serialize_event(event), 'series_count': len(series_members(event, 'all'))},
@@ -344,6 +356,12 @@ def event_detail(id):
         'notes': {n.id: {'id': n.id, 'content': n.content} for n in notes},
         'attachments': attachments,
         'can_manage': manager,
+        'tasks': {t['id']: t for t in tasks},
+        'task_users': [{'id': p['user'].id, 'name': p['user'].shown_name} for p in team],
+        'task_shifts': [{'id': s.id, 'label': shift_label(s)}
+                        for s in sorted({x['s'] for p in team for x in p['shifts']},
+                                        key=lambda s: (s.shift_date, s.id))],
+        'can_tasks': can_edit_event(event),
     }
 
     return render_template(
@@ -351,7 +369,8 @@ def event_detail(id):
         event=event, now=datetime.now(), team=team,
         my_shifts=mine['shifts'] if mine else [], on_team=mine is not None,
         schedules=schedules, notes=notes, run_items=run_items, page_data=page_data,
-        attachments=attachments,
+        attachments=attachments, tasks=tasks, task_shifts=task_shifts, today=now_str(),
+        can_tasks=can_edit_event(event),
         hired=HiredEquipment.query.filter_by(event_id=id).all(),
         assignable=assignable, can_manage=manager, can_edit=can_edit_event(event),
         series_count=len(series_members(event, 'all')),

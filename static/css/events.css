@@ -320,3 +320,28 @@
   .sw-lb-nav { width:38px; height:38px; }
   .sw-gal-grid { grid-template-columns:repeat(auto-fill, minmax(78px, 1fr)); }
 }
+
+/* ---------- tasks (event page + Tasks page) ---------- */
+.sw-tasklist { list-style:none; margin:0; padding:0; display:grid; gap:.5rem; }
+.sw-task { display:flex; align-items:flex-start; gap:.7rem; padding:.6rem .75rem; background:var(--bg-card); border:1px solid var(--border);
+           border-left:4px solid var(--warning); border-radius:10px; }
+.sw-task.p-high { border-left-color:var(--danger); }
+.sw-task.p-low { border-left-color:var(--border); }
+.sw-task.done { border-left-color:var(--success); }
+.sw-task.done .sw-task-title { text-decoration:line-through; color:var(--text-muted); }
+.sw-task.done .sw-task-desc { opacity:.65; }
+.sw-tick { flex:0 0 auto; width:30px; height:30px; margin-top:.05rem; border-radius:8px; border:2px solid var(--border); background:var(--bg-card);
+           color:transparent; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; font-size:.85rem; }
+.sw-tick:hover { border-color:var(--primary); }
+.sw-task.done .sw-tick { background:var(--success); border-color:var(--success); color:#fff; }
+.sw-task-main { flex:1; min-width:0; }
+.sw-task-title { font-weight:600; color:var(--text-primary); word-break:break-word; }
+.sw-task-desc { margin-top:.15rem; font-size:.88rem; color:var(--text-secondary); white-space:pre-wrap; word-break:break-word; }
+.sw-task-meta { display:flex; flex-wrap:wrap; gap:.35rem; align-items:center; margin-top:.4rem; }
+.sw-task-meta .sw-chip { padding:.15rem .6rem; font-size:.78rem; text-decoration:none; }
+.sw-chip.me { background:var(--bg-nav-active); color:var(--text-nav-active); }
+.sw-task-by { font-size:.78rem; color:var(--text-muted); }
+.sw-task-by:empty { display:none; }
+.sw-progress { height:6px; border-radius:999px; background:var(--bg-nav-hover); overflow:hidden; margin:-.25rem 0 .9rem; }
+.sw-progress > span { display:block; height:100%; width:0; background:linear-gradient(90deg,var(--primary),var(--success)); transition:width .25s ease; }
+.sw-shift-tasks { display:inline-flex; align-items:center; gap:.4rem; margin-top:.35rem; }

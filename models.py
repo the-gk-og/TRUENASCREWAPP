@@ -420,6 +420,35 @@ class TodoItem(db.Model):
     event = db.relationship('Event', backref='todos')
 
 
+class EventTask(db.Model):
+    """A task that belongs to an event, to one shift of an event, or to nobody's event at all.
+
+    * ``event_id`` set            -> shown on the event page and, for people linked to the event,
+                                     on the Tasks page.  Anyone linked to the event can tick it off.
+    * ``shift_id`` also set       -> the task is attached to that shift (event_id is the shift's event).
+    * ``event_id`` empty          -> a standalone task an admin assigned to ``assigned_user_id``.
+    * ``assigned_user_id`` set    -> given to one person; empty means "anyone on the event".
+    """
+    id               = db.Column(db.Integer, primary_key=True)
+    event_id         = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=True, index=True)
+    shift_id         = db.Column(db.Integer, db.ForeignKey('shift.id'), nullable=True, index=True)
+    assigned_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True, index=True)
+    title            = db.Column(db.String(200), nullable=False)
+    description      = db.Column(db.Text)
+    priority         = db.Column(db.String(20), default='medium')
+    due_date         = db.Column(db.DateTime, nullable=True)
+    is_completed     = db.Column(db.Boolean, default=False)
+    completed_at     = db.Column(db.DateTime, nullable=True)
+    completed_by     = db.Column(db.String(80), nullable=True)
+    created_by       = db.Column(db.String(80), nullable=False)
+    created_at       = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at       = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Deleting an event deletes its tasks; deleting only a shift keeps the task on the event.
+    event    = db.relationship('Event', backref=db.backref('event_tasks', cascade='all, delete-orphan'))
+    shift    = db.relationship('Shift', backref=db.backref('event_tasks'))
+    assignee = db.relationship('User', foreign_keys=[assigned_user_id], backref='assigned_event_tasks')
+
+
 class UserUnavailability(db.Model):
     id                  = db.Column(db.Integer, primary_key=True)
     user_id             = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
