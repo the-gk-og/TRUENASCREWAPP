@@ -71,6 +71,7 @@
       {% if can_manage %}
       <div class="sw-actions-bar">
         <button class="btn btn-sm btn-primary" data-act="add-person"><i class="fas fa-user-plus"></i>Add person</button>
+        <button class="btn btn-sm btn-ghost" data-act="bulk-add"><i class="fas fa-layer-group"></i>Bulk add shifts</button>
         <button class="btn btn-sm btn-ghost" data-act="add-all">Add all crew</button>
       </div>
       {% endif %}
@@ -246,8 +247,14 @@ const actions = {
     if (!(await SW.confirm(`Remove ${b.dataset.name} and all of their shifts from this event?`, { danger: true, okText: 'Remove' }))) return;
     if (await SW.run(() => SW.api('DELETE', `/events/${EV.id}/team/${b.dataset.user}`))) done('Removed');
   },
+  async 'bulk-add'() {
+    const r = await SW.bulkShiftForm({ event: RANGE, users: D.users });
+    if (!r) return;
+    if (r.added) done(`${r.added} ${r.added === 1 ? 'shift' : 'shifts'} added`);
+    else SW.toast('Nobody was added', 'error');
+  },
   async 'add-all'() {
-    if (!(await SW.confirm('Add every crew member who is not on this event yet, using the event times? They will be asked to accept.', { okText: 'Add everyone' }))) return;
+    if (!(await SW.confirm('Add every crew member (not staff) who is not on this event yet, using the event times? They will be asked to accept.', { okText: 'Add everyone' }))) return;
     const r = await SW.run(() => SW.api('POST', `/events/${EV.id}/team/add-all`));
     if (r) done(`${r.added} added`);
   },

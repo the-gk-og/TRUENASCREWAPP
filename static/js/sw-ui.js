@@ -9,6 +9,7 @@
  *   SW.mdEditor(textarea)          Markdown toolbar + live preview
  *   SW.eventForm({...})            create / edit an event
  *   SW.shiftForm({...})            add / edit a person's shift
+ *   SW.bulkShiftForm({...})        pick many people and give them all the same shift
  *   SW.scheduleForm / SW.runForm   schedule + run-list items
  *
  * Everything user-supplied is escaped with SW.esc before touching innerHTML.
@@ -545,6 +546,134 @@
           throw err;
         }
       },
+    });
+  };
+
+  /** Window with everyone listed: tick people, set one shift, add it to all of them. */
+  SW.bulkShiftForm = function ({ event, users }) {
+    return new Promise((resolve) => {
+      let result = null;
+      const d = openDialog({ title: 'Bulk add shifts', wide: true, onClose: () => resolve(result) });
+      const uid = 'b' + Math.random().toString(36).slice(2, 7);
+      const form = el('form', 'sw-form');
+
+      const picker = el('div', 'sw-field');
+      picker.innerHTML =
+        `<label for="${uid}-q">People <span class="req">*</span></label>
+         <div class="sw-bulk-tools">
+           <input type="search" id="${uid}-q" placeholder="Search people…" autocomplete="off">
+           <button type="button" class="btn btn-sm btn-ghost" data-bulk="all">Select all</button>
+           <button type="button" class="btn btn-sm btn-ghost" data-bulk="crew">Crew only</button>
+           <button type="button" class="btn btn-sm btn-ghost" data-bulk="none">Clear</button>
+         </div>
+         <div class="sw-bulk-list" role="group" aria-label="People"></div>
+         <div class="sw-hint sw-bulk-count"></div>`;
+      const list = picker.querySelector('.sw-bulk-list');
+      const count = picker.querySelector('.sw-bulk-count');
+      const search = picker.querySelector('input[type=search]');
+
+      users.forEach((u) => {
+        const row = el('label', 'sw-bulk-row');
+        row.dataset.name = String(u.name).toLowerCase();
+        row.dataset.role = u.role || '';
+        const cb = el('input'); cb.type = 'checkbox'; cb.value = u.id;
+        const nm = el('span', 'sw-bulk-name'); nm.textContent = u.name;
+        row.append(cb, nm);
+        if (u.role === 'staff') row.appendChild(el('span', 'sw-chip plain', 'Staff'));
+        if (u.on_event) row.appendChild(el('span', 'sw-chip ok', 'On event'));
+        list.appendChild(row);
+      });
+      if (!users.length) list.appendChild(el('div', 'sw-empty', 'There is nobody to add.'));
+
+      const boxes = () => [...list.querySelectorAll('input[type=checkbox]')];
+      const visibleRows = () => [...list.querySelectorAll('.sw-bulk-row')].filter((r) => !r.hidden);
+      const chosen = () => boxes().filter((b) => b.checked).map((b) => Number(b.value));
+      const refreshCount = () => {
+        const n = chosen().length;
+        count.textContent = `${n} selected`;
+        submit.disabled = n === 0;
+        submit.textContent = n ? `Add shift for ${n} ${n === 1 ? 'person' : 'people'}` : 'Add shifts';
+      };
+      search.addEventListener('input', () => {
+        const q = search.value.trim().toLowerCase();
+        list.querySelectorAll('.sw-bulk-row').forEach((r) => { r.hidden = !!q && !r.dataset.name.includes(q); });
+      });
+      picker.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-bulk]');
+        if (!b) return;
+        if (b.dataset.bulk === 'none') boxes().forEach((c) => { c.checked = false; });
+        else visibleRows().forEach((r) => {
+          if (b.dataset.bulk === 'all' || r.dataset.role === 'crew') r.querySelector('input').checked = true;
+        });
+        refreshCount();
+      });
+      list.addEventListener('change', refreshCount);
+
+      const fields = el('div');
+      fields.innerHTML =
+        `<div class="sw-field"><label for="${uid}-role">Role</label>
+           <input id="${uid}-role" name="role" list="${uid}-dl" maxlength="100" placeholder="e.g. Sound">
+           <datalist id="${uid}-dl">${ROLE_SUGGESTIONS.map((r) => `<option value="${SW.esc(r)}">`).join('')}</datalist></div>
+         <div class="sw-row">
+           <div class="sw-field half"><label for="${uid}-start">Shift starts <span class="req">*</span></label>
+             <input id="${uid}-start" name="start" type="datetime-local" required value="${SW.esc(SW.toInput(event.start))}"></div>
+           <div class="sw-field half"><label for="${uid}-end">Shift ends <span class="req">*</span></label>
+             <input id="${uid}-end" name="end" type="datetime-local" required value="${SW.esc(SW.toInput(event.end))}"></div>
+         </div>
+         <div class="sw-field"><label for="${uid}-status">Status</label>
+           <select id="${uid}-status" name="status">${STATUS.slice(0, 3).map((o) =>
+             `<option value="${o.value}">${SW.esc(o.label)}</option>`).join('')}</select></div>
+         <div class="sw-field"><label for="${uid}-notes">Notes for this shift</label>
+           <textarea id="${uid}-notes" name="notes" rows="2"></textarea></div>`;
+
+      const err = el('div', 'sw-error'); err.hidden = true; err.setAttribute('role', 'alert');
+      const foot = el('div', 'sw-actions');
+      const cancel = el('button', 'btn btn-secondary', 'Cancel'); cancel.type = 'button';
+      cancel.onclick = () => d.close();
+      const submit = el('button', 'btn btn-primary', 'Add shifts'); submit.type = 'submit';
+      foot.append(cancel, submit);
+      form.append(picker, fields, err, foot);
+      d.body.appendChild(form);
+      refreshCount();
+      setTimeout(() => search.focus(), 30);
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!form.reportValidity()) return;
+        const val = (n) => form.querySelector(`[name=${n}]`).value;
+        const ids = chosen();
+        if (!ids.length) { err.textContent = 'Choose at least one person'; err.hidden = false; return; }
+        if (val('end') <= val('start')) { err.textContent = 'The shift must end after it starts'; err.hidden = false; return; }
+        err.hidden = true; submit.disabled = true;
+        const label = submit.textContent;
+        submit.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding…';
+        const send = (who, force) => SW.api('POST', `/events/${event.id}/team/bulk-add`, {
+          user_ids: who, role: val('role'), start: val('start'), end: val('end'),
+          status: val('status'), notes: val('notes'), force,
+        });
+        try {
+          const first = await send(ids, false);
+          let added = first.added;
+          let skipped = first.skipped || [];
+          const clashes = skipped.filter((s) => s.clash);
+          if (clashes.length) {
+            const names = clashes.map((c) => '• ' + c.name).join('\n');
+            const ok = await SW.confirm(
+              `${clashes.length} ${clashes.length === 1 ? 'person has' : 'people have'} a clash and ${clashes.length === 1 ? 'was' : 'were'} not added:\n\n${names}\n\nAdd ${clashes.length === 1 ? 'them' : 'them'} anyway?`,
+              { title: 'Scheduling clash', okText: 'Add anyway', danger: true });
+            if (ok) {
+              const again = await send(clashes.map((c) => c.user_id), true);
+              added += again.added;
+              skipped = skipped.filter((s) => !s.clash).concat(again.skipped || []);
+            }
+          }
+          result = { added, skipped };
+          d.close();
+        } catch (ex) {
+          err.textContent = ex.message || 'Something went wrong'; err.hidden = false;
+          submit.disabled = false; submit.textContent = label;
+        }
+      });
     });
   };
 

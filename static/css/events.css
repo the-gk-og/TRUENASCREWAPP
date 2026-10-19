@@ -228,3 +228,13 @@
 .sw-detail-grid dt { color:var(--text-secondary); } .sw-detail-grid dd { margin:0; color:var(--text-primary); word-break:break-word; }
 .sw-una-item { display:flex; justify-content:space-between; gap:.75rem; align-items:center; padding:.6rem .8rem; border:1px solid var(--border);
                border-left:4px solid var(--warning); border-radius:8px; margin-bottom:.5rem; }
+
+/* bulk shift picker */
+.sw-bulk-tools { display:flex; gap:.4rem; flex-wrap:wrap; align-items:center; margin-bottom:.5rem; }
+.sw-bulk-tools input[type=search] { flex:1 1 160px; min-width:0; }
+.sw-bulk-list { max-height:min(40vh,320px); overflow-y:auto; border:1px solid var(--border); border-radius:8px; padding:.25rem; }
+.sw-bulk-row { display:flex; align-items:center; gap:.6rem; padding:.5rem .6rem; border-radius:6px; cursor:pointer; font-weight:500; margin:0; }
+.sw-bulk-row[hidden] { display:none; }
+.sw-bulk-row:hover { background:var(--bg-nav-hover); }
+.sw-bulk-row input { width:auto; margin:0; flex:none; }
+.sw-bulk-name { flex:1; min-width:0; word-break:break-word; color:var(--text-primary); }
