@@ -38,7 +38,8 @@ _session_lifetime = parse_duration(SESSION_DURATION)
 
 
 class BaseConfig:
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'your-secret-key-change-this')
+    # No hardcoded fallback: create_app() refuses to start in production without a real key.
+    SECRET_KEY = os.environ.get('SECRET_KEY') or None
 
     # Database
     SQLALCHEMY_DATABASE_URI = os.environ.get(
@@ -69,7 +70,7 @@ class BaseConfig:
     # Mail
     MAIL_SERVER         = os.environ.get('MAIL_SERVER', '')
     MAIL_PORT           = int(os.environ.get('MAIL_PORT', 587))
-    MAIL_USE_TLS        = os.environ.get('MAIL_USE_TLS', True)
+    MAIL_USE_TLS        = os.environ.get('MAIL_USE_TLS', 'true').strip().lower() not in ('0', 'false', 'no', 'off')
     MAIL_USERNAME       = os.environ.get('MAIL_USERNAME', '')
     MAIL_PASSWORD       = os.environ.get('MAIL_PASSWORD', '')
     MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER', 'noreply@prodcrew.local')
@@ -83,7 +84,7 @@ class BaseConfig:
     DISCORD_BOT_TOKEN   = os.environ.get('DISCORD_BOT_TOKEN', '')
     DISCORD_WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL', '')
     DISCORD_GUILD_ID    = os.environ.get('DISCORD_GUILD_ID', '')
-    DISCORD_BOT_SECRET  = os.environ.get('DISCORD_BOT_SECRET', 'change-this-secret')
+    DISCORD_BOT_SECRET  = os.environ.get('DISCORD_BOT_SECRET', '')   # empty = bot endpoints disabled
 
     # Google OAuth
     GOOGLE_CLIENT_ID     = os.environ.get('GOOGLE_CLIENT_ID', '')
@@ -101,12 +102,12 @@ class DevelopmentConfig(BaseConfig):
 class ProductionConfig(BaseConfig):
     DEBUG = False
 
-    # Required for Google OAuth PKCE + Cloudflare HTTPS
+    # Lax still allows the Google OAuth redirect (a top-level GET) and blocks cross-site POSTs.
     SESSION_COOKIE_SECURE      = True
-    SESSION_COOKIE_SAMESITE    = "None"
+    SESSION_COOKIE_SAMESITE    = "Lax"
 
     REMEMBER_COOKIE_SECURE     = True
-    REMEMBER_COOKIE_SAMESITE   = "None"
+    REMEMBER_COOKIE_SAMESITE   = "Lax"
 
 
 class TestingConfig(BaseConfig):
@@ -124,5 +125,6 @@ config_map = {
 
 
 def get_config():
-    env = os.environ.get('FLASK_ENV', 'default')
-    return config_map.get(env, DevelopmentConfig)
+    # Secure by default: development behaviour must be asked for explicitly (FLASK_ENV=development).
+    env = os.environ.get('FLASK_ENV', 'production')
+    return config_map.get(env, ProductionConfig)

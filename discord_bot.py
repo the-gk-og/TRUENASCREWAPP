@@ -10,7 +10,8 @@ load_dotenv()
 
 DISCORD_BOT_TOKEN = os.environ.get('DISCORD_BOT_TOKEN')
 WEB_APP_URL = os.environ.get('WEB_APP_URL', 'http://localhost:5000')
-DISCORD_BOT_SECRET = os.environ.get('DISCORD_BOT_SECRET', 'change-this-secret')
+DISCORD_BOT_SECRET = os.environ.get('DISCORD_BOT_SECRET', '')
+BOT_HEADERS = {"X-Bot-Secret": DISCORD_BOT_SECRET}
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -91,7 +92,7 @@ async def link_account(interaction: discord.Interaction, username: str, password
 async def find_equipment(interaction: discord.Interaction, query: str):
     """Find equipment by name"""
     try:
-        response = requests.get(f"{WEB_APP_URL}/discord/search-equipment/{query}", timeout=5)
+        response = requests.get(f"{WEB_APP_URL}/discord/search-equipment/{query}", headers=BOT_HEADERS, timeout=5)
         if response.status_code == 200:
             equipment = response.json().get('equipment', [])
             if not equipment:
@@ -113,7 +114,7 @@ async def find_equipment(interaction: discord.Interaction, query: str):
 async def list_events(interaction: discord.Interaction):
     """List upcoming events"""
     try:
-        response = requests.get(f"{WEB_APP_URL}/discord/list-events", timeout=5)
+        response = requests.get(f"{WEB_APP_URL}/discord/list-events", headers=BOT_HEADERS, timeout=5)
         if response.status_code == 200:
             events = response.json().get('events', [])
             if not events:
@@ -135,7 +136,7 @@ async def list_events(interaction: discord.Interaction):
 async def list_crew(interaction: discord.Interaction, event_id: int):
     """List crew assigned to event"""
     try:
-        response = requests.get(f"{WEB_APP_URL}/discord/event-crew/{event_id}", timeout=5)
+        response = requests.get(f"{WEB_APP_URL}/discord/event-crew/{event_id}", headers=BOT_HEADERS, timeout=5)
         if response.status_code == 200:
             data = response.json()
             event_title = data.get('event_title', 'Event')
@@ -157,7 +158,7 @@ async def list_crew(interaction: discord.Interaction, event_id: int):
 async def pick_list(interaction: discord.Interaction, event_id: int):
     """View pick list items - FIXED VERSION"""
     try:
-        response = requests.get(f"{WEB_APP_URL}/discord/pick-list/{event_id}", timeout=5)
+        response = requests.get(f"{WEB_APP_URL}/discord/pick-list/{event_id}", headers=BOT_HEADERS, timeout=5)
         if response.status_code == 200:
             data = response.json()
             event_title = data.get('event_title', 'Event')
@@ -236,7 +237,7 @@ async def my_events(interaction: discord.Interaction):
     """Show your events"""
     discord_id = str(interaction.user.id)
     try:
-        response = requests.get(f"{WEB_APP_URL}/discord/user-events/{discord_id}", timeout=5)
+        response = requests.get(f"{WEB_APP_URL}/discord/user-events/{discord_id}", headers=BOT_HEADERS, timeout=5)
         if response.status_code == 200:
             events = response.json().get('events', [])
             if not events:

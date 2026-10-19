@@ -17,6 +17,8 @@ from decorators import crew_required
 
 stage_designer_bp = Blueprint('stage_designer', __name__)
 UPLOAD_FOLDER = 'uploads'
+_UPLOAD_ALLOWED = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'pdf'}
+_INLINE_TYPES   = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'pdf'}
 
 
 def _save_thumbnail(name: str, b64: str) -> str | None:
@@ -340,6 +342,13 @@ def upload_stageplan():
     file = request.files['file']
     if file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext not in _UPLOAD_ALLOWED:
+        return jsonify({'error': 'Only PNG, JPG, GIF, WebP or PDF files are allowed'}), 400
+    if ext != 'pdf':
+        from services.upload_security import is_real_image
+        if not is_real_image(file):
+            return jsonify({'error': 'That file is not a valid image'}), 400
     filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{secure_filename(file.filename)}"
     file.save(os.path.join(UPLOAD_FOLDER, filename))
     plan = StagePlan(title=request.form.get('title', filename), filename=filename,
@@ -353,7 +362,13 @@ def upload_stageplan():
 @login_required
 @crew_required
 def uploaded_file(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename)
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    # Anything that is not a known-safe type (including legacy uploads) is forced to download
+    # and sandboxed, so an uploaded .html/.svg can never run script on this origin.
+    resp = send_from_directory(UPLOAD_FOLDER, filename, as_attachment=ext not in _INLINE_TYPES)
+    if ext != 'pdf':
+        resp.headers['Content-Security-Policy'] = "sandbox; default-src 'none'; img-src 'self' data:"
+    return resp
 
 
 @stage_designer_bp.route('/stageplans/delete/<int:id>', methods=['DELETE'])

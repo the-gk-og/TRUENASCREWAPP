@@ -6,6 +6,7 @@ ShowWise — Flask application factory.
 from flask import Flask, render_template, request
 import os
 import atexit
+import secrets
 
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -26,8 +27,18 @@ def create_app(config_name: str | None = None):
     else:
         app.config.from_object(get_config())
 
+    # Refuse to run with a missing/placeholder signing key (forged session cookies = full takeover)
+    if app.config.get('SECRET_KEY') in (None, '', 'your-secret-key-change-this'):
+        if app.config.get('TESTING') or app.config.get('DEBUG'):
+            app.config['SECRET_KEY'] = secrets.token_hex(32)
+        else:
+            raise RuntimeError('SECRET_KEY is not set. Set a long random SECRET_KEY environment variable.')
+
     # Trust proxy headers (Cloudflare / nginx / tunnels)
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
+
+    from services.security import init_security
+    init_security(app)
 
     # Initialise extensions
     db.init_app(app)

@@ -17,7 +17,9 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 from extensions import db
 from models import User, TwoFactorAuth, InviteCode, EmailOTP
-from utils import get_organization, generate_invite_code, log_security_event
+from utils import get_organization, generate_invite_code, log_security_event, hash_reset_token
+from services.security import throttle
+from constants import MIN_PASSWORD_LENGTH
 from services.user_names import (
     find_user_by_login, username_taken, username_problem, email_taken, clean_display_name,
 )
@@ -55,10 +57,20 @@ def login():
         password = request.form.get('password') or ''
         remember = request.form.get('remember', 'off') == 'on'
 
+        ip = throttle.client_ip()
+        if (throttle.is_blocked('login_ip', ip, 20, 900)
+                or throttle.is_blocked('login_user', username.lower(), 5, 900)):
+            log_security_event('LOGIN_THROTTLED', username=username, ip_address=ip)
+            flash('Too many failed attempts. Please wait 15 minutes and try again.')
+            org = get_organization() or DEFAULT_ORG
+            return render_template('login.html', organization=org, SESSION_DURATION=SESSION_DURATION,
+                                   now=datetime.now(), google_oauth_enabled=bool(GOOGLE_CLIENT_ID)), 429
+
         # Username or email, in any letter case
         user = find_user_by_login(username)
 
         if user and user.password_hash and check_password_hash(user.password_hash, password):
+            throttle.reset('login_user', username.lower())
             # --- TOTP 2FA check ---
             tfa = TwoFactorAuth.query.filter_by(user_id=user.id).first()
             if tfa and tfa.enabled:
@@ -85,6 +97,8 @@ def login():
 
             return redirect(url_for('cast.cast_events') if user.is_cast else url_for('crew.dashboard'))
 
+        throttle.record_failure('login_ip', ip)
+        throttle.record_failure('login_user', username.lower())
         flash('Invalid username, email or password')
 
     org = get_organization() or DEFAULT_ORG
@@ -153,8 +167,8 @@ def signup():
             flash('An account with that email already exists.', 'error')
             return render_template('signup.html', organization=org, prefill_code=invite_code_str)
 
-        if len(password) < 6:
-            flash('Password must be at least 6 characters.', 'error')
+        if len(password) < MIN_PASSWORD_LENGTH:
+            flash(f'Password must be at least {MIN_PASSWORD_LENGTH} characters.', 'error')
             return render_template('signup.html', organization=org, prefill_code=invite_code_str)
 
         if password != confirm_password:
@@ -211,25 +225,28 @@ def forgot_password():
         org = get_organization() or DEFAULT_ORG
         return render_template('forgot_password.html', organization=org)
 
-    data               = request.json
+    data               = request.get_json(silent=True) or {}
     username_or_email  = (data.get('username_or_email') or '').strip()
 
     if not username_or_email:
         return jsonify({'error': 'Username or email required'}), 400
 
+    # Same answer whether or not the account exists / has an email / mail works (no enumeration)
+    generic = jsonify({'success': True, 'message': 'If that account exists, an email has been sent'}), 200
+
+    ip = throttle.client_ip()
+    if throttle.is_blocked('forgot_ip', ip, 5, 900):
+        return jsonify({'error': 'Too many requests. Please try again later.'}), 429
+    throttle.record_failure('forgot_ip', ip)
+
     user = find_user_by_login(username_or_email)
-
-    if not user:
-        return jsonify({'success': True,
-                        'message': 'If that account exists, an email has been sent'}), 200
-
-    if not user.email:
-        return jsonify({'error': 'This account has no email address associated'}), 400
+    if not user or not user.email:
+        return generic
 
     try:
         reset_token              = secrets.token_urlsafe(32)
-        user.password_reset_token  = reset_token
-        user.password_reset_expiry = datetime.utcnow() + timedelta(hours=24)
+        user.password_reset_token  = hash_reset_token(reset_token)   # only the hash is stored
+        user.password_reset_expiry = datetime.utcnow() + timedelta(hours=1)
         db.session.commit()
 
         reset_url = f"{SIGNUP_BASE_URL}/password/reset/{reset_token}"
@@ -244,19 +261,21 @@ def forgot_password():
 
         if sent:
             log_security_event('PASSWORD_RESET_REQUESTED', username=user.username)
-            return jsonify({'success': True, 'message': 'Password reset email sent'}), 200
-
-        return jsonify({'error': 'Could not send email (check email configuration)'}), 500
+        else:
+            print('Password reset email could not be sent (check email configuration)')
+        return generic
 
     except Exception as exc:
+        db.session.rollback()
         print(f"Password forgot error: {exc}")
-        return jsonify({'error': str(exc)}), 500
+        return generic
 
 
 @auth_bp.route('/password/reset/<token>', methods=['GET', 'POST'])
 def reset_password(token):
+    token_hash = hash_reset_token(token)
     if request.method == 'GET':
-        user = User.query.filter_by(password_reset_token=token).first()
+        user = User.query.filter_by(password_reset_token=token_hash).first()
         if not user or not user.password_reset_expiry \
                 or user.password_reset_expiry < datetime.utcnow():
             flash('Password reset link is invalid or has expired', 'error')
@@ -264,11 +283,11 @@ def reset_password(token):
         org = get_organization() or DEFAULT_ORG
         return render_template('reset_password.html', token=token, organization=org)
 
-    data             = request.json
+    data             = request.get_json(silent=True) or {}
     new_password     = (data.get('new_password') or '').strip()
     confirm_password = (data.get('confirm_password') or '').strip()
 
-    user = User.query.filter_by(password_reset_token=token).first()
+    user = User.query.filter_by(password_reset_token=token_hash).first()
     if not user:
         return jsonify({'error': 'Invalid reset token'}), 400
 
@@ -278,8 +297,8 @@ def reset_password(token):
         db.session.commit()
         return jsonify({'error': 'Reset link has expired'}), 400
 
-    if len(new_password) < 6:
-        return jsonify({'error': 'Password must be at least 6 characters'}), 400
+    if len(new_password) < MIN_PASSWORD_LENGTH:
+        return jsonify({'error': f'Password must be at least {MIN_PASSWORD_LENGTH} characters'}), 400
 
     if new_password != confirm_password:
         return jsonify({'error': 'Passwords do not match'}), 400
@@ -303,7 +322,8 @@ def reset_password(token):
 
     except Exception as exc:
         db.session.rollback()
-        return jsonify({'error': str(exc)}), 500
+        print(f'Password reset error: {exc}')
+        return jsonify({'error': 'Could not reset password. Please try again.'}), 500
 
 
 @auth_bp.route('/session-info')
