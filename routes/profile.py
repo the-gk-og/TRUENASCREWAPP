@@ -88,8 +88,9 @@ def change_password():
     if not check_password_hash(current_user.password_hash, current_password):
         return jsonify({'error': 'Current password is incorrect'}), 401
 
-    if len(new_password) < 6:
-        return jsonify({'error': 'New password must be at least 6 characters'}), 400
+    from constants import MIN_PASSWORD_LENGTH
+    if len(new_password) < MIN_PASSWORD_LENGTH:
+        return jsonify({'error': f'New password must be at least {MIN_PASSWORD_LENGTH} characters'}), 400
 
     if new_password != confirm_password:
         return jsonify({'error': 'Passwords do not match'}), 400
@@ -152,6 +153,10 @@ def upload_profile_picture():
     if not _allowed_file(file.filename):
         return jsonify({'error': 'Invalid file type. Use PNG, JPG, GIF, or WebP'}), 400
 
+    from services.upload_security import is_real_image
+    if not is_real_image(file):
+        return jsonify({'error': 'That file is not a valid image'}), 400
+
     # Check size
     file.seek(0, 2)
     size = file.tell()
@@ -160,7 +165,7 @@ def upload_profile_picture():
         return jsonify({'error': 'File too large (max 16 MB)'}), 400
 
     try:
-        ext      = secure_filename(file.filename).rsplit('.', 1)[1].lower()
+        ext      = file.filename.rsplit('.', 1)[1].lower()   # already validated by _allowed_file
         filename = f"user_{current_user.id}_profile.{ext}"
         save_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'users')
         os.makedirs(save_dir, exist_ok=True)

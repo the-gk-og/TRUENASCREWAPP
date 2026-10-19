@@ -139,7 +139,8 @@ def google_callback():
         # -----------------------
         # Email match fallback
         # -----------------------
-        existing_user = find_user_by_email(email)
+        # Only trust the email for account matching if Google says it is verified
+        existing_user = find_user_by_email(email) if (email and userinfo.get("email_verified")) else None
         if existing_user:
             conn = OAuthConnection(
                 user_id=existing_user.id,

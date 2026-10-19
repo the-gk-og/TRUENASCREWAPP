@@ -13,4 +13,6 @@ instance/
 .env1
 
 crewapp.sql
+backups/*.db
+
 __pycache__/

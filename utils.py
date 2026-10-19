@@ -4,6 +4,7 @@ utils.py
 Shared utility helpers used across the app.
 """
 
+import hashlib
 import random
 import secrets
 import string as _string
@@ -128,3 +129,8 @@ def verify_backup_code(stored_hashes: list[str], provided_code: str) -> Optional
         if check_password_hash(hashed, provided):
             return i
     return None
+
+
+def hash_reset_token(token: str) -> str:
+    """Password-reset tokens are stored hashed so a DB leak cannot be used to take over accounts."""
+    return hashlib.sha256((token or '').encode()).hexdigest()
