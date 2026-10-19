@@ -206,6 +206,23 @@ class EventNote(db.Model):
     event = db.relationship('Event', backref=db.backref('notes', cascade='all, delete-orphan'))
 
 
+class EventAttachment(db.Model):
+    """A PDF or photo attached to an event's schedule or run list (shown as a gallery)."""
+    id            = db.Column(db.Integer, primary_key=True)
+    event_id      = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False, index=True)
+    target        = db.Column(db.String(20), nullable=False, default='schedule')   # 'schedule' | 'run'
+    kind          = db.Column(db.String(10), nullable=False)                       # 'image' | 'pdf'
+    stored_name   = db.Column(db.String(80), nullable=False)    # random name inside uploads/event_files/
+    thumb_name    = db.Column(db.String(80))                    # images only
+    original_name = db.Column(db.String(200))
+    mimetype      = db.Column(db.String(50))
+    size_bytes    = db.Column(db.Integer, default=0)
+    uploaded_by   = db.Column(db.String(80))
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    event = db.relationship('Event', backref=db.backref(
+        'attachments', cascade='all, delete-orphan', order_by='EventAttachment.id'))
+
+
 class PickListItem(db.Model):
     id           = db.Column(db.Integer, primary_key=True)
     item_name    = db.Column(db.String(200), nullable=False)
@@ -461,3 +478,46 @@ class AppSetting(db.Model):
     value      = db.Column(db.Text, nullable=False, default='null')
     updated_by = db.Column(db.String(80))
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+
+# ---------------------------------------------------------------------------
+# Remove an attachment's files from disk once the row is really gone
+# ---------------------------------------------------------------------------
+# Rows can disappear by deleting one attachment or by deleting a whole event
+# (cascade).  The files are only removed after the transaction commits, so a
+# rolled-back delete never leaves a row pointing at a missing file.
+
+import os as _os
+from flask import current_app as _current_app
+from sqlalchemy import event as _sa_event
+from sqlalchemy.orm import Session as _Session
+
+
+def event_files_dir() -> str:
+    return _os.path.abspath(_os.path.join(_current_app.config['UPLOAD_FOLDER'], 'event_files'))
+
+
+@_sa_event.listens_for(EventAttachment, 'after_delete')
+def _queue_attachment_files(mapper, connection, target):
+    session = _Session.object_session(target)
+    if session is None:
+        return
+    pending = session.info.setdefault('pending_file_deletes', [])
+    for name in (target.stored_name, target.thumb_name):
+        if name:
+            pending.append(_os.path.join(event_files_dir(), name))
+
+
+@_sa_event.listens_for(_Session, 'after_commit')
+def _remove_deleted_files(session):
+    for path in session.info.pop('pending_file_deletes', []):
+        try:
+            _os.remove(path)
+        except OSError:
+            pass
+
+
+@_sa_event.listens_for(_Session, 'after_rollback')
+def _forget_pending_deletes(session):
+    session.info.pop('pending_file_deletes', None)
