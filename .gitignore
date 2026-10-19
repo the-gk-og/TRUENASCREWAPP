@@ -16,3 +16,8 @@ crewapp.sql
 backups/*.db
 
 __pycache__/
+
+.vscode/*
+.venv/
+.pytest_cache/
+
