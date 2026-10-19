@@ -17,6 +17,8 @@ import secrets
 import string
 from datetime import datetime, timedelta
 
+import hmac
+from services.security import throttle
 from flask import (
     Blueprint, jsonify, request, redirect,
     url_for, session, render_template,
@@ -198,8 +200,17 @@ def verify_login_otp():
         db.session.commit()
         return jsonify({"error": "Code has expired — please request a new one"}), 400
 
-    if rec.otp_code != code:
+    if throttle.is_blocked('email_otp', str(user_id), 5, 300):
+        rec.otp_used = True                              # burn the code; a new one must be requested
+        db.session.commit()
+        session.pop("pending_2fa_user_id", None)
+        return jsonify({"error": "Too many attempts. Please sign in again in a few minutes."}), 429
+
+    if not hmac.compare_digest(str(rec.otp_code), code):
+        throttle.record_failure('email_otp', str(user_id), 300)
         return jsonify({"error": "Invalid code — please try again"}), 400
+
+    throttle.reset('email_otp', str(user_id))
 
     # Success — invalidate the code and log in
     rec.otp_used = True

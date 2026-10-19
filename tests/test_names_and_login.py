@@ -61,12 +61,19 @@ def test_login_ambiguous_case_needs_exact(app):
 
 
 def test_forgot_password_finds_by_name_or_email_any_case(app):
+    """The user is found (a hashed reset token is stored) but the response never reveals whether they exist."""
     c = app.test_client()
+    messages = set()
     for who in ('ALICE', 'Alice@X.test'):
         r = c.post('/password/forgot', json={'username_or_email': who})
-        assert r.status_code in (200, 500)            # 500 = mail not configured in tests; user *was* found
-        assert 'If that account exists' not in (r.get_json() or {}).get('message', '')
-    assert 'If that account exists' in c.post('/password/forgot', json={'username_or_email': 'ghost'}).get_json()['message']
+        assert r.status_code == 200
+        messages.add(r.get_json()['message'])
+        found = user_names.find_user_by_login(who)
+        assert found.password_reset_token and len(found.password_reset_token) == 64   # sha256 hex, not the raw token
+    r = c.post('/password/forgot', json={'username_or_email': 'ghost'})
+    assert r.status_code == 200
+    messages.add(r.get_json()['message'])
+    assert len(messages) == 1
 
 
 # ---------------------------------------------------------------------------

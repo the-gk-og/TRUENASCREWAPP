@@ -35,7 +35,7 @@ python app.py
 
 You should see:
 ```
-Default admin user created: username='admin', password='admin123'
+The first admin account is created with a random password printed to the console on first start. Copy it and change it immediately.
  * Running on http://0.0.0.0:5000
 ```
 
