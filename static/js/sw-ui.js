@@ -10,7 +10,6 @@
  *   SW.eventForm({...})            create / edit an event
  *   SW.shiftForm({...})            add / edit a person's shift
  *   SW.bulkShiftForm({...})        pick many people and give them all the same shift
- *   SW.timeForm({...})             add / edit a labeled event time (Bump-in, Show 1...)
  *   SW.scheduleForm / SW.runForm   schedule + run-list items
  *   SW.taskForm({...})             add / edit an event task, shift task or assigned task
  *
@@ -259,7 +258,7 @@
    *   values, submitText, danger, wide,
    *   onSubmit: async (values) => result    // throw Error to show it in the dialog
    * }) -> Promise<result | null>
-   * Types: text number textarea markdown datetime date select checkbox days info
+   * Types: text number textarea markdown datetime date select checkbox days times info
    */
   SW.form = function (cfg) {
     return new Promise((resolve) => {
@@ -306,6 +305,53 @@
             const lab = el('label', 'sw-check'); lab.htmlFor = id;
             lab.append(input, document.createTextNode(' ' + (f.label || '')));
             wrap.appendChild(lab);
+            break;
+          }
+          case 'times': {
+            // Repeatable labeled times: [{label, start, end}] - e.g. Bump-in, Show 1, Show 2
+            input = el('div', 'sw-times');
+            const dl = el('datalist'); dl.id = id + '-dl';
+            TIME_LABELS.forEach((t) => { const o = el('option'); o.value = t; dl.appendChild(o); });
+            input.appendChild(dl);
+            const list = el('div'); list.style.cssText = 'display:flex;flex-direction:column;gap:.6rem';
+            const addRow = (t) => {
+              const r = el('div', 'sw-time-row');
+              r.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:.4rem;align-items:end;padding:.5rem;border:1px solid var(--border,#3a3a3a);border-radius:8px';
+              const mk = (cls, type, val, ph, lab) => {
+                const w = el('div'); w.style.cssText = 'display:flex;flex-direction:column;gap:.15rem;min-width:0';
+                const l = el('label', null, lab); l.style.fontSize = '.75rem';
+                const i = el('input', cls); i.type = type; i.value = val || ''; i.required = true;
+                if (ph) i.placeholder = ph;
+                w.append(l, i); return [w, i];
+              };
+              const [wl, il] = mk('t-label', 'text', t.label, 'e.g. Show 1', 'Label'); il.maxLength = 100; il.setAttribute('list', dl.id);
+              wl.style.gridColumn = '1 / 3';
+              const [ws, is] = mk('t-start', 'datetime-local', SW.toInput(t.start), '', 'Starts');
+              const [we, ie] = mk('t-end', 'datetime-local', SW.toInput(t.end), '', 'Ends');
+              const del = el('button', 'btn btn-ghost btn-icon', '<i class="fas fa-trash"></i>');
+              del.type = 'button'; del.title = 'Remove this time'; del.setAttribute('aria-label', 'Remove this time');
+              del.style.gridRow = '1'; del.style.gridColumn = '3';
+              del.onclick = () => r.remove();
+              // picking a start fills a 2-hour end if the end is empty or before it
+              is.addEventListener('change', () => { if (is.value && (!ie.value || ie.value <= is.value)) ie.value = SW.addHours(is.value, 2); });
+              r.append(wl, del, ws, we);
+              list.appendChild(r);
+              return r;
+            };
+            (Array.isArray(init) ? init : []).forEach(addRow);
+            const add = el('button', 'btn btn-sm btn-secondary', '<i class="fas fa-plus"></i> Add time');
+            add.type = 'button'; add.style.marginTop = '.5rem';
+            add.onclick = () => {
+              const rows = list.querySelectorAll('.sw-time-row');
+              const last = rows[rows.length - 1];
+              const base = last ? last.querySelector('.t-end').value : (f.defaultStart || '');
+              const r = addRow({ label: '', start: base, end: base ? SW.addHours(base, 2) : '' });
+              r.querySelector('.t-label').focus();
+            };
+            input.append(list, add);
+            input.readTimes = () => [...list.querySelectorAll('.sw-time-row')].map((r) => ({
+              label: r.querySelector('.t-label').value.trim(),
+              start: r.querySelector('.t-start').value, end: r.querySelector('.t-end').value }));
             break;
           }
           case 'days': {
@@ -357,6 +403,7 @@
           if (f.type === 'checkbox') out[f.name] = input.checked;
           else if (f.type === 'number') out[f.name] = input.value === '' ? null : Number(input.value);
           else if (f.type === 'file') out[f.name] = input.files[0] || null;
+          else if (f.type === 'times') out[f.name] = input.readTimes();
           else if (f.type === 'days') out[f.name] = [...input.querySelectorAll('input:checked')].map((c) => c.value).join(',');
           else out[f.name] = input.value;
         });
@@ -446,13 +493,10 @@
       { name: 'event_date', label: 'Starts', type: 'datetime', allDayToggle: 'all_day', required: true, half: true, defaultTime: '09:00' },
       { name: 'event_end_date', label: 'Ends', type: 'datetime', allDayToggle: 'all_day', required: true, half: true, defaultTime: '12:00' },
       { name: 'location', label: 'Location', maxLength: 200, placeholder: 'Venue / room' },
+      { name: 'times', label: 'Times', type: 'times', defaultStart: d.event_date,
+        hint: 'Optional. Add labeled times like Bump-in, Show 1, Show 2. Each shows up separately as “Event - Label”.' },
       { name: 'description', label: 'Description', type: 'markdown', rows: 7 },
     ];
-    if (edit && d.times && d.times.length) {
-      // Dates come from the labeled times (Bump-in, Show 1...) - edit those on the event page.
-      for (const n of ['all_day', 'event_date', 'event_end_date']) fields.splice(fields.findIndex((f) => f.name === n), 1);
-      fields.splice(1, 0, { type: 'info', text: 'This event’s dates come from its labeled times. Edit them in the Times card on the event page.' });
-    }
     if (edit && d.is_recurring) {
       fields.push({
         name: 'scope', label: 'Apply changes to', type: 'select', options: [
@@ -482,6 +526,7 @@
         const payload = {
           title: v.title, all_day: v.all_day, event_date: v.event_date,
           event_end_date: v.event_end_date, location: v.location, description: v.description,
+          times: v.times || [],
         };
         if (edit) {
           payload.scope = v.scope || 'this';
@@ -685,22 +730,6 @@
   };
 
   const TIME_LABELS = ['Bump-in', 'Rehearsal', 'Doors', 'Show', 'Show 1', 'Show 2', 'Matinee', 'Bump-out'];
-  SW.timeForm = function ({ eventId, item, defaultStart }) {
-    const edit = !!item;
-    return SW.form({
-      title: edit ? 'Edit time' : 'Add time',
-      values: edit ? { label: item.label, start_time: SW.toInput(item.start), end_time: SW.toInput(item.end) }
-        : { start_time: SW.toInput(defaultStart), end_time: SW.addHours(SW.toInput(defaultStart), 2) },
-      fields: [
-        { name: 'label', label: 'Label', required: true, maxLength: 100, suggestions: TIME_LABELS, placeholder: 'e.g. Bump-in, Show 1' },
-        { name: 'start_time', label: 'Starts', type: 'datetime', required: true, half: true },
-        { name: 'end_time', label: 'Ends', type: 'datetime', required: true, half: true },
-      ],
-      submitText: edit ? 'Save' : 'Add time',
-      onSubmit: (v) => edit ? SW.api('PUT', `/events/times/${item.id}/edit`, v)
-        : SW.api('POST', `/events/${eventId}/times/add`, v),
-    });
-  };
 
   SW.scheduleForm = function ({ eventId, item, defaultTime }) {
     const edit = !!item;

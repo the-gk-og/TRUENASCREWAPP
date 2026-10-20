@@ -38,7 +38,7 @@ from services.markdown_service import render_markdown
 from services.availability_service import find_conflicts
 from services.email_service import send_shift_assignment_emails_async
 from services.user_names import name_for
-from services.event_times import sync_span, times_json, times_for
+from services.event_times import extend_span, times_json, times_for
 from services.notification_service import (
     send_discord_event_announcement, schedule_event_notifications,
 )
@@ -178,6 +178,37 @@ def serialize_event(e: Event) -> dict:
         'times': times_json(e),
         'created_by': e.created_by, 'created_by_name': name_for(e.created_by),
     }
+
+
+def _read_times(data: dict):
+    """Validate the labeled times sent with the event form.  None = not sent (leave as is)."""
+    if 'times' not in data:
+        return None
+    raw = data.get('times') or []
+    if not isinstance(raw, list) or len(raw) > 30:
+        raise ApiError('Too many times (max 30)')
+    out = []
+    for item in raw:
+        if not isinstance(item, dict):
+            raise ApiError('Invalid time entry')
+        start = parse_dt(item.get('start'), 'Time start')
+        end = parse_dt(item.get('end'), 'Time end')
+        if end <= start:
+            raise ApiError('Each time must end after it starts')
+        out.append((clean_text(item.get('label'), 'Time label', 100, required=True), start, end))
+    return out
+
+
+def _apply_times(event: Event, times, shift: timedelta = timedelta(0)):
+    """Replace an event's labeled times (shifted by ``shift`` for other events in a series)."""
+    for t in list(event.times):
+        db.session.delete(t)
+    db.session.flush()
+    db.session.refresh(event)
+    for label, start, end in times:
+        event.times.append(EventTime(label=label, start_time=start + shift, end_time=end + shift))
+    db.session.flush()
+    extend_span(event)
 
 
 # ---- recurrence ----------------------------------------------------------
@@ -419,6 +450,7 @@ def event_json(id):
 def add_event():
     data = body()
     fields = _read_event_fields(data)
+    times = _read_times(data)
     rec = data.get('recurrence') or {}
     pattern = rec.get('pattern') or data.get('recurrence_pattern')   # legacy key
     if pattern:
@@ -444,6 +476,8 @@ def add_event():
     try:
         db.session.add(event)
         db.session.flush()
+        if times:
+            _apply_times(event, times)
         created = build_series(event) if pattern else 0
         db.session.commit()
     except Exception as exc:
@@ -468,26 +502,26 @@ def edit_event(id):
 
     old_start = event.event_date
     fields = _read_event_fields(data, existing=event)
-    if event.times:
-        # The event's overall span is driven by its labeled times - edit those instead.
-        fields['event_date'], fields['event_end_date'], fields['all_day'] = \
-            event.event_date, event_end(event), False
+    times = _read_times(data)
     d_start = fields['event_date'] - old_start
     new_duration = fields['event_end_date'] - fields['event_date']
 
+    member_starts = [(m, m.event_date) for m in series_members(event, scope)]
     try:
         for m in series_members(event, scope):
             m.title = fields['title']
             m.description = fields['description']
             m.location = fields['location']
             m.all_day = fields['all_day']
-            if m.times:
-                continue                      # span follows the labeled times
             if m.id == event.id:
                 m.event_date, m.event_end_date = fields['event_date'], fields['event_end_date']
             else:
                 m.event_date = m.event_date + d_start
                 m.event_end_date = m.event_date + new_duration
+        if times is not None:
+            # same labeled times on every event edited, moved to that event's own date
+            for m, m_old_start in member_starts:
+                _apply_times(m, times, shift=m.event_date - fields['event_date'])
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
@@ -502,8 +536,6 @@ def edit_event(id):
 def move_event(id):
     """Calendar drag/resize: only the times change, only this event."""
     event = Event.query.get_or_404(id)
-    if event.times:
-        raise ApiError('This event has labeled times - move the individual times instead')
     data = body()
     all_day = bool(data.get('all_day'))
     start = parse_dt(data.get('event_date'), 'Start')
@@ -919,46 +951,6 @@ def join_event(event_id):
 # Labeled times (Bump-in, Show 1, Show 2 ...)
 # ---------------------------------------------------------------------------
 
-def _time_payload(data: dict) -> dict:
-    start = parse_dt(data.get('start_time'), 'Start')
-    end = parse_dt(data.get('end_time'), 'End')
-    if end <= start:
-        raise ApiError('End must be after the start')
-    return {'label': clean_text(data.get('label'), 'Label', 100, required=True),
-            'start_time': start, 'end_time': end}
-
-
-@events_bp.route('/events/<int:event_id>/times/add', methods=['POST'])
-@login_required
-@crew_required
-def add_event_time(event_id):
-    event = Event.query.get_or_404(event_id)
-    if not can_edit_event(event):
-        raise ApiError('You can only edit events you created', 403)
-    item = EventTime(event_id=event_id, **_time_payload(body()))
-    db.session.add(item)
-    db.session.flush()
-    db.session.refresh(event)
-    sync_span(event)
-    db.session.commit()
-    return jsonify({'success': True, 'id': item.id})
-
-
-@events_bp.route('/events/times/<int:time_id>/edit', methods=['PUT'])
-@login_required
-@crew_required
-def edit_event_time(time_id):
-    item = EventTime.query.get_or_404(time_id)
-    if not can_edit_event(item.event):
-        raise ApiError('You can only edit events you created', 403)
-    for k, v in _time_payload(body()).items():
-        setattr(item, k, v)
-    db.session.flush()
-    sync_span(item.event)
-    db.session.commit()
-    return jsonify({'success': True})
-
-
 @events_bp.route('/events/times/<int:time_id>/move', methods=['PUT'])
 @login_required
 @crew_required
@@ -974,23 +966,7 @@ def move_event_time(time_id):
         raise ApiError('End must be after the start')
     item.start_time, item.end_time = start, end
     db.session.flush()
-    sync_span(item.event)
-    db.session.commit()
-    return jsonify({'success': True})
-
-
-@events_bp.route('/events/times/<int:time_id>/delete', methods=['DELETE'])
-@login_required
-@crew_required
-def delete_event_time(time_id):
-    item = EventTime.query.get_or_404(time_id)
-    event = item.event
-    if not can_edit_event(event):
-        raise ApiError('You can only edit events you created', 403)
-    db.session.delete(item)
-    db.session.flush()
-    db.session.refresh(event)
-    sync_span(event)          # no-op when that was the last time: the span just stays as it was
+    extend_span(item.event)
     db.session.commit()
     return jsonify({'success': True})
 
