@@ -24,7 +24,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import or_
 
 from extensions import db
-from models import Event, Shift, ShiftAssignment, User, CrewAssignment
+from models import Event, EventTime, Shift, ShiftAssignment, User, CrewAssignment
 from decorators import crew_required
 from services.markdown_service import render_markdown
 from services.availability_service import expand_unavailability
@@ -119,11 +119,14 @@ def feed():
 
 
 def _event_items(start: datetime, end: datetime, manager: bool) -> list[dict]:
-    events = Event.query.filter(
-        Event.event_date < end,
-        or_(Event.event_end_date > start,
+    in_window = db.session.query(EventTime.event_id).filter(
+        EventTime.start_time < end, EventTime.end_time > start)
+    events = Event.query.filter(or_(
+        (Event.event_date < end) & or_(
+            Event.event_end_date > start,
             (Event.event_end_date.is_(None)) & (Event.event_date > start - DEFAULT_DURATION)),
-    ).order_by(Event.event_date).all()
+        Event.id.in_(in_window),
+    )).order_by(Event.event_date).all()
     mine = {a.event_id for a in CrewAssignment.query.filter_by(crew_member=current_user.username).all()}
     now = datetime.now()
 
@@ -156,8 +159,9 @@ def _event_items(start: datetime, end: datetime, manager: bool) -> list[dict]:
                         'url': f'/events/{e.id}',
                     },
                 })
-            continue
         e_end = event_end(e)
+        if not (e.event_date < end and e_end > start):
+            continue                          # only a labeled time is in this window
         all_day = bool(e.all_day)
         classes = ['cal-event']
         if e.id in mine:
@@ -371,11 +375,9 @@ def _build_ics(user: User, site_url: str) -> str:
 
     ics_events = []          # (uid, title, start, end, all_day, event)
     for e in Event.query.order_by(Event.event_date).all():
-        if e.times:
-            ics_events += [(f'event-{e.id}-t{t.id}@showwise', time_title(e, t), t.start_time, t.end_time, False, e)
-                           for t in times_for(e)]
-        else:
-            ics_events.append((f'event-{e.id}@showwise', e.title, e.event_date, event_end(e), bool(e.all_day), e))
+        ics_events.append((f'event-{e.id}@showwise', e.title, e.event_date, event_end(e), bool(e.all_day), e))
+        ics_events += [(f'event-{e.id}-t{t.id}@showwise', time_title(e, t), t.start_time, t.end_time, False, e)
+                       for t in times_for(e)]
 
     for uid, title, t_start, t_end, t_all_day, e in ics_events:
         body += ['BEGIN:VEVENT', f'UID:{uid}', f'DTSTAMP:{stamp}']
