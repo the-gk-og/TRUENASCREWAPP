@@ -79,8 +79,13 @@ def generate_event_pdf(event_id: int):
     else:
         time_info = f"{start_time} (Duration: TBD)"
 
+    from services.event_times import times_for, range_text
+    ev_times = times_for(event)
+    if ev_times:
+        time_info = '<br/>'.join(f'<b>{escape(t.label)}:</b> {escape(range_text(t))}' for t in ev_times)
+
     ov_data = [
-        [Paragraph('<b>Time:</b>',       body_style), Paragraph(time_info, body_style)],
+        [Paragraph('<b>Time:</b>' if not ev_times else '<b>Times:</b>', body_style), Paragraph(time_info, body_style)],
         [Paragraph('<b>Location:</b>',   body_style), Paragraph(event.location or 'TBD', body_style)],
         [Paragraph('<b>Created By:</b>', body_style), Paragraph(escape(name_for(event.created_by) or 'N/A'), body_style)],
         [Paragraph('<b>Created:</b>',    body_style), Paragraph(event.created_at.strftime('%B %d, %Y'), body_style)],

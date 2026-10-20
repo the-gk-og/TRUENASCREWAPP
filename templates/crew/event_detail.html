@@ -17,7 +17,8 @@
   <div>
     <h1>{{ event.title }}</h1>
     <div class="sw-chips">
-      <span class="sw-chip"><i class="fas fa-clock"></i>{{ fmt_range(event.event_date, end, event.all_day) }}</span>
+      {% if times %}{% for t in times %}<span class="sw-chip"><i class="fas fa-clock"></i>{{ t.label }} · {{ fmt_range(t.start_time, t.end_time) }}</span>{% endfor %}
+      {% else %}<span class="sw-chip"><i class="fas fa-clock"></i>{{ fmt_range(event.event_date, end, event.all_day) }}</span>{% endif %}
       {% if event.location %}<span class="sw-chip plain"><i class="fas fa-map-marker-alt"></i>{{ event.location }}</span>{% endif %}
       {% if is_series %}<span class="sw-chip plain"><i class="fas fa-redo"></i>Repeats · {{ series_count }} events</span>{% endif %}
       {% if on_team %}<span class="sw-chip ok">You're on this event</span>{% endif %}
@@ -124,6 +125,25 @@
     <div class="sw-progress" aria-hidden="true"><span data-task-bar></span></div>
     {{ task_list(tasks, manage=can_tasks, today=today) }}
     {% else %}<div class="sw-empty">No tasks yet.{% if can_tasks %} Use “Add task” to make one, or the <i class="fas fa-list-check"></i> button on a shift to add one to that shift.{% endif %}</div>{% endif %}
+  </div>
+
+  <!-- TIMES -->
+  <div class="card" id="times">
+    <div class="sw-card-head"><h3><i class="fas fa-calendar-day"></i> Times ({{ times|length }})</h3>
+      {% if can_edit %}<button class="btn btn-sm btn-primary" data-act="add-time"><i class="fas fa-plus"></i>Add time</button>{% endif %}</div>
+    {% if times %}
+    <div class="sw-timeline">
+      {% for t in times %}
+      <div class="sw-tl-item">
+        <div class="sw-tl-time">{{ fmt_range(t.start_time, t.end_time) }}
+          {% if can_edit %}<span class="sw-tl-btns">
+            <button class="btn btn-ghost btn-icon" data-act="edit-time" data-id="{{ t.id }}" title="Edit"><i class="fas fa-pen"></i></button>
+            <button class="btn btn-ghost btn-icon" data-act="del-time" data-id="{{ t.id }}" title="Delete"><i class="fas fa-trash"></i></button></span>{% endif %}</div>
+        <div class="sw-tl-title">{{ event.title }} - {{ t.label }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}<div class="sw-empty">No labeled times. Use “Add time” for things like Bump-in, Show 1, Show 2 — each shows up separately on the calendar.</div>{% endif %}
   </div>
 
   <!-- SCHEDULE -->
@@ -283,6 +303,10 @@ const actions = {
     const r = await SW.run(() => SW.api('POST', `/events/${EV.id}/team/add-all`));
     if (r) done(`${r.added} added`);
   },
+
+  async 'add-time'() { if (await SW.timeForm({ eventId: EV.id, defaultStart: D.times && Object.keys(D.times).length ? EV.event_end_date : EV.event_date })) done('Time added'); },
+  async 'edit-time'(b) { if (await SW.timeForm({ eventId: EV.id, item: D.times[b.dataset.id] })) done('Time saved'); },
+  'del-time'(b) { return removeWith(`/events/times/${b.dataset.id}/delete`, 'this time'); },
 
   async 'add-sched'() { if (await SW.scheduleForm({ eventId: EV.id, defaultTime: EV.event_date })) done('Added'); },
   async 'edit-sched'(b) { if (await SW.scheduleForm({ eventId: EV.id, item: D.schedules[b.dataset.id] })) done('Saved'); },

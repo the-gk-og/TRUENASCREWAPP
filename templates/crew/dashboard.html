@@ -415,20 +415,21 @@
             <span>Upcoming events</span>
             <a href="{{ url_for('calendar.calendar') }}">Calendar</a>
         </h3>
-        {% if upcoming_events %}
+        {% if upcoming_rows %}
         <ul class="dash-events-list">
-            {% for event in upcoming_events %}
+            {% for row in upcoming_rows %}
+            {% set event = row.event %}
             {% set is_mine = event in my_upcoming_events %}
             <li>
                 <a class="dash-event {% if is_mine %}mine{% endif %}" href="{{ url_for('events.event_detail', id=event.id) }}">
                     <div class="dash-datebox">
-                        <span class="dash-datebox-mon">{{ event.event_date.strftime('%b') }}</span>
-                        <span class="dash-datebox-day">{{ event.event_date.strftime('%d').lstrip('0') }}</span>
+                        <span class="dash-datebox-mon">{{ row.start.strftime('%b') }}</span>
+                        <span class="dash-datebox-day">{{ row.start.strftime('%d').lstrip('0') }}</span>
                     </div>
                     <div class="dash-event-main">
-                        <div class="dash-event-title">{{ event.title }}</div>
+                        <div class="dash-event-title">{{ row.title }}</div>
                         <div class="dash-event-sub">
-                            <i class="far fa-clock"></i>{% if event.all_day %}All day{% else %}{{ event.event_date.strftime('%a, %I:%M %p').replace(' 0', ' ') }}{% endif %}
+                            <i class="far fa-clock"></i>{% if row.time %}{{ row.start.strftime('%a, %I:%M %p').replace(' 0', ' ') }} – {{ row.end.strftime('%I:%M %p').lstrip('0') }}{% elif event.all_day %}All day{% else %}{{ event.event_date.strftime('%a, %I:%M %p').replace(' 0', ' ') }}{% endif %}
                             {% if event.location %} · <i class="fas fa-map-marker-alt"></i>{{ event.location }}{% endif %}
                         </div>
                         {% if is_mine %}<span class="dash-chip">You're on this</span>{% endif %}

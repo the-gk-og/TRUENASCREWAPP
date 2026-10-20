@@ -10,6 +10,7 @@ from services.user_names import (
     find_user_by_username, username_problem, username_taken, email_taken, clean_display_name, name_for,
 )
 from decorators import crew_required
+from services.event_times import when_text
 from services.email_service import send_cast_assignment_email, send_cast_welcome_email
 
 cast_bp = Blueprint('cast', __name__)
@@ -105,7 +106,7 @@ def add_cast():
             send_cast_assignment_email(
                 recipient_email=user.email, username=user.shown_name,
                 event_title=event.title,
-                event_date=event.event_date.strftime('%B %d, %Y at %I:%M %p'),
+                event_date=when_text(event),
                 event_location=event.location or 'TBD',
                 character_name=cast.character_name, role_type=cast.role_type,
             )

@@ -28,6 +28,7 @@ from models import Event, Shift, ShiftAssignment, User, CrewAssignment
 from decorators import crew_required
 from services.markdown_service import render_markdown
 from services.availability_service import expand_unavailability
+from services.event_times import times_for, time_title
 from routes.events import (
     ApiError, parse_dt, event_end, fmt_range, is_manager, is_series, DEFAULT_DURATION,
 )
@@ -128,6 +129,34 @@ def _event_items(start: datetime, end: datetime, manager: bool) -> list[dict]:
 
     items = []
     for e in events:
+        if e.times:
+            # One calendar entry per labeled time: "{event} - {label}"
+            for t in times_for(e):
+                if not (t.start_time < end and t.end_time > start):
+                    continue
+                classes = ['cal-event']
+                if e.id in mine:
+                    classes.append('cal-event-mine')
+                if t.end_time < now:
+                    classes.append('cal-past')
+                items.append({
+                    'id': f'e-{e.id}-t{t.id}',
+                    'title': time_title(e, t),
+                    'start': _iso(t.start_time, False),
+                    'end': _iso(t.end_time),
+                    'allDay': False,
+                    'classNames': classes,
+                    'extendedProps': {
+                        'kind': 'event', 'event_id': e.id, 'time_id': t.id, 'label': t.label,
+                        'location': e.location or '',
+                        'when': fmt_range(t.start_time, t.end_time),
+                        'description_html': _md(e.description) if e.description else '',
+                        'on_team': e.id in mine, 'recurring': is_series(e),
+                        'can_edit': manager or e.created_by == current_user.username,
+                        'url': f'/events/{e.id}',
+                    },
+                })
+            continue
         e_end = event_end(e)
         all_day = bool(e.all_day)
         classes = ['cal-event']
@@ -340,10 +369,18 @@ def _build_ics(user: User, site_url: str) -> str:
     head = '\r\n'.join(lines) + '\r\n' + TZ_BLOCK
     body = []
 
+    ics_events = []          # (uid, title, start, end, all_day, event)
     for e in Event.query.order_by(Event.event_date).all():
-        body += ['BEGIN:VEVENT', f'UID:event-{e.id}@showwise', f'DTSTAMP:{stamp}']
-        body += _dt_lines(e.event_date, event_end(e), bool(e.all_day))
-        body.append(f'SUMMARY:{_esc(e.title)}')
+        if e.times:
+            ics_events += [(f'event-{e.id}-t{t.id}@showwise', time_title(e, t), t.start_time, t.end_time, False, e)
+                           for t in times_for(e)]
+        else:
+            ics_events.append((f'event-{e.id}@showwise', e.title, e.event_date, event_end(e), bool(e.all_day), e))
+
+    for uid, title, t_start, t_end, t_all_day, e in ics_events:
+        body += ['BEGIN:VEVENT', f'UID:{uid}', f'DTSTAMP:{stamp}']
+        body += _dt_lines(t_start, t_end, t_all_day)
+        body.append(f'SUMMARY:{_esc(title)}')
         desc = [e.description] if e.description else []
         sched = sorted(e.schedules, key=lambda x: x.scheduled_time)
         if sched:

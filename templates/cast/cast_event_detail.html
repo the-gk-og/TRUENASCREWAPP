@@ -28,7 +28,7 @@
     <!-- Event Overview -->
     <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid var(--warning);">
         <p style="color: #78350f; margin: 0.5rem 0; font-size: 1.05rem;">
-            📅 <strong>Performance:</strong> {{ event.event_date.strftime('%B %d, %Y at %I:%M %p') }}
+            📅 <strong>Performance:</strong> {{ event|event_when(' · ') }}
         </p>
         {% if event.event_end_date %}
         <p style="color: #78350f; margin: 0.5rem 0;">

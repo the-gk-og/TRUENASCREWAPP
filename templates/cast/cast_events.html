@@ -19,7 +19,7 @@
         <div class="card" style="background: linear-gradient(135deg, #667eea22 0%, #764ba222 100%); border: 2px solid #667eea;">
             <h3 style="margin-bottom: 0.5rem;">{{ event.title }}</h3>
             <p style="color: #666; margin-bottom: 0.5rem;">
-                📅 {{ event.event_date.strftime('%B %d, %Y at %I:%M %p') }}
+                📅 {{ event|event_when(' · ') }}
             </p>
             {% if event.event_end_date %}
             <p style="color: #666; margin-bottom: 0.5rem;">

@@ -24,11 +24,16 @@
 
 {% macro row(e) %}
   <a class="sw-event-row" href="{{ url_for('events.event_detail', id=e.id) }}"
-     data-search="{{ (e.title ~ ' ' ~ (e.location or ''))|lower }}">
+     data-search="{{ (e.title ~ ' ' ~ (e.location or '') ~ ' ' ~ (e.times|map(attribute='label')|join(' ')))|lower }}">
     <div class="sw-datebox"><b>{{ e.event_date.day }}</b><span>{{ e.event_date.strftime('%b') }}</span></div>
     <div class="main">
       <div class="title">{{ e.title }}</div>
+      {% if e.times %}
+      {% for t in e.times %}<div class="sub"><strong>{{ e.title }} - {{ t.label }}</strong> · {{ fmt_range(t.start_time, t.end_time) }}</div>{% endfor %}
+      {% if e.location %}<div class="sub"><i class="fas fa-map-marker-alt"></i> {{ e.location }}</div>{% endif %}
+      {% else %}
       <div class="sub">{{ fmt_range(e.event_date, event_end(e), e.all_day) }}{% if e.location %} · <i class="fas fa-map-marker-alt"></i> {{ e.location }}{% endif %}</div>
+      {% endif %}
     </div>
     <div class="sw-chips" style="margin:0">
       {% if e.id in mine %}<span class="sw-chip ok">You're on this</span>{% endif %}
