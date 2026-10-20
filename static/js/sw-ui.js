@@ -10,6 +10,7 @@
  *   SW.eventForm({...})            create / edit an event
  *   SW.shiftForm({...})            add / edit a person's shift
  *   SW.bulkShiftForm({...})        pick many people and give them all the same shift
+ *   SW.timeForm({...})             add / edit a labeled event time (Bump-in, Show 1...)
  *   SW.scheduleForm / SW.runForm   schedule + run-list items
  *   SW.taskForm({...})             add / edit an event task, shift task or assigned task
  *
@@ -447,6 +448,11 @@
       { name: 'location', label: 'Location', maxLength: 200, placeholder: 'Venue / room' },
       { name: 'description', label: 'Description', type: 'markdown', rows: 7 },
     ];
+    if (edit && d.times && d.times.length) {
+      // Dates come from the labeled times (Bump-in, Show 1...) - edit those on the event page.
+      for (const n of ['all_day', 'event_date', 'event_end_date']) fields.splice(fields.findIndex((f) => f.name === n), 1);
+      fields.splice(1, 0, { type: 'info', text: 'This event’s dates come from its labeled times. Edit them in the Times card on the event page.' });
+    }
     if (edit && d.is_recurring) {
       fields.push({
         name: 'scope', label: 'Apply changes to', type: 'select', options: [
@@ -675,6 +681,24 @@
           submit.disabled = false; submit.textContent = label;
         }
       });
+    });
+  };
+
+  const TIME_LABELS = ['Bump-in', 'Rehearsal', 'Doors', 'Show', 'Show 1', 'Show 2', 'Matinee', 'Bump-out'];
+  SW.timeForm = function ({ eventId, item, defaultStart }) {
+    const edit = !!item;
+    return SW.form({
+      title: edit ? 'Edit time' : 'Add time',
+      values: edit ? { label: item.label, start_time: SW.toInput(item.start), end_time: SW.toInput(item.end) }
+        : { start_time: SW.toInput(defaultStart), end_time: SW.addHours(SW.toInput(defaultStart), 2) },
+      fields: [
+        { name: 'label', label: 'Label', required: true, maxLength: 100, suggestions: TIME_LABELS, placeholder: 'e.g. Bump-in, Show 1' },
+        { name: 'start_time', label: 'Starts', type: 'datetime', required: true, half: true },
+        { name: 'end_time', label: 'Ends', type: 'datetime', required: true, half: true },
+      ],
+      submitText: edit ? 'Save' : 'Add time',
+      onSubmit: (v) => edit ? SW.api('PUT', `/events/times/${item.id}/edit`, v)
+        : SW.api('POST', `/events/${eventId}/times/add`, v),
     });
   };
 

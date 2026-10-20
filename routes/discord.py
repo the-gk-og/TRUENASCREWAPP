@@ -2,6 +2,7 @@
 
 import hmac
 import os
+from services.event_times import when_text
 from datetime import datetime
 from flask import Blueprint, jsonify, request
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -92,7 +93,7 @@ def discord_user_events(discord_id):
         event = Event.query.get(a.event_id)
         if event:
             events.append({'id': event.id, 'title': event.title,
-                           'date': event.event_date.strftime('%B %d, %Y at %I:%M %p'),
+                           'date': when_text(event, '\n'),
                            'location': event.location or 'TBD', 'role': a.role or 'Crew Member'})
     return jsonify({'events': events})
 
@@ -101,7 +102,7 @@ def discord_list_events():
     if not _auth(): return _unauthorized()
     events = Event.query.filter(Event.event_date >= datetime.now()).order_by(Event.event_date).limit(10).all()
     return jsonify({'events': [{'id': e.id, 'title': e.title,
-                                'date': e.event_date.strftime('%B %d, %Y at %I:%M %p'),
+                                'date': when_text(e, '\n'),
                                 'location': e.location or 'TBD',
                                 'crew_count': len(e.crew_assignments)} for e in events]})
 

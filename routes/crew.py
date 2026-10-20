@@ -6,14 +6,16 @@ from flask import (
     Blueprint, render_template, request, jsonify,
 )
 from flask_login import login_required, current_user
+from sqlalchemy import or_
 
 from extensions import db
 from models import (
-    Event, CrewAssignment, User, TodoItem,
+    Event, EventTime, CrewAssignment, User, TodoItem,
     Shift, ShiftAssignment, UserUnavailability, RecurringUnavailability,
 )
 from decorators import crew_required
 from services.user_names import find_user_by_username
+from services.event_times import upcoming_time_rows, when_text
 from services.email_service import (
     send_crew_assignment_email, send_event_reminder_email,
 )
@@ -30,7 +32,11 @@ crew_bp = Blueprint('crew', __name__)
 @crew_required
 def dashboard():
     now             = datetime.now()
-    upcoming_events = Event.query.filter(Event.event_date >= now).order_by(Event.event_date).limit(10).all()
+    # Events still to come (an event with labeled times stays until its last time ends)
+    still_running = db.session.query(EventTime.event_id).filter(EventTime.end_time >= now)
+    upcoming_events = Event.query.filter(
+        or_(Event.event_date >= now, Event.id.in_(still_running))).order_by(Event.event_date).limit(10).all()
+    upcoming_rows = upcoming_time_rows(upcoming_events, now)[:10]
 
     my_upcoming_events = []
     for event in upcoming_events:
@@ -53,6 +59,7 @@ def dashboard():
     return render_template(
         '/crew/dashboard.html',
         upcoming_events=upcoming_events,
+        upcoming_rows=upcoming_rows,
         my_upcoming_events=my_upcoming_events,
         pending_tasks_count=len(pending_tasks),
         pending_tasks=pending_tasks,
@@ -87,7 +94,7 @@ def assign_crew():
         send_crew_assignment_email(
             recipient_email=user.email, username=user.shown_name,
             event_title=event.title,
-            event_date=event.event_date.strftime('%B %d, %Y at %I:%M %p'),
+            event_date=when_text(event),
             event_location=event.location or 'TBD',
             role=data.get('role', 'Crew Member'),
             event_description=event.description or '',
@@ -124,7 +131,7 @@ def assign_all_crew():
                 send_crew_assignment_email(
                     recipient_email=user.email, username=user.shown_name,
                     event_title=event.title,
-                    event_date=event.event_date.strftime('%B %d, %Y at %I:%M %p'),
+                    event_date=when_text(event),
                     event_location=event.location or 'TBD',
                     role='Crew Member',
                 )
@@ -146,7 +153,7 @@ def resend_notification():
         send_event_reminder_email(
             recipient_email=user.email, username=user.shown_name,
             event_title=event.title,
-            event_date=event.event_date.strftime('%B %d, %Y at %I:%M %p'),
+            event_date=when_text(event),
             event_location=event.location or 'TBD',
             role=assignment.role or 'Crew Member',
             reminder_type='tomorrow',

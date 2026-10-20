@@ -1,6 +1,7 @@
 """services/notification_service.py — Discord notifications and scheduled reminders."""
 
 import os, threading, requests
+from services.event_times import when_text
 from datetime import datetime, timedelta
 
 DISCORD_WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL', '')
@@ -16,7 +17,7 @@ def send_discord_event_announcement(event) -> bool:
             "description": event.description or "No description provided",
             "color":       6366239,
             "fields": [
-                {"name": "📅 Date & Time", "value": event.event_date.strftime('%B %d, %Y at %I:%M %p'), "inline": False},
+                {"name": "📅 Date & Time", "value": when_text(event, '\n'), "inline": False},
                 {"name": "📍 Location",   "value": event.location or "TBD", "inline": False},
                 {"name": "🎟️ Event ID",    "value": str(event.id),           "inline": True},
             ],
@@ -64,7 +65,7 @@ def schedule_event_notifications(event) -> None:
                 embed = {
                     "title": title, "description": desc, "color": colour,
                     "fields": [
-                        {"name": "📅 Date & Time", "value": ev.event_date.strftime('%B %d, %Y at %I:%M %p'), "inline": False},
+                        {"name": "📅 Date & Time", "value": when_text(ev, '\n'), "inline": False},
                         {"name": "📍 Location",    "value": ev.location or "TBD", "inline": False},
                     ],
                 }

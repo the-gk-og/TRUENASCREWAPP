@@ -73,6 +73,8 @@ def create_app(config_name: str | None = None):
     # {{ note.created_by|person }} - turn a stored username into the person's display name
     from services.user_names import name_for
     app.jinja_env.filters['person'] = name_for
+    from services.event_times import when_text as _when_text
+    app.jinja_env.filters['event_when'] = _when_text
 
     # Context processor
     @app.context_processor

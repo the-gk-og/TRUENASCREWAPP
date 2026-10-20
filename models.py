@@ -196,6 +196,24 @@ class EventSchedule(db.Model):
     event = db.relationship('Event', backref=db.backref('schedules', cascade='all, delete-orphan'))
 
 
+class EventTime(db.Model):
+    """A labeled start/end time on an event (e.g. Bump-in, Show 1, Show 2).
+
+    One event page can have many of these.  Everywhere the event is listed
+    (calendar, dashboard, Discord, cast pages, emails) each time shows up as
+    "{event title} - {label}".  Event.event_date / event_end_date always cover
+    the earliest start to the latest end of these times (see services/event_times.py).
+    """
+    id         = db.Column(db.Integer, primary_key=True)
+    event_id   = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False, index=True)
+    label      = db.Column(db.String(100), nullable=False)
+    start_time = db.Column(db.DateTime, nullable=False)
+    end_time   = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    event = db.relationship('Event', backref=db.backref(
+        'times', cascade='all, delete-orphan', order_by='EventTime.start_time'))
+
+
 class EventNote(db.Model):
     id         = db.Column(db.Integer, primary_key=True)
     event_id   = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)

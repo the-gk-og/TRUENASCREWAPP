@@ -84,7 +84,7 @@ const cal = new FullCalendar.Calendar($('calendar'), {
   slotLabelFormat: { hour: 'numeric', minute: '2-digit', meridiem: 'short' },
   noEventsContent: 'Nothing scheduled in this period',
   editable: CAN_MANAGE,
-  eventAllow: (drop, ev) => !(ev.extendedProps.kind === 'shift' && drop.allDay),
+  eventAllow: (drop, ev) => !((ev.extendedProps.kind === 'shift' || ev.extendedProps.time_id) && drop.allDay),
 
   events: async (info, ok, fail) => {
     const p = new URLSearchParams({ start: SW.toInput(info.start), end: SW.toInput(info.end),
@@ -119,7 +119,10 @@ cal.render();
 async function moved(info) {
   const ev = info.event, x = ev.extendedProps;
   try {
-    if (x.kind === 'event') {
+    if (x.kind === 'event' && x.time_id) {
+      await SW.api('PUT', `/events/times/${x.time_id}/move`, {
+        event_date: SW.toInput(ev.start), event_end_date: ev.end ? SW.toInput(ev.end) : null });
+    } else if (x.kind === 'event') {
       await SW.api('PUT', `/events/${x.event_id}/move`, {
         all_day: ev.allDay, event_date: SW.toInput(ev.start, ev.allDay),
         event_end_date: ev.end ? SW.toInput(ev.end, ev.allDay) : null });
