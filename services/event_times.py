@@ -1,8 +1,8 @@
 """services/event_times.py — labeled times on an event (Bump-in, Show 1, Show 2 ...).
 
-An event keeps its overall ``event_date`` / ``event_end_date``; when it has labeled
-times those two columns are kept equal to the earliest start and latest end, so
-every existing query (ordering, reminders, "upcoming", etc.) keeps working.
+An event keeps its own ``event_date`` / ``event_end_date`` (set in the event form).
+Labeled times are extra: they are widened-into that span (never shrinking it) so every
+existing query (ordering, reminders, "upcoming", calendar window) keeps working.
 """
 
 from models import EventTime
@@ -13,14 +13,20 @@ def times_for(event) -> list:
     return sorted(event.times, key=lambda t: (t.start_time, t.end_time, t.id or 0))
 
 
-def sync_span(event) -> None:
-    """Make the event's own start/end cover all of its labeled times."""
+def extend_span(event) -> None:
+    """Widen the event's own start/end so they cover all of its labeled times.
+
+    Never shrinks: dates the person typed in the event form are kept as they are.
+    """
     ts = times_for(event)
     if not ts:
         return
-    event.event_date = min(t.start_time for t in ts)
-    event.event_end_date = max(t.end_time for t in ts)
-    event.all_day = False
+    lo = min(t.start_time for t in ts)
+    hi = max(t.end_time for t in ts)
+    if lo < event.event_date:
+        event.event_date = lo
+    if hi > (event.event_end_date or event.event_date):
+        event.event_end_date = hi
 
 
 def time_title(event, t) -> str:
