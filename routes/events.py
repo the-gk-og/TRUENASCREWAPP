@@ -38,7 +38,7 @@ from services.markdown_service import render_markdown
 from services.availability_service import find_conflicts
 from services.email_service import send_shift_assignment_emails_async
 from services.user_names import name_for
-from services.event_times import extend_span, times_json, times_for
+from services.event_times import times_json, times_for
 from services.notification_service import (
     send_discord_event_announcement, schedule_event_notifications,
 )
@@ -208,7 +208,6 @@ def _apply_times(event: Event, times, shift: timedelta = timedelta(0)):
     for label, start, end in times:
         event.times.append(EventTime(label=label, start_time=start + shift, end_time=end + shift))
     db.session.flush()
-    extend_span(event)
 
 
 # ---- recurrence ----------------------------------------------------------
@@ -320,7 +319,8 @@ def events_list():
     now = datetime.now()
     ended = Event.query.filter(
         or_(Event.event_end_date < now,
-            (Event.event_end_date.is_(None)) & (Event.event_date < now - DEFAULT_DURATION)))
+            (Event.event_end_date.is_(None)) & (Event.event_date < now - DEFAULT_DURATION)),
+        ~Event.id.in_(db.session.query(EventTime.event_id).filter(EventTime.end_time >= now)))
     upcoming = Event.query.filter(~Event.id.in_(ended.with_entities(Event.id))) \
         .order_by(Event.event_date).all()
     past = ended.order_by(Event.event_date.desc()).limit(50).all()
@@ -965,8 +965,6 @@ def move_event_time(time_id):
     if end <= start:
         raise ApiError('End must be after the start')
     item.start_time, item.end_time = start, end
-    db.session.flush()
-    extend_span(item.event)
     db.session.commit()
     return jsonify({'success': True})
 

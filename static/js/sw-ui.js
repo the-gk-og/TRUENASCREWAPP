@@ -493,8 +493,8 @@
       { name: 'event_date', label: 'Starts', type: 'datetime', allDayToggle: 'all_day', required: true, half: true, defaultTime: '09:00' },
       { name: 'event_end_date', label: 'Ends', type: 'datetime', allDayToggle: 'all_day', required: true, half: true, defaultTime: '12:00' },
       { name: 'location', label: 'Location', maxLength: 200, placeholder: 'Venue / room' },
-      { name: 'times', label: 'Times', type: 'times', defaultStart: d.event_date,
-        hint: 'Optional. Add labeled times like Bump-in, Show 1, Show 2. Each shows up separately as “Event - Label”.' },
+      { name: 'times', label: 'More times', type: 'times', defaultStart: d.event_end_date || d.event_date,
+        hint: 'Optional. Starts / Ends above is the event’s first time. Add more labeled times here, like Bump-in, Show 1, Show 2. Each shows up as “Event - Label”.' },
       { name: 'description', label: 'Description', type: 'markdown', rows: 7 },
     ];
     if (edit && d.is_recurring) {

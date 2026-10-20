@@ -1,4 +1,5 @@
-"""Labeled event times (Bump-in, Show 1, Show 2), set in the create/edit event form.
+"""Labeled extra times (Bump-in, Show 1, Show 2) added in the create/edit event form,
+on top of the event's own Starts/Ends time.
 Run: pytest tests/test_event_times.py"""
 import os, sys
 from datetime import datetime
@@ -25,23 +26,24 @@ def create(c, times=TIMES, **kw):
     return r.get_json()['id']
 
 
-def test_create_with_times_keeps_dates_and_shows_each_time(app, admin):
+def test_start_end_is_time_one_and_times_are_extra(app, admin):
     eid = create(admin)
     with app.app_context():
         e = db.session.get(Event, eid)
         assert [t.label for t in e.times] == ['Bump-in', 'Show 1', 'Show 2']
-        assert e.event_date == datetime(2030, 5, 1, 16)            # widened to cover Bump-in
-        assert e.event_end_date == datetime(2030, 5, 2, 21)        # and Show 2
+        assert e.event_date == datetime(2030, 5, 1, 18)            # exactly what was typed
+        assert e.event_end_date == datetime(2030, 5, 1, 20)
     feed = admin.get('/api/calendar/feed?start=2030-04-28T00:00&end=2030-05-05T00:00').get_json()
     titles = sorted(i['title'] for i in feed if i['extendedProps'].get('kind') == 'event')
-    assert titles == ['Panto - Bump-in', 'Panto - Show 1', 'Panto - Show 2']
+    assert titles == ['Panto', 'Panto - Bump-in', 'Panto - Show 1', 'Panto - Show 2']
 
 
-def test_dates_typed_in_form_are_not_shrunk(app, admin):
-    eid = create(admin, event_date='2030-05-01T08:00', event_end_date='2030-05-03T23:00')
+def test_time_outside_event_dates_still_found_by_window(app, admin):
+    eid = create(admin, times=[{'label': 'Show 2', 'start': '2030-06-10T19:00', 'end': '2030-06-10T21:00'}])
+    feed = admin.get('/api/calendar/feed?start=2030-06-08T00:00&end=2030-06-15T00:00').get_json()
+    assert [i['title'] for i in feed if i['extendedProps'].get('kind') == 'event'] == ['Panto - Show 2']
     with app.app_context():
-        e = db.session.get(Event, eid)
-        assert e.event_date == datetime(2030, 5, 1, 8) and e.event_end_date == datetime(2030, 5, 3, 23)
+        assert db.session.get(Event, eid).event_date == datetime(2030, 5, 1, 18)
 
 
 def test_validation_and_permissions(app, admin, alice):
@@ -68,7 +70,7 @@ def test_edit_replaces_times_and_omitting_keeps_them(app, admin):
     with app.app_context():
         assert EventTime.query.count() == 0
     feed = admin.get('/api/calendar/feed?start=2030-04-28T00:00&end=2030-05-05T00:00').get_json()
-    assert [i['title'] for i in feed if i['extendedProps'].get('kind') == 'event'] == ['Panto II']
+    assert [i['title'] for i in feed if i['extendedProps'].get('kind') == 'event'] == ['Panto II']   # just the one time again
 
 
 def test_calendar_drag_of_one_time(app, admin):
@@ -79,7 +81,8 @@ def test_calendar_drag_of_one_time(app, admin):
         'event_date': '2030-05-04T19:00', 'event_end_date': '2030-05-04T21:00'}).status_code == 200
     with app.app_context():
         e = db.session.get(Event, eid)
-        assert e.event_end_date == datetime(2030, 5, 4, 21)
+        assert db.session.get(EventTime, tid).start_time == datetime(2030, 5, 4, 19)
+        assert e.event_date == datetime(2030, 5, 1, 18)
 
 
 def test_pages_duplicate_series_and_ics(app, admin):
@@ -87,7 +90,7 @@ def test_pages_duplicate_series_and_ics(app, admin):
     for url in (f'/events/{eid}', '/events', '/dashboard', '/calendar', f'/api/events/{eid}'):
         assert admin.get(url).status_code == 200, url
     assert b'Show 1' in admin.get(f'/events/{eid}').data
-    new_id = admin.post(f'/events/{eid}/duplicate', json={'event_date': '2030-05-08T16:00'}).get_json()['id']
+    new_id = admin.post(f'/events/{eid}/duplicate', json={'event_date': '2030-05-08T18:00'}).get_json()['id']
     with app.app_context():
         ts = db.session.get(Event, new_id).times
         assert sorted(t.label for t in ts) == ['Bump-in', 'Show 1', 'Show 2']
@@ -103,8 +106,8 @@ def test_pages_duplicate_series_and_ics(app, admin):
 def test_series_edit_applies_times_to_every_event(app, admin):
     sid = create(admin, recurrence={'pattern': 'weekly', 'count': 3})
     new = [{'label': 'Show', 'start': '2030-05-01T19:00', 'end': '2030-05-01T21:00'}]
-    r = admin.put(f'/events/{sid}/edit', json={'title': 'Panto', 'event_date': '2030-05-01T16:00',
-                                                 'event_end_date': '2030-05-02T21:00', 'times': new, 'scope': 'all'})
+    r = admin.put(f'/events/{sid}/edit', json={'title': 'Panto', 'event_date': '2030-05-01T18:00',
+                                                 'event_end_date': '2030-05-01T20:00', 'times': new, 'scope': 'all'})
     assert r.status_code == 200
     with app.app_context():
         starts = sorted(t.start_time for t in EventTime.query.all())
@@ -116,7 +119,8 @@ def test_when_text_and_cascade(app, admin):
     eid = create(admin)
     with app.app_context():
         e = db.session.get(Event, eid)
-        assert when_text(e, '\n').splitlines()[0].startswith('Bump-in: ')
+        lines = when_text(e, '\n').splitlines()
+        assert lines[0] == 'May 01, 2030 at 06:00 PM' and lines[1].startswith('Bump-in: ')
         db.session.delete(e)
         db.session.commit()
         assert EventTime.query.count() == 0

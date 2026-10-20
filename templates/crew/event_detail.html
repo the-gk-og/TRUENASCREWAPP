@@ -17,8 +17,8 @@
   <div>
     <h1>{{ event.title }}</h1>
     <div class="sw-chips">
-      {% if times %}{% for t in times %}<span class="sw-chip"><i class="fas fa-clock"></i>{{ t.label }} · {{ fmt_range(t.start_time, t.end_time) }}</span>{% endfor %}
-      {% else %}<span class="sw-chip"><i class="fas fa-clock"></i>{{ fmt_range(event.event_date, end, event.all_day) }}</span>{% endif %}
+      <span class="sw-chip"><i class="fas fa-clock"></i>{{ fmt_range(event.event_date, end, event.all_day) }}</span>
+      {% for t in times %}<span class="sw-chip"><i class="fas fa-clock"></i>{{ t.label }} · {{ fmt_range(t.start_time, t.end_time) }}</span>{% endfor %}
       {% if event.location %}<span class="sw-chip plain"><i class="fas fa-map-marker-alt"></i>{{ event.location }}</span>{% endif %}
       {% if is_series %}<span class="sw-chip plain"><i class="fas fa-redo"></i>Repeats · {{ series_count }} events</span>{% endif %}
       {% if on_team %}<span class="sw-chip ok">You're on this event</span>{% endif %}
