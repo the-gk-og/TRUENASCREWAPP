@@ -21,19 +21,14 @@ Back the key up somewhere safe. Never put it on a server.
 Leave the two required vars unset and the feature is completely off (/support/* returns 404).
 Add `cryptography` to requirements.txt.
 
-## 3. Wire into the Flask app (3 edits)
-    # app.py, right after app = Flask(...) and BEFORE your own before_request hooks
-    from support_access import init_support_access, load_support_user
-    init_support_access(app)
+## 3. Wiring (done in this repo)
+`app.py` calls `init_support_access(app)` and the Flask-Login `user_loader` checks `load_support_user()` first.
+Nothing to edit: set the two env vars in step 2 and restart. If `/support/login` still 404s, the vars are not set.
+The backend's Support page shows a "Receiver" chip that tells you which state each instance is in.
 
-    # your Flask-Login user_loader: check the support user first
-    @login_manager.user_loader
-    def load_user(user_id):
-        return load_support_user(user_id) or User.query.get(int(user_id))
-
-Not using Flask-Login? Pass `init_support_access(app, login_hook=fn, is_admin_hook=fn)`.
-If you use Flask-WTF CSRFProtect it's exempted automatically.
-If a global before_request redirects anonymous users, whitelist `/support/login`.
+`SupportUser` carries every attribute the app reads from `current_user` (`is_cast`, `shown_name`, ...). If you add a new
+`current_user.<attr>` anywhere, add it there too, or support sessions will hit an AttributeError on that page.
+`tests/test_support_integration.py` crawls every page as a support user and fails if one breaks.
 
 ## 4. Getting in
     python tools/support_mint.py --instance greenroom-crew --operator elijah \
@@ -52,8 +47,8 @@ Open the printed link within the token lifetime. A red bar is shown on every pag
 - `SupportUser` (support_access.py) is a stand-in with is_admin/role/name fields. If your
   templates or decorators read other `current_user` attributes (e.g. `current_user.id` as an int,
   `crew_role`), add them there.
-- Default blocked list is empty because I haven't seen your routes. Add prefixes for password
-  changes, user deletion and secret/token settings (Discord bot token, SMTP).
+- Always blocked for support: `/settings`, `/change-password`, `/api/2fa`, `/api/settings`, `/login/2fa`, `/auth/google`,
+  `/admin/restore` (personal account pages and database restore). Add more with `SUPPORT_BLOCKED_PREFIXES`.
 - Rate limiting and replay protection use SQLite, so they hold across gunicorn workers on one
   host. Several containers must share SUPPORT_DB_PATH.
 - Tell customers it exists (and that sessions are logged and visible to them).
