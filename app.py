@@ -40,6 +40,11 @@ def create_app(config_name: str | None = None):
     from services.security import init_security
     init_security(app)
 
+    # Support login for the ShowWise backend. Off (every /support/* route 404s) unless both
+    # SUPPORT_PUBLIC_KEY and SUPPORT_INSTANCE_ID are set. Must be registered before our own before_request hooks.
+    from support_access import init_support_access, load_support_user
+    init_support_access(app)
+
     # Initialise extensions
     db.init_app(app)
     login_manager.init_app(app)
@@ -64,6 +69,11 @@ def create_app(config_name: str | None = None):
     from models import User
     @login_manager.user_loader
     def load_user(user_id):
+        support_user = load_support_user(user_id)  # virtual support account, never stored in the DB
+        if support_user is not None:
+            return support_user
+        if not str(user_id).isdigit():
+            return None  # e.g. a stale "support:..." id after the session expired
         return User.query.get(int(user_id))
 
     # Markdown filter — {{ text|md }} renders sanitised HTML

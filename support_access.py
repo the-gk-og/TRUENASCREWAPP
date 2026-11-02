@@ -56,6 +56,10 @@ MAX_TOKEN_LIFETIME = 30 * 60      # seconds a token may be valid for
 CLOCK_SKEW = 30                   # seconds of tolerated clock drift
 FAIL_LIMIT, FAIL_WINDOW = 5, 300  # failed logins per IP per window
 SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
+# Always off-limits to support, on top of SUPPORT_BLOCKED_PREFIXES: personal account, 2FA and password pages
+# belong to the real person, and a restore would overwrite the whole database.
+DEFAULT_BLOCKED = ("/settings", "/change-password", "/api/2fa", "/api/settings", "/login/2fa",
+                   "/auth/google", "/admin/restore")
 SCOPES = ("readonly", "admin")
 
 support_bp = Blueprint("support_access", __name__, url_prefix="/support")
@@ -75,7 +79,7 @@ def _cfg() -> dict:
         "instance_id": (e("SUPPORT_INSTANCE_ID") or "").strip(),
         "session_minutes": int(e("SUPPORT_SESSION_MINUTES", "60")),
         "allowed_ips": split(e("SUPPORT_ALLOWED_IPS")),
-        "blocked": split(e("SUPPORT_BLOCKED_PREFIXES")),
+        "blocked": list(DEFAULT_BLOCKED) + split(e("SUPPORT_BLOCKED_PREFIXES")),
         "trust_proxy": e("SUPPORT_TRUST_PROXY_HEADERS", "0") == "1",
         "landing": e("SUPPORT_LANDING_PATH", "/"),
         "db_path": e("SUPPORT_DB_PATH"),
@@ -215,17 +219,32 @@ def _ip_allowed(ip: str, allowed: list[str]) -> bool:
 class SupportUser(UserMixin):
     """Virtual user. Never stored in the DB, so it can't appear in any list.
 
-    ADAPT: add any attributes your templates/decorators read from current_user.
+    It carries every attribute the ShowWise crew app reads from ``current_user`` (decorators.py,
+    templates, settings pages) so pages render for it instead of raising AttributeError.
     """
     is_support = True
+    is_active = True
 
     def __init__(self, operator: str, scope: str):
         self.operator, self.scope = operator, scope
-        self.id = f"support:{scope}:{operator}"
-        self.username = self.name = self.display_name = f"Support ({operator})"
+        self.key = f"support:{scope}:{operator}"   # what Flask-Login keeps in the session
+        self.id = 0                                # matches no real user row, so personal queries come back empty
+        self.username = self.name = self.display_name = self.shown_name = f"Support ({operator})"
         self.email = None
-        self.role = "admin"
+        self.role = self.user_role = "admin"
         self.is_admin = self.is_staff = self.is_superuser = True
+        self.is_cast = False
+        self.profile_picture = None
+        self.discord_id = self.discord_username = None
+        self.password_hash = None
+        self.oauth_connections = []
+        self.calendar_token = None
+        self.force_2fa_setup = False
+        self.skip_2fa_for_oauth = False
+        self.created_at = None
+
+    def get_id(self):
+        return self.key
 
 
 def load_support_user(user_id):
