@@ -803,12 +803,23 @@
         const m = String(code || '').match(/\/equipment\/(\d+)(?:\/view)?/);
         return m ? parseInt(m[1], 10) : null;
     }
+    function unitIdFromInput(code) {                    // per-unit tag: …/equipment/unit/<id>/view
+        const m = String(code || '').match(/\/equipment\/unit\/(\d+)/);
+        return m ? parseInt(m[1], 10) : null;
+    }
 
     async function lookup(code) {
         code = String(code || '').trim();
         if (!code) return;
         const out = $('#eqResult');
         out.innerHTML = '<div class="eq-result nf"><i class="fas fa-spinner fa-spin"></i> Looking up…</div>';
+        const unitId = unitIdFromInput(code);
+        if (unitId != null) {
+            let hit = null;
+            try { hit = await api(`/equipment/unit/${unitId}/json`, 'GET'); } catch (e) { hit = null; }
+            if (hit) showFound(hit); else showNotFound(code);
+            return;
+        }
         const id = idFromInput(code);
         let item = id != null ? items.find(i => i.id === id) : items.find(i => String(i.barcode).toLowerCase() === code.toLowerCase());
         if (!item) {                                    // not in the page data (e.g. added by someone else a moment ago)
@@ -824,7 +835,7 @@
             ? `<div class="eq-where"><i class="fas fa-map-marker-alt" style="margin-top:.2rem;"></i><div><small>Storage location</small><strong>${esc(it.location)}</strong></div>${it.location_picture_url ? `<img src="${esc(it.location_picture_url)}" alt="Where it is stored">` : ''}</div>`
             : '';
         $('#eqResult').innerHTML = `<div class="eq-result">${hero}<div class="eq-result-body">
-            <h3>${esc(it.name)}</h3>${where}
+            <h3>${esc(it.name)}</h3>${unitBlock(it.unit)}${where}
             <div class="eq-kv">
                 <div><small>Qty owned</small><span>${it.quantity_owned || 1}</span></div>
                 <div><small>Category</small><span>${esc(it.category || '—')}</span></div>
@@ -832,13 +843,27 @@
             </div>
             ${it.notes ? `<p class="note">${esc(it.notes)}</p>` : ''}
             <div class="eq-result-actions">
-                <a class="eq-btn primary" href="/equipment/${it.id}"><i class="fas fa-file-alt"></i> Details</a>
+                <a class="eq-btn primary" href="/equipment/${it.id}${it.unit ? `?unit=${it.unit.id}#unit-${it.unit.id}` : ''}"><i class="fas fa-file-alt"></i> Details</a>
                 <button type="button" class="eq-btn ghost" id="eqAgain"><i class="fas fa-redo"></i> Scan again</button>
             </div></div></div>`;
         $('#eqAgain').addEventListener('click', () => { $('#eqResult').innerHTML = ''; startScan(); });
-        camState(false, 'Found: ' + it.name);
-        toast('Found ' + it.name);
+        const label = it.unit ? `${it.name} (${it.unit.asset_tag})` : it.name;
+        camState(false, 'Found: ' + label);
+        toast('Found ' + label);
         $('#eqResult').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function unitBlock(u) {
+        if (!u) return '';
+        const state = u.status !== 'available' ? u.status : (u.is_out ? 'out' : 'available');
+        const where = (u.allocations || []).map(a =>
+            `${esc(a.event_title)}${a.event_date ? ' · ' + esc(a.event_date) : ''}${a.is_checked ? ' · packed' : ''}`).join('<br>');
+        return `<div class="eq-kv" style="margin-bottom:.6rem;">
+            <div><small>Unit</small><span class="eq-code">${esc(u.asset_tag)}</span></div>
+            <div><small>Status</small><span>${esc(state.charAt(0).toUpperCase() + state.slice(1))}</span></div>
+            ${u.serial_number ? `<div class="full"><small>Serial</small><span>${esc(u.serial_number)}</span></div>` : ''}
+            <div class="full"><small>Where</small><span>${where || 'In storage'}</span></div>
+        </div>`;
     }
 
     function showNotFound(code) {

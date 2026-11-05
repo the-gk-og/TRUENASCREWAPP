@@ -10,7 +10,7 @@ from flask import (
 from flask_login import login_required, current_user
 
 from extensions import db
-from models import Equipment, PickListItem
+from models import Equipment, EquipmentUnit, PickListItem, UNIT_STATUSES
 from decorators import crew_required
 
 from routes import _is_mobile
@@ -62,7 +62,10 @@ def equipment_detail(id):
     from utils import get_organization
     org = get_organization() or {}
     org_name = current_app.config.get('ORG_NAME') or org.get('name', 'ShowWise')
-    return render_template('crew/equipment_detail.html', item=eq, organisation_name=org_name)
+    return render_template('crew/equipment_detail.html', item=eq, organisation_name=org_name,
+                           units=[u.to_dict() for u in eq.units],
+                           unit_statuses=UNIT_STATUSES,
+                           highlight_unit=request.args.get('unit', type=int))
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +113,192 @@ def equipment_by_barcode(barcode):
     eq = Equipment.query.filter_by(barcode=barcode).first()
     if eq:
         return jsonify(eq.to_dict())
+    # A unit's asset tag resolves to its item, with the unit attached
+    unit = _unit_by_tag(barcode)
+    if unit:
+        return jsonify(_unit_payload(unit))
     return jsonify({'error': 'Equipment not found'}), 404
+
+
+# ---------------------------------------------------------------------------
+# Individual units (one row + one QR per physical piece of an item)
+# ---------------------------------------------------------------------------
+
+def _unit_by_tag(tag):
+    tag = (tag or '').strip()
+    if not tag:
+        return None
+    return (EquipmentUnit.query.filter_by(asset_tag=tag).first()
+            or EquipmentUnit.query.filter(db.func.lower(EquipmentUnit.asset_tag) == tag.lower()).first())
+
+
+def _tag_taken(tag, exclude_unit_id=None):
+    """Asset tags share one namespace with item barcodes so a scan is never ambiguous."""
+    q = EquipmentUnit.query.filter(db.func.lower(EquipmentUnit.asset_tag) == tag.lower())
+    if exclude_unit_id:
+        q = q.filter(EquipmentUnit.id != exclude_unit_id)
+    if q.first():
+        return True
+    return Equipment.query.filter(db.func.lower(Equipment.barcode) == tag.lower()).first() is not None
+
+
+def _create_units(eq, count):
+    """Add `count` units to `eq`, tagged <barcode>-01, -02, … skipping tags in use."""
+    base = (eq.barcode or f'EQ{eq.id}').strip()
+    made, n = [], 1
+    while len(made) < count:
+        tag = f'{base}-{n:02d}'
+        n += 1
+        if _tag_taken(tag) or any(u.asset_tag == tag for u in made):
+            continue
+        u = EquipmentUnit(asset_tag=tag, status='available')
+        eq.units.append(u)                    # cascades the add; keeps eq.units in step
+        made.append(u)
+    return made
+
+
+def _unit_payload(unit):
+    """Item dict (as the scanner already expects) with the scanned unit attached."""
+    d = unit.equipment.to_dict()
+    d['unit'] = unit.to_dict()
+    return d
+
+
+def _clean_status(value, default='available'):
+    value = (value or default).strip().lower()
+    return value if value in UNIT_STATUSES else None
+
+
+@equipment_bp.route('/equipment/<int:id>/units')
+@login_required
+@crew_required
+def list_units(id):
+    eq = Equipment.query.get_or_404(id)
+    return jsonify({'units': [u.to_dict() for u in eq.units]})
+
+
+@equipment_bp.route('/equipment/<int:id>/units', methods=['POST'])
+@login_required
+@crew_required
+def add_units(id):
+    """Body {asset_tag, serial_number?, notes?, status?} adds one unit;
+    {count: n} adds n units with generated tags."""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    eq   = Equipment.query.get_or_404(id)
+    data = request.get_json(silent=True) or {}
+
+    if data.get('count') is not None:
+        try:
+            count = int(data['count'])
+        except (TypeError, ValueError):
+            return jsonify({'error': 'count must be a number'}), 400
+        if not 1 <= count <= 500:
+            return jsonify({'error': 'count must be between 1 and 500'}), 400
+        made = _create_units(eq, count)
+        _sync_quantity(eq)
+        db.session.commit()
+        return jsonify({'success': True, 'units': [u.to_dict(False) for u in made]})
+
+    tag = (data.get('asset_tag') or '').strip()
+    if not tag:
+        return jsonify({'error': 'Asset tag is required'}), 400
+    if len(tag) > 100:
+        return jsonify({'error': 'Asset tag is too long'}), 400
+    if _tag_taken(tag):
+        return jsonify({'error': f'Asset tag "{tag}" is already used by another unit or item'}), 409
+    status = _clean_status(data.get('status'))
+    if status is None:
+        return jsonify({'error': 'Unknown status'}), 400
+    u = EquipmentUnit(asset_tag=tag, status=status,
+                      serial_number=(data.get('serial_number') or '').strip() or None,
+                      notes=(data.get('notes') or '').strip() or None)
+    eq.units.append(u)
+    _sync_quantity(eq)
+    db.session.commit()
+    return jsonify({'success': True, 'unit': u.to_dict(False)})
+
+
+def _sync_quantity(eq):
+    """Once an item tracks units, it owns at least that many."""
+    if len(eq.units) > (eq.quantity_owned or 0):
+        eq.quantity_owned = len(eq.units)
+
+
+@equipment_bp.route('/equipment/unit/<int:uid>', methods=['PUT'])
+@login_required
+@crew_required
+def update_unit(uid):
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    u    = EquipmentUnit.query.get_or_404(uid)
+    data = request.get_json(silent=True) or {}
+    if 'asset_tag' in data:
+        tag = (data.get('asset_tag') or '').strip()
+        if not tag:
+            return jsonify({'error': 'Asset tag is required'}), 400
+        if _tag_taken(tag, exclude_unit_id=u.id):
+            return jsonify({'error': f'Asset tag "{tag}" is already used by another unit or item'}), 409
+        u.asset_tag = tag
+    if 'status' in data:
+        status = _clean_status(data.get('status'))
+        if status is None:
+            return jsonify({'error': 'Unknown status'}), 400
+        u.status = status
+    if 'serial_number' in data:
+        u.serial_number = (data.get('serial_number') or '').strip() or None
+    if 'notes' in data:
+        u.notes = (data.get('notes') or '').strip() or None
+    db.session.commit()
+    return jsonify({'success': True, 'unit': u.to_dict()})
+
+
+@equipment_bp.route('/equipment/unit/<int:uid>', methods=['DELETE'])
+@login_required
+@crew_required
+def delete_unit(uid):
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    u = EquipmentUnit.query.get_or_404(uid)
+    db.session.delete(u)
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@equipment_bp.route('/equipment/unit/<int:uid>/json')
+@login_required
+@crew_required
+def unit_json(uid):
+    return jsonify(_unit_payload(EquipmentUnit.query.get_or_404(uid)))
+
+
+@equipment_bp.route('/equipment/unit/tag/<path:tag>')
+@login_required
+@crew_required
+def unit_by_tag(tag):
+    u = _unit_by_tag(tag)
+    if not u:
+        return jsonify({'error': 'Unit not found'}), 404
+    return jsonify(_unit_payload(u))
+
+
+@equipment_bp.route('/equipment/unit/<int:uid>/view')
+def unit_view_public(uid):
+    """Target of a unit QR code. Crew land on the item page with the unit highlighted."""
+    u = EquipmentUnit.query.get_or_404(uid)
+    if current_user.is_authenticated:
+        return redirect(url_for('equipment.equipment_detail', id=u.equipment_id, unit=u.id)
+                        + f'#unit-{u.id}')
+    from flask import current_app
+    from utils import get_organization
+    org = get_organization() or {}
+    org_name = current_app.config.get('ORG_NAME') or org.get('name', 'ShowWise')
+    return render_template(
+        'crew/equipment_detail_public.html',
+        item=u.equipment, unit=u,
+        organisation_name=org_name,
+        login_url=url_for('auth.login', next=request.url),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -401,12 +589,32 @@ def generate_barcodes():
         card_h_mm     = float(data.get('card_height_mm', 80 if layout == 'portrait' else 55))
         base_url      = (data.get('base_url') or request.url_root or '').rstrip('/')
 
-        if not equipment_ids:
-            return jsonify({'error': 'No equipment selected'}), 400
+        mode          = data.get('mode', 'item')       # 'item' | 'unit'
+        unit_ids      = data.get('unit_ids', [])
 
-        items = Equipment.query.filter(Equipment.id.in_(equipment_ids)).all()
-        if not items:
-            return jsonify({'error': 'No equipment found'}), 404
+        # Each tag: (log id, name, asset label, QR url)
+        tags = []
+        if mode == 'unit':
+            if unit_ids:
+                units = EquipmentUnit.query.filter(EquipmentUnit.id.in_(unit_ids)).all()
+            elif equipment_ids:
+                units = EquipmentUnit.query.filter(EquipmentUnit.equipment_id.in_(equipment_ids)).all()
+            else:
+                return jsonify({'error': 'No equipment selected'}), 400
+            units.sort(key=lambda u: (u.equipment.name.lower(), u.asset_tag))
+            if not units:
+                return jsonify({'error': 'The selected items have no units yet. '
+                                         'Add units on the item page, or print one tag per item.'}), 404
+            tags = [(f'unit {u.id}', u.equipment.name, f'# {u.asset_tag}',
+                     f'{base_url}/equipment/unit/{u.id}/view') for u in units]
+        else:
+            if not equipment_ids:
+                return jsonify({'error': 'No equipment selected'}), 400
+            items = Equipment.query.filter(Equipment.id.in_(equipment_ids)).all()
+            if not items:
+                return jsonify({'error': 'No equipment found'}), 404
+            tags = [(f'item {e.id}', e.name, f"# {e.barcode or f'ID-{e.id}'}",
+                     f'{base_url}/equipment/{e.id}/view') for e in items]
 
         # Org name
         from flask import current_app
@@ -517,7 +725,7 @@ def generate_barcodes():
         #  │     Organisation     │  ← small grey footer
         #  └──────────────────────┘
         #
-        def _draw_portrait(cx, cy, item, qr_path):
+        def _draw_portrait(cx, cy, name, asset_label, qr_path):
             pad      = 3   * mm
             footer_h = 6.5 * mm
             asset_h  = 6   * mm
@@ -533,7 +741,7 @@ def generate_barcodes():
             # Name may use at most ~35% of the card height; the QR shrinks to fit.
             name_max  = max(8, min(13, int(card_w / 5.5)))
             name_size, name_lines = _fit_text(
-                item.name, 'Helvetica-Bold', name_max, 6, text_w, 3,
+                name, 'Helvetica-Bold', name_max, 6, text_w, 3,
                 max_height=card_h * 0.35)
             name_h = len(name_lines) * name_size * LEADING + 3 * mm
             c.setFillColor(BLACK)
@@ -559,7 +767,6 @@ def generate_barcodes():
                         preserveAspectRatio=True, mask='auto')
 
             # ── Asset number (centred, under QR) ──
-            asset_label = f"# {item.barcode or f'ID-{item.id}'}"
             asset_size, asset_lines = _fit_text(asset_label, 'Helvetica', 7, 5, text_w, 1)
             asset_y     = cy + footer_h + pad * 0.8
             c.setFillColor(MID_GREY)
@@ -588,7 +795,7 @@ def generate_barcodes():
         #  │              Organisation             │
         #  └──────────────────────────────────────┘
         #
-        def _draw_landscape(cx, cy, item, qr_path):
+        def _draw_landscape(cx, cy, name, asset_label, qr_path):
             pad      = 2.5 * mm
             footer_h = 5.5 * mm
             border_r = 4   * mm
@@ -624,14 +831,13 @@ def generate_barcodes():
             line_gap   = 2 * mm
 
             # Asset number — one line, shrunk/ellipsized to the column width
-            asset_label = f"# {item.barcode or f'ID-{item.id}'}"
             asset_size, asset_lines = _fit_text(asset_label, 'Helvetica', 7, 5, text_w, 1)
             asset_block = asset_size * LEADING
 
             # Item name — bold, wrapped (up to 4 lines) in the space left over
             name_max  = max(8, min(12, int(text_w / 6)))
             name_size, name_lines = _fit_text(
-                item.name, 'Helvetica-Bold', name_max, 6, text_w, 4,
+                name, 'Helvetica-Bold', name_max, 6, text_w, 4,
                 max_height=text_max_h - asset_block - line_gap)
             name_block = len(name_lines) * name_size * LEADING
 
@@ -661,9 +867,8 @@ def generate_barcodes():
         col_idx = 0
         row_idx = 0
 
-        for item in items:
+        for tag_key, name, asset_label, url in tags:
             try:
-                url = f"{base_url}/equipment/{item.id}/view"
                 qr  = qrcode.QRCode(version=1, box_size=10, border=2,
                                     error_correction=qrcode.constants.ERROR_CORRECT_M)
                 qr.add_data(url)
@@ -677,9 +882,9 @@ def generate_barcodes():
                 cy = ph - margin - card_h - row_idx * (card_h + gap)
 
                 if layout == 'landscape':
-                    _draw_landscape(cx, cy, item, qr_path)
+                    _draw_landscape(cx, cy, name, asset_label, qr_path)
                 else:
-                    _draw_portrait(cx, cy, item, qr_path)
+                    _draw_portrait(cx, cy, name, asset_label, qr_path)
 
                 try:
                     os.remove(qr_path)
@@ -687,7 +892,7 @@ def generate_barcodes():
                     pass
 
             except Exception as exc:
-                print(f"QR tag error for item {item.id}: {exc}")
+                print(f"QR tag error for {tag_key}: {exc}")
 
             col_idx += 1
             if col_idx >= cols:
@@ -699,7 +904,7 @@ def generate_barcodes():
 
         c.save()
         pdf_buffer.seek(0)
-        filename = f"equipment_tags_{layout}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        filename = f"equipment_{'unit_' if mode == 'unit' else ''}tags_{layout}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         return send_file(pdf_buffer, mimetype='application/pdf',
                          as_attachment=True, download_name=filename)
 

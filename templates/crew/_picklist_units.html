@@ -1,0 +1,106 @@
+{# Which physical units are on each pick list line. Shared by picklist.html and picklist_mobile.html.
+   Rows render a `.plu` container (see plu_row macro); this file's script fills and updates them. #}
+{% macro plu_row(item, unit_options, item_units) -%}
+{% if item.equipment_id and unit_options.get(item.equipment_id) %}
+<div class="plu" id="plu-{{ item.id }}" data-item="{{ item.id }}" data-eq="{{ item.equipment_id }}"
+     data-qty="{{ item.quantity or 1 }}" onclick="event.stopPropagation()">
+  {%- for u in item_units.get(item.id, []) %}<span class="plu-chip">{{ u.asset_tag }}</span>{% endfor -%}
+</div>
+{% endif %}
+{%- endmacro %}
+
+{% macro plu_assets(unit_options, item_units) %}
+<style>
+.plu { display:flex; flex-wrap:wrap; gap:0.3rem; align-items:center; margin-top:0.35rem; }
+.plu-chip {
+  display:inline-flex; align-items:center; gap:0.3rem;
+  font-family:monospace; font-size:0.72rem; font-weight:700;
+  padding:0.12rem 0.45rem; border-radius:999px;
+  background:#e0e7ff; color:#3730a3; border:1px solid #c7d2fe;
+}
+.plu-chip button {
+  border:0; background:transparent; color:inherit; cursor:pointer;
+  padding:0; font-size:0.8rem; line-height:1; opacity:0.7;
+}
+.plu-chip button:hover { opacity:1; }
+.plu-need { font-size:0.72rem; color:var(--text-muted); }
+.plu-add {
+  font-size:0.75rem; padding:0.12rem 0.3rem; border-radius:6px; max-width:13rem;
+  border:1px dashed var(--border); background:transparent; color:var(--text-secondary);
+}
+</style>
+<script>
+(function () {
+  const OPTIONS = {{ unit_options|tojson }};   // equipment_id -> [unit dicts with allocations]
+  const ON_LINE = {{ item_units|tojson }};     // pick list item id -> [{id, asset_tag}]
+  const esc = t => String(t).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const say = (msg, bad) => (window.plToast ? plToast(msg, bad ? 'err' : 'ok')
+                          : window.mpToast ? mpToast(msg, bad ? 'err' : 'ok') : alert(msg));
+
+  function render(box) {
+    const itemId = box.dataset.item, qty = parseInt(box.dataset.qty, 10) || 1;
+    const units  = ON_LINE[itemId] || [];
+    const taken  = new Set(units.map(u => u.id));
+    let html = units.map(u =>
+      `<span class="plu-chip" title="Unit ${esc(u.asset_tag)}">${esc(u.asset_tag)}` +
+      `<button type="button" data-rm="${u.id}" aria-label="Remove ${esc(u.asset_tag)}">&times;</button></span>`).join('');
+    if (units.length < qty) {
+      const opts = (OPTIONS[box.dataset.eq] || []).filter(u => !taken.has(u.id)).map(u => {
+        const elsewhere = (u.allocations || []).filter(a => String(a.pick_list_item_id) !== itemId);
+        let note = '';
+        if (u.status !== 'available') note = ` (${u.status})`;
+        else if (elsewhere.length) note = ` (on ${elsewhere.map(a => a.event_title).join(', ')})`;
+        const dis = u.status === 'retired' || u.status === 'lost' ? ' disabled' : '';
+        return `<option value="${u.id}"${dis}>${esc(u.asset_tag + note)}</option>`;
+      }).join('');
+      if (opts) html += `<select class="plu-add" aria-label="Assign a unit"><option value="">+ unit (${units.length}/${qty})</option>${opts}</select>`;
+    } else if (qty > 1) {
+      html += `<span class="plu-need">${units.length}/${qty} units</span>`;
+    }
+    box.innerHTML = html;
+  }
+
+  async function call(url, method, body) {
+    const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' },
+                                 body: body ? JSON.stringify(body) : undefined });
+    return { ok: r.ok, data: await r.json().catch(() => ({})) };
+  }
+
+  async function assign(box, unitId, force) {
+    const { ok, data } = await call(`/picklist/${box.dataset.item}/units`, 'POST', { unit_id: unitId, force: !!force });
+    if (ok) { ON_LINE[box.dataset.item] = data.units; render(box); say('Unit assigned'); return; }
+    if (data.can_force && !force && confirm(`${data.error}. Assign it here anyway?`)) return assign(box, unitId, true);
+    say(data.error || 'Could not assign unit', true);
+    render(box);
+  }
+
+  async function unassign(box, unitId) {
+    const { ok, data } = await call(`/picklist/${box.dataset.item}/units/${unitId}`, 'DELETE');
+    if (ok) { ON_LINE[box.dataset.item] = data.units; render(box); }
+    else say(data.error || 'Could not remove unit', true);
+  }
+
+  document.addEventListener('change', e => {
+    if (!e.target.matches('.plu-add') || !e.target.value) return;
+    assign(e.target.closest('.plu'), parseInt(e.target.value, 10));
+  });
+  document.addEventListener('click', e => {
+    const rm = e.target.closest('.plu [data-rm]');
+    if (rm) { e.preventDefault(); unassign(rm.closest('.plu'), parseInt(rm.dataset.rm, 10)); }
+  });
+
+  // Called by the page's live-sync poll with /picklist/state items, so everyone sees unit changes
+  window.pluSync = function (items) {
+    if (document.activeElement && document.activeElement.matches('.plu-add')) return;   // mid-pick
+    for (const it of items || []) {
+      const box = document.getElementById('plu-' + it.id);
+      if (!box) continue;
+      const was = (ON_LINE[it.id] || []).map(u => u.id).join(',');
+      if (was !== (it.units || []).map(u => u.id).join(',')) { ON_LINE[it.id] = it.units || []; render(box); }
+    }
+  };
+
+  document.querySelectorAll('.plu').forEach(render);
+})();
+</script>
+{% endmacro %}
