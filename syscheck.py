@@ -245,7 +245,7 @@ def main():
     else:
         print(f"\n⚠️  {total - passed} check(s) failed. See details above.")
         print("\nCommon fixes:")
-        print("  1. Run: python migrate_hired_equipment.py")
+        print("  1. Run: python -m schema_migrations   (upgrade the database schema)")
         print("  2. Restart Flask server")
         print("  3. Hard refresh browser (Ctrl+F5)")
         print("  4. Check app.py has all updated routes")

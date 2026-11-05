@@ -129,7 +129,7 @@ def create_app(config_name: str | None = None):
     # Register all blueprints (OAuth now ready)
     register_blueprints(app)
 
-    # Add any columns introduced since the DB was created
+    # Create/upgrade tables and columns (versioned, see schema_migrations.py)
     ensure_schema(app)
 
     # Backend client
@@ -161,42 +161,18 @@ def create_app(config_name: str | None = None):
     return app
 
 
-# (table, column, SQL type + default) added after the first release
-_NEW_COLUMNS = [
-    ('event',            'all_day',        'BOOLEAN DEFAULT 0'),
-    ('shift_assignment', 'decline_reason', 'VARCHAR(500)'),
-    ('user',             'calendar_token', 'VARCHAR(64)'),
-    ('user',             'display_name',   'VARCHAR(100)'),
-]
-
-
 def ensure_schema(app):
     """
-    Lightweight, idempotent schema upgrade for existing databases
-    (db.create_all() never alters existing tables, only creates new ones).
+    Bring the database up to the current schema (see schema_migrations.py). Idempotent and cheap
+    when nothing is pending. The Docker image also runs it once before gunicorn starts, and that
+    run fails the start if an upgrade fails; here a failure is logged so a dev server still comes up.
     """
-    from sqlalchemy import inspect, text
+    from schema_migrations import upgrade_app
     try:
-        with app.app_context():
-            db.create_all()                      # picks up brand-new tables (e.g. app_setting)
-            insp = inspect(db.engine)
-            quote = db.engine.dialect.identifier_preparer.quote
-            for table, column, ddl in _NEW_COLUMNS:
-                if table not in insp.get_table_names():
-                    continue
-                if column not in {c['name'] for c in insp.get_columns(table)}:
-                    db.session.execute(text(f'ALTER TABLE {quote(table)} ADD COLUMN {quote(column)} {ddl}'))
-                    db.session.commit()
-                    print(f"✓ Added {table}.{column} column")
-            # ALTER TABLE can't add a UNIQUE column, so the calendar-token index is created separately
-            if 'user' in insp.get_table_names():
-                db.session.execute(text(
-                    f'CREATE UNIQUE INDEX IF NOT EXISTS ix_user_calendar_token '
-                    f'ON {quote("user")} (calendar_token)'))
-                db.session.commit()
+        upgrade_app(app)
     except Exception as exc:
         db.session.rollback()
-        print(f"⚠️  Schema check failed: {exc}")
+        print(f"⚠️  Schema upgrade failed: {exc}")
 
 
 def _start_heartbeat(app, backend):
