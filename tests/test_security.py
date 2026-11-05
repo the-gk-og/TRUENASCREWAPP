@@ -42,17 +42,11 @@ def test_security_headers_present(app):
     assert 'frame-ancestors' in r.headers['Content-Security-Policy']
 
 
-def test_discord_endpoints_fail_closed(app, monkeypatch):
-    import routes.discord as d
+def test_discord_bot_endpoints_are_gone(app):
+    """The Discord bot was removed; its unauthenticated-by-session API must not exist."""
     c = app.test_client()
-    monkeypatch.setattr(d, 'DISCORD_BOT_SECRET', '')
-    assert c.get('/discord/list-events', headers={'X-Bot-Secret': ''}).status_code == 401
-    monkeypatch.setattr(d, 'DISCORD_BOT_SECRET', 'a-real-long-secret')
-    assert c.get('/discord/list-events').status_code == 401
-    assert c.get('/discord/list-events', headers={'X-Bot-Secret': 'wrong'}).status_code == 401
-    assert c.get('/discord/list-events', headers={'X-Bot-Secret': 'a-real-long-secret'}).status_code == 200
-    r = c.post('/discord/create-account', json={'secret': 'a-real-long-secret', 'username': 'newbie', 'password': '123'})
-    assert r.status_code == 400                      # too-short password rejected
+    assert c.get('/discord/list-events', headers={'X-Bot-Secret': 'x'}).status_code == 404
+    assert c.post('/discord/create-account', json={'username': 'newbie', 'password': 'longenough123'}).status_code in (403, 404)
 
 
 def test_password_reset_token_is_hashed_and_single_use(app, monkeypatch):

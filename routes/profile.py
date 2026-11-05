@@ -269,19 +269,15 @@ def update_account_info():
 
 
 # ---------------------------------------------------------------------------
-# Discord unlink
+# Discord unlink (linking is now done by an admin; the bot has been removed)
 # ---------------------------------------------------------------------------
 
 @profile_bp.route('/settings/link-discord', methods=['POST'])
 @login_required
 def link_discord():
-    data             = request.json or {}
-    discord_id       = data.get('discord_id')
-    discord_username = data.get('discord_username')
-
     try:
-        current_user.discord_id       = discord_id or None
-        current_user.discord_username = discord_username or None
+        current_user.discord_id       = None
+        current_user.discord_username = None
         db.session.commit()
         log_security_event('DISCORD_UPDATED', username=current_user.username)
         return jsonify({'success': True}), 200

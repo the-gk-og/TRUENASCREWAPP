@@ -25,12 +25,12 @@
         <span class="tab-badge danger">Off</span>
         {% endif %}
     </button>
+    {% if current_user.discord_id %}
     <button class="settings-tab" onclick="switchTab('discord')" id="tab-discord">
         <i class="fab fa-discord"></i> Discord
-        {% if current_user.discord_id %}
         <span class="tab-badge success">Linked</span>
-        {% endif %}
     </button>
+    {% endif %}
     <button class="settings-tab" onclick="switchTab('google')" id="tab-google">
         <i class="fab fa-google"></i> Google
         {% if google_conn %}
@@ -456,49 +456,23 @@
 </div>
 
 <!-- ==================== DISCORD TAB ==================== -->
+{% if current_user.discord_id %}
 <div class="tab-panel" id="panel-discord">
     <div class="card">
         <div class="card-header">
-            <h3 class="card-title"><i class="fab fa-discord"></i> Discord Integration</h3>
-            {% if current_user.discord_id %}
+            <h3 class="card-title"><i class="fab fa-discord"></i> Discord</h3>
             <span style="color: var(--success); font-weight: 600;"><i class="fas fa-check-circle"></i> Linked</span>
-            {% else %}
-            <span style="color: var(--text-muted); font-weight: 600;">Not Linked</span>
-            {% endif %}
         </div>
-
-        {% if current_user.discord_id %}
         <div style="background: #ecfdf5; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; border-left: 4px solid var(--success);">
-            <strong style="color: var(--success);"><i class="fas fa-check-circle"></i> Discord Linked</strong>
-            <p style="margin-top: 0.5rem;">Username: <strong>{{ current_user.discord_username }}</strong></p>
+            <p>Linked to Discord user <strong>{{ current_user.discord_username or current_user.discord_id }}</strong>.
+               Event reminders posted in your organisation's Discord channel will mention you.</p>
         </div>
         <button onclick="showModal('unlinkDiscordModal')" class="btn btn-danger">
             <i class="fas fa-unlink"></i> Unlink Discord
         </button>
-        {% else %}
-        <div style="background: var(--bg-nav-active); padding: 1.5rem; border-radius: 8px; border-left: 4px solid var(--primary); margin-bottom: 1.5rem;">
-            <h4 style="margin-bottom: 1rem; color: var(--primary);">How to Link:</h4>
-            <ol style="margin-left: 1.5rem; line-height: 1.8; color: var(--text-primary);">
-                <li>Use command <code>/link-account</code> in Discord</li>
-                <li>Enter your ShowWise username and password</li>
-                <li>Your account will be linked automatically</li>
-            </ol>
-        </div>
-        {% endif %}
-
-        <h4 style="margin: 1.5rem 0 1rem; color: var(--text-primary);">Benefits of Linking</h4>
-        <div style="display: grid; gap: 0.75rem;">
-            <div style="background: var(--bg-table-head); padding: 1rem; border-radius: 8px;">
-                <strong style="color: var(--text-primary);"><i class="fas fa-bell" style="color: var(--warning);"></i> Event Notifications</strong>
-                <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 0.25rem;">Get pinged 1 week and 1 day before events you're assigned to.</p>
-            </div>
-            <div style="background: var(--bg-table-head); padding: 1rem; border-radius: 8px;">
-                <strong style="color: var(--text-primary);"><i class="fas fa-comments" style="color: var(--success);"></i> Team Communication</strong>
-                <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 0.25rem;">Collaborate with your crew while managing events here.</p>
-            </div>
-        </div>
     </div>
 </div>
+{% endif %}
 
 <!-- ==================== GOOGLE TAB ==================== -->
 <div class="tab-panel" id="panel-google">
@@ -629,7 +603,7 @@
     <div class="modal-content">
         <span class="close" onclick="hideModal('unlinkDiscordModal')">&times;</span>
         <h2 style="margin-bottom: 1rem; color: var(--danger);"><i class="fas fa-unlink"></i> Unlink Discord</h2>
-        <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">You will stop receiving Discord notifications and won't be able to use Discord bot commands.</p>
+        <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">Event reminders in Discord will stop mentioning you.</p>
         <div style="display: flex; gap: 1rem;">
             <button onclick="unlinkDiscord()" class="btn btn-danger" style="flex: 1;"><i class="fas fa-unlink"></i> Unlink</button>
             <button onclick="hideModal('unlinkDiscordModal')" class="btn btn-secondary" style="flex: 1;">Cancel</button>

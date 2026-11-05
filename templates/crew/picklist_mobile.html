@@ -1181,18 +1181,21 @@
     mpCheckQty();
   };
 
+  document.getElementById('mp-eqev')?.addEventListener('change', () => mpCheckQty());
+
   async function mpCheckQty() {
     const id  = document.getElementById('mp-eqsel').value;
     const qty = parseInt(document.getElementById('mp-eqqty').value) || 1;
+    const ev  = document.getElementById('mp-eqev').value || null;
     const w   = document.getElementById('mp-ewarn');
     if (!id) { w.classList.remove('mp-on'); return; }
     try {
       const r = await fetch(`/equipment/${id}/quantity-check`, {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ quantity: qty })
+        body: JSON.stringify({ quantity: qty, event_id: ev })
       }).then(r => r.json());
       if (r.warning) {
-        w.innerHTML = `⚠ Only <b>${r.available}</b> available (owned: ${r.owned}, allocated: ${r.allocated})`;
+        w.innerHTML = `⚠ Only <b>${r.available}</b> free ${ev ? 'for this event' : 'right now'} (usable: ${r.owned}, on other lists: ${r.allocated})`;
         w.classList.add('mp-on');
       } else { w.classList.remove('mp-on'); }
     } catch {}
@@ -1206,7 +1209,7 @@
     const ev  = document.getElementById('mp-eqev').value || null;
     const chk = await fetch(`/equipment/${id}/quantity-check`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ quantity: qty })
+      body: JSON.stringify({ quantity: qty, event_id: ev })
     }).then(r => r.json()).catch(() => ({ warning: false }));
     if (chk.warning && !confirm(`Only ${chk.available} available. Add anyway?`)) return;
     mpDoAdd({ equipment_id: id, quantity: qty, event_id: ev });
