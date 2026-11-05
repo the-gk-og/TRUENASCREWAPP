@@ -379,6 +379,46 @@
             </div>
         </section>
 
+        {% if maint_alerts or gear_out_late %}
+        <section>
+            <h3 class="dash-section-title">
+                <span>Equipment</span>
+                <a href="{{ url_for('equipment.equipment_list') }}">View</a>
+            </h3>
+            <ul class="dash-list">
+                {% if gear_out_late %}
+                <li>
+                    <a class="dash-task" href="{{ url_for('unit_tracking.checkout_page', event_id=gear_out_late[0].event_id) }}">
+                        <span class="dash-dot high"></span>
+                        <span class="dash-task-main">
+                            <div class="dash-task-title">{{ gear_out_late|length }} unit{{ '' if gear_out_late|length == 1 else 's' }} not returned</div>
+                            <div class="dash-task-due overdue">From finished events · scan them back in</div>
+                        </span>
+                        <i class="fas fa-chevron-right dash-chevron"></i>
+                    </a>
+                </li>
+                {% endif %}
+                {% for a in maint_alerts[:3] %}
+                <li>
+                    <a class="dash-task" href="{{ url_for('equipment.equipment_detail', id=a.equipment_id, unit=a.id) }}#unit-{{ a.id }}">
+                        <span class="dash-dot {{ 'high' if a.due.state == 'overdue' else 'medium' }}"></span>
+                        <span class="dash-task-main">
+                            <div class="dash-task-title">{{ a.due.kind_label }} · {{ a.asset_tag }} {{ a.equipment_name }}</div>
+                            <div class="dash-task-due {{ 'overdue' if a.due.state == 'overdue' }}">{{ 'Overdue since' if a.due.state == 'overdue' else 'Due' }} {{ a.due.date_text }}</div>
+                        </span>
+                        <i class="fas fa-chevron-right dash-chevron"></i>
+                    </a>
+                </li>
+                {% endfor %}
+                {% if maint_alerts|length > 3 %}
+                <li><a class="dash-task" href="{{ url_for('equipment.equipment_list') }}"><span class="dash-task-main"><div class="dash-task-due">
+                    + {{ maint_alerts|length - 3 }} more test{{ '' if maint_alerts|length - 3 == 1 else 's' }} due{% if maint_overdue %} ({{ maint_overdue }} overdue in total){% endif %}</div></span>
+                    <i class="fas fa-chevron-right dash-chevron"></i></a></li>
+                {% endif %}
+            </ul>
+        </section>
+        {% endif %}
+
         <section>
             <h3 class="dash-section-title">
                 <span>Tasks</span>

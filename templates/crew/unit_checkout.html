@@ -1,0 +1,348 @@
+{% extends "base.html" %}
+{% block title %}Scan out / in — ShowWise{% endblock %}
+
+{% block content %}
+<style>
+    /* One responsive page: built for a phone at the venue door, fine on desktop. */
+    .co { max-width: 980px; margin: 0 auto; padding-bottom: 5rem; }
+    .co * { box-sizing: border-box; }
+    .co button, .co input, .co select { font-family: inherit; -webkit-tap-highlight-color: transparent; }
+    .co h1 { margin: 0; font-size: 1.45rem; display: flex; align-items: center; gap: .6rem; color: var(--text-primary); }
+    .co-sub { margin: .25rem 0 1rem; font-size: .9rem; color: var(--text-secondary); }
+    .co-input, .co-select {
+        width: 100%; min-height: 48px; padding: .6rem .8rem; font-size: 16px;
+        color: var(--text-primary); background: var(--bg-input);
+        border: 1px solid var(--border-input); border-radius: 12px;
+    }
+    .co-btn {
+        min-height: 48px; padding: 0 1rem; border-radius: 12px; cursor: pointer;
+        font-size: .95rem; font-weight: 700; border: 1px solid var(--border);
+        background: var(--bg-card); color: var(--text-primary);
+        display: inline-flex; align-items: center; justify-content: center; gap: .45rem;
+    }
+    .co-btn.primary { border: 0; color: #fff; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); }
+    .co-btn.warn { border: 0; color: #fff; background: var(--warning); }
+    .co-btn.small { min-height: 36px; padding: 0 .7rem; font-size: .82rem; }
+    .co-btn:active { transform: scale(.97); }
+    .co-grid { display: grid; gap: 1rem; }
+    @media (min-width: 860px) { .co-grid { grid-template-columns: minmax(0, 420px) minmax(0, 1fr); align-items: start; } }
+    .co-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 1rem; box-shadow: var(--shadow-sm); }
+
+    .co-modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: .35rem; margin: .75rem 0; padding: .25rem;
+                background: var(--bg-nav-hover); border-radius: 12px; }
+    .co-modes button { min-height: 42px; border: 0; border-radius: 9px; background: transparent; color: var(--text-secondary);
+                       font-weight: 700; font-size: .85rem; cursor: pointer; }
+    .co-modes button.on { background: var(--bg-card); color: var(--text-primary); box-shadow: var(--shadow-sm); }
+
+    .co-cam { position: relative; aspect-ratio: 4 / 3; border-radius: 14px; overflow: hidden; background: #000; margin-bottom: .6rem; }
+    .co-cam video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .co-cam-idle { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+                   gap: .5rem; color: #cbd5e1; font-size: .9rem; text-align: center; padding: 1rem; }
+    .co-cam-idle i { font-size: 2rem; }
+    .co-cam.live .co-cam-idle { display: none; }
+    .co-cam .flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .5s; }
+    .co-cam .flash.ok   { background: rgba(16,185,129,.45); opacity: 1; transition: none; }
+    .co-cam .flash.warn { background: rgba(245,158,11,.5);  opacity: 1; transition: none; }
+    .co-cam .flash.err  { background: rgba(239,68,68,.5);   opacity: 1; transition: none; }
+    .co-status { display: flex; align-items: center; gap: .5rem; margin-bottom: .6rem; font-size: .85rem; color: var(--text-secondary); }
+    .co-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-muted); flex: 0 0 9px; }
+    .co-dot.live { background: var(--success); }
+    .co-manual { display: flex; gap: .5rem; margin-top: .6rem; }
+    .co-manual .co-input { flex: 1; min-width: 0; }
+
+    .co-result { margin-top: .9rem; padding: .85rem 1rem; border-radius: 12px; border: 2px solid var(--border); background: var(--bg-card); }
+    .co-result.ok   { border-color: var(--success); }
+    .co-result.warn { border-color: var(--warning); }
+    .co-result.err  { border-color: var(--danger); }
+    .co-result h3 { margin: 0; font-size: 1.05rem; display: flex; gap: .5rem; align-items: center; color: var(--text-primary); }
+    .co-result.ok h3 i   { color: var(--success); }
+    .co-result.warn h3 i { color: var(--warning); }
+    .co-result.err h3 i  { color: var(--danger); }
+    .co-result ul { margin: .5rem 0 0; padding-left: 1.2rem; font-size: .88rem; color: var(--text-secondary); }
+    .co-result .row { display: flex; gap: .5rem; margin-top: .75rem; flex-wrap: wrap; }
+
+    .co-tabs { display: flex; gap: .35rem; margin-bottom: .75rem; overflow-x: auto; }
+    .co-tabs button { flex: 0 0 auto; min-height: 40px; padding: 0 .85rem; border-radius: 999px; cursor: pointer; font-weight: 700; font-size: .85rem;
+                      border: 1px solid var(--border); background: var(--bg-card); color: var(--text-secondary); }
+    .co-tabs button.on { background: var(--bg-nav-active); color: var(--text-nav-active); border-color: transparent; }
+    .co-list { list-style: none; margin: 0; padding: 0; }
+    .co-list li { display: flex; align-items: center; gap: .75rem; padding: .6rem .2rem; border-bottom: 1px solid var(--border); }
+    .co-list li:last-child { border-bottom: 0; }
+    .co-list .main { flex: 1; min-width: 0; }
+    .co-list code { font-weight: 700; font-size: .95rem; }
+    .co-list .meta { font-size: .8rem; color: var(--text-secondary); overflow-wrap: anywhere; }
+    .co-list .meta.bad { color: var(--danger); font-weight: 600; }
+    .co-empty { padding: 1.25rem .5rem; text-align: center; color: var(--text-secondary); font-size: .9rem; }
+    .co-stale { margin-top: 1rem; border-left: 4px solid var(--danger); }
+    .co-stale a { color: var(--primary); font-weight: 600; text-decoration: none; }
+    .co-count { display: inline-block; min-width: 1.4rem; padding: 0 .35rem; margin-left: .25rem; border-radius: 999px;
+                background: var(--bg-nav-hover); font-size: .75rem; text-align: center; }
+</style>
+
+<div class="co">
+    <h1><i class="fas fa-people-carry-box"></i> Scan out / in</h1>
+    <p class="co-sub">Pick the event, then scan unit tags. Scan a unit again to return it.</p>
+
+    <div class="co-grid">
+        <div>
+            <div class="co-card">
+                <label for="coEvent" style="font-size:.8rem; font-weight:700; color:var(--text-secondary);">Event</label>
+                <select id="coEvent" class="co-select">
+                    <option value="">— Choose an event —</option>
+                    {% for e in events %}
+                    <option value="{{ e.id }}" {% if event and event.id == e.id %}selected{% endif %}>{{ e.title }} · {{ e.date }}{% if out_counts.get(e.id) %} ({{ out_counts[e.id] }} out){% endif %}</option>
+                    {% endfor %}
+                    {% if stale_events %}
+                    <optgroup label="Finished, gear still out">
+                        {% for e in stale_events %}
+                        <option value="{{ e.id }}" {% if event and event.id == e.id %}selected{% endif %}>{{ e.title }} · {{ e.date }} ({{ out_counts.get(e.id, 0) }} out)</option>
+                        {% endfor %}
+                    </optgroup>
+                    {% endif %}
+                    {% if event and event.archived and event.id not in stale_events|map(attribute='id')|list %}
+                    <option value="{{ event.id }}" selected>{{ event.title }} · {{ event.date }} (finished)</option>
+                    {% endif %}
+                </select>
+
+                <div class="co-modes" role="radiogroup" aria-label="What a scan does">
+                    <button type="button" data-mode="auto" class="on" role="radio" aria-checked="true" title="Out if it's in, back if it's out on this event">Auto</button>
+                    <button type="button" data-mode="out" role="radio" aria-checked="false">Check out</button>
+                    <button type="button" data-mode="return" role="radio" aria-checked="false">Return</button>
+                </div>
+
+                <div class="co-cam" id="coCam">
+                    <div class="co-cam-idle"><i class="fas fa-camera"></i><span>Camera is off</span></div>
+                    <div class="flash" id="coFlash"></div>
+                </div>
+                <div class="co-status"><span class="co-dot" id="coDot"></span><span id="coCamStatus">Camera off</span></div>
+                <button type="button" class="co-btn primary" id="coCamBtn" style="width:100%;"><i class="fas fa-video"></i> Start camera</button>
+
+                <form class="co-manual" id="coManualForm" autocomplete="off">
+                    <input type="text" id="coManual" class="co-input" placeholder="Type or scan an asset tag…"
+                           spellcheck="false" enterkeyhint="go" aria-label="Asset tag">
+                    <button type="submit" class="co-btn">Go</button>
+                </form>
+
+                <div id="coResult" aria-live="polite"></div>
+            </div>
+        </div>
+
+        <div>
+            <div class="co-card" id="coLists">
+                {% if event %}
+                <div style="display:flex; justify-content:space-between; gap:.5rem; align-items:baseline; flex-wrap:wrap; margin-bottom:.6rem;">
+                    <strong style="font-size:1.05rem;">{{ event.title }}</strong>
+                    <a href="{{ url_for('picklist.picklist', event_id=event.id) }}" style="font-size:.85rem; color:var(--primary);"><i class="fas fa-list-check"></i> Pick list</a>
+                </div>
+                <div class="co-tabs" role="tablist">
+                    <button type="button" data-tab="out" class="on">Out<span class="co-count" id="cntOut">0</span></button>
+                    <button type="button" data-tab="expected">To go<span class="co-count" id="cntExpected">0</span></button>
+                    <button type="button" data-tab="returned">Returned<span class="co-count" id="cntReturned">0</span></button>
+                </div>
+                <ul class="co-list" id="coList"><li class="co-empty">Loading…</li></ul>
+                {% else %}
+                <div class="co-empty">Choose an event to see what's out.</div>
+                {% endif %}
+            </div>
+
+            {% if stale_events %}
+            <div class="co-card co-stale">
+                <strong><i class="fas fa-triangle-exclamation" style="color:var(--danger);"></i> Still out from finished events</strong>
+                <ul class="co-list">
+                    {% for e in stale_events %}
+                    <li><div class="main"><a href="{{ url_for('unit_tracking.checkout_page', event_id=e.id) }}">{{ e.title }}</a>
+                        <div class="meta">{{ e.date }} · {{ out_counts.get(e.id, 0) }} unit{{ '' if out_counts.get(e.id, 0) == 1 else 's' }} not returned</div></div></li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
+<script src="{{ url_for('static', filename='js/sw-scanner.js') }}"></script>
+<script>
+(function () {
+    const EVENT_ID = {{ event.id if event else 'null' }};
+    const $ = (s, r = document) => r.querySelector(s);
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    let mode = 'auto', tab = 'out', state = null, busy = false;
+
+    /* ---------- Event + mode ---------- */
+    $('#coEvent').addEventListener('change', e => {
+        const v = e.target.value;
+        location.href = v ? `?event_id=${v}` : location.pathname;
+    });
+    document.querySelectorAll('.co-modes button').forEach(b => b.addEventListener('click', () => {
+        mode = b.dataset.mode;
+        document.querySelectorAll('.co-modes button').forEach(x => {
+            x.classList.toggle('on', x === b); x.setAttribute('aria-checked', x === b ? 'true' : 'false');
+        });
+    }));
+
+    /* ---------- Feedback: beep + flash ---------- */
+    let audio = null;
+    function beep(kind) {
+        try {
+            audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+            const tones = { ok: [880], warn: [660, 520], err: [220, 180] }[kind] || [880];
+            tones.forEach((f, i) => {
+                const o = audio.createOscillator(), g = audio.createGain();
+                o.frequency.value = f; o.type = kind === 'err' ? 'square' : 'sine';
+                g.gain.value = 0.08; o.connect(g); g.connect(audio.destination);
+                const t = audio.currentTime + i * 0.14;
+                o.start(t); o.stop(t + 0.12);
+            });
+        } catch (e) {}
+        const fl = $('#coFlash');
+        fl.className = 'flash ' + kind;
+        setTimeout(() => { fl.className = 'flash'; }, 60);
+        try { navigator.vibrate && navigator.vibrate(kind === 'ok' ? 60 : [80, 60, 80]); } catch (e) {}
+    }
+
+    /* ---------- Scanner (shared engine, continuous) ---------- */
+    const scanner = SWScanner.create({
+        container: $('#coCam'),
+        continuous: true,
+        onCode: code => submit({ code }),
+        onState: (live, text) => {
+            $('#coDot').classList.toggle('live', live);
+            $('#coCam').classList.toggle('live', live);
+            $('#coCamStatus').textContent = text;
+            $('#coCamBtn').innerHTML = scanner.scanning ? '<i class="fas fa-stop"></i> Stop camera' : '<i class="fas fa-video"></i> Start camera';
+        },
+        onError: msg => showAlert(msg, 'error'),
+    });
+    $('#coCamBtn').addEventListener('click', () => {
+        if (scanner.scanning) return scanner.stop();
+        if (!EVENT_ID && mode !== 'return') return showResult('err', 'Pick an event first');
+        scanner.start();
+    });
+    window.addEventListener('pagehide', () => scanner.stop());
+
+    $('#coManualForm').addEventListener('submit', e => {
+        e.preventDefault();
+        const v = $('#coManual').value.trim();
+        if (!v) return;
+        $('#coManual').value = '';
+        submit({ code: v });
+    });
+
+    /* ---------- Scan → server ---------- */
+    async function post(url, body) {
+        let r;
+        try {
+            r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+        } catch (e) { return { ok: false, status: 0, data: { error: 'Network error — check your connection' } }; }
+        return { ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) };
+    }
+
+    async function submit(body) {
+        if (busy) return;
+        if (!EVENT_ID && mode !== 'return') { beep('err'); return showResult('err', 'Pick an event first'); }
+        busy = true;
+        scanner.pause(true);
+        const { ok, data } = await post('/equipment/checkout/scan', Object.assign({ event_id: EVENT_ID, mode }, body));
+        busy = false;
+        if (ok) {
+            const warns = (data.warnings || []).map(w => w.message);
+            const kind = warns.length ? 'warn' : 'ok';
+            beep(kind);
+            const name = data.unit ? data.unit.equipment_name : '';
+            showResult(kind, `${data.message}`, name, warns.concat(data.info ? [data.info] : []));
+            scanner.pause(false);
+            refresh();
+            return;
+        }
+        if (data.needs_confirm) {
+            beep('warn');
+            showResult('warn', data.unit ? `${data.unit.asset_tag} needs a check` : 'Check this unit',
+                       data.unit ? data.unit.equipment_name : '',
+                       (data.blockers || []).map(b => b.message), [
+                { label: 'Check out anyway', cls: 'warn', run: () => { scanner.pause(false); busy = false; submit(Object.assign({}, body, { force: true, mode: 'out' })); } },
+                { label: 'Skip', run: () => { clearResult(); scanner.pause(false); } },
+            ]);
+            return;                                       // camera stays paused until a choice is made
+        }
+        beep('err');
+        showResult('err', data.error || 'Could not record that scan', data.unit ? data.unit.equipment_name : '');
+        scanner.pause(false);
+    }
+
+    function showResult(kind, title, sub, notes, actions) {
+        const icon = { ok: 'fa-circle-check', warn: 'fa-triangle-exclamation', err: 'fa-circle-xmark' }[kind];
+        $('#coResult').innerHTML = `<div class="co-result ${kind}">
+            <h3><i class="fas ${icon}"></i><span>${esc(title)}</span></h3>
+            ${sub ? `<div style="font-size:.85rem; color:var(--text-secondary); margin-top:.2rem;">${esc(sub)}</div>` : ''}
+            ${notes && notes.length ? `<ul>${notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
+            ${actions ? `<div class="row">${actions.map((a, i) => `<button type="button" class="co-btn small ${a.cls || ''}" data-act="${i}">${esc(a.label)}</button>`).join('')}</div>` : ''}
+        </div>`;
+        (actions || []).forEach((a, i) => $(`#coResult [data-act="${i}"]`).addEventListener('click', a.run));
+    }
+    function clearResult() { $('#coResult').innerHTML = ''; }
+
+    /* ---------- Lists ---------- */
+    async function refresh() {
+        if (!EVENT_ID) return;
+        try {
+            const r = await fetch(`/equipment/checkout/event/${EVENT_ID}`, { headers: { Accept: 'application/json' } });
+            if (!r.ok) return;
+            state = await r.json();
+        } catch (e) { return; }
+        $('#cntOut').textContent = state.out.length;
+        $('#cntExpected').textContent = state.expected.length;
+        $('#cntReturned').textContent = state.returned.length;
+        renderList();
+    }
+
+    function renderList() {
+        if (!state) return;
+        const ul = $('#coList');
+        let rows = [];
+        if (tab === 'out') {
+            rows = state.out.map(c => `<li><div class="main"><code>${esc(c.asset_tag)}</code> <span>${esc(c.equipment_name)}</span>
+                    <div class="meta">Out ${esc(c.checked_out_at)} · ${esc(c.checked_out_by)}</div></div>
+                    <button type="button" class="co-btn small" data-return="${c.id}"><i class="fas fa-rotate-left"></i> Return</button></li>`);
+            if (!rows.length) rows = ['<li class="co-empty">Nothing is out for this event.</li>'];
+        } else if (tab === 'expected') {
+            rows = state.expected.map(u => `<li><div class="main"><code>${esc(u.asset_tag)}</code> <span>${esc(u.equipment_name)}</span>
+                    ${u.out_elsewhere ? `<div class="meta bad">Still out on ${esc(u.out_elsewhere.event_title)}</div>` : ''}
+                    ${u.status !== 'available' ? `<div class="meta bad">Marked ${esc(u.status)}</div>` : ''}</div></li>`);
+            rows = rows.concat((state.unallocated || []).map(x => `<li><div class="main"><span>${esc(x.equipment_name)}</span>
+                    <div class="meta">${x.missing} more unit${x.missing === 1 ? '' : 's'} needed — any scanned unit is added to the pick list</div></div></li>`));
+            if (!rows.length) rows = ['<li class="co-empty">Everything on the pick list is out.</li>'];
+        } else {
+            rows = state.returned.map(c => `<li><div class="main"><code>${esc(c.asset_tag)}</code> <span>${esc(c.equipment_name)}</span>
+                    <div class="meta">Back ${esc(c.returned_at)} · ${esc(c.returned_by)} (out ${esc(c.checked_out_at)})</div></div></li>`);
+            if (!rows.length) rows = ['<li class="co-empty">Nothing returned yet.</li>'];
+        }
+        ul.innerHTML = rows.join('');
+    }
+
+    document.querySelectorAll('.co-tabs button').forEach(b => b.addEventListener('click', () => {
+        tab = b.dataset.tab;
+        document.querySelectorAll('.co-tabs button').forEach(x => x.classList.toggle('on', x === b));
+        renderList();
+    }));
+
+    const lists = $('#coLists');
+    lists.addEventListener('click', async e => {
+        const b = e.target.closest('[data-return]');
+        if (!b) return;
+        b.disabled = true;
+        const { ok, data } = await post(`/equipment/checkout/${b.dataset.return}/return`);
+        if (ok) { beep('ok'); showResult('ok', `${data.checkout.asset_tag} returned`, data.checkout.equipment_name); }
+        else showAlert(data.error || 'Could not return', 'error');
+        refresh();
+    });
+
+    refresh();
+    // Keep the lists in step with other crew scanning at the same time
+    setInterval(() => { if (!document.hidden) refresh(); }, 10000);
+})();
+</script>
+{% endblock %}
