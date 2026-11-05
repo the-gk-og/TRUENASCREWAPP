@@ -15,7 +15,8 @@ env:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Pinned: setup-python has no prebuilt 3.11 for the newer ubuntu-latest image yet.
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
 
@@ -26,7 +27,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version-file: .python-version
+          python-version: "3.11"   # same minor version as the Docker image (python:3.11-slim)
           cache: pip
 
       - name: Install dependencies
