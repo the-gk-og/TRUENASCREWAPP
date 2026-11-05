@@ -1,7 +1,7 @@
 """
 Comprehensive test suite for ShowWise webapp
 Tests all routes and functions
-Run with: pytest test_all_functions.py -v
+Run with: pytest tests/test_all_functions.py -v
 """
 
 import pytest
@@ -10,7 +10,11 @@ import os
 from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock
 from werkzeug.security import generate_password_hash
-from app import app, db, User, Event, Equipment, CrewAssignment, PickListItem, TwoFactorAuth, OAuthConnection
+from app import create_app
+from extensions import db
+from models import User, Event, Equipment, CrewAssignment, PickListItem, TwoFactorAuth, OAuthConnection
+
+app = create_app('testing')
 from rocketchat_client import RocketChatClient
 
 
@@ -346,7 +350,7 @@ class TestEquipmentRoutes:
 class TestChatRoutes:
     """Test chat routes"""
     
-    @patch('app.get_rocketchat_client')
+    @patch('rocketchat_client.get_rocketchat_client')
     def test_rocketchat_info(self, mock_rc, client, test_user):
         """Test Rocket.Chat info endpoint"""
         mock_client = MagicMock()
@@ -564,7 +568,7 @@ class TestHelperFunctions:
     
     def test_generate_secure_password(self):
         """Test secure password generation"""
-        from app import generate_secure_password
+        from utils import generate_secure_password
         pwd1 = generate_secure_password()
         pwd2 = generate_secure_password()
         
@@ -574,7 +578,7 @@ class TestHelperFunctions:
     
     def test_send_email_disabled(self, client):
         """Test email sending when disabled"""
-        from app import send_email
+        from services.email_service import send_email
         # Should return False when not configured
         result = send_email('Test', 'test@test.com', 'Body')
         assert result == False or result is None

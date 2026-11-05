@@ -18,6 +18,23 @@
 <div class="card">
     <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-cog"></i> Label Configuration</h3>
 
+    <!-- Tag mode -->
+    <div style="margin-bottom: 1.5rem;">
+        <label style="display:block; margin-bottom:0.75rem; font-weight:600;">Tags to print</label>
+        <div style="display:flex; gap:1.25rem; flex-wrap:wrap;">
+            <label id="modeItemLabel" class="layout-option selected" onclick="selectMode('item')" style="min-width:200px;">
+                <i class="fas fa-box" style="font-size:1.4rem;"></i>
+                <span>One tag per item</span>
+                <small style="font-weight:400;">Encodes the item, for stock tracked by quantity</small>
+            </label>
+            <label id="modeUnitLabel" class="layout-option" onclick="selectMode('unit')" style="min-width:200px;">
+                <i class="fas fa-boxes" style="font-size:1.4rem;"></i>
+                <span>One tag per unit</span>
+                <small style="font-weight:400;">A unique QR and asset tag for each physical unit</small>
+            </label>
+        </div>
+    </div>
+
     <!-- Layout picker -->
     <div style="margin-bottom: 1.5rem;">
         <label style="display:block; margin-bottom:0.75rem; font-weight:600;">Label Layout</label>
@@ -82,6 +99,7 @@
             <li>Click <strong>Generate PDF</strong> — labels are packed onto A4 pages automatically</li>
             <li>Print at <strong>100% scale (no scaling)</strong> on A4 paper, then cut out and apply</li>
             <li>Scanning the QR in-app shows item details; scanning with a phone camera opens the equipment page</li>
+            <li>With <strong>One tag per unit</strong>, each unit's tag opens that exact unit, so you can see which one is out. Add units on the item's page first.</li>
         </ol>
     </div>
 </div>
@@ -93,6 +111,7 @@
             <h3 style="margin: 0;"><i class="fas fa-check-square"></i> Select Equipment</h3>
             <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary); font-size: 0.9rem;">
                 <span id="selectedCount" style="font-weight: 600; color: var(--primary);">0</span> items selected
+                <span id="unitTagCount" style="display:none;">· <strong style="color: var(--primary);">0</strong> unit tags</span>
             </p>
         </div>
         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
@@ -123,6 +142,7 @@
         <div class="equipment-card"
              data-id="{{ item.id }}"
              data-category="{{ item.category or '' }}"
+             data-units="{{ item.units|length }}"
              style="background: var(--bg-card); border: 2px solid var(--border); border-radius: 8px; padding: 1rem; cursor: pointer; transition: all 0.2s ease;">
             <div style="display: flex; align-items: start; gap: 0.75rem;">
                 <input type="checkbox" class="barcode-checkbox" data-id="{{ item.id }}"
@@ -136,6 +156,10 @@
                         {% if item.location %}<span style="color: var(--text-secondary);"><i class="fas fa-map-marker-alt"></i> {{ item.location }}</span>{% endif %}
                         <span style="background: #e0e7ff; color: var(--primary); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; display: inline-block; width: fit-content;">
                             Qty: {{ item.quantity_owned if item.quantity_owned else 1 }}
+                        </span>
+                        <span class="unit-badge" style="color: var(--text-secondary); font-size: 0.8rem;">
+                            <i class="fas fa-boxes"></i>
+                            {% if item.units %}{{ item.units|length }} unit{{ 's' if item.units|length != 1 }} tracked{% else %}No units tracked{% endif %}
                         </span>
                     </div>
                 </div>
@@ -213,6 +237,23 @@
 let equipmentData = {{ equipment_json|tojson }};
 let selectedIds   = new Set();
 let currentLayout = 'portrait';
+let currentMode   = 'item';
+
+// ── Mode selection (one tag per item / per unit) ─────────────────────────────
+function selectMode(mode) {
+    currentMode = mode;
+    document.getElementById('modeItemLabel').classList.toggle('selected', mode === 'item');
+    document.getElementById('modeUnitLabel').classList.toggle('selected', mode === 'unit');
+    updateCount();
+}
+
+function unitTagTotal() {
+    let n = 0;
+    document.querySelectorAll('.barcode-checkbox:checked').forEach(cb => {
+        n += parseInt(cb.closest('.equipment-card').dataset.units || '0', 10);
+    });
+    return n;
+}
 
 // ── Layout selection ─────────────────────────────────────────────────────────
 function selectLayout(layout) {
@@ -283,9 +324,13 @@ function updateCount() {
         card.style.background  = '';
     });
     document.getElementById('selectedCount').textContent = selectedIds.size;
+    const unitInfo = document.getElementById('unitTagCount');
+    const nTags = currentMode === 'unit' ? unitTagTotal() : selectedIds.size;
+    unitInfo.style.display = currentMode === 'unit' ? '' : 'none';
+    unitInfo.querySelector('strong').textContent = unitTagTotal();
     const btn = document.getElementById('generateBtn');
     btn.innerHTML = selectedIds.size > 0
-        ? `<i class="fas fa-file-pdf"></i> Generate PDF (${selectedIds.size})`
+        ? `<i class="fas fa-file-pdf"></i> Generate PDF (${nTags} tag${nTags === 1 ? '' : 's'})`
         : '<i class="fas fa-file-pdf"></i> Generate PDF';
 }
 
@@ -307,6 +352,11 @@ function generateQRPDF() {
         showAlert('Please select at least one equipment item', 'error');
         return;
     }
+    const nTags = currentMode === 'unit' ? unitTagTotal() : selectedIds.size;
+    if (currentMode === 'unit' && nTags === 0) {
+        showAlert('None of the selected items have units yet. Add units on the item page, or print one tag per item.', 'error');
+        return;
+    }
 
     const btn = document.getElementById('generateBtn');
     btn.disabled = true;
@@ -314,6 +364,7 @@ function generateQRPDF() {
 
     const payload = {
         equipment_ids:   Array.from(selectedIds),
+        mode:            currentMode,
         layout:          currentLayout,
         card_width_mm:   parseFloat(document.getElementById('cardWidthMm').value)  || (currentLayout === 'portrait' ? 60 : 90),
         card_height_mm:  parseFloat(document.getElementById('cardHeightMm').value) || (currentLayout === 'portrait' ? 80 : 55),
@@ -333,12 +384,12 @@ function generateQRPDF() {
         const url = window.URL.createObjectURL(blob);
         const a   = document.createElement('a');
         a.href     = url;
-        a.download = `equipment_qrcodes_${currentLayout}_${Date.now()}.pdf`;
+        a.download = `equipment_${currentMode === 'unit' ? 'unit_' : ''}qrcodes_${currentLayout}_${Date.now()}.pdf`;
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
-        showAlert(`Generated ${selectedIds.size} QR label${selectedIds.size > 1 ? 's' : ''}!`, 'success');
+        showAlert(`Generated ${nTags} QR label${nTags > 1 ? 's' : ''}!`, 'success');
         btn.disabled = false;
         updateCount();
     })

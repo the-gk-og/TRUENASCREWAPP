@@ -117,6 +117,7 @@ def reject_shift(shift_id):
 
 @shifts_bp.route('/shifts/<int:shift_id>/notes', methods=['POST'])
 @login_required
+@crew_required
 def add_shift_note(shift_id):
     Shift.query.get_or_404(shift_id)
     note = ShiftNote(shift_id=shift_id, created_by=current_user.username,
@@ -128,6 +129,7 @@ def add_shift_note(shift_id):
 
 @shifts_bp.route('/shifts/<int:shift_id>/notes', methods=['GET'])
 @login_required
+@crew_required
 def get_shift_notes(shift_id):
     Shift.query.get_or_404(shift_id)
     notes = ShiftNote.query.filter_by(shift_id=shift_id).order_by(ShiftNote.created_at.desc()).all()
@@ -138,6 +140,7 @@ def get_shift_notes(shift_id):
 
 @shifts_bp.route('/shifts/notes/<int:note_id>', methods=['DELETE'])
 @login_required
+@crew_required
 def delete_shift_note(note_id):
     note = ShiftNote.query.get_or_404(note_id)
     if note.created_by != current_user.username and not current_user.is_admin:
@@ -151,6 +154,7 @@ def delete_shift_note(note_id):
 
 @shifts_bp.route('/shifts/<int:shift_id>/tasks', methods=['POST'])
 @login_required
+@crew_required
 def add_shift_task(shift_id):
     Shift.query.get_or_404(shift_id)
     data = request.get_json(silent=True) or {}
@@ -164,6 +168,7 @@ def add_shift_task(shift_id):
 
 @shifts_bp.route('/shifts/<int:shift_id>/tasks', methods=['GET'])
 @login_required
+@crew_required
 def get_shift_tasks(shift_id):
     Shift.query.get_or_404(shift_id)
     tasks = ShiftTask.query.filter_by(shift_id=shift_id).order_by(ShiftTask.created_at).all()
@@ -175,18 +180,36 @@ def get_shift_tasks(shift_id):
 
 @shifts_bp.route('/shifts/tasks/<int:task_id>', methods=['PUT'])
 @login_required
+@crew_required
 def update_shift_task(task_id):
     task = ShiftTask.query.get_or_404(task_id)
     data = request.get_json(silent=True) or {}
-    for field in ('is_complete', 'title', 'description'):
+    # Creator or admin may edit anything; the assignee may only tick it off.
+    if current_user.is_admin or task.created_by == current_user.username:
+        allowed = ('is_complete', 'title', 'description')
+    elif task.assigned_to and task.assigned_to == current_user.username:
+        allowed = ('is_complete',)
+    else:
+        return jsonify({'error': 'Permission denied'}), 403
+    if any(f in data for f in ('title', 'description')) and 'title' not in allowed:
+        return jsonify({'error': 'Permission denied'}), 403
+    for field in allowed:
         if field in data:
-            setattr(task, field, data[field])
+            value = data[field]
+            if field == 'is_complete':
+                value = bool(value)
+            elif field == 'title':
+                value = str(value or '').strip()[:200]
+                if not value:
+                    return jsonify({'error': 'Title is required'}), 400
+            setattr(task, field, value)
     db.session.commit()
     return jsonify({'success': True})
 
 
 @shifts_bp.route('/shifts/tasks/<int:task_id>', methods=['DELETE'])
 @login_required
+@crew_required
 def delete_shift_task(task_id):
     task = ShiftTask.query.get_or_404(task_id)
     if task.created_by != current_user.username and not current_user.is_admin:

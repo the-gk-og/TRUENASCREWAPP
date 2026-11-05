@@ -105,6 +105,10 @@ class Equipment(db.Model):
     picture          = db.Column(db.String(300), nullable=True)
     # Photo of where it lives in storage
     location_picture = db.Column(db.String(300), nullable=True)
+    # Individual physical units (opt-in: empty for items tracked only by quantity)
+    units            = db.relationship('EquipmentUnit', backref='equipment',
+                                       cascade='all, delete-orphan',
+                                       order_by='EquipmentUnit.asset_tag')
 
     def to_dict(self):
         from flask import url_for
@@ -116,6 +120,7 @@ class Equipment(db.Model):
             'location':       self.location or '',
             'notes':          self.notes or '',
             'quantity_owned': self.quantity_owned or 1,
+            'unit_count':     len(self.units),
             'picture_url': (
                 url_for('equipment.serve_equipment_picture', id=self.id)
                 if self.picture else None
@@ -124,6 +129,181 @@ class Equipment(db.Model):
                 url_for('equipment.serve_equipment_location_picture', id=self.id)
                 if self.location_picture else None
             ),
+        }
+
+
+UNIT_STATUSES = ('available', 'repair', 'retired', 'lost')
+
+
+class EquipmentUnit(db.Model):
+    """One physical, individually tagged unit of an Equipment item type.
+
+    Whether a unit is *out* is not stored: it is derived from its allocations
+    to pick lists of events that have not finished yet (see `allocations`).
+    `status` records the unit's own condition (in repair, retired, lost).
+    """
+    __tablename__ = 'equipment_unit'
+    id            = db.Column(db.Integer, primary_key=True)
+    equipment_id  = db.Column(db.Integer, db.ForeignKey('equipment.id', ondelete='CASCADE'),
+                              nullable=False, index=True)
+    asset_tag     = db.Column(db.String(100), unique=True, nullable=False)
+    serial_number = db.Column(db.String(100))
+    status        = db.Column(db.String(20), nullable=False, default='available')
+    notes         = db.Column(db.Text)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def allocations(self, current_only=True):
+        """Pick list lines this unit is allocated to, newest event first.
+        current_only skips events that have already finished."""
+        from routes.picklist import _event_is_archived
+        rows = []
+        for link in self.pick_links:
+            pli = link.pick_list_item
+            ev  = db.session.get(Event, pli.event_id) if pli.event_id else None
+            if current_only and ev is not None and _event_is_archived(ev):
+                continue
+            rows.append((ev.event_date if ev else datetime.max, {
+                'pick_list_item_id': pli.id,
+                'event_id':          ev.id if ev else None,
+                'event_title':       ev.title if ev else 'General list',
+                'event_date':        ev.event_date.strftime('%d %b %Y') if ev and ev.event_date else '',
+                'is_checked':        bool(pli.is_checked),
+            }))
+        rows.sort(key=lambda r: r[0], reverse=True)
+        return [r for _, r in rows]
+
+    def to_dict(self, with_allocations=True):
+        d = {
+            'id':             self.id,
+            'equipment_id':   self.equipment_id,
+            'equipment_name': self.equipment.name if self.equipment else '',
+            'asset_tag':      self.asset_tag,
+            'serial_number':  self.serial_number or '',
+            'status':         self.status or 'available',
+            'notes':          self.notes or '',
+        }
+        if with_allocations:
+            co = self.open_checkout
+            d['allocations'] = self.allocations()
+            d['checkout']    = co.to_dict() if co else None
+            d['is_out']      = bool(d['allocations']) or co is not None
+            d['maintenance_due'] = self.maintenance_due()
+        return d
+
+    @property
+    def open_checkout(self):
+        """The UnitCheckout this unit is physically out on, or None."""
+        return next((c for c in self.checkouts if c.returned_at is None), None)
+
+    def maintenance_due(self, today=None):
+        """Earliest 'next due' date across maintenance kinds, taking only the latest
+        record of each kind (a newer PAT test replaces the older one's due date).
+        Returns {'date', 'kind', 'state': overdue|due_soon|ok} or None."""
+        return due_state(latest_due_by_kind(self.maintenance), today)
+
+
+MAINTENANCE_KINDS   = ('pat', 'inspection', 'repair')
+MAINTENANCE_LABELS  = {'pat': 'PAT test', 'inspection': 'Inspection', 'repair': 'Repair'}
+MAINTENANCE_RESULTS = ('pass', 'fail', 'repaired', 'note')
+DUE_SOON_DAYS = 30
+
+
+def latest_due_by_kind(records):
+    """{kind: next_due} from the newest record of each kind that sets a due date."""
+    newest = {}
+    for r in records:
+        if r.kind not in newest or (r.performed_on, r.id) > (newest[r.kind].performed_on, newest[r.kind].id):
+            newest[r.kind] = r
+    return {k: r.next_due for k, r in newest.items() if r.next_due}
+
+
+def due_state(due_by_kind, today=None):
+    if not due_by_kind:
+        return None
+    from datetime import date, timedelta
+    today = today or date.today()
+    kind, when = min(due_by_kind.items(), key=lambda kv: kv[1])
+    if when < today:
+        state = 'overdue'
+    elif when <= today + timedelta(days=DUE_SOON_DAYS):
+        state = 'due_soon'
+    else:
+        state = 'ok'
+    return {'date': when.isoformat(), 'date_text': when.strftime('%d %b %Y'),
+            'kind': kind, 'kind_label': MAINTENANCE_LABELS.get(kind, kind),
+            'state': state, 'days': (when - today).days}
+
+
+class UnitCheckout(db.Model):
+    """A unit physically leaving storage for an event, and (once back) its return.
+    Open while returned_at is NULL; a unit has at most one open checkout."""
+    __tablename__ = 'unit_checkout'
+    id             = db.Column(db.Integer, primary_key=True)
+    unit_id        = db.Column(db.Integer, db.ForeignKey('equipment_unit.id', ondelete='CASCADE'),
+                               nullable=False, index=True)
+    event_id       = db.Column(db.Integer, db.ForeignKey('event.id', ondelete='CASCADE'),
+                               nullable=False, index=True)
+    checked_out_by = db.Column(db.String(80))
+    checked_out_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    returned_by    = db.Column(db.String(80))
+    returned_at    = db.Column(db.DateTime, index=True)
+    notes          = db.Column(db.Text)
+    unit  = db.relationship('EquipmentUnit', backref=db.backref(
+        'checkouts', cascade='all, delete-orphan', order_by='UnitCheckout.checked_out_at.desc()'))
+    event = db.relationship('Event', backref=db.backref('unit_checkouts', cascade='all, delete-orphan'))
+
+    def to_dict(self):
+        ev, u = self.event, self.unit
+        return {
+            'id':             self.id,
+            'unit_id':        self.unit_id,
+            'asset_tag':      u.asset_tag if u else '',
+            'equipment_id':   u.equipment_id if u else None,
+            'equipment_name': u.equipment.name if u and u.equipment else '',
+            'event_id':       self.event_id,
+            'event_title':    ev.title if ev else '',
+            'event_date':     ev.event_date.strftime('%d %b %Y') if ev and ev.event_date else '',
+            'checked_out_by': self.checked_out_by or '',
+            'checked_out_at': self.checked_out_at.strftime('%d %b %Y, %H:%M') if self.checked_out_at else '',
+            'returned_by':    self.returned_by or '',
+            'returned_at':    self.returned_at.strftime('%d %b %Y, %H:%M') if self.returned_at else '',
+            'is_open':        self.returned_at is None,
+            'notes':          self.notes or '',
+        }
+
+
+class UnitMaintenance(db.Model):
+    """One repair, inspection or electrical safety (PAT) test of a unit."""
+    __tablename__ = 'unit_maintenance'
+    id           = db.Column(db.Integer, primary_key=True)
+    unit_id      = db.Column(db.Integer, db.ForeignKey('equipment_unit.id', ondelete='CASCADE'),
+                             nullable=False, index=True)
+    kind         = db.Column(db.String(20), nullable=False)          # MAINTENANCE_KINDS
+    performed_on = db.Column(db.Date, nullable=False)
+    result       = db.Column(db.String(20), nullable=False)          # MAINTENANCE_RESULTS
+    performed_by = db.Column(db.String(120))                         # who did it (may be an outside tester)
+    notes        = db.Column(db.Text)
+    next_due     = db.Column(db.Date, index=True)
+    recorded_by  = db.Column(db.String(80))
+    created_at   = db.Column(db.DateTime, default=datetime.utcnow)
+    unit = db.relationship('EquipmentUnit', backref=db.backref(
+        'maintenance', cascade='all, delete-orphan',
+        order_by='(UnitMaintenance.performed_on.desc(), UnitMaintenance.id.desc())'))
+
+    def to_dict(self):
+        return {
+            'id':           self.id,
+            'unit_id':      self.unit_id,
+            'kind':         self.kind,
+            'kind_label':   MAINTENANCE_LABELS.get(self.kind, self.kind),
+            'performed_on': self.performed_on.isoformat() if self.performed_on else '',
+            'performed_on_text': self.performed_on.strftime('%d %b %Y') if self.performed_on else '',
+            'result':       self.result,
+            'performed_by': self.performed_by or '',
+            'notes':        self.notes or '',
+            'next_due':     self.next_due.isoformat() if self.next_due else '',
+            'next_due_text': self.next_due.strftime('%d %b %Y') if self.next_due else '',
+            'recorded_by':  self.recorded_by or '',
         }
 
 
@@ -251,6 +431,28 @@ class PickListItem(db.Model):
     event_id     = db.Column(db.Integer, db.ForeignKey('event.id'))
     equipment_id = db.Column(db.Integer, db.ForeignKey('equipment.id'), nullable=True)
     equipment    = db.relationship('Equipment', backref='pick_list_items')
+    # Specific physical units allocated to this line (only for items that track units)
+    unit_links   = db.relationship('PickListUnit', backref='pick_list_item',
+                                   cascade='all, delete-orphan', order_by='PickListUnit.id')
+
+    @property
+    def units(self):
+        return [l.unit for l in self.unit_links]
+
+
+class PickListUnit(db.Model):
+    """One physical EquipmentUnit allocated to a pick list line."""
+    __tablename__ = 'pick_list_unit'
+    __table_args__ = (db.UniqueConstraint('pick_list_item_id', 'unit_id', name='uq_pick_list_unit'),)
+    id                = db.Column(db.Integer, primary_key=True)
+    pick_list_item_id = db.Column(db.Integer, db.ForeignKey('pick_list_item.id', ondelete='CASCADE'),
+                                  nullable=False, index=True)
+    unit_id           = db.Column(db.Integer, db.ForeignKey('equipment_unit.id', ondelete='CASCADE'),
+                                  nullable=False, index=True)
+    assigned_by       = db.Column(db.String(80))
+    assigned_at       = db.Column(db.DateTime, default=datetime.utcnow)
+    unit              = db.relationship('EquipmentUnit', backref=db.backref(
+        'pick_links', cascade='all, delete-orphan'))
 
 
 class StagePlan(db.Model):

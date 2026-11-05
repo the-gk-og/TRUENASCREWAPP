@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 
+{% from 'crew/_picklist_units.html' import plu_row, plu_assets %}
 {% block title %}Pick List - ShowWise{% endblock %}
 
 {% block content %}
@@ -601,6 +602,11 @@
       <span>📅 {{ current_event.event_date.strftime('%d %b, %H:%M') }}</span>
       {% if current_event.location %}<span>📍 {{ current_event.location }}</span>{% endif %}
     </div>
+    <a href="{{ url_for('unit_tracking.checkout_page', event_id=current_event.id) }}"
+       style="display:inline-flex; align-items:center; gap:.4rem; margin-top:.55rem; padding:.45rem .8rem; border-radius:10px;
+              background:var(--primary); color:#fff; font-weight:700; font-size:.85rem; text-decoration:none;">
+      <i class="fas fa-people-carry-box"></i> Scan units out / in
+    </a>
   </div>
   {% endif %}
 
@@ -681,6 +687,7 @@
             </a>
             {% endif %}
           </div>
+          {{ plu_row(item, unit_options, item_units) }}
           {% if item.equipment and item.equipment.barcode %}
           <div class="mp-note">🔖 {{ item.equipment.barcode }}</div>
           {% endif %}
@@ -1008,6 +1015,7 @@
 
       const server = new Map(data.items.map(i => [i.id, i.checked]));
       let changed = false, structural = false;
+      if (window.pluSync) pluSync(data.items);
 
       document.querySelectorAll('#mp-list .mp-item[data-id]').forEach(card => {
         const id = parseInt(card.dataset.id);
@@ -1178,18 +1186,21 @@
     mpCheckQty();
   };
 
+  document.getElementById('mp-eqev')?.addEventListener('change', () => mpCheckQty());
+
   async function mpCheckQty() {
     const id  = document.getElementById('mp-eqsel').value;
     const qty = parseInt(document.getElementById('mp-eqqty').value) || 1;
+    const ev  = document.getElementById('mp-eqev').value || null;
     const w   = document.getElementById('mp-ewarn');
     if (!id) { w.classList.remove('mp-on'); return; }
     try {
       const r = await fetch(`/equipment/${id}/quantity-check`, {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ quantity: qty })
+        body: JSON.stringify({ quantity: qty, event_id: ev })
       }).then(r => r.json());
       if (r.warning) {
-        w.innerHTML = `⚠ Only <b>${r.available}</b> available (owned: ${r.owned}, allocated: ${r.allocated})`;
+        w.innerHTML = `⚠ Only <b>${r.available}</b> free ${ev ? 'for this event' : 'right now'} (usable: ${r.owned}, on other lists: ${r.allocated})`;
         w.classList.add('mp-on');
       } else { w.classList.remove('mp-on'); }
     } catch {}
@@ -1203,7 +1214,7 @@
     const ev  = document.getElementById('mp-eqev').value || null;
     const chk = await fetch(`/equipment/${id}/quantity-check`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ quantity: qty })
+      body: JSON.stringify({ quantity: qty, event_id: ev })
     }).then(r => r.json()).catch(() => ({ warning: false }));
     if (chk.warning && !confirm(`Only ${chk.available} available. Add anyway?`)) return;
     mpDoAdd({ equipment_id: id, quantity: qty, event_id: ev });
@@ -1249,4 +1260,5 @@
 
 })();
 </script>
+{{ plu_assets(unit_options, item_units) }}
 {% endblock %}
