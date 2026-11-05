@@ -433,13 +433,71 @@ def generate_barcodes():
         WHITE    = colors.white
         MID_GREY = colors.HexColor('#666666')
 
-        def _truncate(text, max_chars):
-            return text[:max_chars] + ('…' if len(text) > max_chars else '')
+        LEADING = 1.15  # line height as a multiple of font size
+
+        def _wrap(text, font, size, width):
+            """Greedy word-wrap measured in real glyph widths. Words wider than
+            the column are broken mid-word so nothing ever overflows."""
+            sw = lambda s: c.stringWidth(s, font, size)
+            lines, cur = [], ''
+            for word in text.split():
+                cand = f'{cur} {word}' if cur else word
+                if sw(cand) <= width:
+                    cur = cand
+                    continue
+                if cur:
+                    lines.append(cur)
+                    cur = ''
+                while sw(word) > width and len(word) > 1:
+                    cut = len(word) - 1
+                    while cut > 1 and sw(word[:cut]) > width:
+                        cut -= 1
+                    lines.append(word[:cut])
+                    word = word[cut:]
+                cur = word
+            if cur:
+                lines.append(cur)
+            return lines or ['']
+
+        def _ellipsize(text, font, size, width):
+            if c.stringWidth(text, font, size) <= width:
+                return text
+            while text and c.stringWidth(text + '…', font, size) > width:
+                text = text[:-1]
+            return text.rstrip() + '…'
+
+        def _fit_text(text, font, max_size, min_size, width, max_lines,
+                      max_height=None):
+            """Pick the largest font size (max_size → min_size) at which `text`
+            wraps into ≤ max_lines lines within `width` (and `max_height`).
+            If it still doesn't fit at min_size, the last line is ellipsized."""
+            text  = (text or '').strip()
+            width = max(width, 1)
+            size  = max_size
+            while True:
+                lines = _wrap(text, font, size, width)
+                n_ok  = len(lines) <= max_lines
+                h_ok  = max_height is None or len(lines) * size * LEADING <= max_height
+                if (n_ok and h_ok) or size <= min_size:
+                    break
+                size = max(min_size, size - 0.5)
+            if max_height is not None:
+                max_lines = max(1, min(max_lines, int(max_height // (size * LEADING))))
+            if len(lines) > max_lines:
+                rest  = ' '.join(lines[max_lines - 1:])
+                lines = lines[:max_lines - 1] + [_ellipsize(rest, font, size, width)]
+            return size, lines
 
         def _centred_string(text, font, size, cx, y, width):
             c.setFont(font, size)
             tw = c.stringWidth(text, font, size)
             c.drawString(cx + (width - tw) / 2, y, text)
+
+        def _centred_lines(lines, font, size, cx, top_y, width):
+            """Draw centred lines; top_y is the top of the text block."""
+            for i, line in enumerate(lines):
+                baseline = top_y - size * 0.8 - i * size * LEADING
+                _centred_string(line, font, size, cx, baseline, width)
 
         # ── PORTRAIT ────────────────────────────────────────────────────────
         #
@@ -462,25 +520,30 @@ def generate_barcodes():
         def _draw_portrait(cx, cy, item, qr_path):
             pad      = 3   * mm
             footer_h = 6.5 * mm
-            name_h   = 8   * mm
             asset_h  = 6   * mm
             border_r = 4   * mm
+            text_w   = card_w - 2 * pad - 2 * mm   # keep clear of rounded corners
 
             # Card outline — thick enough to feel like a tag
             c.setStrokeColor(BLACK)
             c.setLineWidth(1.2)
             c.roundRect(cx, cy, card_w, card_h, border_r, stroke=1, fill=0)
 
-            # ── Item name (top, bold, centred) ──
-            name_str  = _truncate(item.name, 26)
-            name_size = max(8, min(13, int(card_w / 5.5)))
+            # ── Item name (top, bold, centred, wrapped up to 3 lines) ──
+            # Name may use at most ~35% of the card height; the QR shrinks to fit.
+            name_max  = max(8, min(13, int(card_w / 5.5)))
+            name_size, name_lines = _fit_text(
+                item.name, 'Helvetica-Bold', name_max, 6, text_w, 3,
+                max_height=card_h * 0.35)
+            name_h = len(name_lines) * name_size * LEADING + 3 * mm
             c.setFillColor(BLACK)
-            _centred_string(name_str, 'Helvetica-Bold', name_size,
-                            cx, cy + card_h - pad - name_h + 2 * mm, card_w)
+            _centred_lines(name_lines, 'Helvetica-Bold', name_size,
+                           cx + (card_w - text_w) / 2,
+                           cy + card_h - pad - 1.5 * mm, text_w)
 
             # ── QR code (centred, with rounded light-grey background) ──
             body_h   = card_h - name_h - footer_h - asset_h - 2 * pad
-            qr_size  = min(card_w - 6 * pad, body_h - 2 * pad)
+            qr_size  = max(8 * mm, min(card_w - 6 * pad, body_h - 2 * pad))
             qr_x     = cx + (card_w - qr_size) / 2
             qr_y     = cy + footer_h + asset_h + (body_h - qr_size) / 2 + pad * 0.5
 
@@ -496,11 +559,11 @@ def generate_barcodes():
                         preserveAspectRatio=True, mask='auto')
 
             # ── Asset number (centred, under QR) ──
-            asset_str  = _truncate(item.barcode or f'ID-{item.id}', 24)
-            asset_label = f'# {asset_str}'
+            asset_label = f"# {item.barcode or f'ID-{item.id}'}"
+            asset_size, asset_lines = _fit_text(asset_label, 'Helvetica', 7, 5, text_w, 1)
             asset_y     = cy + footer_h + pad * 0.8
             c.setFillColor(MID_GREY)
-            _centred_string(asset_label, 'Helvetica', 7,
+            _centred_string(asset_lines[0], 'Helvetica', asset_size,
                             cx, asset_y, card_w)
 
             # ── Divider above footer ──
@@ -511,7 +574,8 @@ def generate_barcodes():
 
             # ── Organisation footer (centred, grey) ──
             c.setFillColor(MID_GREY)
-            _centred_string(org_name, 'Helvetica', 6.5,
+            org_size, org_lines = _fit_text(org_name, 'Helvetica', 6.5, 5, text_w, 1)
+            _centred_string(org_lines[0], 'Helvetica', org_size,
                             cx, cy + 2 * mm, card_w)
 
         # ── LANDSCAPE ───────────────────────────────────────────────────────
@@ -537,7 +601,8 @@ def generate_barcodes():
             c.roundRect(cx, cy, card_w, card_h, border_r, stroke=1, fill=0)
 
             # ── QR with rounded grey background (left) ──
-            qr_size = body_h - 2 * pad
+            # Never let the QR eat more than ~half the width, so text has room.
+            qr_size = min(body_h - 2 * pad, card_w * 0.5)
             qr_x    = cx + pad
             qr_y    = cy + footer_h + (body_h - qr_size) / 2
 
@@ -553,22 +618,31 @@ def generate_barcodes():
 
             # ── Text block (right of QR) ──
             text_x  = cx + qr_size + 3 * pad
-            text_w  = card_w - (qr_size + 4 * pad)
+            text_w  = max(10 * mm, card_w - (qr_size + 4 * pad))
             mid_y   = cy + footer_h + body_h / 2
+            text_max_h = body_h - 2 * pad
+            line_gap   = 2 * mm
 
-            # Item name — bold, centred in text column
-            name_str  = _truncate(item.name, 24)
-            name_size = max(8, min(12, int(text_w / 6)))
+            # Asset number — one line, shrunk/ellipsized to the column width
+            asset_label = f"# {item.barcode or f'ID-{item.id}'}"
+            asset_size, asset_lines = _fit_text(asset_label, 'Helvetica', 7, 5, text_w, 1)
+            asset_block = asset_size * LEADING
+
+            # Item name — bold, wrapped (up to 4 lines) in the space left over
+            name_max  = max(8, min(12, int(text_w / 6)))
+            name_size, name_lines = _fit_text(
+                item.name, 'Helvetica-Bold', name_max, 6, text_w, 4,
+                max_height=text_max_h - asset_block - line_gap)
+            name_block = len(name_lines) * name_size * LEADING
+
+            # Centre the name + asset block vertically beside the QR
+            top_y = mid_y + (name_block + line_gap + asset_block) / 2
             c.setFillColor(BLACK)
-            _centred_string(name_str, 'Helvetica-Bold', name_size,
-                            text_x, mid_y + 2 * mm, text_w)
-
-            # Asset number — centred in text column, below name
-            asset_str   = _truncate(item.barcode or f'ID-{item.id}', 20)
-            asset_label = f'# {asset_str}'
+            _centred_lines(name_lines, 'Helvetica-Bold', name_size,
+                           text_x, top_y, text_w)
             c.setFillColor(MID_GREY)
-            _centred_string(asset_label, 'Helvetica', 7,
-                            text_x, mid_y - 4 * mm, text_w)
+            _centred_lines(asset_lines, 'Helvetica', asset_size,
+                           text_x, top_y - name_block - line_gap, text_w)
 
             # ── Divider above footer ──
             c.setStrokeColor(colors.HexColor('#cccccc'))
@@ -578,7 +652,9 @@ def generate_barcodes():
 
             # ── Organisation footer ──
             c.setFillColor(MID_GREY)
-            _centred_string(org_name, 'Helvetica', 6.5,
+            org_size, org_lines = _fit_text(org_name, 'Helvetica', 6.5, 5,
+                                            card_w - 2 * pad - 2 * mm, 1)
+            _centred_string(org_lines[0], 'Helvetica', org_size,
                             cx, cy + 1.5 * mm, card_w)
 
         # ── Paginate and render ───────────────────────────────────────────────
