@@ -7,15 +7,17 @@ Adds per-unit equipment tracking:
   * `equipment_unit`  — one row per physical, individually tagged unit
   * `pick_list_unit`  — which units are allocated to which pick list line
 
-Units are OPT-IN per item: running this creates the (empty) tables only.
-Many items are consumables or bulk stock (gaffer tape, cable bundles) where
-one QR per piece is just noise, so nothing is created unless you ask for it —
-either from the item's detail page ("Generate units") or with --backfill here.
+You don't need to run this to create the tables: the automatic schema upgrade
+(schema_migrations.py, on every start) creates them. Keep it for --backfill.
+
+Units are OPT-IN per item. Many items are consumables or bulk stock (gaffer
+tape, cable bundles) where one QR per piece is just noise, so no units are
+created unless you ask for it — either from the item's detail page
+("Generate units") or with --backfill here.
 
 Safe to run multiple times — skips work that is already done.
 
 Usage:
-    python Migration_scripts/migrate_equipment_units.py
     python Migration_scripts/migrate_equipment_units.py --backfill
         # also create `quantity_owned` units (tagged <barcode>-01, -02, …) for
         # every item that has no units yet
