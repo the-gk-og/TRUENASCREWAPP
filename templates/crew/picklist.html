@@ -632,6 +632,12 @@ tr.pl-flash > td { animation: plFlash 1.2s ease-out; }
         <span><b id="pl-checked">{{ items|selectattr('is_checked')|list|length }}</b> / {{ items|length }}</span>
         <span class="pl-prog-pct" id="pl-pct">{% if items %}{{ (items|selectattr('is_checked')|list|length / items|length * 100)|int }}{% else %}0{% endif %}%</span>
       </div>
+      {% if current_event %}
+      <a class="pl-btn pl-btn-ghost" href="{{ url_for('unit_tracking.checkout_page', event_id=current_event.id) }}"
+         title="Scan unit tags out to this event and back in" style="text-decoration:none;">
+        <i class="fas fa-people-carry-box"></i> Scan out / in
+      </a>
+      {% endif %}
       <button class="pl-btn pl-btn-primary" onclick="plOpen('pl-addmodal')">
         <i class="fas fa-plus"></i> Add Item
       </button>
