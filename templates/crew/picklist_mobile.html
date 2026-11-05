@@ -602,6 +602,11 @@
       <span>📅 {{ current_event.event_date.strftime('%d %b, %H:%M') }}</span>
       {% if current_event.location %}<span>📍 {{ current_event.location }}</span>{% endif %}
     </div>
+    <a href="{{ url_for('unit_tracking.checkout_page', event_id=current_event.id) }}"
+       style="display:inline-flex; align-items:center; gap:.4rem; margin-top:.55rem; padding:.45rem .8rem; border-radius:10px;
+              background:var(--primary); color:#fff; font-weight:700; font-size:.85rem; text-decoration:none;">
+      <i class="fas fa-people-carry-box"></i> Scan units out / in
+    </a>
   </div>
   {% endif %}
 
