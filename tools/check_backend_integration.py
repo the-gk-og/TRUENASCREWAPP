@@ -1,10 +1,14 @@
 """
 Test ShowWise Backend Integration
 
-Run this to verify everything works.
+Run this manually against a live backend (python tools/check_backend_integration.py).
+Not a pytest test: it makes real network calls at import time.
 """
 
 import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from backend_integration import ShowWiseBackend
 from dotenv import load_dotenv
 
