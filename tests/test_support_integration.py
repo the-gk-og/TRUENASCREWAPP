@@ -13,8 +13,15 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 priv = Ed25519PrivateKey.generate()
 pub = base64.urlsafe_b64encode(priv.public_key().public_bytes(s.Encoding.Raw, s.PublicFormat.Raw)).decode()
-os.environ.update({"SUPPORT_PUBLIC_KEY": pub, "SUPPORT_INSTANCE_ID": "inst-crew", "SUPPORT_DB_PATH": f"{tmp}/support.sqlite",
-                   "SECRET_KEY": "x" * 40, "DATABASE_URL": f"sqlite:///{tmp}/crew.db", "FLASK_ENV": "testing"})
+# support_access reads these at request time, so every test needs them set. They are applied
+# only while this module builds its app and inside its own tests (fixture below), never left
+# behind in os.environ where they would leak into other test modules or be clobbered by them.
+ENV = {"SUPPORT_PUBLIC_KEY": pub, "SUPPORT_INSTANCE_ID": "inst-crew", "SUPPORT_DB_PATH": f"{tmp}/support.sqlite",
+       "SECRET_KEY": "x" * 40, "DATABASE_URL": f"sqlite:///{tmp}/crew.db", "FLASK_ENV": "testing"}
+_saved_env = dict(os.environ)
+os.environ.update(ENV)
+
+import pytest
 
 from support_mint import mint_token
 from werkzeug.security import generate_password_hash
@@ -28,6 +35,15 @@ with app.app_context():
     db.create_all()
     db.session.add(User(username="boss", email="b@x.io", password_hash=generate_password_hash("pw-123456"), is_admin=True, is_cast=False))
     db.session.commit()
+
+os.environ.clear()
+os.environ.update(_saved_env)
+
+
+@pytest.fixture(autouse=True)
+def _support_env(monkeypatch):
+    for k, v in ENV.items():
+        monkeypatch.setenv(k, v)
 
 
 def token(scope="readonly", minutes=10, instance="inst-crew", operator="elijah"):
@@ -111,6 +127,7 @@ def test_plain_users_are_unaffected():
 
 
 if __name__ == "__main__":
+    os.environ.update(ENV)
     for n, f in list(globals().items()):
         if n.startswith("test_"):
             f(); print("ok", n)

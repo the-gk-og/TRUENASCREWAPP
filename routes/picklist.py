@@ -4,7 +4,7 @@ from datetime import datetime
 from flask import Blueprint, render_template, request, jsonify
 from flask_login import login_required, current_user
 from extensions import db
-from models import Event, PickListItem, Equipment, HiredEquipment
+from models import Event, PickListItem, PickListUnit, Equipment, EquipmentUnit, HiredEquipment, UnitCheckout
 from decorators import crew_required
 from routes import _is_mobile
 
@@ -67,6 +67,12 @@ def picklist():
     all_equipment   = Equipment.query.all()
     hired_equipment = HiredEquipment.query.filter_by(is_returned=False).order_by(HiredEquipment.return_date).all()
 
+    # Units that can be allocated, for each item type on this list that tracks units
+    unit_options = {}
+    for it in items:
+        if it.equipment and it.equipment.units and it.equipment_id not in unit_options:
+            unit_options[it.equipment_id] = [u.to_dict() for u in it.equipment.units]
+
     template = '/crew/picklist_mobile.html' if _is_mobile(request.user_agent.string) else '/crew/picklist.html'
 
     return render_template(
@@ -81,7 +87,16 @@ def picklist():
         all_equipment_json=[e.to_dict() for e in all_equipment],
         equipment_json=[e.to_dict() for e in all_equipment],
         hired_equipment=hired_equipment,
+        unit_options=unit_options,
+        item_units={it.id: [_unit_chip(u, it.event_id) for u in it.units] for it in items},
     )
+
+
+def _unit_chip(unit, event_id=None):
+    """out: the unit has been scanned out to this line's event and not returned yet."""
+    co = unit.open_checkout
+    return {'id': unit.id, 'asset_tag': unit.asset_tag,
+            'out': bool(co and event_id and co.event_id == event_id)}
 
 
 @picklist_bp.route('/picklist/search')
@@ -126,7 +141,19 @@ def picklist_state():
     event_id = request.args.get('event_id', type=int)
     rows = PickListItem.query.filter_by(event_id=event_id).with_entities(
         PickListItem.id, PickListItem.is_checked).all()
-    resp = jsonify({'items': [{'id': i, 'checked': bool(c)} for i, c in rows]})
+    units = {}
+    out_ids = {u for (u,) in db.session.query(UnitCheckout.unit_id).filter(
+        UnitCheckout.event_id == event_id, UnitCheckout.returned_at.is_(None))} if event_id else set()
+    if rows:
+        for item_id, unit_id, tag in db.session.query(
+                PickListUnit.pick_list_item_id, EquipmentUnit.id, EquipmentUnit.asset_tag
+        ).join(EquipmentUnit, EquipmentUnit.id == PickListUnit.unit_id).filter(
+                PickListUnit.pick_list_item_id.in_([r[0] for r in rows])
+        ).order_by(PickListUnit.id).all():
+            units.setdefault(item_id, []).append({'id': unit_id, 'asset_tag': tag,
+                                                  'out': unit_id in out_ids})
+    resp = jsonify({'items': [{'id': i, 'checked': bool(c), 'units': units.get(i, [])}
+                              for i, c in rows]})
     resp.headers['Cache-Control'] = 'no-store'
     return resp
 
@@ -175,3 +202,63 @@ def delete_picklist_item(id):
     db.session.delete(item)
     db.session.commit()
     return jsonify({'success': True})
+
+
+# ---------------------------------------------------------------------------
+# Which physical units are allocated to a pick list line
+# ---------------------------------------------------------------------------
+
+@picklist_bp.route('/picklist/<int:item_id>/units', methods=['POST'])
+@login_required
+@crew_required
+def assign_unit(item_id):
+    """Allocate one unit to a pick list line. Body: {unit_id} or {asset_tag}
+    (so a scanned/typed tag works), plus force=true to override a clash."""
+    item = PickListItem.query.get_or_404(item_id)
+    data = request.get_json(silent=True) or {}
+    if not item.equipment_id:
+        return jsonify({'error': 'This line is not linked to an equipment item'}), 400
+
+    unit = None
+    if data.get('unit_id'):
+        unit = db.session.get(EquipmentUnit, int(data['unit_id']))
+    elif data.get('asset_tag'):
+        from routes.equipment import _unit_by_tag
+        unit = _unit_by_tag(data['asset_tag'])
+    if not unit:
+        return jsonify({'error': 'Unit not found'}), 404
+    if unit.equipment_id != item.equipment_id:
+        return jsonify({'error': f'{unit.asset_tag} is a {unit.equipment.name}, '
+                                 f'not a {item.equipment.name}'}), 400
+    if any(l.unit_id == unit.id for l in item.unit_links):
+        return jsonify({'error': f'{unit.asset_tag} is already on this line'}), 409
+    if len(item.unit_links) >= (item.quantity or 1):
+        return jsonify({'error': f'This line is for {item.quantity or 1}; '
+                                 'remove a unit or raise the quantity first'}), 400
+
+    force = bool(data.get('force'))
+    if unit.status in ('retired', 'lost') or (unit.status == 'repair' and not force):
+        return jsonify({'error': f'{unit.asset_tag} is marked {unit.status}',
+                        'conflict': 'status', 'can_force': unit.status == 'repair'}), 409
+    clashes = [a for a in unit.allocations() if a['pick_list_item_id'] != item.id]
+    if clashes and not force:
+        where = ', '.join(a['event_title'] for a in clashes)
+        return jsonify({'error': f'{unit.asset_tag} is already allocated to {where}',
+                        'conflict': 'allocated', 'can_force': True,
+                        'allocations': clashes}), 409
+
+    db.session.add(PickListUnit(pick_list_item_id=item.id, unit_id=unit.id,
+                                assigned_by=current_user.username))
+    db.session.commit()
+    return jsonify({'success': True, 'units': [_unit_chip(u, item.event_id) for u in item.units]})
+
+
+@picklist_bp.route('/picklist/<int:item_id>/units/<int:unit_id>', methods=['DELETE'])
+@login_required
+@crew_required
+def unassign_unit(item_id, unit_id):
+    item = PickListItem.query.get_or_404(item_id)
+    link = PickListUnit.query.filter_by(pick_list_item_id=item.id, unit_id=unit_id).first_or_404()
+    db.session.delete(link)
+    db.session.commit()
+    return jsonify({'success': True, 'units': [_unit_chip(u, item.event_id) for u in item.units]})

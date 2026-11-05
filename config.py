@@ -81,10 +81,7 @@ class BaseConfig:
     SIGNUP_BASE_URL   = os.environ.get('SIGNUP_BASE_URL', os.environ.get('MAIN_SERVER_URL', ''))
 
     # Discord
-    DISCORD_BOT_TOKEN   = os.environ.get('DISCORD_BOT_TOKEN', '')
-    DISCORD_WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL', '')
-    DISCORD_GUILD_ID    = os.environ.get('DISCORD_GUILD_ID', '')
-    DISCORD_BOT_SECRET  = os.environ.get('DISCORD_BOT_SECRET', '')   # empty = bot endpoints disabled
+    DISCORD_WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL', '')   # channel announcements/reminders
 
     # Google OAuth
     GOOGLE_CLIENT_ID     = os.environ.get('GOOGLE_CLIENT_ID', '')

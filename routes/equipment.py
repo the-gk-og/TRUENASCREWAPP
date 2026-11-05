@@ -10,7 +10,7 @@ from flask import (
 from flask_login import login_required, current_user
 
 from extensions import db
-from models import Equipment, PickListItem
+from models import Equipment, EquipmentUnit, PickListItem, UNIT_STATUSES
 from decorators import crew_required
 
 from routes import _is_mobile
@@ -43,10 +43,21 @@ def _remove_file(relative_path: str):
 @login_required
 @crew_required
 def equipment_list():
+    from routes.unit_tracking import maintenance_alerts, stale_checkouts
+    from models import UnitCheckout
     equipment      = Equipment.query.all()
     equipment_json = [e.to_dict() for e in equipment]
+    alerts = maintenance_alerts()
+    per_item = {}
+    for a in alerts:
+        c = per_item.setdefault(a['equipment_id'], {'overdue': 0, 'due_soon': 0})
+        c[a['due']['state']] += 1
+    for d in equipment_json:
+        d['maint'] = per_item.get(d['id'])
     template = 'crew/equipment_mobile.html' if _is_mobile(request.user_agent.string) else 'crew/equipment.html'
-    return render_template(template, equipment=equipment, equipment_json=equipment_json)
+    return render_template(template, equipment=equipment, equipment_json=equipment_json,
+                           maint_alerts=alerts, stale_checkouts=stale_checkouts(),
+                           units_out=UnitCheckout.query.filter(UnitCheckout.returned_at.is_(None)).count())
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +73,16 @@ def equipment_detail(id):
     from utils import get_organization
     org = get_organization() or {}
     org_name = current_app.config.get('ORG_NAME') or org.get('name', 'ShowWise')
-    return render_template('crew/equipment_detail.html', item=eq, organisation_name=org_name)
+    from models import MAINTENANCE_KINDS, MAINTENANCE_LABELS, MAINTENANCE_RESULTS
+    from routes.unit_tracking import maintenance_alerts
+    return render_template('crew/equipment_detail.html', item=eq, organisation_name=org_name,
+                           units=[u.to_dict() for u in eq.units],
+                           unit_statuses=UNIT_STATUSES,
+                           maintenance_kinds=[(k, MAINTENANCE_LABELS[k]) for k in MAINTENANCE_KINDS],
+                           maintenance_results=MAINTENANCE_RESULTS,
+                           maint_alerts=maintenance_alerts(equipment_id=eq.id),
+                           today=datetime.now().date().isoformat(),
+                           highlight_unit=request.args.get('unit', type=int))
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +130,192 @@ def equipment_by_barcode(barcode):
     eq = Equipment.query.filter_by(barcode=barcode).first()
     if eq:
         return jsonify(eq.to_dict())
+    # A unit's asset tag resolves to its item, with the unit attached
+    unit = _unit_by_tag(barcode)
+    if unit:
+        return jsonify(_unit_payload(unit))
     return jsonify({'error': 'Equipment not found'}), 404
+
+
+# ---------------------------------------------------------------------------
+# Individual units (one row + one QR per physical piece of an item)
+# ---------------------------------------------------------------------------
+
+def _unit_by_tag(tag):
+    tag = (tag or '').strip()
+    if not tag:
+        return None
+    return (EquipmentUnit.query.filter_by(asset_tag=tag).first()
+            or EquipmentUnit.query.filter(db.func.lower(EquipmentUnit.asset_tag) == tag.lower()).first())
+
+
+def _tag_taken(tag, exclude_unit_id=None):
+    """Asset tags share one namespace with item barcodes so a scan is never ambiguous."""
+    q = EquipmentUnit.query.filter(db.func.lower(EquipmentUnit.asset_tag) == tag.lower())
+    if exclude_unit_id:
+        q = q.filter(EquipmentUnit.id != exclude_unit_id)
+    if q.first():
+        return True
+    return Equipment.query.filter(db.func.lower(Equipment.barcode) == tag.lower()).first() is not None
+
+
+def _create_units(eq, count):
+    """Add `count` units to `eq`, tagged <barcode>-01, -02, … skipping tags in use."""
+    base = (eq.barcode or f'EQ{eq.id}').strip()
+    made, n = [], 1
+    while len(made) < count:
+        tag = f'{base}-{n:02d}'
+        n += 1
+        if _tag_taken(tag) or any(u.asset_tag == tag for u in made):
+            continue
+        u = EquipmentUnit(asset_tag=tag, status='available')
+        eq.units.append(u)                    # cascades the add; keeps eq.units in step
+        made.append(u)
+    return made
+
+
+def _unit_payload(unit):
+    """Item dict (as the scanner already expects) with the scanned unit attached."""
+    d = unit.equipment.to_dict()
+    d['unit'] = unit.to_dict()
+    return d
+
+
+def _clean_status(value, default='available'):
+    value = (value or default).strip().lower()
+    return value if value in UNIT_STATUSES else None
+
+
+@equipment_bp.route('/equipment/<int:id>/units')
+@login_required
+@crew_required
+def list_units(id):
+    eq = Equipment.query.get_or_404(id)
+    return jsonify({'units': [u.to_dict() for u in eq.units]})
+
+
+@equipment_bp.route('/equipment/<int:id>/units', methods=['POST'])
+@login_required
+@crew_required
+def add_units(id):
+    """Body {asset_tag, serial_number?, notes?, status?} adds one unit;
+    {count: n} adds n units with generated tags."""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    eq   = Equipment.query.get_or_404(id)
+    data = request.get_json(silent=True) or {}
+
+    if data.get('count') is not None:
+        try:
+            count = int(data['count'])
+        except (TypeError, ValueError):
+            return jsonify({'error': 'count must be a number'}), 400
+        if not 1 <= count <= 500:
+            return jsonify({'error': 'count must be between 1 and 500'}), 400
+        made = _create_units(eq, count)
+        _sync_quantity(eq)
+        db.session.commit()
+        return jsonify({'success': True, 'units': [u.to_dict(False) for u in made]})
+
+    tag = (data.get('asset_tag') or '').strip()
+    if not tag:
+        return jsonify({'error': 'Asset tag is required'}), 400
+    if len(tag) > 100:
+        return jsonify({'error': 'Asset tag is too long'}), 400
+    if _tag_taken(tag):
+        return jsonify({'error': f'Asset tag "{tag}" is already used by another unit or item'}), 409
+    status = _clean_status(data.get('status'))
+    if status is None:
+        return jsonify({'error': 'Unknown status'}), 400
+    u = EquipmentUnit(asset_tag=tag, status=status,
+                      serial_number=(data.get('serial_number') or '').strip() or None,
+                      notes=(data.get('notes') or '').strip() or None)
+    eq.units.append(u)
+    _sync_quantity(eq)
+    db.session.commit()
+    return jsonify({'success': True, 'unit': u.to_dict(False)})
+
+
+def _sync_quantity(eq):
+    """Once an item tracks units, it owns at least that many."""
+    if len(eq.units) > (eq.quantity_owned or 0):
+        eq.quantity_owned = len(eq.units)
+
+
+@equipment_bp.route('/equipment/unit/<int:uid>', methods=['PUT'])
+@login_required
+@crew_required
+def update_unit(uid):
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    u    = EquipmentUnit.query.get_or_404(uid)
+    data = request.get_json(silent=True) or {}
+    if 'asset_tag' in data:
+        tag = (data.get('asset_tag') or '').strip()
+        if not tag:
+            return jsonify({'error': 'Asset tag is required'}), 400
+        if _tag_taken(tag, exclude_unit_id=u.id):
+            return jsonify({'error': f'Asset tag "{tag}" is already used by another unit or item'}), 409
+        u.asset_tag = tag
+    if 'status' in data:
+        status = _clean_status(data.get('status'))
+        if status is None:
+            return jsonify({'error': 'Unknown status'}), 400
+        u.status = status
+    if 'serial_number' in data:
+        u.serial_number = (data.get('serial_number') or '').strip() or None
+    if 'notes' in data:
+        u.notes = (data.get('notes') or '').strip() or None
+    db.session.commit()
+    return jsonify({'success': True, 'unit': u.to_dict()})
+
+
+@equipment_bp.route('/equipment/unit/<int:uid>', methods=['DELETE'])
+@login_required
+@crew_required
+def delete_unit(uid):
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    u = EquipmentUnit.query.get_or_404(uid)
+    db.session.delete(u)
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@equipment_bp.route('/equipment/unit/<int:uid>/json')
+@login_required
+@crew_required
+def unit_json(uid):
+    return jsonify(_unit_payload(EquipmentUnit.query.get_or_404(uid)))
+
+
+@equipment_bp.route('/equipment/unit/tag/<path:tag>')
+@login_required
+@crew_required
+def unit_by_tag(tag):
+    u = _unit_by_tag(tag)
+    if not u:
+        return jsonify({'error': 'Unit not found'}), 404
+    return jsonify(_unit_payload(u))
+
+
+@equipment_bp.route('/equipment/unit/<int:uid>/view')
+def unit_view_public(uid):
+    """Target of a unit QR code. Crew land on the item page with the unit highlighted."""
+    u = EquipmentUnit.query.get_or_404(uid)
+    if current_user.is_authenticated:
+        return redirect(url_for('equipment.equipment_detail', id=u.equipment_id, unit=u.id)
+                        + f'#unit-{u.id}')
+    from flask import current_app
+    from utils import get_organization
+    org = get_organization() or {}
+    org_name = current_app.config.get('ORG_NAME') or org.get('name', 'ShowWise')
+    return render_template(
+        'crew/equipment_detail_public.html',
+        item=u.equipment, unit=u,
+        organisation_name=org_name,
+        login_url=url_for('auth.login', next=request.url),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -401,12 +606,32 @@ def generate_barcodes():
         card_h_mm     = float(data.get('card_height_mm', 80 if layout == 'portrait' else 55))
         base_url      = (data.get('base_url') or request.url_root or '').rstrip('/')
 
-        if not equipment_ids:
-            return jsonify({'error': 'No equipment selected'}), 400
+        mode          = data.get('mode', 'item')       # 'item' | 'unit'
+        unit_ids      = data.get('unit_ids', [])
 
-        items = Equipment.query.filter(Equipment.id.in_(equipment_ids)).all()
-        if not items:
-            return jsonify({'error': 'No equipment found'}), 404
+        # Each tag: (log id, name, asset label, QR url)
+        tags = []
+        if mode == 'unit':
+            if unit_ids:
+                units = EquipmentUnit.query.filter(EquipmentUnit.id.in_(unit_ids)).all()
+            elif equipment_ids:
+                units = EquipmentUnit.query.filter(EquipmentUnit.equipment_id.in_(equipment_ids)).all()
+            else:
+                return jsonify({'error': 'No equipment selected'}), 400
+            units.sort(key=lambda u: (u.equipment.name.lower(), u.asset_tag))
+            if not units:
+                return jsonify({'error': 'The selected items have no units yet. '
+                                         'Add units on the item page, or print one tag per item.'}), 404
+            tags = [(f'unit {u.id}', u.equipment.name, f'# {u.asset_tag}',
+                     f'{base_url}/equipment/unit/{u.id}/view') for u in units]
+        else:
+            if not equipment_ids:
+                return jsonify({'error': 'No equipment selected'}), 400
+            items = Equipment.query.filter(Equipment.id.in_(equipment_ids)).all()
+            if not items:
+                return jsonify({'error': 'No equipment found'}), 404
+            tags = [(f'item {e.id}', e.name, f"# {e.barcode or f'ID-{e.id}'}",
+                     f'{base_url}/equipment/{e.id}/view') for e in items]
 
         # Org name
         from flask import current_app
@@ -433,13 +658,71 @@ def generate_barcodes():
         WHITE    = colors.white
         MID_GREY = colors.HexColor('#666666')
 
-        def _truncate(text, max_chars):
-            return text[:max_chars] + ('…' if len(text) > max_chars else '')
+        LEADING = 1.15  # line height as a multiple of font size
+
+        def _wrap(text, font, size, width):
+            """Greedy word-wrap measured in real glyph widths. Words wider than
+            the column are broken mid-word so nothing ever overflows."""
+            sw = lambda s: c.stringWidth(s, font, size)
+            lines, cur = [], ''
+            for word in text.split():
+                cand = f'{cur} {word}' if cur else word
+                if sw(cand) <= width:
+                    cur = cand
+                    continue
+                if cur:
+                    lines.append(cur)
+                    cur = ''
+                while sw(word) > width and len(word) > 1:
+                    cut = len(word) - 1
+                    while cut > 1 and sw(word[:cut]) > width:
+                        cut -= 1
+                    lines.append(word[:cut])
+                    word = word[cut:]
+                cur = word
+            if cur:
+                lines.append(cur)
+            return lines or ['']
+
+        def _ellipsize(text, font, size, width):
+            if c.stringWidth(text, font, size) <= width:
+                return text
+            while text and c.stringWidth(text + '…', font, size) > width:
+                text = text[:-1]
+            return text.rstrip() + '…'
+
+        def _fit_text(text, font, max_size, min_size, width, max_lines,
+                      max_height=None):
+            """Pick the largest font size (max_size → min_size) at which `text`
+            wraps into ≤ max_lines lines within `width` (and `max_height`).
+            If it still doesn't fit at min_size, the last line is ellipsized."""
+            text  = (text or '').strip()
+            width = max(width, 1)
+            size  = max_size
+            while True:
+                lines = _wrap(text, font, size, width)
+                n_ok  = len(lines) <= max_lines
+                h_ok  = max_height is None or len(lines) * size * LEADING <= max_height
+                if (n_ok and h_ok) or size <= min_size:
+                    break
+                size = max(min_size, size - 0.5)
+            if max_height is not None:
+                max_lines = max(1, min(max_lines, int(max_height // (size * LEADING))))
+            if len(lines) > max_lines:
+                rest  = ' '.join(lines[max_lines - 1:])
+                lines = lines[:max_lines - 1] + [_ellipsize(rest, font, size, width)]
+            return size, lines
 
         def _centred_string(text, font, size, cx, y, width):
             c.setFont(font, size)
             tw = c.stringWidth(text, font, size)
             c.drawString(cx + (width - tw) / 2, y, text)
+
+        def _centred_lines(lines, font, size, cx, top_y, width):
+            """Draw centred lines; top_y is the top of the text block."""
+            for i, line in enumerate(lines):
+                baseline = top_y - size * 0.8 - i * size * LEADING
+                _centred_string(line, font, size, cx, baseline, width)
 
         # ── PORTRAIT ────────────────────────────────────────────────────────
         #
@@ -459,28 +742,33 @@ def generate_barcodes():
         #  │     Organisation     │  ← small grey footer
         #  └──────────────────────┘
         #
-        def _draw_portrait(cx, cy, item, qr_path):
+        def _draw_portrait(cx, cy, name, asset_label, qr_path):
             pad      = 3   * mm
             footer_h = 6.5 * mm
-            name_h   = 8   * mm
             asset_h  = 6   * mm
             border_r = 4   * mm
+            text_w   = card_w - 2 * pad - 2 * mm   # keep clear of rounded corners
 
             # Card outline — thick enough to feel like a tag
             c.setStrokeColor(BLACK)
             c.setLineWidth(1.2)
             c.roundRect(cx, cy, card_w, card_h, border_r, stroke=1, fill=0)
 
-            # ── Item name (top, bold, centred) ──
-            name_str  = _truncate(item.name, 26)
-            name_size = max(8, min(13, int(card_w / 5.5)))
+            # ── Item name (top, bold, centred, wrapped up to 3 lines) ──
+            # Name may use at most ~35% of the card height; the QR shrinks to fit.
+            name_max  = max(8, min(13, int(card_w / 5.5)))
+            name_size, name_lines = _fit_text(
+                name, 'Helvetica-Bold', name_max, 6, text_w, 3,
+                max_height=card_h * 0.35)
+            name_h = len(name_lines) * name_size * LEADING + 3 * mm
             c.setFillColor(BLACK)
-            _centred_string(name_str, 'Helvetica-Bold', name_size,
-                            cx, cy + card_h - pad - name_h + 2 * mm, card_w)
+            _centred_lines(name_lines, 'Helvetica-Bold', name_size,
+                           cx + (card_w - text_w) / 2,
+                           cy + card_h - pad - 1.5 * mm, text_w)
 
             # ── QR code (centred, with rounded light-grey background) ──
             body_h   = card_h - name_h - footer_h - asset_h - 2 * pad
-            qr_size  = min(card_w - 6 * pad, body_h - 2 * pad)
+            qr_size  = max(8 * mm, min(card_w - 6 * pad, body_h - 2 * pad))
             qr_x     = cx + (card_w - qr_size) / 2
             qr_y     = cy + footer_h + asset_h + (body_h - qr_size) / 2 + pad * 0.5
 
@@ -496,11 +784,10 @@ def generate_barcodes():
                         preserveAspectRatio=True, mask='auto')
 
             # ── Asset number (centred, under QR) ──
-            asset_str  = _truncate(item.barcode or f'ID-{item.id}', 24)
-            asset_label = f'# {asset_str}'
+            asset_size, asset_lines = _fit_text(asset_label, 'Helvetica', 7, 5, text_w, 1)
             asset_y     = cy + footer_h + pad * 0.8
             c.setFillColor(MID_GREY)
-            _centred_string(asset_label, 'Helvetica', 7,
+            _centred_string(asset_lines[0], 'Helvetica', asset_size,
                             cx, asset_y, card_w)
 
             # ── Divider above footer ──
@@ -511,7 +798,8 @@ def generate_barcodes():
 
             # ── Organisation footer (centred, grey) ──
             c.setFillColor(MID_GREY)
-            _centred_string(org_name, 'Helvetica', 6.5,
+            org_size, org_lines = _fit_text(org_name, 'Helvetica', 6.5, 5, text_w, 1)
+            _centred_string(org_lines[0], 'Helvetica', org_size,
                             cx, cy + 2 * mm, card_w)
 
         # ── LANDSCAPE ───────────────────────────────────────────────────────
@@ -524,7 +812,7 @@ def generate_barcodes():
         #  │              Organisation             │
         #  └──────────────────────────────────────┘
         #
-        def _draw_landscape(cx, cy, item, qr_path):
+        def _draw_landscape(cx, cy, name, asset_label, qr_path):
             pad      = 2.5 * mm
             footer_h = 5.5 * mm
             border_r = 4   * mm
@@ -537,7 +825,8 @@ def generate_barcodes():
             c.roundRect(cx, cy, card_w, card_h, border_r, stroke=1, fill=0)
 
             # ── QR with rounded grey background (left) ──
-            qr_size = body_h - 2 * pad
+            # Never let the QR eat more than ~half the width, so text has room.
+            qr_size = min(body_h - 2 * pad, card_w * 0.5)
             qr_x    = cx + pad
             qr_y    = cy + footer_h + (body_h - qr_size) / 2
 
@@ -553,22 +842,30 @@ def generate_barcodes():
 
             # ── Text block (right of QR) ──
             text_x  = cx + qr_size + 3 * pad
-            text_w  = card_w - (qr_size + 4 * pad)
+            text_w  = max(10 * mm, card_w - (qr_size + 4 * pad))
             mid_y   = cy + footer_h + body_h / 2
+            text_max_h = body_h - 2 * pad
+            line_gap   = 2 * mm
 
-            # Item name — bold, centred in text column
-            name_str  = _truncate(item.name, 24)
-            name_size = max(8, min(12, int(text_w / 6)))
+            # Asset number — one line, shrunk/ellipsized to the column width
+            asset_size, asset_lines = _fit_text(asset_label, 'Helvetica', 7, 5, text_w, 1)
+            asset_block = asset_size * LEADING
+
+            # Item name — bold, wrapped (up to 4 lines) in the space left over
+            name_max  = max(8, min(12, int(text_w / 6)))
+            name_size, name_lines = _fit_text(
+                name, 'Helvetica-Bold', name_max, 6, text_w, 4,
+                max_height=text_max_h - asset_block - line_gap)
+            name_block = len(name_lines) * name_size * LEADING
+
+            # Centre the name + asset block vertically beside the QR
+            top_y = mid_y + (name_block + line_gap + asset_block) / 2
             c.setFillColor(BLACK)
-            _centred_string(name_str, 'Helvetica-Bold', name_size,
-                            text_x, mid_y + 2 * mm, text_w)
-
-            # Asset number — centred in text column, below name
-            asset_str   = _truncate(item.barcode or f'ID-{item.id}', 20)
-            asset_label = f'# {asset_str}'
+            _centred_lines(name_lines, 'Helvetica-Bold', name_size,
+                           text_x, top_y, text_w)
             c.setFillColor(MID_GREY)
-            _centred_string(asset_label, 'Helvetica', 7,
-                            text_x, mid_y - 4 * mm, text_w)
+            _centred_lines(asset_lines, 'Helvetica', asset_size,
+                           text_x, top_y - name_block - line_gap, text_w)
 
             # ── Divider above footer ──
             c.setStrokeColor(colors.HexColor('#cccccc'))
@@ -578,16 +875,17 @@ def generate_barcodes():
 
             # ── Organisation footer ──
             c.setFillColor(MID_GREY)
-            _centred_string(org_name, 'Helvetica', 6.5,
+            org_size, org_lines = _fit_text(org_name, 'Helvetica', 6.5, 5,
+                                            card_w - 2 * pad - 2 * mm, 1)
+            _centred_string(org_lines[0], 'Helvetica', org_size,
                             cx, cy + 1.5 * mm, card_w)
 
         # ── Paginate and render ───────────────────────────────────────────────
         col_idx = 0
         row_idx = 0
 
-        for item in items:
+        for tag_key, name, asset_label, url in tags:
             try:
-                url = f"{base_url}/equipment/{item.id}/view"
                 qr  = qrcode.QRCode(version=1, box_size=10, border=2,
                                     error_correction=qrcode.constants.ERROR_CORRECT_M)
                 qr.add_data(url)
@@ -601,9 +899,9 @@ def generate_barcodes():
                 cy = ph - margin - card_h - row_idx * (card_h + gap)
 
                 if layout == 'landscape':
-                    _draw_landscape(cx, cy, item, qr_path)
+                    _draw_landscape(cx, cy, name, asset_label, qr_path)
                 else:
-                    _draw_portrait(cx, cy, item, qr_path)
+                    _draw_portrait(cx, cy, name, asset_label, qr_path)
 
                 try:
                     os.remove(qr_path)
@@ -611,7 +909,7 @@ def generate_barcodes():
                     pass
 
             except Exception as exc:
-                print(f"QR tag error for item {item.id}: {exc}")
+                print(f"QR tag error for {tag_key}: {exc}")
 
             col_idx += 1
             if col_idx >= cols:
@@ -623,7 +921,7 @@ def generate_barcodes():
 
         c.save()
         pdf_buffer.seek(0)
-        filename = f"equipment_tags_{layout}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        filename = f"equipment_{'unit_' if mode == 'unit' else ''}tags_{layout}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         return send_file(pdf_buffer, mimetype='application/pdf',
                          as_attachment=True, download_name=filename)
 
@@ -631,19 +929,72 @@ def generate_barcodes():
         import traceback; traceback.print_exc()
         return jsonify({'error': str(exc)}), 500
 
+def _event_window(event):
+    """(start, end) an event holds its equipment for. All-day events and events
+    with no end time hold it until the end of their last day."""
+    from datetime import time as dtime
+    start = event.event_date
+    end   = event.event_end_date or event.event_date
+    if event.all_day:
+        start = datetime.combine(start.date(), dtime.min)
+    if event.all_day or not event.event_end_date:
+        end = datetime.combine(end.date(), dtime.max)
+    return start, max(start, end)
+
+
 @equipment_bp.route('/equipment/<int:id>/quantity-check', methods=['POST'])
 @login_required
+@crew_required
 def check_equipment_quantity(id):
-    eq            = Equipment.query.get_or_404(id)
-    requested_qty = request.json.get('quantity', 1)
-    allocated     = db.session.query(db.func.sum(PickListItem.quantity)).filter(
-        PickListItem.equipment_id == id,
-        PickListItem.is_checked   == False,
-    ).scalar() or 0
-    owned     = eq.quantity_owned or 999
-    available = owned - allocated
+    """How many of an item are free for a given event.
+
+    Counts every pick-list line for this item (packed or not: packed gear is
+    still in use) on events whose time overlaps the target event. With no
+    event, counts lines on all events that haven't finished, plus lines not
+    tied to any event. Items tracked by unit count only usable units as owned.
+    """
+    from models import Event
+    from routes.picklist import _event_is_archived
+
+    eq   = Equipment.query.get_or_404(id)
+    data = request.get_json(silent=True) or {}
+    try:
+        requested_qty = max(1, int(data.get('quantity') or 1))
+    except (TypeError, ValueError):
+        requested_qty = 1
+    target = None
+    if data.get('event_id'):
+        try:
+            target = db.session.get(Event, int(data['event_id']))
+        except (TypeError, ValueError):
+            target = None
+
+    lines = PickListItem.query.filter(PickListItem.equipment_id == id).all()
+    if target is not None:
+        t_start, t_end = _event_window(target)
+
+    def _counts(line):
+        ev = db.session.get(Event, line.event_id) if line.event_id else None
+        if target is None:
+            return ev is None or not _event_is_archived(ev)
+        if ev is None:
+            return False
+        if ev.id == target.id:
+            return True
+        start, end = _event_window(ev)
+        return start <= t_end and t_start <= end
+
+    allocated = sum((line.quantity or 0) for line in lines if _counts(line))
+
+    units = EquipmentUnit.query.filter_by(equipment_id=id).all()
+    if units:
+        owned = sum(1 for u in units if u.status == 'available')
+    else:
+        owned = eq.quantity_owned if eq.quantity_owned is not None else 1
+    available = max(0, owned - allocated)
     return jsonify({
         'owned': owned, 'allocated': allocated,
         'available': available, 'requested': requested_qty,
+        'event_id': target.id if target else None,
         'warning': requested_qty > available,
     })

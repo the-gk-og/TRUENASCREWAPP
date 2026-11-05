@@ -69,6 +69,18 @@
 </div>
 
 <div class="info-grid">
+    {% if unit %}
+    <div class="info-chip">
+        <div class="label"><i class="fas fa-hashtag"></i> Unit asset tag</div>
+        <div class="value barcode-val">{{ unit.asset_tag }}</div>
+    </div>
+    {% if unit.serial_number %}
+    <div class="info-chip">
+        <div class="label"><i class="fas fa-fingerprint"></i> Serial number</div>
+        <div class="value barcode-val">{{ unit.serial_number }}</div>
+    </div>
+    {% endif %}
+    {% endif %}
     <div class="info-chip">
         <div class="label"><i class="fas fa-barcode"></i> Barcode</div>
         <div class="value barcode-val">{{ item.barcode }}</div>

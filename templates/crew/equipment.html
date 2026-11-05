@@ -122,6 +122,20 @@
     .eq-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 500; }
     .eq-loc i { font-size: .7rem; color: var(--primary); }
     .eq-notes { display: none; }
+    .eq-tag.eq-due { background: #fef3c7; color: #92400e; }
+    .eq-tag.eq-due.over { background: #fee2e2; color: #991b1b; }
+    .eq-alert { margin: 0 0 .9rem; padding: .75rem 1rem; border-radius: 12px; background: var(--bg-card);
+                border: 1px solid var(--border); border-left: 4px solid var(--warning); font-size: .9rem; color: var(--text-primary); }
+    .eq-alert.bad { border-left-color: var(--danger); }
+    .eq-alert summary { cursor: pointer; font-weight: 700; }
+    .eq-alert ul { margin: .5rem 0 0; padding-left: 1.1rem; }
+    .eq-alert li { margin: .2rem 0; }
+    .eq-alert a { color: var(--primary); text-decoration: none; }
+    .eq-alert .over { color: var(--danger); font-weight: 600; }
+    .eq-links { display: flex; gap: .5rem; flex-wrap: wrap; margin: 0 0 .9rem; }
+    .eq-links a { display: inline-flex; align-items: center; gap: .4rem; min-height: 40px; padding: 0 .9rem; border-radius: 10px;
+                  background: var(--bg-card); border: 1px solid var(--border); color: var(--text-primary); font-weight: 600; font-size: .88rem; text-decoration: none; }
+    .eq-links a i { color: var(--primary); }
 
     .eq-edit {
         grid-area: edit; position: relative; z-index: 2; align-self: center;
@@ -346,6 +360,39 @@
         <div class="eq-stat"><b id="stLocs">—</b><span>Locations</span></div>
     </section>
 
+    <div class="eq-links">
+        <a href="{{ url_for('unit_tracking.checkout_page') }}"><i class="fas fa-people-carry-box"></i> Scan out / in
+            {% if units_out %}<span style="color:var(--text-secondary); font-weight:500;">· {{ units_out }} out</span>{% endif %}</a>
+    </div>
+
+    {% if stale_checkouts %}
+    <details class="eq-alert bad">
+        <summary><i class="fas fa-triangle-exclamation"></i> {{ stale_checkouts|length }} unit{{ '' if stale_checkouts|length == 1 else 's' }} still out from finished events</summary>
+        <ul>
+            {% for c in stale_checkouts[:20] %}
+            <li><a href="{{ url_for('equipment.equipment_detail', id=c.equipment_id, unit=c.unit_id) }}#unit-{{ c.unit_id }}"><code>{{ c.asset_tag }}</code></a>
+                {{ c.equipment_name }} — <a href="{{ url_for('unit_tracking.checkout_page', event_id=c.event_id) }}">{{ c.event_title }}</a> ({{ c.event_date }})</li>
+            {% endfor %}
+        </ul>
+    </details>
+    {% endif %}
+
+    {% if maint_alerts %}
+    {% set n_over = maint_alerts|selectattr('due.state', 'equalto', 'overdue')|list|length %}
+    <details class="eq-alert {{ 'bad' if n_over }}">
+        <summary><i class="fas fa-screwdriver-wrench"></i>
+            {% if n_over %}{{ n_over }} unit{{ '' if n_over == 1 else 's' }} overdue for testing{% endif %}{% if n_over and maint_alerts|length > n_over %}, {% endif %}{% if maint_alerts|length > n_over %}{{ maint_alerts|length - n_over }} due within 30 days{% endif %}
+        </summary>
+        <ul>
+            {% for a in maint_alerts[:30] %}
+            <li><a href="{{ url_for('equipment.equipment_detail', id=a.equipment_id, unit=a.id) }}#unit-{{ a.id }}"><code>{{ a.asset_tag }}</code></a>
+                {{ a.equipment_name }} — {{ a.due.kind_label }}
+                <span class="{{ 'over' if a.due.state == 'overdue' }}">{{ 'overdue since' if a.due.state == 'overdue' else 'due' }} {{ a.due.date_text }}</span></li>
+            {% endfor %}
+        </ul>
+    </details>
+    {% endif %}
+
     <!-- Filters -->
     <div class="eq-chips" id="eqChips" role="group" aria-label="Filter by category"></div>
     <div class="eq-selects">
@@ -511,6 +558,7 @@
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
+<script src="{{ url_for('static', filename='js/sw-scanner.js') }}"></script>
 <script>
 (function () {
     const IS_ADMIN = {{ 'true' if current_user.is_admin else 'false' }};
@@ -600,12 +648,16 @@
         const thumb = it.picture_url ? `<img src="${esc(it.picture_url)}" alt="" loading="lazy">` : '<i class="fas fa-box"></i>';
         const cat = it.category ? `<span class="eq-tag eq-cat">${hl(it.category)}</span>` : '';
         const loc = it.location ? `<span class="eq-tag eq-loc"><i class="fas fa-map-marker-alt"></i>${hl(it.location)}</span>` : '';
+        const m = it.maint;
+        const due = !m ? '' : m.overdue
+            ? `<span class="eq-tag eq-due over" title="Test or inspection overdue"><i class="fas fa-screwdriver-wrench"></i>${m.overdue} overdue</span>`
+            : `<span class="eq-tag eq-due" title="Test or inspection due within 30 days"><i class="fas fa-screwdriver-wrench"></i>${m.due_soon} due soon</span>`;
         const edit = IS_ADMIN ? `<button type="button" class="eq-edit" data-edit aria-label="Edit ${esc(it.name)}"><i class="fas fa-pen"></i></button>` : '';
         return `<div class="eq-row${IS_ADMIN ? ' admin' : ''}" data-id="${it.id}">
             <div class="eq-thumb">${thumb}</div>
             <a class="eq-name" href="/equipment/${it.id}">${hl(it.name)}</a>
             <div class="eq-qty"><b>${it.quantity_owned || 1}</b><small>qty</small></div>
-            <div class="eq-tags"><span class="eq-tag eq-code">${hl(it.barcode)}</span>${cat}${loc}</div>
+            <div class="eq-tags"><span class="eq-tag eq-code">${hl(it.barcode)}</span>${due}${cat}${loc}</div>
             <div class="eq-notes" title="${esc(it.notes || '')}">${esc(it.notes || '')}</div>
             ${edit}
         </div>`;
@@ -704,103 +756,35 @@
     /* ============================================================
        SCANNER (getUserMedia + jsQR for QR + Quagga2 for 1D barcodes)
        ============================================================ */
-    let scanning = false, stream = null, video = null, canvas = null, ctx = null, raf = 0, quaggaBusy = false, lastTick = 0, frameN = 0;
+    // Camera + decoding live in static/js/sw-scanner.js (shared with the check-out page)
+    const scanner = SWScanner.create({
+        container: $('#eqCam'),
+        isOpen: () => $('#shScan').classList.contains('open'),
+        onCode: code => lookup(code),
+        onState: (live, text) => {
+            const idle = $('#eqCamIdle'); if (idle) idle.style.display = scanner && scanner.scanning ? 'none' : '';
+            camState(live, text);
+        },
+        onError: msg => toast(msg, true),
+    });
 
     function camState(live, text) {
         $('#eqDot').classList.toggle('live', live);
         $('#eqCamStatus').textContent = text;
         $('#eqCam').classList.toggle('live', live);
         const b = $('#eqCamBtn');
-        b.innerHTML = scanning ? '<i class="fas fa-stop"></i> Stop camera' : '<i class="fas fa-video"></i> Start camera';
+        b.innerHTML = scanner.scanning ? '<i class="fas fa-stop"></i> Stop camera' : '<i class="fas fa-video"></i> Start camera';
     }
 
-    async function startScan() {
-        if (scanning) return;
-        $('#eqResult').innerHTML = '';
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            camState(false, 'Camera not available here — type the barcode instead');
-            toast('Camera needs a secure (https) connection', true);
-            return;
-        }
-        camState(false, 'Starting camera…');
-        try {
-            try {
-                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
-            } catch (e) {
-                stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-            }
-        } catch (err) {
-            camState(false, 'Camera unavailable — type the barcode instead');
-            toast('Camera unavailable: ' + (err && err.message ? err.message : err), true);
-            return;
-        }
-        // The sheet may have been closed while the permission prompt was showing
-        if (!$('#shScan').classList.contains('open')) { stream.getTracks().forEach(t => t.stop()); stream = null; return; }
-
-        scanning = true;
-        $('#eqCamIdle').style.display = 'none';
-        video = document.createElement('video');
-        video.setAttribute('playsinline', ''); video.setAttribute('autoplay', ''); video.muted = true;
-        video.srcObject = stream;
-        $('#eqCam').insertBefore(video, $('#eqCam').firstChild);
-        try { await video.play(); } catch (e) {}
-        canvas = document.createElement('canvas');
-        ctx = canvas.getContext('2d', { willReadFrequently: true });
-        camState(true, 'Scanning — point at a barcode or QR code');
-        raf = requestAnimationFrame(tick);
-    }
-
-    function tick(ts) {
-        if (!scanning) return;
-        raf = requestAnimationFrame(tick);
-        if (ts - lastTick < 130 || !video || video.readyState < 2 || !video.videoWidth) return;
-        lastTick = ts;
-
-        const scale = Math.min(1, 960 / video.videoWidth);
-        const w = Math.round(video.videoWidth * scale), h = Math.round(video.videoHeight * scale);
-        if (canvas.width !== w) { canvas.width = w; canvas.height = h; }
-        ctx.drawImage(video, 0, 0, w, h);
-
-        if (typeof jsQR === 'function') {
-            try {
-                const img = ctx.getImageData(0, 0, w, h);
-                const qr = jsQR(img.data, w, h, { inversionAttempts: 'dontInvert' });
-                if (qr && qr.data) { onCode(qr.data); return; }
-            } catch (e) {}
-        }
-        if (typeof Quagga !== 'undefined' && !quaggaBusy && (++frameN % 2 === 0)) {
-            quaggaBusy = true;
-            try {
-                Quagga.decodeSingle({
-                    src: canvas.toDataURL('image/jpeg', 0.8), numOfWorkers: 0, locate: true,
-                    decoder: { readers: ['code_128_reader', 'ean_reader', 'ean_8_reader', 'code_39_reader', 'upc_reader', 'upc_e_reader', 'codabar_reader'] }
-                }, res => {
-                    quaggaBusy = false;
-                    if (scanning && res && res.codeResult && res.codeResult.code) onCode(res.codeResult.code);
-                });
-            } catch (e) { quaggaBusy = false; }
-        }
-    }
-
-    function onCode(code) {
-        if (!scanning) return;
-        try { navigator.vibrate && navigator.vibrate([40, 20, 60]); } catch (e) {}
-        stopScan();
-        lookup(code);
-    }
-
-    function stopScan() {
-        scanning = false;
-        cancelAnimationFrame(raf);
-        if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
-        if (video) { video.srcObject = null; video.remove(); video = null; }
-        canvas = ctx = null;
-        const idle = $('#eqCamIdle'); if (idle) idle.style.display = '';
-        camState(false, 'Camera off');
-    }
+    function startScan() { $('#eqResult').innerHTML = ''; return scanner.start(); }
+    function stopScan() { scanner.stop(); }
 
     function idFromInput(code) {
         const m = String(code || '').match(/\/equipment\/(\d+)(?:\/view)?/);
+        return m ? parseInt(m[1], 10) : null;
+    }
+    function unitIdFromInput(code) {                    // per-unit tag: …/equipment/unit/<id>/view
+        const m = String(code || '').match(/\/equipment\/unit\/(\d+)/);
         return m ? parseInt(m[1], 10) : null;
     }
 
@@ -809,6 +793,13 @@
         if (!code) return;
         const out = $('#eqResult');
         out.innerHTML = '<div class="eq-result nf"><i class="fas fa-spinner fa-spin"></i> Looking up…</div>';
+        const unitId = unitIdFromInput(code);
+        if (unitId != null) {
+            let hit = null;
+            try { hit = await api(`/equipment/unit/${unitId}/json`, 'GET'); } catch (e) { hit = null; }
+            if (hit) showFound(hit); else showNotFound(code);
+            return;
+        }
         const id = idFromInput(code);
         let item = id != null ? items.find(i => i.id === id) : items.find(i => String(i.barcode).toLowerCase() === code.toLowerCase());
         if (!item) {                                    // not in the page data (e.g. added by someone else a moment ago)
@@ -824,7 +815,7 @@
             ? `<div class="eq-where"><i class="fas fa-map-marker-alt" style="margin-top:.2rem;"></i><div><small>Storage location</small><strong>${esc(it.location)}</strong></div>${it.location_picture_url ? `<img src="${esc(it.location_picture_url)}" alt="Where it is stored">` : ''}</div>`
             : '';
         $('#eqResult').innerHTML = `<div class="eq-result">${hero}<div class="eq-result-body">
-            <h3>${esc(it.name)}</h3>${where}
+            <h3>${esc(it.name)}</h3>${unitBlock(it.unit)}${where}
             <div class="eq-kv">
                 <div><small>Qty owned</small><span>${it.quantity_owned || 1}</span></div>
                 <div><small>Category</small><span>${esc(it.category || '—')}</span></div>
@@ -832,13 +823,33 @@
             </div>
             ${it.notes ? `<p class="note">${esc(it.notes)}</p>` : ''}
             <div class="eq-result-actions">
-                <a class="eq-btn primary" href="/equipment/${it.id}"><i class="fas fa-file-alt"></i> Details</a>
+                <a class="eq-btn primary" href="/equipment/${it.id}${it.unit ? `?unit=${it.unit.id}#unit-${it.unit.id}` : ''}"><i class="fas fa-file-alt"></i> Details</a>
                 <button type="button" class="eq-btn ghost" id="eqAgain"><i class="fas fa-redo"></i> Scan again</button>
             </div></div></div>`;
         $('#eqAgain').addEventListener('click', () => { $('#eqResult').innerHTML = ''; startScan(); });
-        camState(false, 'Found: ' + it.name);
-        toast('Found ' + it.name);
+        const label = it.unit ? `${it.name} (${it.unit.asset_tag})` : it.name;
+        camState(false, 'Found: ' + label);
+        toast('Found ' + label);
         $('#eqResult').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function unitBlock(u) {
+        if (!u) return '';
+        const co = u.checkout;
+        const state = u.status !== 'available' ? u.status : (co ? 'checked out' : (u.is_out ? 'booked' : 'available'));
+        const where = (co ? [`Out on ${esc(co.event_title)} · ${esc(co.checked_out_at)} by ${esc(co.checked_out_by)}`] : []).concat(
+            (u.allocations || []).filter(a => !co || a.event_id !== co.event_id).map(a =>
+            `${esc(a.event_title)}${a.event_date ? ' · ' + esc(a.event_date) : ''}${a.is_checked ? ' · packed' : ''}`)).join('<br>');
+        const d = u.maintenance_due;
+        const dueRow = d && d.state !== 'ok'
+            ? `<div class="full"><small>${esc(d.kind_label)}</small><span style="color:${d.state === 'overdue' ? 'var(--danger)' : 'var(--warning)'};">${d.state === 'overdue' ? 'Overdue since' : 'Due'} ${esc(d.date_text)}</span></div>` : '';
+        return `<div class="eq-kv" style="margin-bottom:.6rem;">
+            <div><small>Unit</small><span class="eq-code">${esc(u.asset_tag)}</span></div>
+            <div><small>Status</small><span>${esc(state.charAt(0).toUpperCase() + state.slice(1))}</span></div>
+            ${u.serial_number ? `<div class="full"><small>Serial</small><span>${esc(u.serial_number)}</span></div>` : ''}
+            <div class="full"><small>Where</small><span>${where || 'In storage'}</span></div>
+            ${dueRow}
+        </div>`;
     }
 
     function showNotFound(code) {
@@ -859,7 +870,7 @@
         openSheet('shScan');
         startScan();                       // opened from a tap, so the camera prompt is allowed
     });
-    $('#eqCamBtn').addEventListener('click', () => { if (scanning) stopScan(); else startScan(); });
+    $('#eqCamBtn').addEventListener('click', () => { if (scanner.scanning) stopScan(); else startScan(); });
     $('#eqManualGo').addEventListener('click', () => { stopScan(); lookup($('#eqManual').value); });
     $('#eqManual').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); stopScan(); lookup(e.target.value); } });
 
