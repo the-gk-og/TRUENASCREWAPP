@@ -912,19 +912,72 @@ def generate_barcodes():
         import traceback; traceback.print_exc()
         return jsonify({'error': str(exc)}), 500
 
+def _event_window(event):
+    """(start, end) an event holds its equipment for. All-day events and events
+    with no end time hold it until the end of their last day."""
+    from datetime import time as dtime
+    start = event.event_date
+    end   = event.event_end_date or event.event_date
+    if event.all_day:
+        start = datetime.combine(start.date(), dtime.min)
+    if event.all_day or not event.event_end_date:
+        end = datetime.combine(end.date(), dtime.max)
+    return start, max(start, end)
+
+
 @equipment_bp.route('/equipment/<int:id>/quantity-check', methods=['POST'])
 @login_required
+@crew_required
 def check_equipment_quantity(id):
-    eq            = Equipment.query.get_or_404(id)
-    requested_qty = request.json.get('quantity', 1)
-    allocated     = db.session.query(db.func.sum(PickListItem.quantity)).filter(
-        PickListItem.equipment_id == id,
-        PickListItem.is_checked   == False,
-    ).scalar() or 0
-    owned     = eq.quantity_owned or 999
-    available = owned - allocated
+    """How many of an item are free for a given event.
+
+    Counts every pick-list line for this item (packed or not: packed gear is
+    still in use) on events whose time overlaps the target event. With no
+    event, counts lines on all events that haven't finished, plus lines not
+    tied to any event. Items tracked by unit count only usable units as owned.
+    """
+    from models import Event
+    from routes.picklist import _event_is_archived
+
+    eq   = Equipment.query.get_or_404(id)
+    data = request.get_json(silent=True) or {}
+    try:
+        requested_qty = max(1, int(data.get('quantity') or 1))
+    except (TypeError, ValueError):
+        requested_qty = 1
+    target = None
+    if data.get('event_id'):
+        try:
+            target = db.session.get(Event, int(data['event_id']))
+        except (TypeError, ValueError):
+            target = None
+
+    lines = PickListItem.query.filter(PickListItem.equipment_id == id).all()
+    if target is not None:
+        t_start, t_end = _event_window(target)
+
+    def _counts(line):
+        ev = db.session.get(Event, line.event_id) if line.event_id else None
+        if target is None:
+            return ev is None or not _event_is_archived(ev)
+        if ev is None:
+            return False
+        if ev.id == target.id:
+            return True
+        start, end = _event_window(ev)
+        return start <= t_end and t_start <= end
+
+    allocated = sum((line.quantity or 0) for line in lines if _counts(line))
+
+    units = EquipmentUnit.query.filter_by(equipment_id=id).all()
+    if units:
+        owned = sum(1 for u in units if u.status == 'available')
+    else:
+        owned = eq.quantity_owned if eq.quantity_owned is not None else 1
+    available = max(0, owned - allocated)
     return jsonify({
         'owned': owned, 'allocated': allocated,
         'available': available, 'requested': requested_qty,
+        'event_id': target.id if target else None,
         'warning': requested_qty > available,
     })

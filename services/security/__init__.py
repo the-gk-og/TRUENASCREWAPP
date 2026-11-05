@@ -4,8 +4,8 @@ from urllib.parse import urlparse
 from flask import request, jsonify
 
 _UNSAFE_METHODS = {'POST', 'PUT', 'PATCH', 'DELETE'}
-# The Discord bot is a server-to-server client authenticated by a shared secret, not a browser session.
-_EXEMPT_ENDPOINT_PREFIXES = ('discord.',)
+# Endpoint prefixes for server-to-server clients that authenticate without a browser session.
+_EXEMPT_ENDPOINT_PREFIXES = ()
 
 
 def init_security(app):
