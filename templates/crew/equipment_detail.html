@@ -128,6 +128,28 @@
     font-size: 1rem;
 }
 
+/* ── Units ── */
+.units-table { width:100%; border-collapse:collapse; font-size:0.9rem; }
+.units-table th { text-align:left; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.06em;
+                  color:var(--text-secondary); padding:0.5rem; border-bottom:2px solid var(--border); }
+.units-table td { padding:0.6rem 0.5rem; border-bottom:1px solid var(--border); vertical-align:top; }
+.units-table tr.unit-highlight td { background:#fef9c3; }
+.units-table code { font-size:0.95rem; font-weight:700; }
+.unit-pill { display:inline-block; padding:0.15rem 0.6rem; border-radius:20px; font-size:0.78rem; font-weight:700; }
+.unit-pill.available { background:#dcfce7; color:#166534; }
+.unit-pill.out       { background:#fee2e2; color:#991b1b; }
+.unit-pill.repair    { background:#fef3c7; color:#92400e; }
+.unit-pill.retired, .unit-pill.lost { background:#e5e7eb; color:#374151; }
+.unit-where { font-size:0.82rem; color:var(--text-secondary); }
+.unit-where a { color:var(--primary); }
+.units-add { display:flex; gap:0.5rem; flex-wrap:wrap; align-items:flex-end; margin-top:1rem; }
+.units-add input { padding:0.55rem 0.7rem; border:2px solid var(--border); border-radius:8px; font-size:0.9rem; }
+@media (max-width: 700px) {
+    .units-table thead { display:none; }
+    .units-table tr { display:block; border-bottom:2px solid var(--border); padding:0.4rem 0; }
+    .units-table td { display:block; border:0; padding:0.2rem 0.25rem; }
+}
+
 @keyframes progressPulse {
     0%   { opacity: 1; }
     50%  { opacity: 0.5; }
@@ -284,6 +306,88 @@
 </div>
 {% endif %}
 
+
+<!-- ── Individual units ──────────────────────────────────────────────────── -->
+<div class="card" id="units" style="margin-bottom:1.5rem;">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.75rem;">
+        <h3 style="margin:0;"><i class="fas fa-boxes"></i> Units
+            <span style="font-weight:400; color:var(--text-secondary); font-size:0.9rem;">({{ units|length }})</span>
+        </h3>
+        {% if current_user.is_admin and units %}
+        <button type="button" class="btn btn-secondary" style="font-size:0.85rem;" onclick="printUnitTags()">
+            <i class="fas fa-qrcode"></i> Print all unit tags
+        </button>
+        {% endif %}
+    </div>
+    <p style="color:var(--text-secondary); font-size:0.88rem; margin:0.5rem 0 1rem;">
+        Track each physical piece with its own asset tag and QR code, so you can see exactly which one is out.
+        {% if not units %}This item is tracked by quantity only.{% endif %}
+    </p>
+
+    {% if units %}
+    <table class="units-table">
+        <thead><tr><th>Asset tag</th><th>Serial</th><th>Status</th><th>Where</th>{% if current_user.is_admin %}<th></th>{% endif %}</tr></thead>
+        <tbody>
+        {% for u in units %}
+        <tr id="unit-{{ u.id }}" class="{{ 'unit-highlight' if highlight_unit == u.id }}">
+            <td><code>{{ u.asset_tag }}</code>{% if u.notes %}<div class="unit-where">{{ u.notes }}</div>{% endif %}</td>
+            <td>{{ u.serial_number or '—' }}</td>
+            <td>
+                {% if u.status != 'available' %}
+                <span class="unit-pill {{ u.status }}">{{ u.status|capitalize }}</span>
+                {% elif u.is_out %}
+                <span class="unit-pill out">Out</span>
+                {% else %}
+                <span class="unit-pill available">Available</span>
+                {% endif %}
+            </td>
+            <td class="unit-where">
+                {% for a in u.allocations %}
+                <div><a href="{{ url_for('picklist.picklist', event_id=a.event_id) if a.event_id else url_for('picklist.picklist') }}">{{ a.event_title }}</a>
+                    {% if a.event_date %}· {{ a.event_date }}{% endif %}
+                    {% if a.is_checked %}· <i class="fas fa-check" title="Packed"></i> packed{% endif %}</div>
+                {% else %}In storage{% endfor %}
+            </td>
+            {% if current_user.is_admin %}
+            <td style="white-space:nowrap; text-align:right;">
+                <button type="button" class="btn btn-secondary" style="font-size:0.75rem; padding:0.3rem 0.55rem;" title="Print tag"
+                        onclick="printUnitTags([{{ u.id }}])"><i class="fas fa-qrcode"></i></button>
+                <button type="button" class="btn btn-secondary" style="font-size:0.75rem; padding:0.3rem 0.55rem;" title="Edit unit"
+                        onclick='openUnitEdit({{ u|tojson }})'><i class="fas fa-edit"></i></button>
+                <button type="button" class="btn btn-danger" style="font-size:0.75rem; padding:0.3rem 0.55rem;" title="Remove unit"
+                        onclick="deleteUnit({{ u.id }}, '{{ u.asset_tag|e }}')"><i class="fas fa-trash"></i></button>
+            </td>
+            {% endif %}
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    {% if current_user.is_admin %}
+    <form class="units-add" onsubmit="addUnit(event)">
+        <div>
+            <label style="display:block; font-size:0.8rem; font-weight:600;">Asset tag *</label>
+            <input type="text" id="uTag" required maxlength="100" placeholder="{{ item.barcode }}-{{ '%02d'|format(units|length + 1) }}">
+        </div>
+        <div>
+            <label style="display:block; font-size:0.8rem; font-weight:600;">Serial number</label>
+            <input type="text" id="uSerial" maxlength="100">
+        </div>
+        <button type="submit" class="btn btn-primary" style="font-size:0.85rem;"><i class="fas fa-plus"></i> Add unit</button>
+        <span style="color:var(--text-muted); font-size:0.85rem; align-self:center;">or</span>
+        <div>
+            <label style="display:block; font-size:0.8rem; font-weight:600;">Generate</label>
+            <input type="number" id="uCount" min="1" max="500" style="width:5rem;"
+                   value="{{ [ (item.quantity_owned or 1) - units|length, 1 ]|max }}">
+        </div>
+        <button type="button" class="btn btn-secondary" style="font-size:0.85rem;" onclick="generateUnits()">
+            <i class="fas fa-magic"></i> Generate units
+        </button>
+    </form>
+    {% endif %}
+</div>
+
 <!-- ── Full image viewer ──────────────────────────────────────────────────── -->
 <div id="imgViewer" class="modal" onclick="hideModal('imgViewer')" style="display:none;">
     <div style="max-width:90vw; max-height:90vh; margin:auto; margin-top:5vh; text-align:center;">
@@ -327,6 +431,26 @@
     </div>
 </div>
 
+<!-- ── Edit unit modal ──────────────────────────────────────────────────── -->
+<div id="unitModal" class="modal">
+    <div class="modal-content" style="max-width:440px;">
+        <span class="close" onclick="hideModal('unitModal')">&times;</span>
+        <h2>Edit Unit</h2>
+        <form onsubmit="submitUnitEdit(event)">
+            <input type="hidden" id="ueId">
+            <div class="form-group"><label>Asset tag *</label><input type="text" id="ueTag" required maxlength="100"></div>
+            <div class="form-group"><label>Serial number</label><input type="text" id="ueSerial" maxlength="100"></div>
+            <div class="form-group"><label>Status</label>
+                <select id="ueStatus">
+                    {% for s in unit_statuses %}<option value="{{ s }}">{{ s|capitalize }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="form-group"><label>Notes</label><textarea id="ueNotes"></textarea></div>
+            <button type="submit" class="btn btn-success" style="width:100%;">Save Unit</button>
+        </form>
+    </div>
+</div>
+
 <!-- ── Upload modal (shared for both types) ──────────────────────────────── -->
 <div id="picModal" class="modal">
     <div class="modal-content" style="max-width:440px;">
@@ -361,6 +485,10 @@
 {% block scripts %}
 <script>
 const ITEM_ID = {{ item.id }};
+
+{% if highlight_unit %}
+document.getElementById('unit-{{ highlight_unit }}')?.scrollIntoView({ block: 'center' });
+{% endif %}
 
 // ── Full image viewer ────────────────────────────────────────────────────────
 function viewImg(url, caption) {
@@ -397,6 +525,75 @@ function submitEdit(e) {
             showAlert(result.error || 'Update failed.', 'error');
         }
     });
+}
+
+// ── Units ────────────────────────────────────────────────────────────────────
+function unitApi(url, method, body) {
+    return fetch(url, {
+        method, headers: { 'Content-Type': 'application/json' },
+        body: body ? JSON.stringify(body) : undefined,
+    }).then(r => r.json().then(j => { if (!r.ok) throw new Error(j.error || 'Request failed'); return j; }));
+}
+
+function addUnit(e) {
+    e.preventDefault();
+    unitApi(`/equipment/${ITEM_ID}/units`, 'POST', {
+        asset_tag:     document.getElementById('uTag').value,
+        serial_number: document.getElementById('uSerial').value,
+    }).then(() => { showAlert('Unit added', 'success'); setTimeout(() => location.reload(), 500); })
+      .catch(err => showAlert(err.message, 'error'));
+}
+
+function generateUnits() {
+    const n = parseInt(document.getElementById('uCount').value, 10) || 0;
+    if (n < 1) return showAlert('Enter how many units to generate', 'error');
+    unitApi(`/equipment/${ITEM_ID}/units`, 'POST', { count: n })
+      .then(r => { showAlert(`Added ${r.units.length} unit${r.units.length === 1 ? '' : 's'}`, 'success');
+                   setTimeout(() => location.reload(), 500); })
+      .catch(err => showAlert(err.message, 'error'));
+}
+
+function openUnitEdit(u) {
+    document.getElementById('ueId').value     = u.id;
+    document.getElementById('ueTag').value    = u.asset_tag;
+    document.getElementById('ueSerial').value = u.serial_number || '';
+    document.getElementById('ueStatus').value = u.status || 'available';
+    document.getElementById('ueNotes').value  = u.notes || '';
+    showModal('unitModal');
+}
+
+function submitUnitEdit(e) {
+    e.preventDefault();
+    unitApi(`/equipment/unit/${document.getElementById('ueId').value}`, 'PUT', {
+        asset_tag:     document.getElementById('ueTag').value,
+        serial_number: document.getElementById('ueSerial').value,
+        status:        document.getElementById('ueStatus').value,
+        notes:         document.getElementById('ueNotes').value,
+    }).then(() => { hideModal('unitModal'); showAlert('Unit updated', 'success'); setTimeout(() => location.reload(), 500); })
+      .catch(err => showAlert(err.message, 'error'));
+}
+
+function deleteUnit(id, tag) {
+    if (!confirm(`Remove unit ${tag}? Its QR tag will stop working.`)) return;
+    unitApi(`/equipment/unit/${id}`, 'DELETE')
+      .then(() => { showAlert('Unit removed', 'success'); setTimeout(() => location.reload(), 500); })
+      .catch(err => showAlert(err.message, 'error'));
+}
+
+function printUnitTags(unitIds) {
+    const body = { mode: 'unit', layout: 'portrait', base_url: window.location.origin };
+    if (unitIds) body.unit_ids = unitIds; else body.equipment_ids = [ITEM_ID];
+    fetch('/equipment/generate-qrcodes', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }).then(r => r.ok ? r.blob() : r.json().then(j => { throw new Error(j.error || 'Failed'); }))
+      .then(blob => {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = `unit_tags_${ITEM_ID}.pdf`;
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      })
+      .catch(err => showAlert(err.message, 'error'));
 }
 
 // ── Picture upload ────────────────────────────────────────────────────────────

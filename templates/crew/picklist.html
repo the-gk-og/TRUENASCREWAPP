@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 
+{% from 'crew/_picklist_units.html' import plu_row, plu_assets %}
 {% block title %}Pick List - ShowWise{% endblock %}
 
 {% block content %}
@@ -729,6 +730,7 @@ tr.pl-flash > td { animation: plFlash 1.2s ease-out; }
                     {{ item.item_name }}
                     {% endif %}
                   </div>
+                  {{ plu_row(item, unit_options, item_units) }}
                 </td>
 
                 <!-- Qty -->
@@ -1161,6 +1163,7 @@ tr.pl-flash > td { animation: plFlash 1.2s ease-out; }
 
       const server = new Map(data.items.map(i => [i.id, i.checked]));
       let changed = false, structural = false;
+      if (window.pluSync) pluSync(data.items);
 
       document.querySelectorAll('#pl-tbody tr[data-id]').forEach(row => {
         const id = parseInt(row.dataset.id);
@@ -1392,4 +1395,5 @@ tr.pl-flash > td { animation: plFlash 1.2s ease-out; }
 
 })();
 </script>
+{{ plu_assets(unit_options, item_units) }}
 {% endblock %}

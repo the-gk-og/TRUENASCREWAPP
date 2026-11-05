@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 
+{% from 'crew/_picklist_units.html' import plu_row, plu_assets %}
 {% block title %}Pick List - ShowWise{% endblock %}
 
 {% block content %}
@@ -681,6 +682,7 @@
             </a>
             {% endif %}
           </div>
+          {{ plu_row(item, unit_options, item_units) }}
           {% if item.equipment and item.equipment.barcode %}
           <div class="mp-note">🔖 {{ item.equipment.barcode }}</div>
           {% endif %}
@@ -1008,6 +1010,7 @@
 
       const server = new Map(data.items.map(i => [i.id, i.checked]));
       let changed = false, structural = false;
+      if (window.pluSync) pluSync(data.items);
 
       document.querySelectorAll('#mp-list .mp-item[data-id]').forEach(card => {
         const id = parseInt(card.dataset.id);
@@ -1249,4 +1252,5 @@
 
 })();
 </script>
+{{ plu_assets(unit_options, item_units) }}
 {% endblock %}

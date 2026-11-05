@@ -105,6 +105,10 @@ class Equipment(db.Model):
     picture          = db.Column(db.String(300), nullable=True)
     # Photo of where it lives in storage
     location_picture = db.Column(db.String(300), nullable=True)
+    # Individual physical units (opt-in: empty for items tracked only by quantity)
+    units            = db.relationship('EquipmentUnit', backref='equipment',
+                                       cascade='all, delete-orphan',
+                                       order_by='EquipmentUnit.asset_tag')
 
     def to_dict(self):
         from flask import url_for
@@ -116,6 +120,7 @@ class Equipment(db.Model):
             'location':       self.location or '',
             'notes':          self.notes or '',
             'quantity_owned': self.quantity_owned or 1,
+            'unit_count':     len(self.units),
             'picture_url': (
                 url_for('equipment.serve_equipment_picture', id=self.id)
                 if self.picture else None
@@ -125,6 +130,62 @@ class Equipment(db.Model):
                 if self.location_picture else None
             ),
         }
+
+
+UNIT_STATUSES = ('available', 'repair', 'retired', 'lost')
+
+
+class EquipmentUnit(db.Model):
+    """One physical, individually tagged unit of an Equipment item type.
+
+    Whether a unit is *out* is not stored: it is derived from its allocations
+    to pick lists of events that have not finished yet (see `allocations`).
+    `status` records the unit's own condition (in repair, retired, lost).
+    """
+    __tablename__ = 'equipment_unit'
+    id            = db.Column(db.Integer, primary_key=True)
+    equipment_id  = db.Column(db.Integer, db.ForeignKey('equipment.id', ondelete='CASCADE'),
+                              nullable=False, index=True)
+    asset_tag     = db.Column(db.String(100), unique=True, nullable=False)
+    serial_number = db.Column(db.String(100))
+    status        = db.Column(db.String(20), nullable=False, default='available')
+    notes         = db.Column(db.Text)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def allocations(self, current_only=True):
+        """Pick list lines this unit is allocated to, newest event first.
+        current_only skips events that have already finished."""
+        from routes.picklist import _event_is_archived
+        rows = []
+        for link in self.pick_links:
+            pli = link.pick_list_item
+            ev  = db.session.get(Event, pli.event_id) if pli.event_id else None
+            if current_only and ev is not None and _event_is_archived(ev):
+                continue
+            rows.append((ev.event_date if ev else datetime.max, {
+                'pick_list_item_id': pli.id,
+                'event_id':          ev.id if ev else None,
+                'event_title':       ev.title if ev else 'General list',
+                'event_date':        ev.event_date.strftime('%d %b %Y') if ev and ev.event_date else '',
+                'is_checked':        bool(pli.is_checked),
+            }))
+        rows.sort(key=lambda r: r[0], reverse=True)
+        return [r for _, r in rows]
+
+    def to_dict(self, with_allocations=True):
+        d = {
+            'id':             self.id,
+            'equipment_id':   self.equipment_id,
+            'equipment_name': self.equipment.name if self.equipment else '',
+            'asset_tag':      self.asset_tag,
+            'serial_number':  self.serial_number or '',
+            'status':         self.status or 'available',
+            'notes':          self.notes or '',
+        }
+        if with_allocations:
+            d['allocations'] = self.allocations()
+            d['is_out']      = bool(d['allocations'])
+        return d
 
 
 class HiredEquipment(db.Model):
@@ -251,6 +312,28 @@ class PickListItem(db.Model):
     event_id     = db.Column(db.Integer, db.ForeignKey('event.id'))
     equipment_id = db.Column(db.Integer, db.ForeignKey('equipment.id'), nullable=True)
     equipment    = db.relationship('Equipment', backref='pick_list_items')
+    # Specific physical units allocated to this line (only for items that track units)
+    unit_links   = db.relationship('PickListUnit', backref='pick_list_item',
+                                   cascade='all, delete-orphan', order_by='PickListUnit.id')
+
+    @property
+    def units(self):
+        return [l.unit for l in self.unit_links]
+
+
+class PickListUnit(db.Model):
+    """One physical EquipmentUnit allocated to a pick list line."""
+    __tablename__ = 'pick_list_unit'
+    __table_args__ = (db.UniqueConstraint('pick_list_item_id', 'unit_id', name='uq_pick_list_unit'),)
+    id                = db.Column(db.Integer, primary_key=True)
+    pick_list_item_id = db.Column(db.Integer, db.ForeignKey('pick_list_item.id', ondelete='CASCADE'),
+                                  nullable=False, index=True)
+    unit_id           = db.Column(db.Integer, db.ForeignKey('equipment_unit.id', ondelete='CASCADE'),
+                                  nullable=False, index=True)
+    assigned_by       = db.Column(db.String(80))
+    assigned_at       = db.Column(db.DateTime, default=datetime.utcnow)
+    unit              = db.relationship('EquipmentUnit', backref=db.backref(
+        'pick_links', cascade='all, delete-orphan'))
 
 
 class StagePlan(db.Model):
