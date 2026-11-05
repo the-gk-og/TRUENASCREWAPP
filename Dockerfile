@@ -15,4 +15,5 @@ COPY . .
 ENV PORT=5002
 EXPOSE 5002
 
-CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${PORT:-5002} --workers 2 --timeout 120 'app:create_app()'"]
+# Upgrade the database schema once (fails the start if it can't), then serve.
+CMD ["sh", "-c", "python -m schema_migrations && exec gunicorn --bind 0.0.0.0:${PORT:-5002} --workers 2 --timeout 120 'app:create_app()'"]
