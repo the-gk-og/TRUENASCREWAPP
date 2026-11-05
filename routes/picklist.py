@@ -4,7 +4,7 @@ from datetime import datetime
 from flask import Blueprint, render_template, request, jsonify
 from flask_login import login_required, current_user
 from extensions import db
-from models import Event, PickListItem, PickListUnit, Equipment, EquipmentUnit, HiredEquipment
+from models import Event, PickListItem, PickListUnit, Equipment, EquipmentUnit, HiredEquipment, UnitCheckout
 from decorators import crew_required
 from routes import _is_mobile
 
@@ -88,12 +88,15 @@ def picklist():
         equipment_json=[e.to_dict() for e in all_equipment],
         hired_equipment=hired_equipment,
         unit_options=unit_options,
-        item_units={it.id: [_unit_chip(u) for u in it.units] for it in items},
+        item_units={it.id: [_unit_chip(u, it.event_id) for u in it.units] for it in items},
     )
 
 
-def _unit_chip(unit):
-    return {'id': unit.id, 'asset_tag': unit.asset_tag}
+def _unit_chip(unit, event_id=None):
+    """out: the unit has been scanned out to this line's event and not returned yet."""
+    co = unit.open_checkout
+    return {'id': unit.id, 'asset_tag': unit.asset_tag,
+            'out': bool(co and event_id and co.event_id == event_id)}
 
 
 @picklist_bp.route('/picklist/search')
@@ -139,13 +142,16 @@ def picklist_state():
     rows = PickListItem.query.filter_by(event_id=event_id).with_entities(
         PickListItem.id, PickListItem.is_checked).all()
     units = {}
+    out_ids = {u for (u,) in db.session.query(UnitCheckout.unit_id).filter(
+        UnitCheckout.event_id == event_id, UnitCheckout.returned_at.is_(None))} if event_id else set()
     if rows:
         for item_id, unit_id, tag in db.session.query(
                 PickListUnit.pick_list_item_id, EquipmentUnit.id, EquipmentUnit.asset_tag
         ).join(EquipmentUnit, EquipmentUnit.id == PickListUnit.unit_id).filter(
                 PickListUnit.pick_list_item_id.in_([r[0] for r in rows])
         ).order_by(PickListUnit.id).all():
-            units.setdefault(item_id, []).append({'id': unit_id, 'asset_tag': tag})
+            units.setdefault(item_id, []).append({'id': unit_id, 'asset_tag': tag,
+                                                  'out': unit_id in out_ids})
     resp = jsonify({'items': [{'id': i, 'checked': bool(c), 'units': units.get(i, [])}
                               for i, c in rows]})
     resp.headers['Cache-Control'] = 'no-store'
@@ -244,7 +250,7 @@ def assign_unit(item_id):
     db.session.add(PickListUnit(pick_list_item_id=item.id, unit_id=unit.id,
                                 assigned_by=current_user.username))
     db.session.commit()
-    return jsonify({'success': True, 'units': [_unit_chip(u) for u in item.units]})
+    return jsonify({'success': True, 'units': [_unit_chip(u, item.event_id) for u in item.units]})
 
 
 @picklist_bp.route('/picklist/<int:item_id>/units/<int:unit_id>', methods=['DELETE'])
@@ -255,4 +261,4 @@ def unassign_unit(item_id, unit_id):
     link = PickListUnit.query.filter_by(pick_list_item_id=item.id, unit_id=unit_id).first_or_404()
     db.session.delete(link)
     db.session.commit()
-    return jsonify({'success': True, 'units': [_unit_chip(u) for u in item.units]})
+    return jsonify({'success': True, 'units': [_unit_chip(u, item.event_id) for u in item.units]})

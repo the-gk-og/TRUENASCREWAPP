@@ -56,8 +56,15 @@ def dashboard():
                 my_events_this_week += 1
                 break
 
+    from routes.unit_tracking import maintenance_alerts, stale_checkouts
+    maint_alerts = maintenance_alerts()
+    gear_out_late = stale_checkouts()
+
     return render_template(
         '/crew/dashboard.html',
+        maint_alerts=maint_alerts,
+        maint_overdue=sum(1 for a in maint_alerts if a['due']['state'] == 'overdue'),
+        gear_out_late=gear_out_late,
         upcoming_events=upcoming_events,
         upcoming_rows=upcoming_rows,
         my_upcoming_events=my_upcoming_events,

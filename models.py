@@ -183,9 +183,128 @@ class EquipmentUnit(db.Model):
             'notes':          self.notes or '',
         }
         if with_allocations:
+            co = self.open_checkout
             d['allocations'] = self.allocations()
-            d['is_out']      = bool(d['allocations'])
+            d['checkout']    = co.to_dict() if co else None
+            d['is_out']      = bool(d['allocations']) or co is not None
+            d['maintenance_due'] = self.maintenance_due()
         return d
+
+    @property
+    def open_checkout(self):
+        """The UnitCheckout this unit is physically out on, or None."""
+        return next((c for c in self.checkouts if c.returned_at is None), None)
+
+    def maintenance_due(self, today=None):
+        """Earliest 'next due' date across maintenance kinds, taking only the latest
+        record of each kind (a newer PAT test replaces the older one's due date).
+        Returns {'date', 'kind', 'state': overdue|due_soon|ok} or None."""
+        return due_state(latest_due_by_kind(self.maintenance), today)
+
+
+MAINTENANCE_KINDS   = ('pat', 'inspection', 'repair')
+MAINTENANCE_LABELS  = {'pat': 'PAT test', 'inspection': 'Inspection', 'repair': 'Repair'}
+MAINTENANCE_RESULTS = ('pass', 'fail', 'repaired', 'note')
+DUE_SOON_DAYS = 30
+
+
+def latest_due_by_kind(records):
+    """{kind: next_due} from the newest record of each kind that sets a due date."""
+    newest = {}
+    for r in records:
+        if r.kind not in newest or (r.performed_on, r.id) > (newest[r.kind].performed_on, newest[r.kind].id):
+            newest[r.kind] = r
+    return {k: r.next_due for k, r in newest.items() if r.next_due}
+
+
+def due_state(due_by_kind, today=None):
+    if not due_by_kind:
+        return None
+    from datetime import date, timedelta
+    today = today or date.today()
+    kind, when = min(due_by_kind.items(), key=lambda kv: kv[1])
+    if when < today:
+        state = 'overdue'
+    elif when <= today + timedelta(days=DUE_SOON_DAYS):
+        state = 'due_soon'
+    else:
+        state = 'ok'
+    return {'date': when.isoformat(), 'date_text': when.strftime('%d %b %Y'),
+            'kind': kind, 'kind_label': MAINTENANCE_LABELS.get(kind, kind),
+            'state': state, 'days': (when - today).days}
+
+
+class UnitCheckout(db.Model):
+    """A unit physically leaving storage for an event, and (once back) its return.
+    Open while returned_at is NULL; a unit has at most one open checkout."""
+    __tablename__ = 'unit_checkout'
+    id             = db.Column(db.Integer, primary_key=True)
+    unit_id        = db.Column(db.Integer, db.ForeignKey('equipment_unit.id', ondelete='CASCADE'),
+                               nullable=False, index=True)
+    event_id       = db.Column(db.Integer, db.ForeignKey('event.id', ondelete='CASCADE'),
+                               nullable=False, index=True)
+    checked_out_by = db.Column(db.String(80))
+    checked_out_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    returned_by    = db.Column(db.String(80))
+    returned_at    = db.Column(db.DateTime, index=True)
+    notes          = db.Column(db.Text)
+    unit  = db.relationship('EquipmentUnit', backref=db.backref(
+        'checkouts', cascade='all, delete-orphan', order_by='UnitCheckout.checked_out_at.desc()'))
+    event = db.relationship('Event', backref=db.backref('unit_checkouts', cascade='all, delete-orphan'))
+
+    def to_dict(self):
+        ev, u = self.event, self.unit
+        return {
+            'id':             self.id,
+            'unit_id':        self.unit_id,
+            'asset_tag':      u.asset_tag if u else '',
+            'equipment_id':   u.equipment_id if u else None,
+            'equipment_name': u.equipment.name if u and u.equipment else '',
+            'event_id':       self.event_id,
+            'event_title':    ev.title if ev else '',
+            'event_date':     ev.event_date.strftime('%d %b %Y') if ev and ev.event_date else '',
+            'checked_out_by': self.checked_out_by or '',
+            'checked_out_at': self.checked_out_at.strftime('%d %b %Y, %H:%M') if self.checked_out_at else '',
+            'returned_by':    self.returned_by or '',
+            'returned_at':    self.returned_at.strftime('%d %b %Y, %H:%M') if self.returned_at else '',
+            'is_open':        self.returned_at is None,
+            'notes':          self.notes or '',
+        }
+
+
+class UnitMaintenance(db.Model):
+    """One repair, inspection or electrical safety (PAT) test of a unit."""
+    __tablename__ = 'unit_maintenance'
+    id           = db.Column(db.Integer, primary_key=True)
+    unit_id      = db.Column(db.Integer, db.ForeignKey('equipment_unit.id', ondelete='CASCADE'),
+                             nullable=False, index=True)
+    kind         = db.Column(db.String(20), nullable=False)          # MAINTENANCE_KINDS
+    performed_on = db.Column(db.Date, nullable=False)
+    result       = db.Column(db.String(20), nullable=False)          # MAINTENANCE_RESULTS
+    performed_by = db.Column(db.String(120))                         # who did it (may be an outside tester)
+    notes        = db.Column(db.Text)
+    next_due     = db.Column(db.Date, index=True)
+    recorded_by  = db.Column(db.String(80))
+    created_at   = db.Column(db.DateTime, default=datetime.utcnow)
+    unit = db.relationship('EquipmentUnit', backref=db.backref(
+        'maintenance', cascade='all, delete-orphan',
+        order_by='(UnitMaintenance.performed_on.desc(), UnitMaintenance.id.desc())'))
+
+    def to_dict(self):
+        return {
+            'id':           self.id,
+            'unit_id':      self.unit_id,
+            'kind':         self.kind,
+            'kind_label':   MAINTENANCE_LABELS.get(self.kind, self.kind),
+            'performed_on': self.performed_on.isoformat() if self.performed_on else '',
+            'performed_on_text': self.performed_on.strftime('%d %b %Y') if self.performed_on else '',
+            'result':       self.result,
+            'performed_by': self.performed_by or '',
+            'notes':        self.notes or '',
+            'next_due':     self.next_due.isoformat() if self.next_due else '',
+            'next_due_text': self.next_due.strftime('%d %b %Y') if self.next_due else '',
+            'recorded_by':  self.recorded_by or '',
+        }
 
 
 class HiredEquipment(db.Model):

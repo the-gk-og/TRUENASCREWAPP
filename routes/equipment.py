@@ -43,10 +43,21 @@ def _remove_file(relative_path: str):
 @login_required
 @crew_required
 def equipment_list():
+    from routes.unit_tracking import maintenance_alerts, stale_checkouts
+    from models import UnitCheckout
     equipment      = Equipment.query.all()
     equipment_json = [e.to_dict() for e in equipment]
+    alerts = maintenance_alerts()
+    per_item = {}
+    for a in alerts:
+        c = per_item.setdefault(a['equipment_id'], {'overdue': 0, 'due_soon': 0})
+        c[a['due']['state']] += 1
+    for d in equipment_json:
+        d['maint'] = per_item.get(d['id'])
     template = 'crew/equipment_mobile.html' if _is_mobile(request.user_agent.string) else 'crew/equipment.html'
-    return render_template(template, equipment=equipment, equipment_json=equipment_json)
+    return render_template(template, equipment=equipment, equipment_json=equipment_json,
+                           maint_alerts=alerts, stale_checkouts=stale_checkouts(),
+                           units_out=UnitCheckout.query.filter(UnitCheckout.returned_at.is_(None)).count())
 
 
 # ---------------------------------------------------------------------------
@@ -62,9 +73,15 @@ def equipment_detail(id):
     from utils import get_organization
     org = get_organization() or {}
     org_name = current_app.config.get('ORG_NAME') or org.get('name', 'ShowWise')
+    from models import MAINTENANCE_KINDS, MAINTENANCE_LABELS, MAINTENANCE_RESULTS
+    from routes.unit_tracking import maintenance_alerts
     return render_template('crew/equipment_detail.html', item=eq, organisation_name=org_name,
                            units=[u.to_dict() for u in eq.units],
                            unit_statuses=UNIT_STATUSES,
+                           maintenance_kinds=[(k, MAINTENANCE_LABELS[k]) for k in MAINTENANCE_KINDS],
+                           maintenance_results=MAINTENANCE_RESULTS,
+                           maint_alerts=maintenance_alerts(equipment_id=eq.id),
+                           today=datetime.now().date().isoformat(),
                            highlight_unit=request.args.get('unit', type=int))
 
 
