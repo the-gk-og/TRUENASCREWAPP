@@ -18,7 +18,7 @@
 
         {% if current_user.is_admin %}
         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-            <a href="{{ url_for('events.event_detail', id=event.id) }}" class="btn btn-primary" style="padding: 0.5rem 1rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+            <a href="{{ url_for('events.event_detail', id=event.id) }}" class="btn btn-primary" style="padding: 0.5rem 1rem; background: #10b981;">
                 <i class="fas fa-hard-hat"></i> Switch to Crew View
             </a>
         </div>
@@ -26,25 +26,25 @@
     </div>
 
     <!-- Event Overview -->
-    <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid var(--warning);">
+    <div style="background: #fef3c7; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid var(--warning);">
         <p style="color: #78350f; margin: 0.5rem 0; font-size: 1.05rem;">
-            📅 <strong>Performance:</strong> {{ event|event_when(' · ') }}
+            <strong>Performance:</strong> {{ event|event_when(' · ') }}
         </p>
         {% if event.event_end_date %}
         <p style="color: #78350f; margin: 0.5rem 0;">
-            🏁 <strong>Ends:</strong> {{ event.event_end_date.strftime('%I:%M %p') }}
+            <strong>Ends:</strong> {{ event.event_end_date.strftime('%I:%M %p') }}
         </p>
         {% endif %}
         {% if event.location %}
         <p style="color: #78350f; margin: 0.5rem 0;">
-            📍 <strong>Venue:</strong> {{ event.location }}
+            <strong>Venue:</strong> {{ event.location }}
         </p>
         {% endif %}
     </div>
 
     <!-- My Character Info -->
     {% if not current_user.is_admin and cast_member %}
-    <div style="background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%); padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem; border-left: 4px solid var(--primary);">
+    <div style="background: #e0e7ff; padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem; border-left: 4px solid var(--primary);">
         <h3 style="margin: 0 0 1rem 0; color: var(--primary);"><i class="fas fa-user-tag"></i> Your Role</h3>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
             <div>
@@ -88,7 +88,7 @@
 
         {% if current_user.is_admin %}
         <div id="castDescriptionEdit" style="display: none;">
-            <textarea id="castDescriptionTextarea" style="width: 100%; min-height: 150px; padding: 0.75rem; border: 2px solid var(--border); border-radius: 6px; font-family: inherit;">{{ event.cast_description or '' }}</textarea>
+            <textarea id="castDescriptionTextarea" style="width: 100%; min-height: 150px; padding: 0.75rem; border: 1px solid var(--border); border-radius: 6px; font-family: inherit;">{{ event.cast_description or '' }}</textarea>
             <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
                 <button onclick="saveCastDescription()" class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
                     <i class="fas fa-save"></i> Save
@@ -117,7 +117,7 @@
     {% if cast_schedules %}
     <div style="display: flex; flex-direction: column; gap: 0.75rem;">
         {% for schedule in cast_schedules %}
-        <div style="background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); padding: 1rem; border-radius: 8px; border-left: 4px solid #0284c7;">
+        <div style="background: #e0f2fe; padding: 1rem; border-radius: 8px; border-left: 4px solid #0284c7;">
             <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
                 <div style="flex: 1; min-width: 200px;">
                     <h4 style="margin: 0 0 0.5rem 0; color: #075985;">{{ schedule.title }}</h4>
@@ -156,11 +156,11 @@
     {% if event.crew_run_items %}
     <div id="crewRunList" style="display: flex; flex-direction: column; gap: 0.75rem;">
         {% for item in event.crew_run_items %}
-        <div class="run-item" data-id="{{ item.id }}" style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); padding: 1rem; border-radius: 8px; border-left: 4px solid {% if item.cue_type == 'Lighting' %}#f59e0b{% elif item.cue_type == 'Sound' %}#6366f1{% elif item.cue_type == 'Props' %}#10b981{% else %}#6b7280{% endif %}; cursor: move;">
+        <div class="run-item" data-id="{{ item.id }}" style="background: #f8fafc; padding: 1rem; border-radius: 8px; border-left: 4px solid {% if item.cue_type == 'Lighting' %}#f59e0b{% elif item.cue_type == 'Sound' %}#2557d6{% elif item.cue_type == 'Props' %}#10b981{% else %}#6b7280{% endif %}; cursor: move;">
             <div style="display: flex; align-items: start; gap: 1rem;">
                 <div style="display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0;">
                     <i class="fas fa-grip-vertical" style="color: #9ca3af; cursor: grab;"></i>
-                    <span style="background: #e5e7eb; color: var(--dark); padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem; font-weight: 700; min-width: 40px; text-align: center;">
+                    <span style="background: #e5e7eb; color: var(--dark); padding: 0.25rem 0.75rem; border-radius: 8px; font-size: 0.85rem; font-weight: 700; min-width: 40px; text-align: center;">
                         {{ item.order_number }}
                     </span>
                 </div>
@@ -171,12 +171,12 @@
                         {% if item.cue_type %}
                         <span style="background: {% if item.cue_type == 'Lighting' %}#fef3c7{% elif item.cue_type == 'Sound' %}#e0e7ff{% elif item.cue_type == 'Props' %}#dcfce7{% else %}#f3f4f6{% endif %};
                                      color: {% if item.cue_type == 'Lighting' %}#78350f{% elif item.cue_type == 'Sound' %}#3730a3{% elif item.cue_type == 'Props' %}#065f46{% else %}#374151{% endif %};
-                                     padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600;">
+                                     padding: 0.25rem 0.75rem; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">
                             {{ item.cue_type }}
                         </span>
                         {% endif %}
                         {% if item.duration %}
-                        <span style="background: #f3f4f6; color: #6b7280; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem;">
+                        <span style="background: #f3f4f6; color: #6b7280; padding: 0.25rem 0.75rem; border-radius: 8px; font-size: 0.75rem;">
                             <i class="fas fa-clock"></i> {{ item.duration }}
                         </span>
                         {% endif %}
@@ -266,7 +266,7 @@
 <!-- CAST NOTES -->
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
-        <h3>📝 Cast Notes</h3>
+        <h3>Cast Notes</h3>
         {% if current_user.is_admin %}
         <button onclick="showModal('addCastNoteModal')" class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
             + Add Note
@@ -277,7 +277,7 @@
     <div id="castNotesList">
         {% if cast_notes %}
         {% for note in cast_notes %}
-        <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--warning); margin-bottom: 0.75rem;">
+        <div style="background: #fef3c7; padding: 1rem; border-radius: 8px; border-left: 4px solid var(--warning); margin-bottom: 0.75rem;">
             <div style="display: flex; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
                 <div style="flex: 1; min-width: 0;">
                     <p style="margin: 0.25rem 0; color: #555; font-size: 0.85rem;">
@@ -286,7 +286,7 @@
                     <p id="cast-note-content-{{ note.id }}" style="margin: 0.5rem 0; color: #333; word-break: break-word;">{{ note.content }}</p>
                     {% if current_user.is_admin %}
                     <div id="cast-note-edit-{{ note.id }}" style="display: none; margin: 0.5rem 0;">
-                        <textarea id="cast-note-textarea-{{ note.id }}" style="width: 100%; padding: 0.5rem; border: 2px solid var(--border); border-radius: 6px; min-height: 80px; font-family: inherit;">{{ note.content }}</textarea>
+                        <textarea id="cast-note-textarea-{{ note.id }}" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px; min-height: 80px; font-family: inherit;">{{ note.content }}</textarea>
                     </div>
                     {% endif %}
                 </div>
@@ -324,7 +324,7 @@
             <p style="margin: 0.25rem 0; color: var(--primary); font-weight: 600;">as {{ member.character_name }}</p>
             <span style="background: {% if member.role_type == 'lead' %}#fee2e2{% elif member.role_type == 'supporting' %}#fef3c7{% else %}#dcfce7{% endif %};
                          color: {% if member.role_type == 'lead' %}#991b1b{% elif member.role_type == 'supporting' %}#78350f{% else %}#065f46{% endif %};
-                         padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; display: inline-block; margin-top: 0.5rem;">
+                         padding: 0.25rem 0.75rem; border-radius: 8px; font-size: 0.75rem; font-weight: 600; display: inline-block; margin-top: 0.5rem;">
                 {{ member.role_type|upper }}
             </span>
         </div>

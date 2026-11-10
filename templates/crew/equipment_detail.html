@@ -1,871 +1,402 @@
 {% extends "base.html" %}
+{% block title %}{{ item.name }} — Equipment — ShowWise{% endblock %}
 
-{% block title %}{{ item.name }} — ShowWise{% endblock %}
-
+{% set individual = item.is_individual %}
 {% block content %}
+<div class="gear">
+    <a class="sw-crumb" href="{{ url_for('equipment.equipment_list') }}"><i class="fas fa-arrow-left"></i> Equipment</a>
 
-<style>
-/* ── Detail page styles ─────────────────────────────────────────────────── */
-.detail-hero {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1.5rem;
-    margin-bottom: 2rem;
-}
-@media (max-width: 700px) {
-    .detail-hero { grid-template-columns: 1fr; }
-}
-
-.photo-card {
-    background: var(--bg-card);
-    border: 2px solid var(--border);
-    border-radius: 14px;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-}
-
-.photo-card-header {
-    padding: 0.75rem 1rem;
-    font-weight: 700;
-    font-size: 0.9rem;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    border-bottom: 2px solid var(--border);
-}
-
-.photo-card-header.item-header   { background: #e0e7ff; color: #3730a3; }
-.photo-card-header.loc-header    { background: #fef3c7; color: #92400e; }
-
-.photo-card-body {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 220px;
-    padding: 1rem;
-    cursor: pointer;
-    transition: background 0.2s;
-    position: relative;
-}
-.photo-card-body:hover { background: var(--bg-nav-hover); }
-
-.photo-card-body img {
-    max-width: 100%;
-    max-height: 260px;
-    border-radius: 10px;
-    object-fit: contain;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.12);
-}
-
-.photo-placeholder {
-    text-align: center;
-    color: var(--text-muted);
-}
-.photo-placeholder .ph-icon { font-size: 3.5rem; margin-bottom: 0.5rem; }
-.photo-placeholder p { font-size: 0.9rem; margin: 0; }
-
-.photo-card-footer {
-    padding: 0.75rem 1rem;
-    border-top: 2px solid var(--border);
-    display: flex;
-    gap: 0.5rem;
-}
-
-.info-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-}
-
-.info-chip {
-    background: var(--bg-nav-active);
-    border: 2px solid var(--border);
-    border-radius: 12px;
-    padding: 1rem;
-}
-.info-chip .label {
-    font-size: 0.75rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    color: var(--text-secondary);
-    margin-bottom: 0.35rem;
-}
-.info-chip .value {
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: var(--text-primary);
-    word-break: break-word;
-}
-.info-chip .value.barcode-val {
-    font-family: monospace;
-    font-size: 1rem;
-    background: var(--bg-card);
-    padding: 0.35rem 0.6rem;
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    display: inline-block;
-}
-.info-chip .value.loc-val {
-    background: #fef3c7;
-    color: #92400e;
-    padding: 0.3rem 0.75rem;
-    border-radius: 20px;
-    display: inline-block;
-    font-size: 1rem;
-}
-.info-chip .value.qty-val {
-    background: #e0e7ff;
-    color: #3730a3;
-    padding: 0.3rem 0.75rem;
-    border-radius: 20px;
-    display: inline-block;
-    font-size: 1rem;
-}
-
-/* ── Units ── */
-.units-table { width:100%; border-collapse:collapse; font-size:0.9rem; }
-.units-table th { text-align:left; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.06em;
-                  color:var(--text-secondary); padding:0.5rem; border-bottom:2px solid var(--border); }
-.units-table td { padding:0.6rem 0.5rem; border-bottom:1px solid var(--border); vertical-align:top; }
-.units-table tr.unit-highlight td { background:#fef9c3; }
-.units-table code { font-size:0.95rem; font-weight:700; }
-.unit-pill { display:inline-block; padding:0.15rem 0.6rem; border-radius:20px; font-size:0.78rem; font-weight:700; }
-.unit-pill.available { background:#dcfce7; color:#166534; }
-.unit-pill.out       { background:#fee2e2; color:#991b1b; }
-.unit-pill.repair    { background:#fef3c7; color:#92400e; }
-.unit-pill.retired, .unit-pill.lost { background:#e5e7eb; color:#374151; }
-.unit-where { font-size:0.82rem; color:var(--text-secondary); }
-.unit-where a { color:var(--primary); }
-.unit-pill.checked   { background:#dbeafe; color:#1e40af; }
-.due-pill { display:inline-block; margin-top:0.25rem; padding:0.1rem 0.5rem; border-radius:20px; font-size:0.72rem; font-weight:700; }
-.due-pill.overdue  { background:#fee2e2; color:#991b1b; }
-.due-pill.due_soon { background:#fef3c7; color:#92400e; }
-.due-pill.ok       { background:#e5e7eb; color:#374151; }
-.maint-alert { margin-bottom:1.5rem; border-left:4px solid var(--warning); }
-.maint-alert.has-overdue { border-left-color: var(--danger); }
-.maint-alert ul { margin:0.5rem 0 0; padding-left:1.1rem; font-size:0.9rem; }
-.hist-list { list-style:none; margin:0; padding:0; font-size:0.88rem; }
-.hist-list li { padding:0.55rem 0; border-bottom:1px solid var(--border); }
-.hist-list li:last-child { border-bottom:0; }
-.hist-meta { color:var(--text-secondary); font-size:0.8rem; }
-.res-pill { display:inline-block; padding:0.05rem 0.45rem; border-radius:20px; font-size:0.72rem; font-weight:700; text-transform:uppercase; }
-.res-pill.pass, .res-pill.repaired { background:#dcfce7; color:#166534; }
-.res-pill.fail { background:#fee2e2; color:#991b1b; }
-.res-pill.note { background:#e5e7eb; color:#374151; }
-.unit-actions { white-space:nowrap; text-align:right; }
-.unit-actions .btn { font-size:0.75rem; padding:0.3rem 0.55rem; }
-.units-add { display:flex; gap:0.5rem; flex-wrap:wrap; align-items:flex-end; margin-top:1rem; }
-.units-add input { padding:0.55rem 0.7rem; border:2px solid var(--border); border-radius:8px; font-size:0.9rem; }
-@media (max-width: 700px) {
-    .units-table thead { display:none; }
-    .units-table tr { display:block; border-bottom:2px solid var(--border); padding:0.4rem 0; }
-    .units-table td { display:block; border:0; padding:0.2rem 0.25rem; }
-}
-
-@keyframes progressPulse {
-    0%   { opacity: 1; }
-    50%  { opacity: 0.5; }
-    100% { opacity: 1; }
-}
-</style>
-
-<!-- Breadcrumb -->
-<div style="margin-bottom:1.25rem; font-size:0.9rem; color:var(--text-secondary);">
-    <a href="{{ url_for('equipment.equipment_list') }}" style="color:var(--primary); text-decoration:none;">
-        <i class="fas fa-boxes"></i> Equipment
-    </a>
-    <span style="margin:0 0.5rem; opacity:0.5;">/</span>
-    <span style="color:var(--text-primary); font-weight:600;">{{ item.name }}</span>
-</div>
-
-{% if organisation_name %}
-<p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:1rem;">Registered to <strong style="color:var(--text-primary);">{{ organisation_name }}</strong></p>
-{% endif %}
-
-<!-- Page header -->
-<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.5rem;">
-    <div>
-        <h1 style="margin:0; font-size:1.75rem;">{{ item.name }}</h1>
-        {% if item.category %}
-        <span style="background:#e0e7ff; color:#3730a3; padding:0.3rem 0.9rem; border-radius:20px; font-size:0.85rem; font-weight:600; margin-top:0.5rem; display:inline-block;">
-            {{ item.category }}
-        </span>
-        {% endif %}
-    </div>
-    <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-        <a href="{{ url_for('equipment.equipment_list') }}" class="btn btn-secondary" style="text-decoration:none;">
-            <i class="fas fa-arrow-left"></i> Back
-        </a>
-        {% if current_user.is_admin %}
-        <button onclick="openEditModal()" class="btn btn-primary">
-            <i class="fas fa-edit"></i> Edit
-        </button>
-        {% endif %}
-    </div>
-</div>
-
-<!-- ── Two photo cards ──────────────────────────────────────────────────── -->
-<div class="detail-hero">
-
-    <!-- Item photo -->
-    <div class="photo-card">
-        <div class="photo-card-header item-header">
-            <i class="fas fa-camera"></i> Equipment Photo
-        </div>
-        <div class="photo-card-body"
-             {% if item.picture %}
-             onclick="viewImg('{{ url_for('equipment.serve_equipment_picture', id=item.id) }}', '{{ item.name|e }}')"
-             title="Click to enlarge"
-             {% endif %}>
-            {% if item.picture %}
-            <img src="{{ url_for('equipment.serve_equipment_picture', id=item.id) }}" alt="{{ item.name }}">
-            {% else %}
-            <div class="photo-placeholder">
-                <div class="ph-icon">📦</div>
-                <p>No equipment photo yet</p>
-                {% if current_user.is_admin %}
-                <p style="margin-top:0.25rem; font-size:0.8rem;">Use the button below to add one</p>
-                {% endif %}
-            </div>
-            {% endif %}
+    <header class="sw-head">
+        <div>
+            <h1>{{ item.name }}</h1>
+            <p><code>{{ item.barcode }}</code>{% if item.category %} · {{ item.category }}{% endif %}
+                · {{ 'each item tracked individually' if individual else 'counted in bulk' }}</p>
         </div>
         {% if current_user.is_admin %}
-        <div class="photo-card-footer">
-            <button onclick="openPicModal('item')" class="btn btn-primary" style="flex:1; font-size:0.85rem;">
-                <i class="fas fa-camera"></i>
-                {{ 'Replace Photo' if item.picture else 'Upload Photo' }}
-            </button>
-            {% if item.picture %}
-            <button onclick="deletePic('item')" class="btn btn-danger" style="font-size:0.85rem;" title="Remove photo">
-                <i class="fas fa-trash"></i>
-            </button>
-            {% endif %}
+        <div class="sw-head-actions">
+            <button type="button" class="btn btn-secondary" id="tLabels"><i class="fas fa-qrcode"></i> Print labels</button>
+            <button type="button" class="btn btn-secondary" id="tEdit"><i class="fas fa-pen"></i> Edit</button>
         </div>
+        {% endif %}
+    </header>
+
+    <div class="gear-facts">
+        <div class="gear-fact"><b>{{ summary.owned }}</b><span>Owned</span></div>
+        <div class="gear-fact"><b>{{ summary.available }}</b><span>{{ 'Available' if individual else 'In storage' }}</span></div>
+        <div class="gear-fact"><b>{{ summary.out }}</b><span>Out</span></div>
+        {% if individual %}
+        <div class="gear-fact {{ 'bad' if summary.quarantined }}"><b>{{ summary.quarantined }}</b><span>Quarantined</span></div>
+        {% if summary.repair %}<div class="gear-fact"><b>{{ summary.repair }}</b><span>In repair</span></div>{% endif %}
         {% endif %}
     </div>
 
-    <!-- Location photo -->
-    <div class="photo-card">
-        <div class="photo-card-header loc-header">
-            <i class="fas fa-map-marker-alt"></i> Storage Location Photo
-        </div>
-        <div class="photo-card-body"
-             {% if item.location_picture %}
-             onclick="viewImg('{{ url_for('equipment.serve_equipment_location_picture', id=item.id) }}', 'Storage: {{ item.location|e if item.location else item.name|e }}')"
-             title="Click to enlarge"
-             {% endif %}>
-            {% if item.location_picture %}
-            <img src="{{ url_for('equipment.serve_equipment_location_picture', id=item.id) }}" alt="Storage location">
-            {% else %}
-            <div class="photo-placeholder">
-                <div class="ph-icon">📍</div>
-                <p>No location photo yet</p>
-                {% if current_user.is_admin %}
-                <p style="margin-top:0.25rem; font-size:0.8rem;">Help crew find this item by adding a photo</p>
-                {% endif %}
-            </div>
-            {% endif %}
-        </div>
-        {% if current_user.is_admin %}
-        <div class="photo-card-footer">
-            <button onclick="openPicModal('location')" class="btn btn-primary" style="flex:1; font-size:0.85rem; background:#f59e0b; border-color:#f59e0b;">
-                <i class="fas fa-map-marker-alt"></i>
-                {{ 'Replace Location Photo' if item.location_picture else 'Upload Location Photo' }}
-            </button>
-            {% if item.location_picture %}
-            <button onclick="deletePic('location')" class="btn btn-danger" style="font-size:0.85rem;" title="Remove photo">
-                <i class="fas fa-trash"></i>
-            </button>
-            {% endif %}
-        </div>
-        {% endif %}
-    </div>
-
-</div>
-
-<!-- ── Info chips ────────────────────────────────────────────────────────── -->
-<div class="info-grid">
-    <div class="info-chip">
-        <div class="label"><i class="fas fa-barcode"></i> Barcode</div>
-        <div class="value barcode-val">{{ item.barcode }}</div>
-    </div>
-    <div class="info-chip">
-        <div class="label"><i class="fas fa-layer-group"></i> Quantity Owned</div>
-        <div class="value qty-val">{{ item.quantity_owned or 1 }}</div>
-    </div>
-    {% if item.category %}
-    <div class="info-chip">
-        <div class="label"><i class="fas fa-tag"></i> Category</div>
-        <div class="value">{{ item.category }}</div>
+    {% if untagged and current_user.is_admin %}
+    <div class="sw-notice info">
+        The count for this type was {{ item.quantity_owned }}, but only {{ units|length }} {{ 'item is' if units|length == 1 else 'items are' }} listed.
+        <button type="button" class="btn-link" id="tAddMissing" data-n="{{ untagged }}">Add the other {{ untagged }}</button>
+        or <button type="button" class="btn-link" id="tDropMissing">ignore, the list is right</button>.
     </div>
     {% endif %}
-    {% if item.location %}
-    <div class="info-chip">
-        <div class="label"><i class="fas fa-map-marker-alt"></i> Storage Location</div>
-        <div class="value loc-val">{{ item.location }}</div>
+
+    {% if maint_alerts %}
+    <div class="sw-notice {{ 'bad' if maint_alerts|selectattr('due.state', 'equalto', 'overdue')|list }}">
+        <strong>Tests and inspections due</strong>
+        <ul>
+            {% for a in maint_alerts %}
+            <li><a href="#unit-{{ a.id }}"><code>{{ a.asset_tag }}</code></a> {{ a.due.kind_label }}
+                {{ 'overdue since' if a.due.state == 'overdue' else 'due' }} {{ a.due.date_text }}</li>
+            {% endfor %}
+        </ul>
     </div>
     {% endif %}
-    <div class="info-chip">
-        <div class="label"><i class="fas fa-calendar-alt"></i> Added</div>
-        <div class="value" style="font-size:0.95rem;">{{ item.created_at.strftime('%d %b %Y') if item.created_at else '—' }}</div>
-    </div>
-</div>
 
-{% if item.notes %}
-<div class="card" style="margin-bottom:1.5rem; border-left:4px solid var(--primary);">
-    <h3 style="margin-bottom:0.75rem;"><i class="fas fa-sticky-note"></i> Notes</h3>
-    <p style="margin:0; white-space:pre-wrap; color:var(--text-secondary);">{{ item.notes }}</p>
-</div>
-{% endif %}
-
-
-{% if maint_alerts %}
-{% set any_overdue = maint_alerts|selectattr('due.state', 'equalto', 'overdue')|list %}
-<div class="card maint-alert {{ 'has-overdue' if any_overdue }}" id="maintenance-due">
-    <h3 style="margin:0;"><i class="fas fa-screwdriver-wrench"></i> Tests and inspections due</h3>
-    <ul>
-        {% for a in maint_alerts %}
-        <li><a href="#unit-{{ a.id }}" style="color:var(--primary);"><code>{{ a.asset_tag }}</code></a> —
-            {{ a.due.kind_label }}
-            {% if a.due.state == 'overdue' %}<span class="due-pill overdue">overdue since {{ a.due.date_text }}</span>
-            {% else %}<span class="due-pill due_soon">due {{ a.due.date_text }}</span>{% endif %}</li>
-        {% endfor %}
-    </ul>
-</div>
-{% endif %}
-
-<!-- ── Individual units ──────────────────────────────────────────────────── -->
-<div class="card" id="units" style="margin-bottom:1.5rem;">
-    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.75rem;">
-        <h3 style="margin:0;"><i class="fas fa-boxes"></i> Units
-            <span style="font-weight:400; color:var(--text-secondary); font-size:0.9rem;">({{ units|length }})</span>
-        </h3>
-        {% if current_user.is_admin and units %}
-        <button type="button" class="btn btn-secondary" style="font-size:0.85rem;" onclick="printUnitTags()">
-            <i class="fas fa-qrcode"></i> Print all unit tags
-        </button>
-        {% endif %}
-    </div>
-    <p style="color:var(--text-secondary); font-size:0.88rem; margin:0.5rem 0 1rem;">
-        Track each physical piece with its own asset tag and QR code, so you can see exactly which one is out.
-        {% if not units %}This item is tracked by quantity only.{% endif %}
-    </p>
-
-    {% if units %}
-    <table class="units-table">
-        <thead><tr><th>Asset tag</th><th>Serial</th><th>Status</th><th>Where</th><th></th></tr></thead>
-        <tbody>
-        {% for u in units %}
-        <tr id="unit-{{ u.id }}" class="{{ 'unit-highlight' if highlight_unit == u.id }}">
-            <td><code>{{ u.asset_tag }}</code>{% if u.notes %}<div class="unit-where">{{ u.notes }}</div>{% endif %}</td>
-            <td>{{ u.serial_number or '—' }}</td>
-            <td>
-                {% if u.status != 'available' %}
-                <span class="unit-pill {{ u.status }}">{{ u.status|capitalize }}</span>
-                {% elif u.checkout %}
-                <span class="unit-pill checked">Checked out</span>
-                {% elif u.is_out %}
-                <span class="unit-pill out">Booked</span>
-                {% else %}
-                <span class="unit-pill available">Available</span>
-                {% endif %}
-                {% if u.maintenance_due and u.maintenance_due.state != 'ok' %}
-                <div><span class="due-pill {{ u.maintenance_due.state }}" title="{{ u.maintenance_due.kind_label }}">
-                    {{ u.maintenance_due.kind_label }} {{ 'overdue' if u.maintenance_due.state == 'overdue' else 'due' }} {{ u.maintenance_due.date_text }}</span></div>
-                {% elif u.maintenance_due %}
-                <div class="unit-where">Next {{ u.maintenance_due.kind_label }}: {{ u.maintenance_due.date_text }}</div>
-                {% endif %}
-            </td>
-            <td class="unit-where">
-                {% if u.checkout %}
-                <div><i class="fas fa-truck-ramp-box" title="Scanned out"></i>
-                    Out on <a href="{{ url_for('unit_tracking.checkout_page', event_id=u.checkout.event_id) }}">{{ u.checkout.event_title }}</a>
-                    · {{ u.checkout.checked_out_at }} by {{ u.checkout.checked_out_by }}</div>
-                {% endif %}
-                {% for a in u.allocations %}
-                {% if not u.checkout or a.event_id != u.checkout.event_id %}
-                <div><a href="{{ url_for('picklist.picklist', event_id=a.event_id) if a.event_id else url_for('picklist.picklist') }}">{{ a.event_title }}</a>
-                    {% if a.event_date %}· {{ a.event_date }}{% endif %}
-                    {% if a.is_checked %}· <i class="fas fa-check" title="Packed"></i> packed{% endif %}</div>
-                {% endif %}
-                {% else %}{% if not u.checkout %}In storage{% endif %}{% endfor %}
-            </td>
-            <td class="unit-actions">
-                <button type="button" class="btn btn-secondary" title="Log a test, inspection or repair"
-                        onclick='openMaint({{ {"id": u.id, "asset_tag": u.asset_tag, "status": u.status}|tojson }})'><i class="fas fa-screwdriver-wrench"></i></button>
-                <button type="button" class="btn btn-secondary" title="History"
-                        onclick="openHistory({{ u.id }})"><i class="fas fa-clock-rotate-left"></i></button>
-                {% if current_user.is_admin %}
-                <button type="button" class="btn btn-secondary" title="Print tag"
-                        onclick="printUnitTags([{{ u.id }}])"><i class="fas fa-qrcode"></i></button>
-                <button type="button" class="btn btn-secondary" title="Edit unit"
-                        onclick='openUnitEdit({{ u|tojson }})'><i class="fas fa-edit"></i></button>
-                <button type="button" class="btn btn-danger" title="Remove unit"
-                        onclick="deleteUnit({{ u.id }}, '{{ u.asset_tag|e }}')"><i class="fas fa-trash"></i></button>
-                {% endif %}
-            </td>
-        </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-    {% endif %}
-
-    {% if current_user.is_admin %}
-    <form class="units-add" onsubmit="addUnit(event)">
+    <div class="gear-type">
         <div>
-            <label style="display:block; font-size:0.8rem; font-weight:600;">Asset tag *</label>
-            <input type="text" id="uTag" required maxlength="100" placeholder="{{ item.barcode }}-{{ '%02d'|format(units|length + 1) }}">
-        </div>
-        <div>
-            <label style="display:block; font-size:0.8rem; font-weight:600;">Serial number</label>
-            <input type="text" id="uSerial" maxlength="100">
-        </div>
-        <button type="submit" class="btn btn-primary" style="font-size:0.85rem;"><i class="fas fa-plus"></i> Add unit</button>
-        <span style="color:var(--text-muted); font-size:0.85rem; align-self:center;">or</span>
-        <div>
-            <label style="display:block; font-size:0.8rem; font-weight:600;">Generate</label>
-            <input type="number" id="uCount" min="1" max="500" style="width:5rem;"
-                   value="{{ [ (item.quantity_owned or 1) - units|length, 1 ]|max }}">
-        </div>
-        <button type="button" class="btn btn-secondary" style="font-size:0.85rem;" onclick="generateUnits()">
-            <i class="fas fa-magic"></i> Generate units
-        </button>
-    </form>
-    {% endif %}
-</div>
-
-<!-- ── Full image viewer ──────────────────────────────────────────────────── -->
-<div id="imgViewer" class="modal" onclick="hideModal('imgViewer')" style="display:none;">
-    <div style="max-width:90vw; max-height:90vh; margin:auto; margin-top:5vh; text-align:center;">
-        <img id="imgViewerSrc" src="" alt=""
-             style="max-width:100%; max-height:85vh; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,0.5);">
-        <p id="imgViewerCaption" style="color:#fff; margin-top:0.75rem; font-size:1rem; font-weight:600;"></p>
-        <p style="color:rgba(255,255,255,0.6); font-size:0.85rem; margin-top:0.25rem;">Click anywhere to close</p>
-    </div>
-</div>
-
-{% if current_user.is_admin %}
-
-<!-- ── Edit modal ────────────────────────────────────────────────────────── -->
-<div id="editModal" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="hideModal('editModal')">&times;</span>
-        <h2>Edit Equipment</h2>
-        <form id="editForm" onsubmit="submitEdit(event)">
-            <div class="form-group">
-                <label>Name *</label>
-                <input type="text" id="eName" value="{{ item.name }}" required>
-            </div>
-            <div class="form-group">
-                <label>Quantity Owned</label>
-                <input type="number" id="eQty" value="{{ item.quantity_owned or 1 }}" min="1" required>
-            </div>
-            <div class="form-group">
-                <label>Category</label>
-                <input type="text" id="eCat" value="{{ item.category or '' }}">
-            </div>
-            <div class="form-group">
-                <label>Storage Location</label>
-                <input type="text" id="eLoc" value="{{ item.location or '' }}">
-            </div>
-            <div class="form-group">
-                <label>Notes</label>
-                <textarea id="eNotes">{{ item.notes or '' }}</textarea>
-            </div>
-            <button type="submit" class="btn btn-success" style="width:100%;">Save Changes</button>
-        </form>
-    </div>
-</div>
-
-<!-- ── Edit unit modal ──────────────────────────────────────────────────── -->
-<div id="unitModal" class="modal">
-    <div class="modal-content" style="max-width:440px;">
-        <span class="close" onclick="hideModal('unitModal')">&times;</span>
-        <h2>Edit Unit</h2>
-        <form onsubmit="submitUnitEdit(event)">
-            <input type="hidden" id="ueId">
-            <div class="form-group"><label>Asset tag *</label><input type="text" id="ueTag" required maxlength="100"></div>
-            <div class="form-group"><label>Serial number</label><input type="text" id="ueSerial" maxlength="100"></div>
-            <div class="form-group"><label>Status</label>
-                <select id="ueStatus">
-                    {% for s in unit_statuses %}<option value="{{ s }}">{{ s|capitalize }}</option>{% endfor %}
-                </select>
-            </div>
-            <div class="form-group"><label>Notes</label><textarea id="ueNotes"></textarea></div>
-            <button type="submit" class="btn btn-success" style="width:100%;">Save Unit</button>
-        </form>
-    </div>
-</div>
-
-<!-- ── Log maintenance modal ────────────────────────────────────────────── -->
-<div id="maintModal" class="modal">
-    <div class="modal-content" style="max-width:460px;">
-        <span class="close" onclick="hideModal('maintModal')">&times;</span>
-        <h2>Log check — <code id="mTag"></code></h2>
-        <form onsubmit="submitMaint(event)">
-            <input type="hidden" id="mUnit">
-            <div class="form-group"><label>Type</label>
-                <select id="mKind" onchange="maintFormSync()">
-                    {% for k, label in maintenance_kinds %}<option value="{{ k }}">{{ label }}</option>{% endfor %}
-                </select>
-            </div>
-            <div class="form-group"><label>Result</label>
-                <select id="mResult" onchange="maintFormSync()">
-                    {% for r in maintenance_results %}<option value="{{ r }}">{{ r|capitalize }}</option>{% endfor %}
-                </select>
-            </div>
-            <div class="form-group"><label>Date</label><input type="date" id="mDate" max="{{ today }}" required></div>
-            <div class="form-group"><label>Done by</label><input type="text" id="mBy" maxlength="120" placeholder="{{ current_user.username }}"></div>
-            <div class="form-group"><label>Next due <span style="font-weight:400; color:var(--text-muted);">(optional)</span></label>
-                <input type="date" id="mNext">
-                <div style="display:flex; gap:0.35rem; margin-top:0.35rem; flex-wrap:wrap;">
-                    {% for months in (3, 6, 12, 24) %}
-                    <button type="button" class="btn btn-secondary" style="font-size:0.72rem; padding:0.2rem 0.5rem;" onclick="setNextDue({{ months }})">+{{ months }} mo</button>
-                    {% endfor %}
+            {% if individual %}
+            <section class="card" id="units">
+                <div class="sw-section-head">
+                    <h2>Items <span class="count">({{ units|length }})</span></h2>
+                    {% if current_user.is_admin %}
+                    <button type="button" class="btn btn-secondary btn-sm" id="tSelLabels" hidden><i class="fas fa-qrcode"></i> <span></span></button>
+                    {% endif %}
                 </div>
-            </div>
-            <div class="form-group"><label>Notes</label><textarea id="mNotes" placeholder="Readings, what was fixed, cost…"></textarea></div>
-            <label id="mRepairWrap" style="display:none; gap:0.5rem; align-items:center; margin-bottom:1rem; font-weight:600;">
-                <input type="checkbox" id="mSetRepair" checked> Mark unit as <em>in repair</em>
-            </label>
-            {% if current_user.is_admin %}
-            <label id="mAvailWrap" style="display:none; gap:0.5rem; align-items:center; margin-bottom:1rem; font-weight:600;">
-                <input type="checkbox" id="mSetAvail" checked> Put unit back in service (<em>available</em>)
-            </label>
+
+                {% if units %}
+                <div class="sw-table-wrap">
+                <table class="sw-table gear-units">
+                    <thead><tr>
+                        {% if current_user.is_admin %}<th class="c-sel"><input type="checkbox" id="tSelAll" aria-label="Select all items"></th>{% endif %}
+                        <th>Item</th><th>Status</th><th>Where</th><th></th>
+                    </tr></thead>
+                    <tbody>
+                    {% for u in units %}
+                    <tr id="unit-{{ u.id }}" class="{{ 'is-target' if highlight_unit == u.id }}" data-unit='{{ u|tojson }}'>
+                        {% if current_user.is_admin %}<td class="c-sel"><input type="checkbox" data-sel="{{ u.id }}" aria-label="Select {{ u.asset_tag }}"></td>{% endif %}
+                        <td class="c-item"><code>{{ u.asset_tag }}</code>
+                            {% if u.serial_number %}<span class="sub">S/N {{ u.serial_number }}</span>{% endif %}
+                            {% if u.notes %}<span class="sub">{{ u.notes }}</span>{% endif %}</td>
+                        <td><span class="pill {{ u.state }}">{{ u.state_label }}</span>
+                            {% if u.quarantine %}<span class="why">{{ u.quarantine.reason }}</span>{% endif %}
+                            {% if u.maintenance_due and u.maintenance_due.state != 'ok' %}
+                            <div style="margin-top:.2rem"><span class="pill {{ u.maintenance_due.state }}">{{ u.maintenance_due.kind_label }} {{ 'overdue' if u.maintenance_due.state == 'overdue' else 'due' }} {{ u.maintenance_due.date_text }}</span></div>
+                            {% elif u.maintenance_due %}
+                            <span class="sub">Next {{ u.maintenance_due.kind_label }}: {{ u.maintenance_due.date_text }}</span>
+                            {% endif %}</td>
+                        <td class="where">
+                            {% if u.quarantine %}
+                            Quarantined {{ u.quarantine.quarantined_at }} by {{ u.quarantine.quarantined_by or 'unknown' }}
+                            {% if u.quarantine.photo_url %}· <a href="{{ u.quarantine.photo_url }}" target="_blank" rel="noopener">photo</a>{% endif %}
+                            {% endif %}
+                            {% if u.checkout %}
+                            <div>Out on <a href="{{ url_for('unit_tracking.checkout_page', event_id=u.checkout.event_id) }}">{{ u.checkout.event_title }}</a>
+                                since {{ u.checkout.checked_out_at }} ({{ u.checkout.checked_out_by }})</div>
+                            {% endif %}
+                            {% for a in u.allocations %}{% if not u.checkout or a.event_id != u.checkout.event_id %}
+                            <div>Booked for <a href="{{ url_for('picklist.picklist', event_id=a.event_id) if a.event_id else url_for('picklist.picklist') }}">{{ a.event_title }}</a>{% if a.event_date %}, {{ a.event_date }}{% endif %}{% if a.is_checked %} (packed){% endif %}</div>
+                            {% endif %}{% endfor %}
+                            {% if not u.checkout and not u.allocations and not u.quarantine %}In storage{% endif %}
+                        </td>
+                        <td class="actions">
+                            {% if u.status == 'quarantined' %}
+                                {% if current_user.is_admin %}<button type="button" class="btn btn-secondary btn-sm" data-act="release">Release…</button>{% endif %}
+                            {% elif u.status not in ('retired', 'lost') %}
+                                <button type="button" class="btn btn-outline-danger btn-sm" data-act="quarantine">Quarantine</button>
+                            {% endif %}
+                            <button type="button" class="btn btn-secondary btn-icon" data-act="check" title="Log a test, inspection or repair" aria-label="Log a check for {{ u.asset_tag }}"><i class="fas fa-screwdriver-wrench"></i></button>
+                            <button type="button" class="btn btn-secondary btn-icon" data-act="history" title="History" aria-label="History of {{ u.asset_tag }}"><i class="fas fa-clock-rotate-left"></i></button>
+                            {% if current_user.is_admin %}
+                            <button type="button" class="btn btn-secondary btn-icon" data-act="edit" title="Edit or remove" aria-label="Edit {{ u.asset_tag }}"><i class="fas fa-pen"></i></button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+                {% else %}
+                <div class="sw-blank"><strong>No items yet</strong>{{ 'Add them below.' if current_user.is_admin else 'An admin needs to add them.' }}</div>
+                {% endif %}
+
+                {% if current_user.is_admin %}
+                <form class="gear-addrow" id="tAddOne">
+                    <div>
+                        <label class="sw-label" for="uTag">Add one: asset tag</label>
+                        <input type="text" id="uTag" class="sw-input" required maxlength="100" placeholder="{{ item.barcode }}-{{ '%02d'|format(units|length + 1) }}">
+                    </div>
+                    <div>
+                        <label class="sw-label" for="uSerial">Serial number</label>
+                        <input type="text" id="uSerial" class="sw-input" maxlength="100" placeholder="Optional">
+                    </div>
+                    <button type="submit" class="btn btn-secondary">Add item</button>
+                    <span class="or">or</span>
+                    <button type="button" class="btn btn-secondary" id="tAddMany">Add several…</button>
+                </form>
+                {% endif %}
+            </section>
+            {% else %}
+            <section class="card">
+                <div class="sw-section-head"><h2>Counted in bulk</h2></div>
+                <p style="color:var(--text-secondary); margin-bottom:.9rem">
+                    You own {{ summary.owned }}. They share one group label, and are checked out by number rather than one by one.
+                </p>
+                {% if bulk_out %}
+                <div class="sw-table-wrap" style="margin-bottom:.9rem">
+                <table class="sw-table">
+                    <thead><tr><th>Out on</th><th class="num">How many</th><th>Since</th></tr></thead>
+                    <tbody>
+                    {% for b in bulk_out %}
+                    <tr><td><a href="{{ url_for('unit_tracking.checkout_page', event_id=b.event_id) }}">{{ b.event_title }}</a></td>
+                        <td class="num">{{ b.outstanding }}</td>
+                        <td>{{ b.checked_out_at }} ({{ b.checked_out_by }})</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+                {% endif %}
+                {% if current_user.is_admin %}
+                <button type="button" class="btn btn-secondary" id="tGoIndividual">Track each one individually instead…</button>
+                {% endif %}
+            </section>
             {% endif %}
-            <button type="submit" class="btn btn-success" style="width:100%;">Save</button>
-        </form>
-    </div>
-</div>
 
-<!-- ── Unit history modal ───────────────────────────────────────────────── -->
-<div id="histModal" class="modal">
-    <div class="modal-content" style="max-width:560px;">
-        <span class="close" onclick="hideModal('histModal')">&times;</span>
-        <h2>History — <code id="hTag"></code></h2>
-        <div id="hDue" style="margin-bottom:0.75rem;"></div>
-        <h3 style="font-size:1rem; margin:0.5rem 0;"><i class="fas fa-screwdriver-wrench"></i> Maintenance</h3>
-        <ul class="hist-list" id="hMaint"></ul>
-        <h3 style="font-size:1rem; margin:1rem 0 0.5rem;"><i class="fas fa-truck-ramp-box"></i> Check-outs</h3>
-        <ul class="hist-list" id="hOut"></ul>
-    </div>
-</div>
-
-<!-- ── Upload modal (shared for both types) ──────────────────────────────── -->
-<div id="picModal" class="modal">
-    <div class="modal-content" style="max-width:440px;">
-        <span class="close" onclick="hideModal('picModal')">&times;</span>
-        <h2 id="picModalTitle" style="margin-bottom:1.5rem;"></h2>
-
-        <div id="uploadArea"
-             style="border:2px dashed var(--border); border-radius:10px; padding:2.5rem; text-align:center; cursor:pointer; transition:border-color 0.2s;"
-             onclick="document.getElementById('picFileInput').click()"
-             ondragover="event.preventDefault(); this.style.borderColor='var(--primary)';"
-             ondragleave="this.style.borderColor='var(--border)';"
-             ondrop="handleDrop(event)">
-            <p id="picModalIcon" style="font-size:2.5rem; margin-bottom:0.5rem;"></p>
-            <p style="color:var(--text-secondary); margin:0; font-weight:600;">Click or drag & drop</p>
-            <p style="color:var(--text-muted); font-size:0.8rem; margin-top:0.25rem;">PNG, JPG, JPEG, GIF, WEBP</p>
+            {% if item.notes %}
+            <section class="card">
+                <div class="sw-section-head"><h2>Notes</h2></div>
+                <p style="white-space:pre-wrap; overflow-wrap:anywhere">{{ item.notes }}</p>
+            </section>
+            {% endif %}
         </div>
-        <input type="file" id="picFileInput" accept="image/*" style="display:none;" onchange="doUpload(this.files[0])">
 
-        <div id="picProgress" style="display:none; margin-top:1rem;">
-            <div style="background:var(--border); border-radius:4px; height:6px; overflow:hidden;">
-                <div style="width:100%; height:100%; background:var(--primary); animation:progressPulse 1s infinite;"></div>
-            </div>
-            <p style="text-align:center; color:var(--text-secondary); font-size:0.85rem; margin-top:0.5rem;">Uploading…</p>
-        </div>
+        <aside>
+            <section class="card">
+                {% for kind, label, url, has in (
+                    ('picture', 'The item', url_for('equipment.serve_equipment_picture', id=item.id), item.picture),
+                    ('location-picture', 'Where it lives', url_for('equipment.serve_equipment_location_picture', id=item.id), item.location_picture)) %}
+                <div class="gear-photo">
+                    {% if has %}<img src="{{ url }}" alt="{{ label }}" data-zoom>{% else %}No photo{% endif %}
+                </div>
+                <div class="gear-photo-cap">
+                    <span>{{ label }}</span>
+                    {% if current_user.is_admin %}
+                    <span>
+                        <label class="btn-link">{{ 'Replace' if has else 'Add photo' }}<input type="file" accept="image/*" class="sr-only" data-photo="{{ kind }}"></label>
+                        {% if has %} · <button type="button" class="btn-link" data-photo-remove="{{ kind }}" style="color:var(--danger)">Remove</button>{% endif %}
+                    </span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+                <dl class="gear-dl">
+                    <dt>Lives in</dt><dd>{{ item.location or 'Not set' }}</dd>
+                    <dt>Category</dt><dd>{{ item.category or 'None' }}</dd>
+                    <dt>Group code</dt><dd><code>{{ item.barcode }}</code></dd>
+                    <dt>Added</dt><dd>{{ item.created_at.strftime('%d %b %Y') if item.created_at else 'Unknown' }}</dd>
+                </dl>
+            </section>
+        </aside>
     </div>
 </div>
-
-{% endif %}
-
 {% endblock %}
 
 {% block scripts %}
 <script>
-const ITEM_ID = {{ item.id }};
+(function () {
+    const ITEM = {{ item.to_dict() | tojson }};
+    const IS_ADMIN = {{ 'true' if current_user.is_admin else 'false' }};
+    const ME = {{ current_user.username | tojson }};
+    const TODAY = {{ today | tojson }};
+    const STATUSES = {{ unit_statuses | tojson }};
+    const KINDS = {{ maintenance_kinds | tojson }};
+    const RESULTS = {{ maintenance_results | tojson }};
+    const $  = (s, r = document) => r.querySelector(s);
+    const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+    const reload = () => SW.reloadSoon();
+    const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 
-{% if highlight_unit %}
-document.getElementById('unit-{{ highlight_unit }}')?.scrollIntoView({ block: 'center' });
-{% endif %}
+    const target = $('tr.is-target');
+    if (target) target.scrollIntoView({ block: 'center' });
 
-// ── Full image viewer ────────────────────────────────────────────────────────
-function viewImg(url, caption) {
-    document.getElementById('imgViewerSrc').src        = url;
-    document.getElementById('imgViewerCaption').textContent = caption;
-    showModal('imgViewer');
-}
+    /* ---------- photo lightbox ---------- */
+    $$('[data-zoom]').forEach(img => img.addEventListener('click', () => {
+        const box = document.createElement('div');
+        box.className = 'gear-lightbox';
+        box.innerHTML = `<img src="${img.src}" alt="">`;
+        box.addEventListener('click', () => box.remove());
+        document.body.appendChild(box);
+    }));
 
-// ── Maintenance log + history (any crew member) ──────────────────────────────
-const IS_ADMIN = {{ 'true' if current_user.is_admin else 'false' }};
-let maintUnit = null;
-const escH = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    /* ---------- per-item actions ---------- */
+    function logCheck(u) {
+        const today = TODAY;
+        SW.form({
+            title: `Log a check: ${u.asset_tag}`,
+            fields: [
+                { name: 'kind', label: 'Type', type: 'select', half: true, options: KINDS.map(([value, label]) => ({ value, label })) },
+                { name: 'result', label: 'Result', type: 'select', half: true, options: RESULTS.map(r => ({ value: r, label: cap(r) })) },
+                { name: 'performed_on', label: 'Date', type: 'date', half: true, required: true, value: today },
+                { name: 'next_due', label: 'Next due (optional)', type: 'date', half: true },
+                { name: 'performed_by', label: 'Done by', maxLength: 120, placeholder: ME },
+                { name: 'notes', label: 'Notes', type: 'textarea', rows: 3, placeholder: 'Readings, what was fixed, cost…' },
+                { name: 'to_repair', label: 'Mark this item as in repair', type: 'checkbox', value: true,
+                  show: v => v.result === 'fail' && u.status === 'available' },
+                ...(IS_ADMIN ? [{ name: 'to_service', label: 'Put it back in service', type: 'checkbox', value: true,
+                  show: v => (v.result === 'pass' || v.result === 'repaired') && u.status === 'repair' }] : []),
+                ...(u.status === 'quarantined' ? [{ type: 'info', text: 'This item stays quarantined. Use “Release” to put it back in service.' }] : []),
+            ],
+            onSubmit: async v => {
+                if (v.performed_on > today) throw new Error('Date can’t be in the future');
+                const body = { kind: v.kind, result: v.result, performed_on: v.performed_on, next_due: v.next_due || '',
+                               performed_by: v.performed_by, notes: v.notes };
+                if (v.to_repair) body.set_status = 'repair';
+                if (v.to_service) body.set_status = 'available';
+                await SW.api('POST', `/equipment/unit/${u.id}/maintenance`, body);
+                SW.toast('Logged'); reload();
+            },
+        });
+    }
 
-function openMaint(u) {
-    maintUnit = u;
-    document.getElementById('mUnit').value   = u.id;
-    document.getElementById('mTag').textContent = u.asset_tag;
-    document.getElementById('mKind').value   = 'pat';
-    document.getElementById('mResult').value = 'pass';
-    document.getElementById('mDate').value   = '{{ today }}';
-    document.getElementById('mBy').value     = '';
-    document.getElementById('mNext').value   = '';
-    document.getElementById('mNotes').value  = '';
-    maintFormSync();
-    showModal('maintModal');
-}
+    function editUnit(u) {
+        const quarantined = u.status === 'quarantined';
+        SW.form({
+            title: `Edit ${u.asset_tag}`,
+            values: { asset_tag: u.asset_tag, serial_number: u.serial_number, status: u.status, notes: u.notes },
+            fields: [
+                { name: 'asset_tag', label: 'Asset tag', required: true, maxLength: 100, half: true,
+                  hint: 'Changing it means reprinting the label text (the QR code still works).' },
+                { name: 'serial_number', label: 'Serial number', maxLength: 100, half: true },
+                ...(quarantined
+                    ? [{ type: 'info', text: 'Quarantined. Use “Release” to change its status.' }]
+                    : [{ name: 'status', label: 'Status', type: 'select', options: STATUSES.map(([value, label]) => ({ value, label })) }]),
+                { name: 'notes', label: 'Notes', type: 'textarea', rows: 2 },
+            ],
+            extraButtons: [{ label: 'Remove item', danger: true, onClick: async () => {
+                if (!await SW.confirm(`Remove ${u.asset_tag}? Its label will stop working and its history is deleted.`, { danger: true, okText: 'Remove' })) return null;
+                try { await SW.api('DELETE', `/equipment/unit/${u.id}`); } catch (e) { SW.toast(e.message, 'error'); return null; }
+                SW.toast('Item removed'); reload(); return true;
+            } }],
+            onSubmit: async v => {
+                await SW.api('PUT', `/equipment/unit/${u.id}`, v);
+                SW.toast('Saved'); reload();
+            },
+        });
+    }
 
-function maintFormSync() {
-    const res = document.getElementById('mResult').value;
-    const st  = maintUnit ? maintUnit.status : 'available';
-    document.getElementById('mRepairWrap').style.display = res === 'fail' && st !== 'repair' ? 'flex' : 'none';
-    const av = document.getElementById('mAvailWrap');
-    if (av) av.style.display = (res === 'pass' || res === 'repaired') && st === 'repair' ? 'flex' : 'none';
-}
-
-function setNextDue(months) {
-    const base = document.getElementById('mDate').value || '{{ today }}';
-    const d = new Date(base + 'T12:00:00');
-    d.setMonth(d.getMonth() + months);
-    document.getElementById('mNext').value = d.toISOString().slice(0, 10);
-}
-
-function submitMaint(e) {
-    e.preventDefault();
-    const res = document.getElementById('mResult').value;
-    const body = {
-        kind:         document.getElementById('mKind').value,
-        result:       res,
-        performed_on: document.getElementById('mDate').value,
-        performed_by: document.getElementById('mBy').value,
-        next_due:     document.getElementById('mNext').value,
-        notes:        document.getElementById('mNotes').value,
-    };
-    if (document.getElementById('mRepairWrap').style.display !== 'none' && document.getElementById('mSetRepair').checked)
-        body.set_status = 'repair';
-    const av = document.getElementById('mAvailWrap');
-    if (av && av.style.display !== 'none' && document.getElementById('mSetAvail').checked)
-        body.set_status = 'available';
-    fetch(`/equipment/unit/${document.getElementById('mUnit').value}/maintenance`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-    }).then(r => r.json().then(j => { if (!r.ok) throw new Error(j.error || 'Could not save'); return j; }))
-      .then(j => { hideModal('maintModal');
-                   showAlert(body.set_status === 'repair' ? 'Logged — unit marked in repair' : 'Logged', 'success');
-                   setTimeout(() => location.reload(), 600); })
-      .catch(err => showAlert(err.message, 'error'));
-}
-
-function openHistory(uid) {
-    document.getElementById('hTag').textContent = '…';
-    document.getElementById('hDue').innerHTML = '';
-    document.getElementById('hMaint').innerHTML = '<li class="hist-meta">Loading…</li>';
-    document.getElementById('hOut').innerHTML = '';
-    showModal('histModal');
-    fetch(`/equipment/unit/${uid}/history`).then(r => r.json()).then(h => {
-        document.getElementById('hTag').textContent = h.unit.asset_tag;
-        const d = h.maintenance_due;
-        if (d) document.getElementById('hDue').innerHTML =
-            `<span class="due-pill ${d.state}">Next ${escH(d.kind_label)}: ${escH(d.date_text)}${d.state === 'overdue' ? ' (overdue)' : ''}</span>`;
-        document.getElementById('hMaint').innerHTML = h.maintenance.length ? h.maintenance.map(m => `<li>
-            <strong>${escH(m.kind_label)}</strong> <span class="res-pill ${escH(m.result)}">${escH(m.result)}</span>
-            · ${escH(m.performed_on_text)}
-            ${IS_ADMIN ? `<button type="button" class="btn btn-danger" style="float:right; font-size:0.7rem; padding:0.15rem 0.45rem;" title="Delete record" onclick="deleteMaint(${m.id}, ${uid})"><i class="fas fa-trash"></i></button>` : ''}
-            <div class="hist-meta">By ${escH(m.performed_by || '—')}${m.recorded_by && m.recorded_by !== m.performed_by ? ` · logged by ${escH(m.recorded_by)}` : ''}${m.next_due_text ? ` · next due ${escH(m.next_due_text)}` : ''}</div>
-            ${m.notes ? `<div style="white-space:pre-wrap; margin-top:0.2rem;">${escH(m.notes)}</div>` : ''}</li>`).join('')
-            : '<li class="hist-meta">No tests, inspections or repairs logged yet.</li>';
-        document.getElementById('hOut').innerHTML = h.checkouts.length ? h.checkouts.map(c => `<li>
-            <strong>${escH(c.event_title)}</strong>${c.is_open ? ' <span class="unit-pill checked">Out now</span>' : ''}
-            <div class="hist-meta">Out ${escH(c.checked_out_at)} by ${escH(c.checked_out_by || '—')}${c.is_open ? '' : ` · back ${escH(c.returned_at)} by ${escH(c.returned_by || '—')}`}</div>
-            ${c.notes ? `<div class="hist-meta" style="white-space:pre-wrap;">${escH(c.notes)}</div>` : ''}</li>`).join('')
-            : '<li class="hist-meta">Never scanned out.</li>';
-    }).catch(() => { document.getElementById('hMaint').innerHTML = '<li class="hist-meta">Could not load history.</li>'; });
-}
-
-function deleteMaint(mid, uid) {
-    if (!confirm('Delete this record?')) return;
-    fetch(`/equipment/maintenance/${mid}`, { method: 'DELETE' })
-      .then(r => r.json().then(j => { if (!r.ok) throw new Error(j.error || 'Failed'); }))
-      .then(() => openHistory(uid))
-      .catch(err => showAlert(err.message, 'error'));
-}
-
-{% if current_user.is_admin %}
-
-// ── Edit ─────────────────────────────────────────────────────────────────────
-function openEditModal() { showModal('editModal'); }
-
-function submitEdit(e) {
-    e.preventDefault();
-    fetch(`/equipment/update/${ITEM_ID}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            name:           document.getElementById('eName').value,
-            quantity_owned: parseInt(document.getElementById('eQty').value) || 1,
-            category:       document.getElementById('eCat').value,
-            location:       document.getElementById('eLoc').value,
-            notes:          document.getElementById('eNotes').value,
-        })
-    })
-    .then(r => r.json())
-    .then(result => {
-        if (result.success) {
-            hideModal('editModal');
-            showAlert('Equipment updated!', 'success');
-            setTimeout(() => location.reload(), 700);
-        } else {
-            showAlert(result.error || 'Update failed.', 'error');
-        }
+    const table = $('.gear-units');
+    if (table) table.addEventListener('click', async e => {
+        const b = e.target.closest('[data-act]'); if (!b) return;
+        const u = JSON.parse(b.closest('tr').dataset.unit);
+        const unit = { id: u.id, asset_tag: u.asset_tag, equipment_name: ITEM.name, status: u.status };
+        if (b.dataset.act === 'quarantine') { if (await SWGear.quarantine(unit)) reload(); }
+        else if (b.dataset.act === 'release') { if (await SWGear.release(unit, u.quarantine)) reload(); }
+        else if (b.dataset.act === 'history') SWGear.history(u.id, { isAdmin: IS_ADMIN });
+        else if (b.dataset.act === 'check') logCheck(u);
+        else if (b.dataset.act === 'edit') editUnit(u);
     });
-}
 
-// ── Units ────────────────────────────────────────────────────────────────────
-function unitApi(url, method, body) {
-    return fetch(url, {
-        method, headers: { 'Content-Type': 'application/json' },
-        body: body ? JSON.stringify(body) : undefined,
-    }).then(r => r.json().then(j => { if (!r.ok) throw new Error(j.error || 'Request failed'); return j; }));
-}
+    if (!IS_ADMIN) return;
 
-function addUnit(e) {
-    e.preventDefault();
-    unitApi(`/equipment/${ITEM_ID}/units`, 'POST', {
-        asset_tag:     document.getElementById('uTag').value,
-        serial_number: document.getElementById('uSerial').value,
-    }).then(() => { showAlert('Unit added', 'success'); setTimeout(() => location.reload(), 500); })
-      .catch(err => showAlert(err.message, 'error'));
-}
-
-function generateUnits() {
-    const n = parseInt(document.getElementById('uCount').value, 10) || 0;
-    if (n < 1) return showAlert('Enter how many units to generate', 'error');
-    unitApi(`/equipment/${ITEM_ID}/units`, 'POST', { count: n })
-      .then(r => { showAlert(`Added ${r.units.length} unit${r.units.length === 1 ? '' : 's'}`, 'success');
-                   setTimeout(() => location.reload(), 500); })
-      .catch(err => showAlert(err.message, 'error'));
-}
-
-function openUnitEdit(u) {
-    document.getElementById('ueId').value     = u.id;
-    document.getElementById('ueTag').value    = u.asset_tag;
-    document.getElementById('ueSerial').value = u.serial_number || '';
-    document.getElementById('ueStatus').value = u.status || 'available';
-    document.getElementById('ueNotes').value  = u.notes || '';
-    showModal('unitModal');
-}
-
-function submitUnitEdit(e) {
-    e.preventDefault();
-    unitApi(`/equipment/unit/${document.getElementById('ueId').value}`, 'PUT', {
-        asset_tag:     document.getElementById('ueTag').value,
-        serial_number: document.getElementById('ueSerial').value,
-        status:        document.getElementById('ueStatus').value,
-        notes:         document.getElementById('ueNotes').value,
-    }).then(() => { hideModal('unitModal'); showAlert('Unit updated', 'success'); setTimeout(() => location.reload(), 500); })
-      .catch(err => showAlert(err.message, 'error'));
-}
-
-function deleteUnit(id, tag) {
-    if (!confirm(`Remove unit ${tag}? Its QR tag will stop working.`)) return;
-    unitApi(`/equipment/unit/${id}`, 'DELETE')
-      .then(() => { showAlert('Unit removed', 'success'); setTimeout(() => location.reload(), 500); })
-      .catch(err => showAlert(err.message, 'error'));
-}
-
-function printUnitTags(unitIds) {
-    const body = { mode: 'unit', layout: 'portrait', base_url: window.location.origin };
-    if (unitIds) body.unit_ids = unitIds; else body.equipment_ids = [ITEM_ID];
-    fetch('/equipment/generate-qrcodes', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-    }).then(r => r.ok ? r.blob() : r.json().then(j => { throw new Error(j.error || 'Failed'); }))
-      .then(blob => {
-          const a = document.createElement('a');
-          a.href = URL.createObjectURL(blob);
-          a.download = `unit_tags_${ITEM_ID}.pdf`;
-          document.body.appendChild(a); a.click(); a.remove();
-          setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-      })
-      .catch(err => showAlert(err.message, 'error'));
-}
-
-// ── Picture upload ────────────────────────────────────────────────────────────
-let currentPicType = 'item'; // 'item' | 'location'
-
-function openPicModal(type) {
-    currentPicType = type;
-    const isLoc = type === 'location';
-    document.getElementById('picModalTitle').innerHTML = isLoc
-        ? '<i class="fas fa-map-marker-alt" style="color:#f59e0b;"></i> Upload Storage Location Photo'
-        : '<i class="fas fa-camera"></i> Upload Equipment Photo';
-    document.getElementById('picModalIcon').textContent = isLoc ? '📍' : '📷';
-    document.getElementById('picProgress').style.display = 'none';
-    showModal('picModal');
-}
-
-function handleDrop(event) {
-    event.preventDefault();
-    document.getElementById('uploadArea').style.borderColor = 'var(--border)';
-    const file = event.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) doUpload(file);
-    else showAlert('Please drop an image file.', 'error');
-}
-
-function doUpload(file) {
-    if (!file) return;
-    document.getElementById('picProgress').style.display = 'block';
-
-    const fd = new FormData();
-    fd.append('file', file);
-
-    const endpoint = currentPicType === 'location'
-        ? `/equipment/${ITEM_ID}/location-picture`
-        : `/equipment/${ITEM_ID}/picture`;
-
-    fetch(endpoint, { method: 'POST', body: fd })
-        .then(r => r.json())
-        .then(result => {
-            document.getElementById('picProgress').style.display = 'none';
-            if (result.success) {
-                showAlert('Photo uploaded!', 'success');
-                hideModal('picModal');
-                setTimeout(() => location.reload(), 600);
-            } else {
-                showAlert(result.error || 'Upload failed.', 'error');
-            }
-        })
-        .catch(() => {
-            document.getElementById('picProgress').style.display = 'none';
-            showAlert('Upload failed.', 'error');
+    /* ---------- labels ---------- */
+    const picked = () => $$('[data-sel]:checked').map(c => parseInt(c.dataset.sel, 10));
+    function paintSel() {
+        const ids = picked(), btn = $('#tSelLabels');
+        if (!btn) return;
+        btn.hidden = !ids.length;
+        $('span', btn).textContent = `Print labels for ${ids.length} selected`;
+        const all = $('#tSelAll'), n = $$('[data-sel]').length;
+        if (all) { all.checked = n > 0 && ids.length === n; all.indeterminate = ids.length > 0 && ids.length < n; }
+    }
+    if (table) {
+        table.addEventListener('change', e => {
+            if (e.target.id === 'tSelAll') $$('[data-sel]').forEach(c => { c.checked = e.target.checked; });
+            paintSel();
         });
-}
+        $('#tSelLabels').addEventListener('click', () => SWGear.labels({ unitIds: picked(), mode: 'unit' }));
+    }
+    $('#tLabels').addEventListener('click', () => SWGear.labels({
+        equipmentIds: [ITEM.id], hasItems: ITEM.tracking === 'individual' && ITEM.unit_count > 0, name: ITEM.name,
+        mode: ITEM.tracking === 'individual' ? 'both' : 'group' }));
 
-function deletePic(type) {
-    const label = type === 'location' ? 'location photo' : 'equipment photo';
-    if (!confirm(`Remove this ${label}?`)) return;
+    /* ---------- edit the type ---------- */
+    $('#tEdit').addEventListener('click', () => SW.form({
+        title: 'Edit type',
+        values: { name: ITEM.name, category: ITEM.category, location: ITEM.location, notes: ITEM.notes, quantity_owned: ITEM.quantity_owned },
+        fields: [
+            { name: 'name', label: 'Name', required: true, maxLength: 200 },
+            { name: 'category', label: 'Category', half: true, maxLength: 100 },
+            { name: 'location', label: 'Where it lives', half: true, maxLength: 200 },
+            ...(ITEM.tracking === 'bulk' ? [{ name: 'quantity_owned', label: 'How many do you own?', type: 'number', min: 0, max: 100000 }]
+                : [{ type: 'info', text: `Owned is the number of items listed (${ITEM.quantity_owned}). Add or remove items to change it.` }]),
+            { name: 'notes', label: 'Notes', type: 'textarea', rows: 3 },
+        ],
+        extraButtons: [{ label: 'Delete type', danger: true, onClick: async () => {
+            const n = ITEM.unit_count;
+            if (!await SW.confirm(`Delete ${ITEM.name}${n ? ` and its ${n} item${n === 1 ? '' : 's'}` : ''}? This can’t be undone.`, { danger: true, okText: 'Delete' })) return null;
+            try { await SW.api('DELETE', `/equipment/delete/${ITEM.id}`); } catch (e) { SW.toast(e.message, 'error'); return null; }
+            location.href = '/equipment'; return true;
+        } }],
+        onSubmit: async v => { await SW.api('PUT', `/equipment/update/${ITEM.id}`, v); SW.toast('Saved'); reload(); },
+    }));
 
-    const endpoint = type === 'location'
-        ? `/equipment/${ITEM_ID}/location-picture`
-        : `/equipment/${ITEM_ID}/picture`;
-
-    fetch(endpoint, { method: 'DELETE' })
-        .then(r => r.json())
-        .then(result => {
-            if (result.success) {
-                showAlert('Photo removed.', 'success');
-                setTimeout(() => location.reload(), 600);
-            } else {
-                showAlert(result.error || 'Failed to remove.', 'error');
-            }
+    /* ---------- add items ---------- */
+    const addMany = n => SW.form({
+        title: 'Add several items', submitText: 'Add items',
+        fields: [
+            { name: 'count', label: 'How many?', type: 'number', min: 1, max: 500, value: n || 1, required: true,
+              hint: `They are tagged ${ITEM.barcode}-01, ${ITEM.barcode}-02… continuing from the last one.` },
+        ],
+        onSubmit: async v => {
+            const r = await SW.api('POST', `/equipment/${ITEM.id}/units`, { count: v.count });
+            SW.toast(`Added ${r.units.length} item${r.units.length === 1 ? '' : 's'}`); reload();
+        },
+    });
+    const addOne = $('#tAddOne');
+    if (addOne) {
+        addOne.addEventListener('submit', async e => {
+            e.preventDefault();
+            try {
+                await SW.api('POST', `/equipment/${ITEM.id}/units`, { asset_tag: $('#uTag').value, serial_number: $('#uSerial').value });
+                SW.toast('Item added'); reload();
+            } catch (ex) { SW.toast(ex.message, 'error'); }
         });
-}
+        $('#tAddMany').addEventListener('click', () => addMany(1));
+    }
+    const missing = $('#tAddMissing');
+    if (missing) {
+        missing.addEventListener('click', () => addMany(parseInt(missing.dataset.n, 10)));
+        $('#tDropMissing').addEventListener('click', async () => {
+            try { await SW.api('POST', `/equipment/${ITEM.id}/units/sync-count`); reload(); }
+            catch (ex) { SW.toast(ex.message, 'error'); }
+        });
+    }
+    const goInd = $('#tGoIndividual');
+    if (goInd) goInd.addEventListener('click', () => SW.form({
+        title: 'Track each one individually', submitText: 'Create items',
+        fields: [
+            { type: 'info', text: 'Each one gets its own row, asset tag and label, so you can see exactly which one is out or damaged.' },
+            { name: 'quantity_owned', label: 'How many are there?', type: 'number', min: 1, max: 500, value: Math.min(Math.max(ITEM.quantity_owned, 1), 500), required: true },
+        ],
+        onSubmit: async v => {
+            await SW.api('PUT', `/equipment/update/${ITEM.id}`, { tracking: 'individual', quantity_owned: v.quantity_owned });
+            reload();
+        },
+    }));
 
-{% endif %}
+    /* ---------- photos ---------- */
+    $$('[data-photo]').forEach(inp => inp.addEventListener('change', async () => {
+        const file = inp.files[0]; inp.value = '';
+        if (!file) return;
+        const fd = new FormData(); fd.append('file', await SWGear.shrink(file));
+        try {
+            const res = await fetch(`/equipment/${ITEM.id}/${inp.dataset.photo}`, { method: 'POST', body: fd });
+            const j = await res.json();
+            if (!res.ok || j.error) throw new Error(j.error || 'Upload failed');
+            SW.toast('Photo saved'); reload();
+        } catch (ex) { SW.toast(ex.message, 'error'); }
+    }));
+    $$('[data-photo-remove]').forEach(b => b.addEventListener('click', async () => {
+        if (!await SW.confirm('Remove this photo?', { danger: true, okText: 'Remove' })) return;
+        try { await SW.api('DELETE', `/equipment/${ITEM.id}/${b.dataset.photoRemove}`); reload(); }
+        catch (ex) { SW.toast(ex.message, 'error'); }
+    }));
+})();
 </script>
 {% endblock %}

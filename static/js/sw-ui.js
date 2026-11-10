@@ -380,6 +380,7 @@
         if (f.required && f.type !== 'checkbox') input.required = true;
         if (f.placeholder) input.placeholder = f.placeholder;
         if (f.maxLength) input.maxLength = f.maxLength;
+        if (f.accept) input.accept = f.accept;
         if (f.suggestions) {
           const dl = el('datalist'); dl.id = id + '-dl';
           f.suggestions.forEach((s) => { const o = el('option'); o.value = s; dl.appendChild(o); });

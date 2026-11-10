@@ -1,1408 +1,345 @@
 {% extends "base.html" %}
+{% block title %}Pick list{% if current_event %}: {{ current_event.title }}{% endif %} — ShowWise{% endblock %}
 
-{% from 'crew/_picklist_units.html' import plu_row, plu_assets %}
-{% block title %}Pick List - ShowWise{% endblock %}
-
+{% set n_done = items|selectattr('is_checked')|list|length %}
 {% block content %}
-<style>
-/* ── Reset base padding ── */
-.main-content { padding: 0 !important; }
-
-/* ══════════════════════════════════════════
-   ROOT LAYOUT
-══════════════════════════════════════════ */
-#pl {
-  font-family: inherit;
-  min-height: calc(100vh - var(--topbar-height));
-  background: var(--bg-body);
-  color: var(--text-primary);
-  display: flex;
-  flex-direction: column;
-}
-
-/* ── Page header bar ── */
-#pl .pl-header {
-  background: var(--bg-topbar);
-  border-bottom: 2px solid var(--border);
-  padding: 0.9rem 1.5rem;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-#pl .pl-title {
-  font-weight: 900;
-  font-size: 1.2rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--primary);
-  white-space: nowrap;
-}
-
-#pl .pl-event-pill {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: var(--bg-nav-active);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.35rem 0.75rem;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  font-weight: 600;
-}
-#pl .pl-event-pill b { color: var(--text-primary); }
-
-#pl .pl-header-right {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-
-/* ── Progress in header ── */
-#pl .pl-prog-wrap {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-#pl .pl-prog-track {
-  width: 120px; height: 6px;
-  background: var(--bg-nav-hover);
-  border-radius: 3px; overflow: hidden;
-}
-#pl .pl-prog-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--success), var(--primary));
-  border-radius: 3px;
-  transition: width 0.4s ease;
-}
-#pl .pl-prog-pct { color: var(--primary); font-family: monospace; }
-
-/* ── Header buttons ── */
-.pl-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-weight: 700;
-  font-size: 0.82rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  border-radius: 8px !important;
-  border: none !important;
-  padding: 0.5rem 1rem !important;
-  cursor: pointer;
-  transition: opacity 0.15s, transform 0.1s;
-  box-shadow: none !important;
-  white-space: nowrap;
-  font-family: inherit;
-}
-.pl-btn:active { transform: scale(0.96); }
-.pl-btn-primary  { background: var(--primary) !important; color: #fff !important; box-shadow: 0 2px 8px rgba(99,102,241,0.3) !important; }
-.pl-btn-ghost    { background: var(--bg-card) !important; color: var(--text-secondary) !important; border: 1.5px solid var(--border) !important; }
-.pl-btn-danger   { background: var(--danger) !important; color: #fff !important; }
-
-/* ══════════════════════════════════════════
-   TWO-COLUMN BODY
-══════════════════════════════════════════ */
-#pl .pl-body {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-}
-
-/* ── Left panel: filters + list ── */
-#pl .pl-left {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  border-right: 1px solid var(--border);
-}
-
-/* ── Filter / toolbar row ── */
-#pl .pl-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem 1.5rem;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-card);
-  flex-wrap: wrap;
-}
-
-/* Filter tabs */
-.pl-ftabs {
-  display: flex;
-  gap: 0.25rem;
-  background: var(--bg-nav-hover);
-  border-radius: 8px;
-  padding: 0.25rem;
-}
-.pl-ftab {
-  font-weight: 700; font-size: 0.78rem;
-  letter-spacing: 0.05em; text-transform: uppercase;
-  background: transparent !important; border: none !important;
-  color: var(--text-muted) !important;
-  padding: 0.4rem 0.85rem; border-radius: 6px;
-  cursor: pointer; transition: all 0.15s;
-  box-shadow: none !important; font-family: inherit;
-}
-.pl-ftab.pl-on {
-  background: var(--bg-body) !important;
-  color: var(--text-primary) !important;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.12) !important;
-}
-.pl-ftab.pl-on[data-f="pending"] { color: var(--warning) !important; }
-.pl-ftab.pl-on[data-f="done"]    { color: var(--success) !important; }
-
-/* Sort / search */
-.pl-search {
-  flex: 1;
-  min-width: 160px;
-  max-width: 280px;
-  background: var(--bg-input) !important;
-  border: 1.5px solid var(--border-input) !important;
-  border-radius: 8px !important;
-  color: var(--text-primary) !important;
-  font-size: 0.88rem !important;
-  padding: 0.4rem 0.8rem !important;
-  outline: none;
-  font-family: inherit;
-  box-shadow: none !important;
-}
-.pl-search:focus { border-color: var(--border-focus) !important; }
-
-.pl-toolbar-right { margin-left: auto; display: flex; gap: 0.5rem; }
-
-/* ── Bulk action bar (replaces toolbar when in bulk mode) ── */
-#pl-bulk-bar {
-  display: none;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem 1.5rem;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-nav-active);
-  border-left: 4px solid var(--warning);
-}
-#pl-bulk-bar.pl-vis { display: flex; }
-#pl-bulk-bar .pl-binfo { font-weight: 800; font-size: 0.95rem; color: var(--warning); }
-
-/* ══════════════════════════════════════════
-   TABLE VIEW
-══════════════════════════════════════════ */
-#pl .pl-table-wrap {
-  flex: 1;
-  overflow-y: auto;
-}
-
-#pl .pl-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-#pl .pl-table thead th {
-  position: sticky;
-  top: 0;
-  background: var(--bg-card);
-  border-bottom: 2px solid var(--border);
-  padding: 0.65rem 1rem;
-  text-align: left;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  white-space: nowrap;
-  z-index: 2;
-}
-#pl .pl-table thead th:first-child { width: 44px; text-align: center; }
-#pl .pl-table thead th.th-bulk { width: 36px; }
-
-#pl .pl-table tbody tr {
-  border-bottom: 1px solid var(--border);
-  transition: background 0.12s;
-  cursor: default;
-}
-#pl .pl-table tbody tr:hover { background: var(--bg-nav-hover); }
-#pl .pl-table tbody tr.pl-done { opacity: 0.5; }
-#pl .pl-table tbody tr.pl-bsel { background: var(--bg-nav-active); }
-
-#pl .pl-table td {
-  padding: 0.7rem 1rem;
-  font-size: 0.9rem;
-  vertical-align: middle;
-}
-
-/* Check cell */
-.pl-td-check { text-align: center; width: 44px; }
-.pl-ring {
-  width: 28px; height: 28px; border-radius: 50%;
-  border: 2px solid var(--border);
-  display: inline-flex; align-items: center; justify-content: center;
-  cursor: pointer; transition: all 0.15s; flex-shrink: 0;
-  background: transparent;
-}
-.pl-ring:hover { border-color: var(--success); background: var(--bg-nav-hover); }
-tr.pl-done .pl-ring { background: var(--success); border-color: var(--success); }
-.pl-tick { display: none; }
-tr.pl-done .pl-tick { display: block; }
-
-/* Name cell */
-.pl-td-name { min-width: 180px; }
-.pl-item-name {
-  font-weight: 700; color: var(--text-primary);
-  display: flex; align-items: center; gap: 0.5rem;
-}
-tr.pl-done .pl-item-name { text-decoration: line-through; color: var(--text-muted); }
-.pl-item-thumb {
-  width: 32px; height: 32px; border-radius: 6px;
-  object-fit: cover; border: 1px solid var(--border);
-  cursor: pointer; flex-shrink: 0;
-}
-.pl-item-thumb-ph {
-  width: 32px; height: 32px; border-radius: 6px;
-  background: var(--bg-nav-hover); border: 1px solid var(--border);
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 0.9rem; flex-shrink: 0;
-}
-
-/* Chips/tags */
-.pl-tag {
-  display: inline-block;
-  font-size: 0.68rem; font-family: monospace; font-weight: 700;
-  padding: 0.1rem 0.4rem; border-radius: 4px;
-  background: var(--bg-nav-hover); color: var(--text-secondary);
-  border: 1px solid var(--border);
-}
-.pl-tag-qty  { color: var(--warning); }
-.pl-tag-loc  { color: var(--primary); }
-.pl-tag-cat  { color: var(--secondary); }
-
-/* Actions cell */
-.pl-td-actions { width: 100px; text-align: right; white-space: nowrap; }
-.pl-action-btn {
-  background: transparent; border: none !important;
-  color: var(--text-muted) !important; cursor: pointer;
-  font-size: 0.82rem; padding: 0.3rem 0.45rem;
-  border-radius: 5px; transition: all 0.12s;
-  box-shadow: none !important;
-}
-.pl-action-btn:hover { background: var(--bg-nav-hover) !important; color: var(--text-primary) !important; }
-.pl-action-btn.pl-action-del:hover { background: rgba(239,68,68,0.12) !important; color: var(--danger) !important; }
-.pl-action-btn.pl-action-view:hover { background: rgba(99,102,241,0.1) !important; color: var(--primary) !important; }
-
-/* Bulk checkbox cell */
-.pl-td-bulk { width: 36px; text-align: center; }
-.pl-bdot {
-  width: 20px; height: 20px; border-radius: 4px;
-  border: 2px solid var(--border);
-  display: inline-flex; align-items: center; justify-content: center;
-  cursor: pointer; transition: all 0.12s;
-}
-tr.pl-bsel .pl-bdot { background: var(--warning); border-color: var(--warning); }
-
-/* Empty row */
-.pl-empty-row td {
-  text-align: center; padding: 4rem 2rem;
-  color: var(--text-muted); font-size: 0.95rem;
-}
-.pl-empty-icon { font-size: 2.5rem; display: block; margin-bottom: 0.5rem; }
-
-/* ══════════════════════════════════════════
-   RIGHT PANEL — event info
-══════════════════════════════════════════ */
-#pl .pl-right {
-  width: 280px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-card);
-  border-left: 1px solid var(--border);
-  overflow-y: auto;
-}
-
-.pl-panel-title {
-  font-weight: 800; font-size: 0.72rem;
-  letter-spacing: 0.12em; text-transform: uppercase;
-  color: var(--text-muted); padding: 1rem 1.25rem 0.5rem;
-}
-
-/* Event cards in sidebar */
-.pl-ev-item {
-  display: block; margin: 0 0.75rem 0.4rem;
-  padding: 0.75rem 1rem;
-  background: var(--bg-nav-hover) !important;
-  border: 1.5px solid var(--border);
-  border-radius: 10px; text-decoration: none !important;
-  color: var(--text-primary) !important;
-  transition: border-color 0.15s, background 0.15s;
-}
-.pl-ev-item:hover { background: var(--bg-nav-active) !important; border-color: var(--primary); }
-.pl-ev-item.pl-cur { background: var(--primary) !important; color: #fff !important; border-color: var(--primary) !important; }
-.pl-ev-item.pl-cur .pl-ev-meta { color: rgba(255,255,255,0.7); }
-.pl-ev-name { font-weight: 700; font-size: 0.9rem; }
-.pl-ev-meta { font-size: 0.76rem; color: var(--text-muted); margin-top: 0.15rem; }
-
-/* Stats strip in sidebar */
-.pl-stats {
-  margin: 0.5rem 0.75rem 1rem;
-  display: grid; grid-template-columns: 1fr 1fr;
-  gap: 0.5rem;
-}
-.pl-stat {
-  background: var(--bg-nav-hover);
-  border: 1px solid var(--border);
-  border-radius: 8px; padding: 0.6rem 0.75rem;
-  text-align: center;
-}
-.pl-stat-num { font-size: 1.4rem; font-weight: 900; font-family: monospace; color: var(--primary); line-height: 1; }
-.pl-stat-lbl { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-top: 0.2rem; }
-
-/* ══════════════════════════════════════════
-   MODAL SYSTEM (desktop — centred dialog)
-══════════════════════════════════════════ */
-.pl-overlay {
-  display: none;
-  position: fixed; inset: 0; z-index: 800;
-  background: rgba(0,0,0,0.45);
-  backdrop-filter: blur(4px);
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-}
-.pl-overlay.pl-open { display: flex; }
-/* offset for sidebar */
-@media (min-width: 769px) {
-  .pl-overlay { left: var(--sidebar-width); }
-}
-
-.pl-modal {
-  background: var(--bg-modal);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.35);
-  width: 100%;
-  max-width: 520px;
-  max-height: 85vh;
-  overflow-y: auto;
-  padding: 2rem;
-  position: relative;
-  animation: plPop 0.2s cubic-bezier(.34,1.56,.64,1);
-  color: var(--text-primary);
-}
-
-@keyframes plPop {
-  from { opacity: 0; transform: scale(0.94) translateY(10px); }
-  to   { opacity: 1; transform: scale(1)    translateY(0); }
-}
-
-/* Narrow modal variant */
-.pl-modal-sm { max-width: 420px; }
-
-.pl-modal-close {
-  position: absolute; top: 1.1rem; right: 1.1rem;
-  width: 30px; height: 30px; border-radius: 50%;
-  background: var(--bg-nav-hover) !important;
-  border: 1px solid var(--border) !important;
-  color: var(--text-muted) !important;
-  font-size: 0.85rem; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: none !important; transition: background 0.15s, color 0.15s;
-}
-.pl-modal-close:hover { background: var(--danger) !important; color: #fff !important; }
-
-.pl-modal-title {
-  font-weight: 900; font-size: 1.25rem; letter-spacing: 0.03em;
-  text-transform: uppercase; color: var(--text-primary);
-  margin-bottom: 1.5rem;
-}
-
-/* Mode tabs inside modal */
-.pl-mtabs {
-  display: flex; gap: 0.25rem;
-  background: var(--bg-nav-hover); border-radius: 8px;
-  padding: 0.25rem; margin-bottom: 1.25rem;
-}
-.pl-mtab {
-  flex: 1; font-weight: 700; font-size: 0.78rem;
-  letter-spacing: 0.05em; text-transform: uppercase;
-  background: transparent !important; border: none !important;
-  color: var(--text-muted) !important;
-  padding: 0.45rem 0.5rem; border-radius: 6px; cursor: pointer;
-  transition: all 0.15s; box-shadow: none !important; font-family: inherit;
-  text-align: center;
-}
-.pl-mtab.pl-on { background: var(--primary) !important; color: #fff !important; }
-
-/* Form fields */
-.pl-field { margin-bottom: 1rem; }
-.pl-field label {
-  display: block; font-weight: 700; font-size: 0.72rem;
-  letter-spacing: 0.1em; text-transform: uppercase;
-  color: var(--text-muted); margin-bottom: 0.4rem;
-}
-.pl-field select,
-.pl-field input[type="text"],
-.pl-field input[type="number"] {
-  width: 100% !important;
-  background: var(--bg-input) !important;
-  border: 1.5px solid var(--border-input) !important;
-  border-radius: 10px !important;
-  color: var(--text-primary) !important;
-  font-size: 0.95rem !important;
-  padding: 0.65rem 1rem !important;
-  outline: none; transition: border-color 0.15s;
-  box-shadow: none !important; font-family: inherit;
-  -webkit-appearance: none; appearance: none;
-}
-.pl-field select:focus,
-.pl-field input:focus { border-color: var(--border-focus) !important; }
-
-/* Inline 2-col fields */
-.pl-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
-
-/* Qty stepper */
-.pl-qty-row { display: flex; align-items: center; gap: 0.5rem; }
-.pl-qty-btn {
-  width: 42px; height: 42px;
-  border-radius: 8px !important; border: 1.5px solid var(--border) !important;
-  background: var(--bg-nav-hover) !important; color: var(--text-primary) !important;
-  font-size: 1.3rem; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0; box-shadow: none !important; transition: background 0.12s;
-}
-.pl-qty-btn:hover { background: var(--primary) !important; color: #fff !important; border-color: var(--primary) !important; }
-.pl-qty-disp {
-  flex: 1; text-align: center; font-family: monospace;
-  font-size: 1.3rem; font-weight: 700; color: var(--text-primary);
-  background: var(--bg-nav-hover); border: 1.5px solid var(--border);
-  border-radius: 8px; padding: 0.4rem;
-}
-
-/* Equipment preview card */
-.pl-eprev {
-  display: none; background: var(--bg-nav-hover);
-  border: 1px solid var(--border); border-radius: 10px;
-  padding: 0.75rem; margin-bottom: 1rem;
-  align-items: center; gap: 0.75rem;
-}
-.pl-eprev.pl-on { display: flex; }
-.pl-eprev-img {
-  width: 48px; height: 48px; border-radius: 8px;
-  background: var(--bg-card); border: 1px solid var(--border);
-  flex-shrink: 0; display: flex; align-items: center;
-  justify-content: center; font-size: 1.2rem; overflow: hidden;
-}
-.pl-eprev-img img { width: 100%; height: 100%; object-fit: cover; }
-.pl-eprev-name { font-weight: 700; font-size: 0.95rem; color: var(--text-primary); }
-.pl-eprev-loc  { font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.1rem; }
-
-/* Warn banner */
-.pl-warn {
-  display: none; background: var(--bg-nav-active);
-  border: 1px solid var(--border); border-left: 4px solid var(--warning);
-  border-radius: 8px; padding: 0.65rem 1rem; margin-bottom: 1rem;
-  font-size: 0.84rem; color: var(--warning);
-}
-.pl-warn.pl-on { display: block; }
-
-/* Modal footer row */
-.pl-modal-footer {
-  display: flex; gap: 0.75rem; margin-top: 1.5rem;
-  padding-top: 1.25rem; border-top: 1px solid var(--border);
-}
-.pl-modal-footer .pl-btn { flex: 1; justify-content: center; padding: 0.7rem 1rem !important; }
-
-/* Confirm modal specific */
-.pl-confirm-icon { font-size: 2.5rem; margin-bottom: 0.75rem; }
-.pl-confirm-title { font-weight: 900; font-size: 1.3rem; color: var(--danger); margin-bottom: 0.5rem; text-transform: uppercase; }
-.pl-confirm-body  { color: var(--text-secondary); font-size: 0.92rem; line-height: 1.55; }
-
-
-/* Sidebar search + archive */
-.pl-ev-searchwrap { padding: 0 0.75rem 0.6rem; }
-.pl-ev-search { width: 100%; max-width: none !important; min-width: 0 !important; box-sizing: border-box; }
-.pl-arch { margin-top: 0.4rem; }
-.pl-arch > summary {
-  cursor: pointer; list-style: none; user-select: none;
-  font-weight: 800; font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase;
-  color: var(--text-muted); padding: 0.9rem 1.25rem 0.5rem;
-}
-.pl-arch > summary::-webkit-details-marker { display: none; }
-.pl-arch > summary::after { content: '▸'; float: right; transition: transform 0.15s; }
-.pl-arch[open] > summary::after { transform: rotate(90deg); }
-.pl-ev-item.pl-ev-archived { opacity: 0.78; }
-.pl-ev-item.pl-ev-archived.pl-cur { opacity: 1; }
-.pl-ev-divider {
-  font-weight: 800; font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase;
-  color: var(--text-muted); padding: 0.9rem 1.25rem 0.5rem;
-}
-.pl-ev-none { padding: 0.75rem 1.25rem; font-size: 0.85rem; color: var(--text-muted); }
-.pl-arch-pill {
-  font-size: 0.7rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
-  background: var(--bg-nav-active); color: var(--text-muted);
-  border: 1px solid var(--border); border-radius: 999px; padding: 0.15rem 0.55rem; margin-left: 0.4rem;
-}
-
-/* Live updates */
-@keyframes plFlash { from { background: rgba(99,102,241,0.28); } to { background: transparent; } }
-tr.pl-flash > td { animation: plFlash 1.2s ease-out; }
-.pl-live {
-  display: inline-flex; align-items: center; gap: 0.35rem;
-  font-size: 0.72rem; font-weight: 700; color: var(--text-muted);
-}
-.pl-live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
-.pl-live.pl-off .pl-live-dot { background: var(--warning); }
-#pl-newbanner {
-  display: none; align-items: center; justify-content: space-between; gap: 0.75rem;
-  margin: 0 0 0.6rem; padding: 0.55rem 0.9rem; border-radius: 8px;
-  background: var(--primary); color: #fff; font-weight: 700; font-size: 0.85rem;
-}
-#pl-newbanner.pl-show { display: flex; }
-#pl-newbanner button {
-  background: rgba(255,255,255,0.2); color: #fff; border: 0; border-radius: 6px;
-  padding: 0.25rem 0.7rem; font-weight: 700; cursor: pointer;
-}
-
-/* ── Toast ── */
-#pl-toasts {
-  position: fixed; top: 72px; right: 1.5rem;
-  z-index: 2000; display: flex; flex-direction: column;
-  gap: 0.4rem; align-items: flex-end; pointer-events: none;
-}
-.pl-toast {
-  font-weight: 700; font-size: 0.85rem;
-  padding: 0.55rem 1.1rem; border-radius: 8px;
-  white-space: nowrap; box-shadow: 0 4px 16px rgba(0,0,0,0.2);
-  animation: plTIn 0.2s ease, plTOut 0.25s ease 1.7s forwards;
-}
-.pl-toast.ok  { background: var(--success); color: #fff; }
-.pl-toast.err { background: var(--danger);  color: #fff; }
-@keyframes plTIn  { from { opacity:0; transform:translateX(12px); } to { opacity:1; transform:translateX(0); } }
-@keyframes plTOut { from { opacity:1; } to { opacity:0; } }
-
-/* ── Image lightbox ── */
-#pl-imgview {
-  display: none !important;
-  position: fixed; inset: 0; z-index: 3000;
-  background: rgba(0,0,0,0.92);
-  align-items: center; justify-content: center; flex-direction: column; gap: 0.75rem;
-}
-#pl-imgview.pl-open { display: flex !important; }
-#pl-imgview img { max-width: 80vw; max-height: 80vh; border-radius: 12px; object-fit: contain; }
-#pl-imgview-cap { font-weight: 700; font-size: 1rem; color: #fff; opacity: 0.8; }
-@media (min-width: 769px) { #pl-imgview { left: var(--sidebar-width); } }
-</style>
-
-<div id="pl">
-
-  <!-- ── Page header ── -->
-  <div class="pl-header">
-    <span class="pl-title">📋 Pick List</span>
-
-    {% if current_event %}
-    <div class="pl-event-pill">
-      <i class="fas fa-calendar-alt" style="color:var(--primary);"></i>
-      <b>{{ current_event.title }}</b>
-      <span>· {{ current_event.event_date.strftime('%d %b %Y') }}</span>
-      {% if current_event_archived %}<span class="pl-arch-pill">Archived</span>{% endif %}
-    </div>
-    {% else %}
-    <div class="pl-event-pill">
-      <i class="fas fa-list" style="color:var(--text-muted);"></i>
-      <span>General List</span>
-    </div>
-    {% endif %}
-
-    <div class="pl-header-right">
-      <span class="pl-live" id="pl-live" title="Changes from other people appear automatically"><span class="pl-live-dot"></span>Live</span>
-      <!-- Progress -->
-      <div class="pl-prog-wrap">
-        <div class="pl-prog-track">
-          <div class="pl-prog-fill" id="pl-prog"
-               style="width:{% if items %}{{ (items|selectattr('is_checked')|list|length / items|length * 100)|int }}{% else %}0{% endif %}%">
-          </div>
-        </div>
-        <span><b id="pl-checked">{{ items|selectattr('is_checked')|list|length }}</b> / {{ items|length }}</span>
-        <span class="pl-prog-pct" id="pl-pct">{% if items %}{{ (items|selectattr('is_checked')|list|length / items|length * 100)|int }}{% else %}0{% endif %}%</span>
-      </div>
-      {% if current_event %}
-      <a class="pl-btn pl-btn-ghost" href="{{ url_for('unit_tracking.checkout_page', event_id=current_event.id) }}"
-         title="Scan unit tags out to this event and back in" style="text-decoration:none;">
-        <i class="fas fa-people-carry-box"></i> Scan out / in
-      </a>
-      {% endif %}
-      <button class="pl-btn pl-btn-primary" onclick="plOpen('pl-addmodal')">
-        <i class="fas fa-plus"></i> Add Item
-      </button>
-    </div>
-  </div>
-
-  <!-- ── Body ── -->
-  <div class="pl-body">
-
-    <!-- ── Left: toolbar + table ── -->
-    <div class="pl-left">
-
-      <div id="pl-newbanner"><span>Items were added or removed by someone else.</span><button onclick="location.reload()">Refresh</button></div>
-
-      <!-- Normal toolbar -->
-      <div class="pl-toolbar" id="pl-toolbar">
-        <div class="pl-ftabs">
-          <button class="pl-ftab pl-on" data-f="all"     onclick="plFilter('all')">All <span id="pl-cnt-all">({{ items|length }})</span></button>
-          <button class="pl-ftab"       data-f="pending" onclick="plFilter('pending')">Pending <span id="pl-cnt-pending">({{ items|rejectattr('is_checked')|list|length }})</span></button>
-          <button class="pl-ftab"       data-f="done"    onclick="plFilter('done')">Done <span id="pl-cnt-done">({{ items|selectattr('is_checked')|list|length }})</span></button>
-        </div>
-        <input type="search" class="pl-search" placeholder="🔍  Search items…" oninput="plSearch(this.value)" autocomplete="off">
-        <div class="pl-toolbar-right">
-          <button class="pl-btn pl-btn-ghost" id="pl-bulk-toggle" onclick="plEnterBulk()" title="Select multiple">
-            <i class="fas fa-check-square"></i> Select
-          </button>
-        </div>
-      </div>
-
-      <!-- Bulk action bar -->
-      <div id="pl-bulk-bar">
-        <span class="pl-binfo" id="pl-binfo">0 selected</span>
-        <button class="pl-btn pl-btn-ghost"  onclick="plBCancel()"><i class="fas fa-times"></i> Cancel</button>
-        <button class="pl-btn pl-btn-danger" onclick="plBDelConfirm()"><i class="fas fa-trash"></i> Delete Selected</button>
-        <span style="margin-left:auto;font-size:0.78rem;color:var(--text-muted);">Click rows to select</span>
-      </div>
-
-      <!-- Table -->
-      <div class="pl-table-wrap">
-        <table class="pl-table" id="pl-table">
-          <thead>
-            <tr>
-              <th class="th-bulk" id="th-bulk" style="display:none;"></th>
-              <th></th><!-- check -->
-              <th>Item</th>
-              <th>Qty</th>
-              <th>Location</th>
-              <th>Category</th>
-              <th>Note</th>
-              <th style="text-align:right;">Actions</th>
-            </tr>
-          </thead>
-          <tbody id="pl-tbody">
-            {% if items %}
-              {% for item in items %}
-              <tr id="pl-row-{{ item.id }}"
-                  class="{% if item.is_checked %}pl-done{% endif %}"
-                  data-id="{{ item.id }}"
-                  data-ck="{{ 'true' if item.is_checked else 'false' }}"
-                  data-name="{{ item.item_name|lower }}">
-
-                <!-- Bulk select cell (hidden until bulk mode) -->
-                <td class="pl-td-bulk" style="display:none;" onclick="plBToggle({{ item.id }})">
-                  <div class="pl-bdot" id="pl-bdot-{{ item.id }}">
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                      <path d="M1.5 5l2 2 5-4" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                  </div>
-                </td>
-
-                <!-- Check -->
-                <td class="pl-td-check">
-                  <div class="pl-ring" onclick="plToggle({{ item.id }})" title="Mark gathered">
-                    <svg class="pl-tick" width="12" height="12" viewBox="0 0 12 12" fill="none">
-                      <path d="M2 6l2.5 2.5 5.5-5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                  </div>
-                </td>
-
-                <!-- Name + thumb -->
-                <td class="pl-td-name">
-                  <div class="pl-item-name">
-                    {% if item.equipment and item.equipment.picture %}
-                    <img class="pl-item-thumb"
-                         src="{{ url_for('equipment.serve_equipment_picture', id=item.equipment.id) }}"
-                         alt="{{ item.equipment.name }}"
-                         onclick="plViewPic('{{ url_for('equipment.serve_equipment_picture', id=item.equipment.id) }}','{{ item.equipment.name|e }}')">
-                    {% elif item.equipment %}
-                    <span class="pl-item-thumb-ph">📦</span>
-                    {% endif %}
-                    {% if item.equipment %}
-                    <a href="{{ url_for('equipment.equipment_detail', id=item.equipment.id) }}"
-                       style="color:inherit;text-decoration:none;"
-                       onclick="event.stopPropagation()">{{ item.item_name }}</a>
-                    {% else %}
-                    {{ item.item_name }}
-                    {% endif %}
-                  </div>
-                  {{ plu_row(item, unit_options, item_units) }}
-                </td>
-
-                <!-- Qty -->
-                <td><span class="pl-tag pl-tag-qty">×{{ item.quantity }}</span></td>
-
-                <!-- Location -->
-                <td>
-                  {% if item.equipment and item.equipment.location %}
-                  <span class="pl-tag pl-tag-loc">{{ item.equipment.location }}</span>
-                  {% else %}<span style="color:var(--text-muted);font-size:0.8rem;">—</span>{% endif %}
-                </td>
-
-                <!-- Category -->
-                <td>
-                  {% if item.equipment and item.equipment.category %}
-                  <span class="pl-tag pl-tag-cat">{{ item.equipment.category }}</span>
-                  {% else %}<span style="color:var(--text-muted);font-size:0.8rem;">—</span>{% endif %}
-                </td>
-
-                <!-- Note -->
-                <td style="font-size:0.8rem;color:var(--text-muted);max-width:180px;">
-                  {% if item.equipment and item.equipment.barcode %}
-                  <span title="{{ item.equipment.barcode }}">🔖 {{ item.equipment.barcode }}</span>
-                  {% elif item.equipment and item.equipment.notes %}
-                  <span title="{{ item.equipment.notes }}">{{ item.equipment.notes|truncate(40,True,'…') }}</span>
-                  {% else %}—{% endif %}
-                </td>
-
-                <!-- Actions -->
-                <td class="pl-td-actions">
-                  {% if item.equipment %}
-                  <a href="{{ url_for('equipment.equipment_detail', id=item.equipment.id) }}"
-                     class="pl-action-btn pl-action-view"
-                     title="View equipment" onclick="event.stopPropagation()">
-                    <i class="fas fa-external-link-alt"></i>
-                  </a>
-                  {% endif %}
-                  <button class="pl-action-btn pl-action-del"
-                          onclick="plDelOne({{ item.id }})"
-                          title="Delete">
-                    <i class="fas fa-trash-alt"></i>
-                  </button>
-                </td>
-
-              </tr>
-              {% endfor %}
-            {% else %}
-              <tr class="pl-empty-row">
-                <td colspan="8">
-                  <span class="pl-empty-icon">📋</span>
-                  List is empty — click <b>Add Item</b> to get started.
-                </td>
-              </tr>
-            {% endif %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- ── Right panel: event switcher ── -->
-    <div class="pl-right">
-      <div class="pl-panel-title">Stats</div>
-      <div class="pl-stats">
-        <div class="pl-stat">
-          <div class="pl-stat-num" id="ps-total">{{ items|length }}</div>
-          <div class="pl-stat-lbl">Total</div>
-        </div>
-        <div class="pl-stat">
-          <div class="pl-stat-num" id="ps-done" style="color:var(--success);">{{ items|selectattr('is_checked')|list|length }}</div>
-          <div class="pl-stat-lbl">Done</div>
-        </div>
-        <div class="pl-stat">
-          <div class="pl-stat-num" id="ps-pending" style="color:var(--warning);">{{ items|rejectattr('is_checked')|list|length }}</div>
-          <div class="pl-stat-lbl">Pending</div>
-        </div>
-        <div class="pl-stat">
-          <div class="pl-stat-num" id="ps-pct" style="color:var(--primary);">{% if items %}{{ (items|selectattr('is_checked')|list|length / items|length * 100)|int }}{% else %}0{% endif %}%</div>
-          <div class="pl-stat-lbl">Complete</div>
-        </div>
-      </div>
-
-      <div class="pl-panel-title" style="margin-top:0.5rem;">Pick Lists</div>
-      <div class="pl-ev-searchwrap">
-        <input type="search" id="pl-evsearch" class="pl-search pl-ev-search"
-               placeholder="🔍  Search all lists, incl. archive…" autocomplete="off"
-               oninput="plEvSearch(this.value)">
-      </div>
-
-      {% macro ev_card(event, archived=False) %}
-      <a href="/picklist?event_id={{ event.id }}"
-         class="pl-ev-item {% if archived %}pl-ev-archived{% endif %} {% if current_event and current_event.id == event.id %}pl-cur{% endif %}">
-        <div class="pl-ev-name">{% if archived %}🗄{% else %}🎭{% endif %} {{ event.title }}</div>
-        <div class="pl-ev-meta">
-          {{ event.event_date.strftime('%d %b %Y, %H:%M') }}
-          {% if event.location %}<br>📍 {{ event.location }}{% endif %}
-        </div>
-      </a>
-      {% endmacro %}
-
-      <div id="pl-ev-browse">
-        <a href="/picklist" class="pl-ev-item {% if not current_event %}pl-cur{% endif %}">
-          <div class="pl-ev-name">📋 General List</div>
-          <div class="pl-ev-meta">No event filter</div>
-        </a>
-        {% for event in current_events %}{{ ev_card(event) }}{% endfor %}
-
-        {% if archived_events %}
-        <details class="pl-arch" {% if current_event_archived %}open{% endif %}>
-          <summary>🗄 Archive ({{ archived_events|length }})</summary>
-          {% for event in archived_events %}{{ ev_card(event, True) }}{% endfor %}
-        </details>
-        {% endif %}
-      </div>
-
-      <div id="pl-ev-results" style="display:none;"></div>
-    </div>
-
-  </div><!-- .pl-body -->
-</div><!-- #pl -->
-
-<!-- Toasts -->
-<div id="pl-toasts"></div>
-
-<!-- ══════════════════════════════════════════
-     ADD ITEM MODAL
-══════════════════════════════════════════ -->
-<div class="pl-overlay" id="pl-addmodal" onclick="plOvClose(event,'pl-addmodal')">
-  <div class="pl-modal">
-    <button class="pl-modal-close" onclick="plClose('pl-addmodal')"><i class="fas fa-times"></i></button>
-    <div class="pl-modal-title">+ Add Item</div>
-
-    <div class="pl-mtabs">
-      <button class="pl-mtab pl-on" id="plt-equipment" onclick="plMode('equipment')"><i class="fas fa-box"></i> Equipment</button>
-      <button class="pl-mtab"       id="plt-hired"     onclick="plMode('hired')"><i class="fas fa-handshake"></i> Hired</button>
-      <button class="pl-mtab"       id="plt-manual"    onclick="plMode('manual')"><i class="fas fa-pencil-alt"></i> Manual</button>
-    </div>
-
-    <!-- Equipment mode -->
-    <div id="plf-equipment">
-      <div class="pl-eprev" id="pl-eprev">
-        <div class="pl-eprev-img" id="pl-eprev-img">📦</div>
+<div class="gear pl">
+    <header class="sw-head">
         <div>
-          <div class="pl-eprev-name" id="pl-eprev-name"></div>
-          <div class="pl-eprev-loc"  id="pl-eprev-loc"></div>
+            <h1>Pick list</h1>
+            <p>{% if current_event %}<strong>{{ current_event.title }}</strong> · {{ current_event.event_date.strftime('%d %b %Y') }}{% if current_event.location %} · {{ current_event.location }}{% endif %}
+                {% if current_event_archived %}<span class="pill">Archived</span>{% endif %}
+                {% else %}General list, not tied to an event{% endif %}
+                <a href="#plLists" class="pl-switch-link">Switch list</a></p>
         </div>
-      </div>
-      <div class="pl-warn" id="pl-ewarn"></div>
-      <div class="pl-field">
-        <label>Equipment *</label>
-        <select id="pl-eqsel" onchange="plEqChange()">
-          <option value="">— choose equipment —</option>
-          {% for eq in all_equipment %}
-          <option value="{{ eq.id }}"
-                  data-name="{{ eq.name|e }}"
-                  data-loc="{{ eq.location or '' }}"
-                  data-pic="{{ url_for('equipment.serve_equipment_picture', id=eq.id) if eq.picture else '' }}"
-                  data-qty="{{ eq.quantity_owned or 1 }}">
-            {{ eq.name }}{% if eq.location %} — {{ eq.location }}{% endif %} ({{ eq.quantity_owned or 1 }} owned)
-          </option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="pl-field-row">
-        <div class="pl-field">
-          <label>Quantity</label>
-          <div class="pl-qty-row">
-            <button type="button" class="pl-qty-btn" onclick="plStep('pl-eqqty',-1)">−</button>
-            <div class="pl-qty-disp" id="pl-eqqty-d">1</div>
-            <input type="hidden" id="pl-eqqty" value="1">
-            <button type="button" class="pl-qty-btn" onclick="plStep('pl-eqqty',1)">+</button>
-          </div>
+        <div class="sw-head-actions">
+            <span class="pl-live" id="plLive" title="Changes other people make show up here automatically"><span class="sw-dot live"></span> Live</span>
+            {% if current_event %}
+            <a class="btn btn-secondary" href="{{ url_for('unit_tracking.checkout_page', event_id=current_event.id) }}"><i class="fas fa-right-left"></i> Check out / in</a>
+            {% endif %}
+            <button type="button" class="btn btn-primary" id="plAdd"><i class="fas fa-plus"></i> Add item</button>
         </div>
-        <div class="pl-field">
-          <label>Event (optional)</label>
-          <select id="pl-eqev">
-            <option value="">General</option>
-            {% for event in events %}
-            <option value="{{ event.id }}" {% if current_event and current_event.id == event.id %}selected{% endif %}>
-              {{ event.title }} – {{ event.event_date.strftime('%d %b') }}
-            </option>
-            {% endfor %}
-          </select>
-        </div>
-      </div>
-      <div class="pl-modal-footer">
-        <button class="pl-btn pl-btn-ghost" onclick="plClose('pl-addmodal')">Cancel</button>
-        <button class="pl-btn pl-btn-primary" onclick="plSubEquip()"><i class="fas fa-plus"></i> Add Equipment</button>
-      </div>
-    </div>
+    </header>
 
-    <!-- Hired mode -->
-    <div id="plf-hired" style="display:none;">
-      <div class="pl-field">
-        <label>Hired Equipment *</label>
-        <select id="pl-hsel">
-          <option value="">— choose hired equipment —</option>
-          {% for h in hired_equipment %}
-          <option value="{{ h.id }}" data-name="{{ h.name|e }}">
-            {{ h.name }} — {{ h.supplier }} (return {{ h.return_date.strftime('%d %b') }})
-          </option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="pl-field-row">
-        <div class="pl-field">
-          <label>Quantity</label>
-          <div class="pl-qty-row">
-            <button type="button" class="pl-qty-btn" onclick="plStep('pl-hqty',-1)">−</button>
-            <div class="pl-qty-disp" id="pl-hqty-d">1</div>
-            <input type="hidden" id="pl-hqty" value="1">
-            <button type="button" class="pl-qty-btn" onclick="plStep('pl-hqty',1)">+</button>
-          </div>
-        </div>
-        <div class="pl-field">
-          <label>Event (optional)</label>
-          <select id="pl-hev">
-            <option value="">General</option>
-            {% for event in events %}
-            <option value="{{ event.id }}" {% if current_event and current_event.id == event.id %}selected{% endif %}>
-              {{ event.title }} – {{ event.event_date.strftime('%d %b') }}
-            </option>
-            {% endfor %}
-          </select>
-        </div>
-      </div>
-      <div class="pl-modal-footer">
-        <button class="pl-btn pl-btn-ghost" onclick="plClose('pl-addmodal')">Cancel</button>
-        <button class="pl-btn pl-btn-primary" onclick="plSubHired()"><i class="fas fa-plus"></i> Add Hired</button>
-      </div>
-    </div>
+    <div class="pl-grid">
+        <div>
+            <div class="pl-progress" aria-live="polite">
+                <span><b id="plDone">{{ n_done }}</b> of <span id="plTotal">{{ items|length }}</span> packed</span>
+                <div class="pl-bar"><span id="plBar" style="width:{{ (n_done / items|length * 100)|int if items else 0 }}%"></span></div>
+            </div>
 
-    <!-- Manual mode -->
-    <div id="plf-manual" style="display:none;">
-      <div class="pl-field">
-        <label>Item Name *</label>
-        <input type="text" id="pl-mname" placeholder="e.g. Extension lead 5m" autocomplete="off">
-      </div>
-      <div class="pl-field-row">
-        <div class="pl-field">
-          <label>Quantity</label>
-          <div class="pl-qty-row">
-            <button type="button" class="pl-qty-btn" onclick="plStep('pl-mqty',-1)">−</button>
-            <div class="pl-qty-disp" id="pl-mqty-d">1</div>
-            <input type="hidden" id="pl-mqty" value="1">
-            <button type="button" class="pl-qty-btn" onclick="plStep('pl-mqty',1)">+</button>
-          </div>
-        </div>
-        <div class="pl-field">
-          <label>Event (optional)</label>
-          <select id="pl-mev">
-            <option value="">General</option>
-            {% for event in events %}
-            <option value="{{ event.id }}" {% if current_event and current_event.id == event.id %}selected{% endif %}>
-              {{ event.title }} – {{ event.event_date.strftime('%d %b') }}
-            </option>
-            {% endfor %}
-          </select>
-        </div>
-      </div>
-      <div class="pl-modal-footer">
-        <button class="pl-btn pl-btn-ghost" onclick="plClose('pl-addmodal')">Cancel</button>
-        <button class="pl-btn pl-btn-primary" onclick="plSubManual()"><i class="fas fa-plus"></i> Add Item</button>
-      </div>
-    </div>
+            <div class="sw-notice info" id="plNew" hidden>
+                Someone else added or removed items. <button type="button" class="btn-link" onclick="location.reload()">Refresh</button>
+            </div>
 
-  </div>
+            <div class="gear-toolbar" style="margin-top:.75rem">
+                <div class="sw-filters" id="plFilters" role="group" aria-label="Show">
+                    <button type="button" class="sw-filter" data-f="all" aria-pressed="true">All<span class="n" id="cntAll"></span></button>
+                    <button type="button" class="sw-filter" data-f="pending" aria-pressed="false">To pack<span class="n" id="cntPending"></span></button>
+                    <button type="button" class="sw-filter" data-f="done" aria-pressed="false">Packed<span class="n" id="cntDone"></span></button>
+                </div>
+                <div class="gear-toolbar-right">
+                    <input type="search" id="plFilter" class="sw-input" placeholder="Filter items…" autocomplete="off" aria-label="Filter items">
+                    <button type="button" class="btn btn-secondary" id="plSelect" aria-pressed="false">Select</button>
+                </div>
+            </div>
+
+            <div class="gear-selbar" id="plSelBar" hidden>
+                <strong id="plSelCount">0 selected</strong>
+                <button type="button" class="btn btn-danger btn-sm" id="plSelDelete">Remove from list</button>
+                <button type="button" class="btn-link" id="plSelCancel">Cancel</button>
+            </div>
+
+            {% if items %}
+            <ul class="pl-list" id="plList">
+                {% for item in items %}
+                {% set eq = item.equipment %}
+                <li class="pl-item{{ ' done' if item.is_checked }}" id="pl-row-{{ item.id }}" data-id="{{ item.id }}"
+                    data-ck="{{ 'true' if item.is_checked else 'false' }}" data-name="{{ item.item_name|lower }}">
+                    <input type="checkbox" class="pl-sel" aria-label="Select {{ item.item_name }}" hidden>
+                    <button type="button" class="pl-tick" aria-pressed="{{ 'true' if item.is_checked else 'false' }}" aria-label="Packed: {{ item.item_name }}"><i class="fas fa-check"></i></button>
+                    <div class="pl-main">
+                        <div class="pl-name">
+                            {% if eq %}<a href="{{ url_for('equipment.equipment_detail', id=eq.id) }}">{{ item.item_name }}</a>{% else %}{{ item.item_name }}{% endif %}
+                        </div>
+                        {% if eq and (eq.location or eq.category) %}
+                        <div class="pl-meta">{{ eq.location or '' }}{% if eq.location and eq.category %} · {% endif %}{{ eq.category or '' }}</div>
+                        {% elif not eq %}
+                        <div class="pl-meta">Not in the equipment list</div>
+                        {% endif %}
+                        {% if eq and unit_options.get(eq.id) is not none %}
+                        <div class="plu" id="plu-{{ item.id }}" data-item="{{ item.id }}" data-eq="{{ eq.id }}" data-qty="{{ item.quantity or 1 }}"></div>
+                        {% endif %}
+                    </div>
+                    {% if eq and eq.picture %}
+                    <img class="pl-thumb" src="{{ url_for('equipment.serve_equipment_picture', id=eq.id) }}" alt="" loading="lazy">
+                    {% endif %}
+                    <span class="pl-qty">× {{ item.quantity or 1 }}</span>
+                    <button type="button" class="btn btn-secondary btn-icon pl-del" title="Remove from list" aria-label="Remove {{ item.item_name }} from the list"><i class="fas fa-trash"></i></button>
+                </li>
+                {% endfor %}
+            </ul>
+            <div class="sw-blank" id="plNone" hidden>Nothing matches that filter.</div>
+            {% else %}
+            <div class="sw-blank"><strong>This list is empty</strong>Add the gear this {{ 'event' if current_event else 'job' }} needs.</div>
+            {% endif %}
+        </div>
+
+        <aside class="card pl-lists" id="plLists">
+            <div class="sw-section-head"><h2>Pick lists</h2></div>
+            <input type="search" id="plEvSearch" class="sw-input" placeholder="Search lists, including old ones…" autocomplete="off" aria-label="Search pick lists">
+            {% macro ev_link(event, archived=False) %}
+            <a href="{{ url_for('picklist.picklist', event_id=event.id) }}" class="pl-ev{{ ' on' if current_event and current_event.id == event.id }}">
+                <span>{{ event.title }}</span>
+                <small>{{ event.event_date.strftime('%d %b %Y') }}{% if event.location %} · {{ event.location }}{% endif %}</small>
+            </a>
+            {% endmacro %}
+            <div id="plEvBrowse">
+                <a href="{{ url_for('picklist.picklist') }}" class="pl-ev{{ ' on' if not current_event }}"><span>General list</span><small>Not tied to an event</small></a>
+                {% for event in current_events %}{{ ev_link(event) }}{% endfor %}
+                {% if archived_events %}
+                <details {{ 'open' if current_event_archived }}>
+                    <summary>Finished events ({{ archived_events|length }})</summary>
+                    {% for event in archived_events %}{{ ev_link(event, True) }}{% endfor %}
+                </details>
+                {% endif %}
+            </div>
+            <div id="plEvResults" hidden></div>
+        </aside>
+    </div>
 </div>
-
-<!-- ══════════════════════════════════════════
-     CONFIRM DELETE MODAL
-══════════════════════════════════════════ -->
-<div class="pl-overlay" id="pl-cmodal">
-  <div class="pl-modal pl-modal-sm">
-    <button class="pl-modal-close" onclick="plClose('pl-cmodal')"><i class="fas fa-times"></i></button>
-    <div class="pl-confirm-icon">🗑️</div>
-    <div class="pl-confirm-title">Delete?</div>
-    <div class="pl-confirm-body" id="pl-cbody">This cannot be undone.</div>
-    <div class="pl-modal-footer">
-      <button class="pl-btn pl-btn-ghost"  onclick="plClose('pl-cmodal')">Cancel</button>
-      <button class="pl-btn pl-btn-danger" id="pl-cok"><i class="fas fa-trash"></i> Delete</button>
-    </div>
-  </div>
-</div>
-
-<!-- ══════════════════════════════════════════
-     IMAGE LIGHTBOX
-══════════════════════════════════════════ -->
-<div id="pl-imgview" onclick="plClose('pl-imgview')">
-  <img id="pl-imgview-src" src="" alt="">
-  <div id="pl-imgview-cap"></div>
-</div>
-
 {% endblock %}
 
 {% block scripts %}
 <script>
-(function() {
+(function () {
+    const EVENT_ID = {{ current_event.id if current_event else 'null' }};
+    const EQUIPMENT = {{ all_equipment_json | tojson }};
+    const HIRED = {{ hired_json | tojson }};
+    const EVENTS = {{ events_json | tojson }};
+    const OPTIONS = {{ unit_options | tojson }};      // equipment_id -> its items (with allocations)
+    const ON_LINE = {{ item_units | tojson }};        // pick list line id -> [{id, asset_tag, out}]
+    const $ = (s, r = document) => r.querySelector(s);
+    const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+    const esc = SW.esc;
+    const rows = () => $$('.pl-item');
+    let filter = 'all', query = '', selecting = false;
+    const inflight = new Set();
 
-  const TOTAL_INIT = {{ items|length }};
-  let checked  = {{ items|selectattr('is_checked')|list|length }};
-  let bulkMode = false;
-  const bulkSel = new Set();
-  let pendingIds = [];
-
-  /* ── Modals ── */
-  window.plOpen    = id => document.getElementById(id).classList.add('pl-open');
-  window.plClose   = id => document.getElementById(id).classList.remove('pl-open');
-  window.plOvClose = (e, id) => { if (e.target === e.currentTarget) plClose(id); };
-
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape')
-      document.querySelectorAll('.pl-overlay.pl-open').forEach(el => el.classList.remove('pl-open'));
-  });
-
-  /* ── Toast ── */
-  window.plToast = function(msg, type='ok') {
-    const w  = document.getElementById('pl-toasts');
-    const el = document.createElement('div');
-    el.className = `pl-toast ${type}`;
-    el.textContent = msg;
-    w.appendChild(el);
-    setTimeout(() => el.remove(), 2200);
-  };
-
-  /* ── Progress + stats ── */
-  function plUpdateStats() {
-    const rows  = document.querySelectorAll('#pl-tbody tr[data-id]');
-    const total = rows.length;
-    const done  = [...rows].filter(r => r.dataset.ck === 'true').length;
-    const pend  = total - done;
-    const pct   = total ? Math.round(done / total * 100) : 0;
-
-    document.getElementById('pl-prog').style.width   = pct + '%';
-    document.getElementById('pl-checked').textContent = done;
-    document.getElementById('pl-pct').textContent     = pct + '%';
-    document.getElementById('ps-total').textContent   = total;
-    document.getElementById('ps-done').textContent    = done;
-    document.getElementById('ps-pending').textContent = pend;
-    document.getElementById('ps-pct').textContent     = pct + '%';
-
-    const vis = f => [...rows].filter(r => {
-      const ck = r.dataset.ck === 'true';
-      if (f === 'pending') return !ck;
-      if (f === 'done')    return  ck;
-      return true;
-    }).length;
-    document.getElementById('pl-cnt-all').textContent     = `(${total})`;
-    document.getElementById('pl-cnt-pending').textContent = `(${vis('pending')})`;
-    document.getElementById('pl-cnt-done').textContent    = `(${vis('done')})`;
-  }
-
-  /* ── Filter ── */
-  let activeFilter = 'all';
-  let activeSearch = '';
-
-  window.plFilter = function(f) {
-    activeFilter = f;
-    document.querySelectorAll('.pl-ftab').forEach(t => t.classList.toggle('pl-on', t.dataset.f === f));
-    applyVisibility();
-  };
-
-  window.plSearch = function(q) {
-    activeSearch = q.toLowerCase().trim();
-    applyVisibility();
-  };
-
-  function applyVisibility() {
-    document.querySelectorAll('#pl-tbody tr[data-id]').forEach(row => {
-      const ck   = row.dataset.ck === 'true';
-      const name = row.dataset.name || '';
-      let show   = true;
-      if (activeFilter === 'pending') show = !ck;
-      if (activeFilter === 'done')    show =  ck;
-      if (activeSearch && !name.includes(activeSearch)) show = false;
-      row.style.display = show ? '' : 'none';
-    });
-  }
-
-  /* ── Toggle ── */
-  const inflight = new Set();   // ids being toggled by this user right now
-  window.plToggle = async function(id) {
-    const row = document.getElementById(`pl-row-${id}`);
-    if (!row) return;
-    const want = row.dataset.ck !== 'true';
-    inflight.add(id);
-    try {
-      // Send the state we want (not "flip it") so two people tapping together can't cancel out
-      const data = await fetch(`/picklist/toggle/${id}`, {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ checked: want })
-      }).then(r => r.json());
-      if (!data.success) throw new Error(data.error);
-      setRowChecked(row, data.is_checked, false);
-      plUpdateStats();
-      applyVisibility();
-    } catch(e) { plToast('Error: ' + e.message, 'err'); }
-    finally { inflight.delete(id); }
-  };
-
-  function setRowChecked(row, now, flash) {
-    row.dataset.ck = now ? 'true' : 'false';
-    row.classList.toggle('pl-done', now);
-    if (flash) {
-      row.classList.remove('pl-flash'); void row.offsetWidth; row.classList.add('pl-flash');
-      setTimeout(() => row.classList.remove('pl-flash'), 1300);
-    }
-  }
-
-  /* ── Live sync: poll so everyone prepping the same list sees ticks as they happen ── */
-  const EVENT_ID = {{ current_event.id if current_event else 'null' }};
-  const POLL_MS  = 3000;
-  const liveEl   = document.getElementById('pl-live');
-  let pollFails  = 0;
-
-  function userIsBusy() {
-    if (bulkMode) return true;
-    if (document.querySelector('.pl-overlay.pl-open')) return true;
-    const a = document.activeElement;
-    return !!(a && ['INPUT','TEXTAREA','SELECT'].includes(a.tagName));
-  }
-
-  async function plPoll() {
-    if (document.hidden) return;
-    try {
-      const url = '/picklist/state' + (EVENT_ID !== null ? `?event_id=${EVENT_ID}` : '');
-      const res = await fetch(url, { cache: 'no-store', credentials: 'same-origin' });
-      if (res.redirected || !res.ok) throw new Error('bad response');   // logged out / server hiccup
-      const data = await res.json();
-      pollFails = 0; liveEl.classList.remove('pl-off');
-
-      const server = new Map(data.items.map(i => [i.id, i.checked]));
-      let changed = false, structural = false;
-      if (window.pluSync) pluSync(data.items);
-
-      document.querySelectorAll('#pl-tbody tr[data-id]').forEach(row => {
-        const id = parseInt(row.dataset.id);
-        if (!server.has(id)) {                       // deleted by someone else
-          if (!pendingIds.includes(id)) { row.remove(); changed = true; }
-          return;
-        }
-        if (inflight.has(id)) return;                // don't fight our own tap
-        const now = server.get(id);
-        if ((row.dataset.ck === 'true') !== now) { setRowChecked(row, now, true); changed = true; }
-      });
-
-      const have = new Set([...document.querySelectorAll('#pl-tbody tr[data-id]')].map(r => parseInt(r.dataset.id)));
-      for (const id of server.keys()) if (!have.has(id)) structural = true;   // added by someone else
-
-      if (changed) { plUpdateStats(); applyVisibility(); }
-      if (structural) {
-        if (userIsBusy()) document.getElementById('pl-newbanner').classList.add('pl-show');
-        else location.reload();
-      }
-    } catch (e) {
-      if (++pollFails >= 2) liveEl.classList.add('pl-off');
-    }
-  }
-  setInterval(plPoll, POLL_MS);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) plPoll(); });
-
-  /* ── Sidebar search (events + archive) ── */
-  let evSearchTimer = null, evSearchSeq = 0;
-  const esc = t => String(t).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-
-  window.plEvSearch = function(q) {
-    clearTimeout(evSearchTimer);
-    const browse  = document.getElementById('pl-ev-browse');
-    const results = document.getElementById('pl-ev-results');
-    q = q.trim();
-    if (!q) { results.style.display = 'none'; results.innerHTML = ''; browse.style.display = ''; return; }
-    evSearchTimer = setTimeout(async () => {
-      const seq = ++evSearchSeq;
-      try {
-        const data = await fetch('/picklist/search?q=' + encodeURIComponent(q)).then(r => r.json());
-        if (seq !== evSearchSeq) return;               // a newer search superseded this one
-        let html = '', shownArchiveHeader = false;
-        data.results.forEach(ev => {
-          if (ev.archived && !shownArchiveHeader) {
-            html += '<div class="pl-ev-divider">🗄 Archive</div>'; shownArchiveHeader = true;
-          }
-          const cur = EVENT_ID === ev.id ? ' pl-cur' : '';
-          html += `<a href="/picklist?event_id=${ev.id}" class="pl-ev-item${ev.archived ? ' pl-ev-archived' : ''}${cur}">
-            <div class="pl-ev-name">${ev.archived ? '🗄' : '🎭'} ${esc(ev.title)}</div>
-            <div class="pl-ev-meta">${esc(ev.date)}${ev.location ? '<br>📍 ' + esc(ev.location) : ''}</div></a>`;
+    /* ---------- counts, filter ---------- */
+    function update() {
+        const all = rows(), done = all.filter(r => r.dataset.ck === 'true').length;
+        $('#plDone').textContent = done; $('#plTotal').textContent = all.length;
+        $('#plBar').style.width = (all.length ? Math.round(done / all.length * 100) : 0) + '%';
+        $('#cntAll').textContent = all.length; $('#cntPending').textContent = all.length - done; $('#cntDone').textContent = done;
+        let shown = 0;
+        all.forEach(r => {
+            const ck = r.dataset.ck === 'true';
+            const show = (filter === 'all' || (filter === 'done') === ck) && (!query || (r.dataset.name || '').includes(query));
+            r.hidden = !show; if (show) shown++;
         });
-        if (!html) html = '<div class="pl-ev-none">No pick lists match.</div>';
-        browse.style.display = 'none';
-        results.innerHTML = html;
-        results.style.display = '';
-      } catch (e) { /* leave current view */ }
-    }, 200);
-  };
-
-  /* ── Delete one ── */
-  window.plDelOne = function(id) {
-    pendingIds = [id];
-    document.getElementById('pl-cbody').textContent = 'Remove this item from the list? This cannot be undone.';
-    document.getElementById('pl-cok').onclick = plExecDelete;
-    plOpen('pl-cmodal');
-  };
-
-  async function plExecDelete() {
-    plClose('pl-cmodal');
-    const ids = [...pendingIds];
-    const results = await Promise.all(
-      ids.map(id => fetch(`/picklist/delete/${id}`, { method: 'DELETE' }).then(r => r.json()))
-    );
-    const ok = results.filter(r => r.success).length;
-    if (ok > 0) {
-      plToast(`Removed ${ok} item${ok > 1 ? 's' : ''}`);
-      ids.forEach(id => {
-        const el = document.getElementById(`pl-row-${id}`);
-        if (el) el.remove();
-      });
-      plUpdateStats();
-    } else { plToast('Error deleting', 'err'); }
-    plBCancel();
-    pendingIds = [];
-  }
-
-  /* ── Bulk ── */
-  window.plEnterBulk = function() {
-    bulkMode = true;
-    document.getElementById('pl-toolbar').style.display  = 'none';
-    document.getElementById('pl-bulk-bar').classList.add('pl-vis');
-    // Show bulk checkbox column
-    document.querySelectorAll('.pl-td-bulk, #th-bulk').forEach(el => el.style.display = '');
-  };
-
-  window.plBCancel = function() {
-    bulkMode = false; bulkSel.clear();
-    document.getElementById('pl-toolbar').style.display  = '';
-    document.getElementById('pl-bulk-bar').classList.remove('pl-vis');
-    document.querySelectorAll('.pl-td-bulk, #th-bulk').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('#pl-tbody tr').forEach(r => r.classList.remove('pl-bsel'));
-    document.getElementById('pl-binfo').textContent = '0 selected';
-  };
-
-  window.plBToggle = function(id) {
-    const row = document.getElementById(`pl-row-${id}`);
-    if (bulkSel.has(id)) {
-      bulkSel.delete(id);
-      row.classList.remove('pl-bsel');
-    } else {
-      bulkSel.add(id);
-      row.classList.add('pl-bsel');
+        const none = $('#plNone'); if (none) none.hidden = shown > 0 || !all.length;
     }
-    document.getElementById('pl-binfo').textContent = `${bulkSel.size} selected`;
-  };
-
-  window.plBDelConfirm = function() {
-    if (!bulkSel.size) return;
-    const n = bulkSel.size;
-    pendingIds = [...bulkSel];
-    document.getElementById('pl-cbody').textContent = `Delete ${n} item${n>1?'s':''}? This cannot be undone.`;
-    document.getElementById('pl-cok').onclick = plExecDelete;
-    plOpen('pl-cmodal');
-  };
-
-  /* ── Mode switcher ── */
-  window.plMode = function(mode) {
-    ['equipment','hired','manual'].forEach(m => {
-      document.getElementById(`plt-${m}`).classList.toggle('pl-on', m === mode);
-      document.getElementById(`plf-${m}`).style.display = m === mode ? 'block' : 'none';
+    $('#plFilters').addEventListener('click', e => {
+        const b = e.target.closest('[data-f]'); if (!b) return;
+        filter = b.dataset.f;
+        $$('#plFilters [data-f]').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+        update();
     });
-  };
+    $('#plFilter').addEventListener('input', e => { query = e.target.value.trim().toLowerCase(); update(); });
 
-  /* ── Qty stepper ── */
-  window.plStep = function(inputId, delta) {
-    const inp  = document.getElementById(inputId);
-    const disp = document.getElementById(inputId + '-d');
-    const v    = Math.max(1, parseInt(inp.value) + delta);
-    inp.value = v; disp.textContent = v;
-    if (inputId === 'pl-eqqty') plCheckQty();
-  };
+    /* ---------- tick / remove ---------- */
+    function setChecked(row, now, flash) {
+        row.dataset.ck = now ? 'true' : 'false';
+        row.classList.toggle('done', now);
+        $('.pl-tick', row).setAttribute('aria-pressed', now ? 'true' : 'false');
+        if (flash) { row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash'); }
+    }
+    async function toggle(row) {
+        const id = parseInt(row.dataset.id, 10), want = row.dataset.ck !== 'true';
+        inflight.add(id);
+        setChecked(row, want); update();                    // feels instant; rolled back if the save fails
+        try {
+            // Send the state we want (not "flip it") so two people tapping together can't cancel out
+            const r = await SW.api('POST', `/picklist/toggle/${id}`, { checked: want });
+            setChecked(row, r.is_checked);
+        } catch (e) { setChecked(row, !want); SW.toast(e.message, 'error'); }
+        inflight.delete(id); update();
+    }
+    async function remove(ids) {
+        const results = await Promise.allSettled(ids.map(id => SW.api('DELETE', `/picklist/delete/${id}`)));
+        let ok = 0;
+        results.forEach((r, i) => { if (r.status === 'fulfilled') { ok++; const el = $(`#pl-row-${ids[i]}`); if (el) el.remove(); } });
+        if (ok) SW.toast(`Removed ${ok} item${ok === 1 ? '' : 's'}`); else SW.toast('Could not remove', 'error');
+        update();
+    }
+    const list = $('#plList');
+    if (list) list.addEventListener('click', async e => {
+        const row = e.target.closest('.pl-item'); if (!row) return;
+        if (e.target.closest('.pl-tick')) return selecting ? null : toggle(row);
+        if (e.target.closest('.pl-del')) {
+            if (await SW.confirm(`Remove “${$('.pl-name', row).textContent.trim()}” from this list?`, { danger: true, okText: 'Remove' }))
+                remove([parseInt(row.dataset.id, 10)]);
+        }
+    });
 
-  /* ── Equipment change ── */
-  window.plEqChange = function() {
-    const sel  = document.getElementById('pl-eqsel');
-    const opt  = sel.options[sel.selectedIndex];
-    const prev = document.getElementById('pl-eprev');
-    if (!sel.value) { prev.classList.remove('pl-on'); return; }
-    document.getElementById('pl-eprev-name').textContent = opt.dataset.name;
-    document.getElementById('pl-eprev-loc').textContent  = opt.dataset.loc ? '📍 ' + opt.dataset.loc : '';
-    const img = document.getElementById('pl-eprev-img');
-    img.innerHTML = opt.dataset.pic ? `<img src="${opt.dataset.pic}">` : '📦';
-    prev.classList.add('pl-on');
-    plCheckQty();
-  };
+    /* ---------- select several to remove ---------- */
+    function setSelecting(on) {
+        selecting = on;
+        $('#plSelect').setAttribute('aria-pressed', on ? 'true' : 'false');
+        $('#plSelBar').hidden = !on;
+        $$('.pl-sel').forEach(c => { c.hidden = !on; c.checked = false; });
+        $$('.pl-tick').forEach(b => { b.hidden = on; });
+        paintSel();
+    }
+    const paintSel = () => { $('#plSelCount').textContent = `${$$('.pl-sel:checked').length} selected`; };
+    $('#plSelect').addEventListener('click', () => setSelecting(!selecting));
+    $('#plSelCancel').addEventListener('click', () => setSelecting(false));
+    if (list) list.addEventListener('change', e => { if (e.target.matches('.pl-sel')) paintSel(); });
+    $('#plSelDelete').addEventListener('click', async () => {
+        const ids = $$('.pl-sel:checked').map(c => parseInt(c.closest('.pl-item').dataset.id, 10));
+        if (!ids.length) return SW.toast('Tick the items to remove first', 'error');
+        if (!await SW.confirm(`Remove ${ids.length} item${ids.length === 1 ? '' : 's'} from this list?`, { danger: true, okText: 'Remove' })) return;
+        await remove(ids); setSelecting(false);
+    });
 
-  document.getElementById('pl-eqev')?.addEventListener('change', () => plCheckQty());
+    /* ---------- add an item ---------- */
+    const eqLabel = e => `${e.name}${e.location ? ' — ' + e.location : ''} [${e.barcode}]`;
+    const byLabel = new Map(EQUIPMENT.map(e => [eqLabel(e).toLowerCase(), e]));
+    $('#plAdd').addEventListener('click', () => SW.form({
+        title: 'Add to pick list', submitText: 'Add',
+        values: { event_id: EVENT_ID == null ? '' : String(EVENT_ID), quantity: 1, kind: 'equipment' },
+        fields: [
+            { name: 'kind', label: 'What is it?', type: 'select', options: [
+                { value: 'equipment', label: 'Our equipment' },
+                ...(HIRED.length ? [{ value: 'hired', label: 'Hired gear' }] : []),
+                { value: 'manual', label: 'Something else (type a name)' } ] },
+            { name: 'equipment', label: 'Equipment', placeholder: 'Start typing a name or code…', show: v => v.kind === 'equipment',
+              suggestions: EQUIPMENT.map(eqLabel), hint: 'Pick from the list as you type.' },
+            { name: 'hired', label: 'Hired gear', type: 'select', show: v => v.kind === 'hired',
+              options: HIRED.map(h => ({ value: String(h.id), label: h.label })) },
+            { name: 'item_name', label: 'Name', maxLength: 200, placeholder: 'e.g. Extension lead 5 m', show: v => v.kind === 'manual' },
+            { name: 'quantity', label: 'How many?', type: 'number', min: 1, max: 100000, half: true },
+            { name: 'event_id', label: 'For', type: 'select', half: true,
+              options: [{ value: '', label: 'General list' }, ...EVENTS.map(e => ({ value: String(e.id), label: e.label }))] },
+        ],
+        onSubmit: async v => {
+            const quantity = Math.max(1, v.quantity || 1), event_id = v.event_id || null;
+            let body;
+            if (v.kind === 'equipment') {
+                const typed = (v.equipment || '').trim().toLowerCase();
+                const eq = byLabel.get(typed) || EQUIPMENT.find(e => e.name.toLowerCase() === typed || e.barcode.toLowerCase() === typed);
+                if (!eq) throw new Error('Pick a piece of equipment from the list');
+                const chk = await SW.api('POST', `/equipment/${eq.id}/quantity-check`, { quantity, event_id }).catch(() => ({}));
+                if (chk.warning && !await SW.confirm(
+                    `Only ${chk.available} of ${eq.name} ${event_id ? 'are free for this event' : 'are free right now'} (${chk.owned} usable, ${chk.allocated} on other lists). Add ${quantity} anyway?`,
+                    { okText: 'Add anyway' })) throw SW.CANCEL;
+                body = { equipment_id: eq.id, quantity, event_id };
+            } else if (v.kind === 'hired') {
+                const h = HIRED.find(x => String(x.id) === v.hired);
+                if (!h) throw new Error('Choose the hired gear');
+                body = { item_name: h.name, quantity, event_id, hired_equipment_id: h.id };
+            } else {
+                if (!(v.item_name || '').trim()) throw new Error('Enter a name');
+                body = { item_name: v.item_name.trim(), quantity, event_id };
+            }
+            await SW.api('POST', '/picklist/add', body);
+            SW.toast('Added'); SW.reloadSoon();
+        },
+    }));
 
-  async function plCheckQty() {
-    const id  = document.getElementById('pl-eqsel').value;
-    const qty = parseInt(document.getElementById('pl-eqqty').value) || 1;
-    const ev  = document.getElementById('pl-eqev').value || null;
-    const w   = document.getElementById('pl-ewarn');
-    if (!id) { w.classList.remove('pl-on'); return; }
-    try {
-      const r = await fetch(`/equipment/${id}/quantity-check`, {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ quantity: qty, event_id: ev })
-      }).then(r => r.json());
-      if (r.warning) {
-        w.innerHTML = `⚠ Only <b>${r.available}</b> free ${ev ? 'for this event' : 'right now'} (usable: ${r.owned}, on other lists: ${r.allocated})`;
-        w.classList.add('pl-on');
-      } else { w.classList.remove('pl-on'); }
-    } catch {}
-  }
+    /* ---------- which individual items are on each line ---------- */
+    function renderUnits(box) {
+        const itemId = box.dataset.item, qty = parseInt(box.dataset.qty, 10) || 1;
+        const units = ON_LINE[itemId] || [];
+        const taken = new Set(units.map(u => u.id));
+        let html = units.map(u => `<span class="plu-chip${u.out ? ' out' : ''}" title="${u.out ? 'Checked out to this event' : 'Reserved for this line'}">${esc(u.asset_tag)}${u.out ? ' · out' : ''}` +
+            `<button type="button" data-rm="${u.id}" aria-label="Take ${esc(u.asset_tag)} off this line">&times;</button></span>`).join('');
+        if (units.length < qty) {
+            const opts = (OPTIONS[box.dataset.eq] || []).filter(u => !taken.has(u.id) && !['retired', 'lost'].includes(u.status)).map(u => {
+                const elsewhere = (u.allocations || []).filter(a => String(a.pick_list_item_id) !== itemId);
+                const note = u.status !== 'available' ? ` (${u.state_label.toLowerCase()})` : elsewhere.length ? ` (on ${elsewhere.map(a => a.event_title).join(', ')})` : '';
+                return `<option value="${u.id}"${u.status === 'quarantined' ? ' disabled' : ''}>${esc(u.asset_tag + note)}</option>`;
+            }).join('');
+            html += opts ? `<select class="plu-add" aria-label="Choose which one"><option value="">Choose which (${units.length} of ${qty})</option>${opts}</select>`
+                         : `<span class="pl-meta">${units.length} of ${qty} chosen, none left to choose</span>`;
+        }
+        box.innerHTML = html;
+    }
+    async function assign(box, unitId, force) {
+        try {
+            const r = await SW.api('POST', `/picklist/${box.dataset.item}/units`, { unit_id: unitId, force: !!force });
+            ON_LINE[box.dataset.item] = r.units;
+        } catch (e) {
+            if (e.payload && e.payload.can_force && !force && await SW.confirm(`${e.message}. Put it on this line anyway?`, { okText: 'Use it anyway' }))
+                return assign(box, unitId, true);
+            if (!(e.payload && e.payload.can_force)) SW.toast(e.message, 'error');
+        }
+        renderUnits(box);
+    }
+    document.addEventListener('change', e => {
+        if (e.target.matches('.plu-add') && e.target.value) assign(e.target.closest('.plu'), parseInt(e.target.value, 10));
+    });
+    document.addEventListener('click', async e => {
+        const rm = e.target.closest('.plu [data-rm]'); if (!rm) return;
+        const box = rm.closest('.plu');
+        try { ON_LINE[box.dataset.item] = (await SW.api('DELETE', `/picklist/${box.dataset.item}/units/${rm.dataset.rm}`)).units; }
+        catch (ex) { SW.toast(ex.message, 'error'); }
+        renderUnits(box);
+    });
+    $$('.plu').forEach(renderUnits);
 
-  /* ── Submit helpers ── */
-  window.plSubEquip = async function() {
-    const id  = document.getElementById('pl-eqsel').value;
-    if (!id) { plToast('Select equipment', 'err'); return; }
-    const qty = parseInt(document.getElementById('pl-eqqty').value);
-    const ev  = document.getElementById('pl-eqev').value || null;
-    const chk = await fetch(`/equipment/${id}/quantity-check`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ quantity: qty, event_id: ev })
-    }).then(r => r.json()).catch(() => ({ warning: false }));
-    if (chk.warning && !confirm(`Only ${chk.available} available. Add anyway?`)) return;
-    plDoAdd({ equipment_id: id, quantity: qty, event_id: ev });
-  };
+    /* ---------- live: everyone packing the same list sees ticks as they happen ---------- */
+    let fails = 0;
+    const busy = () => selecting || !!$('.sw-overlay') || /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '');
+    async function poll() {
+        if (document.hidden) return;
+        try {
+            const res = await fetch('/picklist/state' + (EVENT_ID !== null ? `?event_id=${EVENT_ID}` : ''), { cache: 'no-store', credentials: 'same-origin' });
+            if (res.redirected || !res.ok) throw new Error('bad response');
+            const data = await res.json();
+            fails = 0; $('#plLive').classList.remove('off');
+            const server = new Map(data.items.map(i => [i.id, i]));
+            rows().forEach(row => {
+                const id = parseInt(row.dataset.id, 10), it = server.get(id);
+                if (!it) return row.remove();                               // removed by someone else
+                if (!inflight.has(id) && (row.dataset.ck === 'true') !== it.checked) setChecked(row, it.checked, true);
+                const box = $('.plu', row);
+                if (box && !(document.activeElement && document.activeElement.matches('.plu-add'))) {
+                    const key = us => (us || []).map(u => u.id + (u.out ? '+' : '')).join(',');
+                    if (key(ON_LINE[id]) !== key(it.units)) { ON_LINE[id] = it.units || []; renderUnits(box); }
+                }
+            });
+            const have = new Set(rows().map(r => parseInt(r.dataset.id, 10)));
+            if ([...server.keys()].some(id => !have.has(id))) {             // added by someone else
+                if (busy()) $('#plNew').hidden = false; else location.reload();
+            }
+            update();
+        } catch (e) { if (++fails >= 2) $('#plLive').classList.add('off'); }
+    }
+    setInterval(poll, 3000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
 
-  window.plSubHired = function() {
-    const sel = document.getElementById('pl-hsel');
-    if (!sel.value) { plToast('Select hired equipment', 'err'); return; }
-    const name = sel.options[sel.selectedIndex].dataset.name || sel.options[sel.selectedIndex].text;
-    const qty  = parseInt(document.getElementById('pl-hqty').value);
-    const ev   = document.getElementById('pl-hev').value || null;
-    plDoAdd({ item_name: name, quantity: qty, event_id: ev, hired_equipment_id: sel.value });
-  };
+    /* ---------- find another list ---------- */
+    let timer = 0, seq = 0;
+    $('#plEvSearch').addEventListener('input', e => {
+        clearTimeout(timer);
+        const q = e.target.value.trim(), browse = $('#plEvBrowse'), out = $('#plEvResults');
+        if (!q) { out.hidden = true; browse.hidden = false; return; }
+        timer = setTimeout(async () => {
+            const mine = ++seq;
+            let data;
+            try { data = await SW.api('GET', '/picklist/search?q=' + encodeURIComponent(q)); } catch (ex) { return; }
+            if (mine !== seq) return;
+            out.innerHTML = data.results.length ? data.results.map(ev =>
+                `<a href="/picklist?event_id=${ev.id}" class="pl-ev${EVENT_ID === ev.id ? ' on' : ''}"><span>${esc(ev.title)}</span>
+                 <small>${esc(ev.date_short)}${ev.location ? ' · ' + esc(ev.location) : ''}${ev.archived ? ' · finished' : ''}</small></a>`).join('')
+                : '<p class="pl-meta" style="padding:.6rem 0">No pick lists match.</p>';
+            browse.hidden = true; out.hidden = false;
+        }, 200);
+    });
 
-  window.plSubManual = function() {
-    const name = document.getElementById('pl-mname').value.trim();
-    if (!name) { plToast('Enter an item name', 'err'); return; }
-    const qty = parseInt(document.getElementById('pl-mqty').value);
-    const ev  = document.getElementById('pl-mev').value || null;
-    plDoAdd({ item_name: name, quantity: qty, event_id: ev });
-  };
-
-  async function plDoAdd(payload) {
-    try {
-      const data = await fetch('/picklist/add', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(payload)
-      }).then(r => r.json());
-      if (data.success) {
-        plClose('pl-addmodal');
-        plToast('Item added!');
-        setTimeout(() => location.reload(), 500);
-      } else { plToast(data.error || 'Error', 'err'); }
-    } catch { plToast('Network error', 'err'); }
-  }
-
-  /* ── Image lightbox ── */
-  window.plViewPic = function(url, name) {
-    document.getElementById('pl-imgview-src').src = url;
-    document.getElementById('pl-imgview-cap').textContent = name;
-    plOpen('pl-imgview');
-  };
-
-  /* Initial hide of bulk column */
-  document.querySelectorAll('.pl-td-bulk, #th-bulk').forEach(el => el.style.display = 'none');
-
+    update();
 })();
 </script>
-{{ plu_assets(unit_options, item_units) }}
 {% endblock %}

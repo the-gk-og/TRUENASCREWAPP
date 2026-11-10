@@ -92,8 +92,25 @@ def create_app(config_name: str | None = None):
         from models import User as _User
         def get_user_by_username(username):
             return _User.query.filter_by(username=username).first()
+        def gear_quarantined():
+            """Items waiting in quarantine, for the badge on the Equipment nav link."""
+            try:
+                from models import UnitQuarantine
+                return UnitQuarantine.query.filter(UnitQuarantine.released_at.is_(None)).count()
+            except Exception:
+                return 0
+        def asset(filename):
+            """Static URL with the file's mtime, so a deploy never serves stale CSS/JS from cache."""
+            from flask import url_for
+            try:
+                v = int(os.path.getmtime(os.path.join(app.static_folder, filename)))
+            except OSError:
+                v = 0
+            return url_for('static', filename=filename, v=v)
         return dict(
             get_user_by_username=get_user_by_username,
+            gear_quarantined=gear_quarantined,
+            asset=asset,
             app=app,
             ORG_SLUG=app.config.get('ORGANIZATION_SLUG', ''),
         )

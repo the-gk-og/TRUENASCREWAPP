@@ -132,7 +132,7 @@ def test_item_mode_unchanged_and_unit_mode_needs_units(app, admin, mic, monkeypa
         'equipment_ids': [mic], 'base_url': 'http://x.test'}).status_code == 200
     assert urls == [f'http://x.test/equipment/{mic}/view']
     r = admin.post('/equipment/generate-qrcodes', json={'equipment_ids': [mic], 'mode': 'unit'})
-    assert r.status_code == 404 and 'no units' in r.get_json()['error']
+    assert r.status_code == 404 and 'no individual items' in r.get_json()['error']
 
 
 def test_scanning_unit_qr_and_asset_tag(app, admin, alice, mic):
@@ -157,7 +157,7 @@ def test_scanning_unit_qr_and_asset_tag(app, admin, alice, mic):
     assert r.status_code == 302
     assert r.headers['Location'].endswith(f'/equipment/{mic}?unit={uid}#unit-{uid}')
     page = alice.get(f'/equipment/{mic}?unit={uid}').get_data(as_text=True)
-    assert 'id="unit-%d" class="unit-highlight"' % uid in page
+    assert 'id="unit-%d" class="is-target"' % uid in page
 
     # …and someone not signed in sees the public page naming the unit
     anon = app.test_client()
@@ -192,7 +192,7 @@ def test_allocate_units_to_pick_list(app, admin, alice, mic):
     page = alice.get(f'/picklist?event_id={show}').get_data(as_text=True)
     assert 'MIC-01' in page and 'MIC-02' in page and f'id="plu-{line}"' in page
     mobile = alice.get(f'/picklist?event_id={show}', headers={'User-Agent': MOBILE_UA}).get_data(as_text=True)
-    assert 'mp-list' in mobile and f'id="plu-{line}"' in mobile and 'MIC-02' in mobile
+    assert 'pl-list' in mobile and f'id="plu-{line}"' in mobile and 'MIC-02' in mobile    # one page for phones and desktops
     state = alice.get(f'/picklist/state?event_id={show}').get_json()['items']
     assert [u['asset_tag'] for u in state[0]['units']] == ['MIC-01', 'MIC-02']
 

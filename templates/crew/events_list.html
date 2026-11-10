@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% block title %}Events - ShowWise{% endblock %}
-{% block head_extra %}<link rel="stylesheet" href="{{ url_for('static', filename='css/events.css') }}">{% endblock %}
 
 {% block content %}
 <div class="sw-page-head">
@@ -48,7 +47,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/sw-ui.js') }}"></script>
 <script>
 document.getElementById('newEvent').onclick = async () => {
   const r = await SW.eventForm({ canRecur: {{ 'true' if can_manage else 'false' }} });

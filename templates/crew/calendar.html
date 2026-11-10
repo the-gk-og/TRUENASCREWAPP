@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% block title %}Calendar - ShowWise{% endblock %}
-{% block head_extra %}<link rel="stylesheet" href="{{ url_for('static', filename='css/events.css') }}">{% endblock %}
 
 {% block content %}
 <div class="sw-page-head">
@@ -38,8 +37,8 @@
   </label>
 </div>
 <div class="sw-legend">
-  <span><i style="background:#6366f1"></i>Event</span>
-  <span><i style="background:#4338ca"></i>Event you're on</span>
+  <span><i style="background:#2557d6"></i>Event</span>
+  <span><i style="background:#16337f"></i>Event you're on</span>
   <span><i style="background:#059669"></i>Shift (confirmed)</span>
   <span><i style="background:#f59e0b"></i>Shift (awaiting response)</span>
   <span><i style="background:#fca5a5"></i>Unavailable</span>
@@ -51,7 +50,6 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='vendor/fullcalendar-6.1.15.min.js') }}"></script>
-<script src="{{ url_for('static', filename='js/sw-ui.js') }}"></script>
 <script>
 const CAN_MANAGE = {{ 'true' if can_manage else 'false' }};
 const KEY = 'sw-cal-filters';

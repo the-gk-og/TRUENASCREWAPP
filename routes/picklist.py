@@ -6,7 +6,6 @@ from flask_login import login_required, current_user
 from extensions import db
 from models import Event, PickListItem, PickListUnit, Equipment, EquipmentUnit, HiredEquipment, UnitCheckout
 from decorators import crew_required
-from routes import _is_mobile
 
 picklist_bp = Blueprint('picklist', __name__)
 
@@ -70,13 +69,11 @@ def picklist():
     # Units that can be allocated, for each item type on this list that tracks units
     unit_options = {}
     for it in items:
-        if it.equipment and it.equipment.units and it.equipment_id not in unit_options:
+        if it.equipment and it.equipment.is_individual and it.equipment_id not in unit_options:
             unit_options[it.equipment_id] = [u.to_dict() for u in it.equipment.units]
 
-    template = '/crew/picklist_mobile.html' if _is_mobile(request.user_agent.string) else '/crew/picklist.html'
-
     return render_template(
-        template,
+        'crew/picklist.html',
         items=items,
         events=events,
         current_events=current_events,
@@ -87,6 +84,11 @@ def picklist():
         all_equipment_json=[e.to_dict() for e in all_equipment],
         equipment_json=[e.to_dict() for e in all_equipment],
         hired_equipment=hired_equipment,
+        hired_json=[{'id': h.id, 'name': h.name,
+                     'label': f"{h.name} — {h.supplier or 'supplier unknown'}"
+                              + (f" (back {h.return_date.strftime('%d %b')})" if h.return_date else '')}
+                    for h in hired_equipment],
+        events_json=[{'id': e.id, 'label': f"{e.title} · {e.event_date.strftime('%d %b')}"} for e in events],
         unit_options=unit_options,
         item_units={it.id: [_unit_chip(u, it.event_id) for u in it.units] for it in items},
     )
@@ -237,6 +239,11 @@ def assign_unit(item_id):
                                  'remove a unit or raise the quantity first'}), 400
 
     force = bool(data.get('force'))
+    if unit.status == 'quarantined':
+        q = unit.open_quarantine
+        why = f': {q.reason}' if q and q.reason else ''
+        return jsonify({'error': f'{unit.asset_tag} is quarantined{why}',
+                        'conflict': 'quarantined', 'can_force': False}), 409
     if unit.status in ('retired', 'lost') or (unit.status == 'repair' and not force):
         return jsonify({'error': f'{unit.asset_tag} is marked {unit.status}',
                         'conflict': 'status', 'can_force': unit.status == 'repair'}), 409

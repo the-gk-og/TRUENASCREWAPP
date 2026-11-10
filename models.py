@@ -101,6 +101,9 @@ class Equipment(db.Model):
     notes            = db.Column(db.Text)
     created_at       = db.Column(db.DateTime, default=datetime.utcnow)
     quantity_owned   = db.Column(db.Integer, default=1)
+    # 'individual': every physical item has its own row (EquipmentUnit) and label.
+    # 'bulk': only counted (quantity_owned); one group label for the lot.
+    tracking         = db.Column(db.String(20), default='bulk')
     # Photo of the item itself
     picture          = db.Column(db.String(300), nullable=True)
     # Photo of where it lives in storage
@@ -119,7 +122,8 @@ class Equipment(db.Model):
             'category':       self.category or '',
             'location':       self.location or '',
             'notes':          self.notes or '',
-            'quantity_owned': self.quantity_owned or 1,
+            'quantity_owned': self.owned,
+            'tracking':       self.tracking_mode,
             'unit_count':     len(self.units),
             'picture_url': (
                 url_for('equipment.serve_equipment_picture', id=self.id)
@@ -132,7 +136,28 @@ class Equipment(db.Model):
         }
 
 
-UNIT_STATUSES = ('available', 'repair', 'retired', 'lost')
+    @property
+    def is_individual(self):
+        # A type that has tagged items is individual whatever the column says
+        return self.tracking == 'individual' or bool(self.units)
+
+    @property
+    def tracking_mode(self):
+        return 'individual' if self.is_individual else 'bulk'
+
+    @property
+    def owned(self):
+        """How many of this type the organisation has. For individually tracked
+        types that is the items on the books (retired and lost ones are gone)."""
+        if self.is_individual:
+            return sum(1 for u in self.units if u.status not in ('retired', 'lost'))
+        return self.quantity_owned if self.quantity_owned is not None else 1
+
+
+TRACKING_MODES = ('individual', 'bulk')
+UNIT_STATUSES = ('available', 'quarantined', 'repair', 'retired', 'lost')
+UNIT_STATUS_LABELS = {'available': 'Available', 'quarantined': 'Quarantined', 'repair': 'In repair',
+                      'retired': 'Retired', 'lost': 'Lost'}
 
 
 class EquipmentUnit(db.Model):
@@ -188,7 +213,28 @@ class EquipmentUnit(db.Model):
             d['checkout']    = co.to_dict() if co else None
             d['is_out']      = bool(d['allocations']) or co is not None
             d['maintenance_due'] = self.maintenance_due()
+            q = self.open_quarantine
+            d['quarantine']  = q.to_dict() if q else None
+            d['state']       = self.state
+            d['state_label'] = UNIT_STATE_LABELS[d['state']]
         return d
+
+    @property
+    def open_quarantine(self):
+        """The UnitQuarantine this item is currently held under, or None."""
+        return next((q for q in self.quarantines if q.released_at is None), None)
+
+    @property
+    def state(self):
+        """One word for where this item stands right now: its own condition first,
+        then whether it is physically out, then whether it is promised to an event."""
+        if (self.status or 'available') != 'available':
+            return self.status
+        if self.open_checkout:
+            return 'out'
+        if self.allocations():
+            return 'booked'
+        return 'available'
 
     @property
     def open_checkout(self):
@@ -201,6 +247,8 @@ class EquipmentUnit(db.Model):
         Returns {'date', 'kind', 'state': overdue|due_soon|ok} or None."""
         return due_state(latest_due_by_kind(self.maintenance), today)
 
+
+UNIT_STATE_LABELS = {**UNIT_STATUS_LABELS, 'out': 'Checked out', 'booked': 'Booked'}
 
 MAINTENANCE_KINDS   = ('pat', 'inspection', 'repair')
 MAINTENANCE_LABELS  = {'pat': 'PAT test', 'inspection': 'Inspection', 'repair': 'Repair'}
@@ -304,6 +352,99 @@ class UnitMaintenance(db.Model):
             'next_due':     self.next_due.isoformat() if self.next_due else '',
             'next_due_text': self.next_due.strftime('%d %b %Y') if self.next_due else '',
             'recorded_by':  self.recorded_by or '',
+        }
+
+
+class UnitQuarantine(db.Model):
+    """An item pulled out of use because it may be damaged, until an admin releases it.
+    Open while released_at is NULL; an item has at most one open quarantine."""
+    __tablename__ = 'unit_quarantine'
+    id             = db.Column(db.Integer, primary_key=True)
+    unit_id        = db.Column(db.Integer, db.ForeignKey('equipment_unit.id', ondelete='CASCADE'),
+                               nullable=False, index=True)
+    reason         = db.Column(db.Text, nullable=False)
+    photo          = db.Column(db.String(300))                    # path under uploads/
+    event_id       = db.Column(db.Integer, db.ForeignKey('event.id', ondelete='SET NULL'))  # came back damaged from
+    quarantined_by = db.Column(db.String(80))
+    quarantined_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    released_by    = db.Column(db.String(80))
+    released_at    = db.Column(db.DateTime, index=True)
+    outcome        = db.Column(db.String(20))                     # QUARANTINE_OUTCOMES
+    release_note   = db.Column(db.Text)
+    unit  = db.relationship('EquipmentUnit', backref=db.backref(
+        'quarantines', cascade='all, delete-orphan', order_by='UnitQuarantine.quarantined_at.desc()'))
+    event = db.relationship('Event')
+
+    def to_dict(self):
+        from flask import url_for
+        u = self.unit
+        return {
+            'id':             self.id,
+            'unit_id':        self.unit_id,
+            'asset_tag':      u.asset_tag if u else '',
+            'equipment_id':   u.equipment_id if u else None,
+            'equipment_name': u.equipment.name if u and u.equipment else '',
+            'reason':         self.reason or '',
+            'photo_url':      url_for('unit_tracking.quarantine_photo', qid=self.id) if self.photo else None,
+            'event_id':       self.event_id,
+            'event_title':    self.event.title if self.event else '',
+            'quarantined_by': self.quarantined_by or '',
+            'quarantined_at': self.quarantined_at.strftime('%d %b %Y, %H:%M') if self.quarantined_at else '',
+            'released_by':    self.released_by or '',
+            'released_at':    self.released_at.strftime('%d %b %Y, %H:%M') if self.released_at else '',
+            'outcome':        self.outcome or '',
+            'outcome_label':  QUARANTINE_OUTCOMES.get(self.outcome, ''),
+            'release_note':   self.release_note or '',
+            'is_open':        self.released_at is None,
+        }
+
+
+# What an admin decided when closing a quarantine -> the status the item gets
+QUARANTINE_OUTCOMES = {'available': 'Back in service', 'repair': 'Sent for repair', 'retired': 'Retired'}
+
+
+class BulkCheckout(db.Model):
+    """Some of a bulk (count-only) item type leaving storage for an event.
+    Open while returned_at is NULL; quantity_returned counts partial returns."""
+    __tablename__ = 'bulk_checkout'
+    id                = db.Column(db.Integer, primary_key=True)
+    equipment_id      = db.Column(db.Integer, db.ForeignKey('equipment.id', ondelete='CASCADE'),
+                                  nullable=False, index=True)
+    event_id          = db.Column(db.Integer, db.ForeignKey('event.id', ondelete='CASCADE'),
+                                  nullable=False, index=True)
+    quantity          = db.Column(db.Integer, nullable=False, default=1)
+    quantity_returned = db.Column(db.Integer, nullable=False, default=0)
+    checked_out_by    = db.Column(db.String(80))
+    checked_out_at    = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    returned_by       = db.Column(db.String(80))
+    returned_at       = db.Column(db.DateTime, index=True)
+    notes             = db.Column(db.Text)
+    equipment = db.relationship('Equipment', backref=db.backref(
+        'bulk_checkouts', cascade='all, delete-orphan', order_by='BulkCheckout.checked_out_at.desc()'))
+    event     = db.relationship('Event', backref=db.backref('bulk_checkouts', cascade='all, delete-orphan'))
+
+    @property
+    def outstanding(self):
+        return 0 if self.returned_at else max(0, (self.quantity or 0) - (self.quantity_returned or 0))
+
+    def to_dict(self):
+        ev, eq = self.event, self.equipment
+        return {
+            'id':                self.id,
+            'equipment_id':      self.equipment_id,
+            'equipment_name':    eq.name if eq else '',
+            'event_id':          self.event_id,
+            'event_title':       ev.title if ev else '',
+            'event_date':        ev.event_date.strftime('%d %b %Y') if ev and ev.event_date else '',
+            'quantity':          self.quantity or 0,
+            'quantity_returned': self.quantity_returned or 0,
+            'outstanding':       self.outstanding,
+            'checked_out_by':    self.checked_out_by or '',
+            'checked_out_at':    self.checked_out_at.strftime('%d %b %Y, %H:%M') if self.checked_out_at else '',
+            'returned_by':       self.returned_by or '',
+            'returned_at':       self.returned_at.strftime('%d %b %Y, %H:%M') if self.returned_at else '',
+            'is_open':           self.returned_at is None,
+            'notes':             self.notes or '',
         }
 
 
