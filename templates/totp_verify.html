@@ -32,8 +32,8 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <style>
     :root {
-      --primary: {{ organization.primary_color or '#6366f1' }};
-      --primary-dark: {{ organization.primary_color or '#4f46e5' }};
+      --primary: {{ organization.primary_color or '#2557d6' }};
+      --primary-dark: {{ organization.primary_color or '#1c45b0' }};
       --secondary: {{ organization.secondary_color or '#898989' }};
       --dark: #1f2937;
       --light: #f9fafb;
@@ -47,7 +47,7 @@
 
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      background: var(--primary);
       color: var(--dark);
       min-height: 100vh;
       display: flex;
@@ -72,7 +72,7 @@
     .login-container {
       background: white;
       padding: 3rem;
-      border-radius: 16px;
+      border-radius: 8px;
       box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
       width: 100%;
       max-width: 420px;
@@ -93,11 +93,11 @@
     .form-group { margin-bottom: 1.5rem; }
     .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: var(--dark); font-size: 0.95rem; }
     .form-group input {
-      width: 100%; padding: 0.75rem; border: 2px solid var(--border);
+      width: 100%; padding: 0.75rem; border: 1px solid var(--border);
       border-radius: 8px; font-size: 1rem; transition: all 0.3s ease;
       font-family: 'Courier New', monospace;
     }
-    .form-group input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1); }
+    .form-group input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 87, 214, 0.1); }
 
     .code-input { text-align: center; font-size: 1.5rem; letter-spacing: 8px; font-weight: 600; }
 
@@ -107,9 +107,9 @@
       display: flex; align-items: center; justify-content: center; gap: 0.5rem;
     }
     .btn-primary { background: var(--primary); color: white; }
-    .btn-primary:hover { background: var(--primary-dark); transform: translateY(-2px); box-shadow: 0 10px 20px rgba(99, 102, 241, 0.2); }
+    .btn-primary:hover { background: var(--primary-dark); box-shadow: 0 10px 20px rgba(37, 87, 214, 0.2); }
     .btn-primary:active { transform: translateY(0); }
-    .btn-secondary { background: var(--light); color: var(--dark); border: 2px solid var(--border); }
+    .btn-secondary { background: var(--light); color: var(--dark); border: 1px solid var(--border); }
     .btn-secondary:hover { background: #f3f4f6; border-color: var(--primary); }
 
     .alert {

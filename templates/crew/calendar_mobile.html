@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% block title %}Calendar - ShowWise{% endblock %}
-{% block head_extra %}<link rel="stylesheet" href="{{ url_for('static', filename='css/events.css') }}">{% endblock %}
 
 {% block content %}
 <style>
@@ -13,7 +12,7 @@
 #mcal .mc-head { position: sticky; top: 0; z-index: 80; background: var(--bg-topbar); border-bottom: 2px solid var(--border); }
 #mcal .mc-top { display: flex; align-items: center; gap: .4rem; padding: .55rem .75rem .4rem; }
 #mcal .mc-title { flex: 1; min-width: 0; text-align: center; font-weight: 800; font-size: 1rem; color: var(--primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#mcal .mc-btn { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border); border-radius: 10px;
+#mcal .mc-btn { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px;
   min-width: 42px; height: 42px; font-size: .95rem; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 #mcal .mc-btn.today { padding: 0 .7rem; font-weight: 700; font-size: .85rem; }
 #mcal .mc-views { display: flex; gap: .3rem; padding: 0 .75rem .55rem; }
@@ -45,7 +44,7 @@
 #mcal .mc-agenda-head small { color: var(--text-muted); font-weight: 600; }
 #mcal .mc-list { padding: 0 .75rem; display: flex; flex-direction: column; gap: .5rem; }
 #mcal .mc-item { display: flex; gap: .75rem; text-align: left; width: 100%; background: var(--bg-card); color: var(--text-primary);
-  border: 1px solid var(--border); border-left-width: 6px; border-radius: 10px; padding: .75rem; cursor: pointer; font: inherit; }
+  border: 1px solid var(--border); border-left-width: 6px; border-radius: 8px; padding: .75rem; cursor: pointer; font: inherit; }
 #mcal .mc-item.past { opacity: .6; }
 #mcal .mc-item.declined .mc-it-title { text-decoration: line-through; }
 #mcal .mc-time { min-width: 64px; font-size: .8rem; font-weight: 700; color: var(--text-muted); line-height: 1.3; }
@@ -61,7 +60,7 @@
 #mcal .mc-tg-head { border: 0; background: transparent; color: var(--text-primary); padding: .35rem 0; display: flex; flex-direction: column;
   align-items: center; gap: 2px; font: inherit; cursor: pointer; }
 #mcal .mc-tg-head span { font-size: .65rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted); }
-#mcal .mc-tg-head b { min-width: 28px; height: 28px; padding: 0 6px; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; font-size: .9rem; }
+#mcal .mc-tg-head b { min-width: 28px; height: 28px; padding: 0 6px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; font-size: .9rem; }
 #mcal .mc-tg-head.today b { border: 2px solid var(--primary); }
 #mcal .mc-tg-head.sel b { background: var(--primary); color: #fff; }
 #mcal .mc-tg-allday { border-top: 1px solid var(--border); padding: 2px 0; }
@@ -76,7 +75,7 @@
 #mcal .mc-tg-labels span { position: absolute; right: 4px; font-size: .62rem; color: var(--text-muted); transform: translateY(-50%); }
 #mcal .mc-tg-col { position: relative; border-left: 1px solid var(--border);
   background-image: repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--hh) - 1px), var(--border) calc(var(--hh) - 1px), var(--border) var(--hh)); }
-#mcal .mc-tg-col.today { background-color: rgba(99, 102, 241, .07); }
+#mcal .mc-tg-col.today { background-color: rgba(37, 87, 214, .07); }
 #mcal .mc-blk { position: absolute; border: 0; border-radius: 5px; padding: 2px 3px; overflow: hidden; text-align: left; font: inherit;
   font-size: .64rem; line-height: 1.15; cursor: pointer; box-shadow: 0 0 0 1px var(--bg-card); }
 #mcal .mc-tg.one .mc-blk { font-size: .82rem; padding: 4px 6px; }
@@ -155,8 +154,8 @@
   </div>
 
   <div class="mc-legend">
-    <span><i style="background:#6366f1"></i>Event</span>
-    <span><i style="background:#4338ca"></i>You're on it</span>
+    <span><i style="background:#2557d6"></i>Event</span>
+    <span><i style="background:#16337f"></i>You're on it</span>
     <span><i style="background:#059669"></i>Shift</span>
     <span><i style="background:#f59e0b"></i>Awaiting reply</span>
     <span><i style="background:#fca5a5"></i>Unavailable</span>
@@ -168,7 +167,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/sw-ui.js') }}"></script>
 <script>
 const CAN_MANAGE = {{ 'true' if can_manage else 'false' }};
 const KEY = 'sw-cal-filters';           // shared with the desktop calendar, so filters follow the person
@@ -225,8 +223,8 @@ function look(classes) {
   if (c.includes('cal-shift-declined')) return { bg: '#9ca3af', fg: '#fff', dot: '#9ca3af' };
   if (c.includes('cal-shift-pending')) return { bg: '#f59e0b', fg: '#1f2937', dot: '#f59e0b' };
   if (c.includes('cal-shift-confirmed')) return { bg: '#059669', fg: '#fff', dot: '#059669' };
-  if (c.includes('cal-event-mine')) return { bg: '#4338ca', fg: '#fff', dot: '#4338ca' };
-  return { bg: '#6366f1', fg: '#fff', dot: '#6366f1' };
+  if (c.includes('cal-event-mine')) return { bg: '#16337f', fg: '#fff', dot: '#16337f' };
+  return { bg: '#2557d6', fg: '#fff', dot: '#2557d6' };
 }
 
 // What range does the current view need?  Week, Day and List all use the surrounding week, so

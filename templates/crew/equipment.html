@@ -2,376 +2,54 @@
 {% block title %}Equipment — ShowWise{% endblock %}
 
 {% block content %}
-<style>
-    /* ============================================================
-       EQUIPMENT — one responsive page for phones and desktops.
-       Cards on mobile, a table-style list on wide screens.
-       Uses the base.html theme variables (dark mode etc. just work).
-       ============================================================ */
-    .eq { max-width: 1200px; margin: 0 auto; padding-bottom: 6rem; }
-    .eq * { box-sizing: border-box; }
-    .eq button, .eq input, .eq select, .eq textarea,
-    .eq-scrim button, .eq-scrim input, .eq-scrim select, .eq-scrim textarea { font-family: inherit; -webkit-tap-highlight-color: transparent; }
+<div class="gear">
 
-    /* ---------- Header ---------- */
-    .eq-head-row { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
-    .eq-title h1 { margin: 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: .6rem; }
-    .eq-title p  { margin: .25rem 0 0; font-size: .9rem; color: var(--text-secondary); }
-    .eq-icon-btn {
-        flex: 0 0 48px; width: 48px; height: 48px; border-radius: 12px; cursor: pointer;
-        background: var(--bg-card); border: 1px solid var(--border); color: var(--text-primary); font-size: 1.1rem;
-    }
-
-    /* ---------- Search bar (sticks under the top bar) ---------- */
-    .eq-bar {
-        position: sticky; top: var(--topbar-height); z-index: 5;
-        display: flex; gap: .6rem;
-        margin: .9rem -.25rem 0; padding: .5rem .25rem;
-        background: var(--bg-body);
-    }
-    .eq-search { position: relative; flex: 1; min-width: 0; }
-    .eq-search i { position: absolute; left: .9rem; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none; }
-    .eq-input {
-        width: 100%; min-height: 48px; padding: .65rem .8rem;
-        font-size: 16px;                         /* stops iOS zooming on focus */
-        color: var(--text-primary);
-        background: var(--bg-input);
-        border: 1px solid var(--border-input);
-        border-radius: 12px;
-    }
-    .eq-search .eq-input { padding-left: 2.5rem; padding-right: 2.75rem; }
-    .eq-input:focus { outline: none; border-color: var(--border-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--border-focus) 25%, transparent); }
-    textarea.eq-input { min-height: 84px; resize: vertical; }
-    .eq-clear { position: absolute; right: .25rem; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border: 0; background: none; color: var(--text-muted); cursor: pointer; font-size: 1rem; display: none; }
-    .eq-search.has-text .eq-clear { display: block; }
-    .eq-scan-btn {
-        flex: 0 0 auto; min-height: 48px; padding: 0 1.1rem;
-        display: flex; align-items: center; gap: .5rem;
-        border: 0; border-radius: 12px; cursor: pointer;
-        background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-        color: #fff; font-size: .95rem; font-weight: 700;
-    }
-    .eq-scan-btn:active { transform: scale(.97); }
-
-    /* ---------- Stats ---------- */
-    .eq-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .5rem; margin: .4rem 0 .9rem; }
-    .eq-stat { padding: .6rem .4rem; text-align: center; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-sm); }
-    .eq-stat b { display: block; font-size: 1.3rem; line-height: 1.15; color: var(--text-primary); }
-    .eq-stat span { font-size: .7rem; font-weight: 500; color: var(--text-secondary); }
-
-    /* ---------- Filters ---------- */
-    .eq-chips { display: flex; gap: .5rem; overflow-x: auto; padding: .1rem .1rem .4rem; margin: 0 -.25rem; scroll-snap-type: x proximity; scrollbar-width: none; }
-    .eq-chips::-webkit-scrollbar { display: none; }
-    .eq-chip {
-        flex: 0 0 auto; min-height: 40px; padding: 0 1rem; scroll-snap-align: start;
-        border-radius: 999px; cursor: pointer; white-space: nowrap;
-        background: var(--bg-card); border: 1px solid var(--border); color: var(--text-secondary);
-        font-size: .88rem; font-weight: 600;
-    }
-    .eq-chip[aria-pressed="true"] { background: var(--bg-nav-active); border-color: var(--primary); color: var(--text-nav-active); }
-
-    .eq-selects { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-top: .4rem; }
-    .eq-selects select { appearance: auto; }
-
-    .eq-meta { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin: .8rem 0 .5rem; font-size: .85rem; color: var(--text-secondary); min-height: 32px; }
-    .eq-meta b { color: var(--text-primary); }
-    .eq-link-btn { background: none; border: 0; padding: .5rem 0; color: var(--primary); font-weight: 600; font-size: .85rem; cursor: pointer; }
-
-    /* ---------- List (cards on mobile) ---------- */
-    .eq-list { display: grid; gap: .6rem; }
-    .eq-headrow { display: none; }
-
-    .eq-row {
-        position: relative;
-        display: grid;
-        grid-template-columns: 56px minmax(0, 1fr) auto;
-        grid-template-areas: "thumb main qty" "thumb tags tags";
-        column-gap: .75rem; row-gap: .4rem;
-        padding: .7rem .75rem;
-        background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-sm);
-    }
-    .eq-row.admin { grid-template-columns: 56px minmax(0, 1fr) auto 44px; grid-template-areas: "thumb main qty edit" "thumb tags tags tags"; }
-    .eq-row:active { background: var(--bg-nav-hover); }
-
-    .eq-thumb {
-        grid-area: thumb; width: 56px; height: 56px; border-radius: 12px; overflow: hidden;
-        background: var(--bg-nav-hover); color: var(--text-muted);
-        display: flex; align-items: center; justify-content: center; font-size: 1.3rem;
-    }
-    .eq-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-
-    .eq-name {
-        grid-area: main; align-self: center;
-        font-size: 1rem; font-weight: 700; color: var(--text-primary); text-decoration: none; overflow-wrap: anywhere;
-        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-    }
-    .eq-name::after { content: ""; position: absolute; inset: 0; border-radius: 14px; }   /* whole card is tappable */
-    .eq-name mark, .eq-tag mark { background: color-mix(in srgb, var(--warning) 35%, transparent); color: inherit; border-radius: 3px; }
-
-    .eq-qty { grid-area: qty; align-self: center; text-align: center; min-width: 2.5rem; }
-    .eq-qty b { display: block; font-size: 1.2rem; line-height: 1.1; color: var(--text-primary); }
-    .eq-qty small { font-size: .65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
-
-    .eq-tags { grid-area: tags; display: flex; flex-wrap: wrap; gap: .35rem; min-width: 0; }
-    .eq-tag {
-        display: inline-flex; align-items: center; gap: .3rem; max-width: 100%;
-        padding: .15rem .6rem; border-radius: 999px;
-        background: var(--bg-nav-hover); color: var(--text-secondary);
-        font-size: .75rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .eq-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 500; }
-    .eq-loc i { font-size: .7rem; color: var(--primary); }
-    .eq-notes { display: none; }
-    .eq-tag.eq-due { background: #fef3c7; color: #92400e; }
-    .eq-tag.eq-due.over { background: #fee2e2; color: #991b1b; }
-    .eq-alert { margin: 0 0 .9rem; padding: .75rem 1rem; border-radius: 12px; background: var(--bg-card);
-                border: 1px solid var(--border); border-left: 4px solid var(--warning); font-size: .9rem; color: var(--text-primary); }
-    .eq-alert.bad { border-left-color: var(--danger); }
-    .eq-alert summary { cursor: pointer; font-weight: 700; }
-    .eq-alert ul { margin: .5rem 0 0; padding-left: 1.1rem; }
-    .eq-alert li { margin: .2rem 0; }
-    .eq-alert a { color: var(--primary); text-decoration: none; }
-    .eq-alert .over { color: var(--danger); font-weight: 600; }
-    .eq-links { display: flex; gap: .5rem; flex-wrap: wrap; margin: 0 0 .9rem; }
-    .eq-links a { display: inline-flex; align-items: center; gap: .4rem; min-height: 40px; padding: 0 .9rem; border-radius: 10px;
-                  background: var(--bg-card); border: 1px solid var(--border); color: var(--text-primary); font-weight: 600; font-size: .88rem; text-decoration: none; }
-    .eq-links a i { color: var(--primary); }
-
-    .eq-edit {
-        grid-area: edit; position: relative; z-index: 2; align-self: center;
-        width: 44px; height: 44px; border: 0; border-radius: 10px; cursor: pointer;
-        background: none; color: var(--text-muted);
-    }
-    .eq-edit:active { background: var(--bg-nav-hover); }
-
-    .eq-more { width: 100%; min-height: 48px; margin-top: .75rem; border-radius: 12px; cursor: pointer; background: var(--bg-card); border: 1px solid var(--border); color: var(--text-primary); font-weight: 600; font-size: .95rem; }
-
-    .eq-empty { margin-top: .5rem; padding: 2.25rem 1rem; text-align: center; color: var(--text-secondary); background: var(--bg-card); border: 1px dashed var(--border); border-radius: 14px; }
-    .eq-empty i { display: block; font-size: 1.75rem; color: var(--text-muted); margin-bottom: .5rem; }
-    .eq-empty strong { display: block; color: var(--text-primary); margin-bottom: .25rem; }
-
-    /* ---------- Floating add button ---------- */
-    .eq-fab {
-        position: fixed; z-index: 900;
-        right: 1.1rem; bottom: calc(1.1rem + env(safe-area-inset-bottom, 0px));
-        height: 56px; padding: 0 1.25rem 0 1.1rem; display: flex; align-items: center; gap: .55rem;
-        border: 0; border-radius: 999px; cursor: pointer;
-        background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #fff;
-        font-size: 1rem; font-weight: 700; box-shadow: var(--shadow-md);
-    }
-    .eq-fab:active { transform: scale(.97); }
-
-    /* ---------- Bottom sheets ---------- */
-    .eq-scrim { position: fixed; inset: 0; z-index: 2100; display: none; align-items: flex-end; justify-content: center; background: var(--overlay-bg); }
-    .eq-scrim.open { display: flex; }
-    .eq-sheet {
-        width: 100%; max-width: 560px; max-height: 94vh; max-height: 94dvh;
-        display: flex; flex-direction: column;
-        background: var(--bg-modal); border: 1px solid var(--border);
-        border-radius: 20px 20px 0 0; box-shadow: var(--shadow-lg);
-        animation: eqUp .22s ease-out;
-    }
-    @keyframes eqUp { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
-    .eq-sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1rem .5rem 1.25rem; }
-    .eq-sheet-head h2 { margin: 0; font-size: 1.15rem; font-weight: 700; color: var(--text-primary); }
-    .eq-x { width: 44px; height: 44px; border: 0; background: none; border-radius: 10px; font-size: 1.1rem; color: var(--text-secondary); cursor: pointer; }
-    .eq-sheet-body { overflow-y: auto; padding: .25rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom, 0px)); -webkit-overflow-scrolling: touch; }
-
-    .eq-field { margin-bottom: 1rem; }
-    .eq-field > label, .eq-field > .lbl { display: block; margin-bottom: .35rem; font-size: .82rem; font-weight: 600; color: var(--text-secondary); }
-    .eq-two { display: grid; grid-template-columns: 1fr 110px; gap: .75rem; }
-    .eq-input[readonly] { opacity: .7; }
-
-    .eq-btn {
-        display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
-        min-height: 48px; padding: 0 1.1rem; border-radius: 12px; cursor: pointer;
-        font-size: .95rem; font-weight: 700; text-decoration: none; border: 1px solid transparent;
-    }
-    .eq-btn.primary { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #fff; }
-    .eq-btn.ghost   { background: var(--bg-card); border-color: var(--border); color: var(--text-primary); }
-    .eq-btn.danger  { background: transparent; border-color: var(--danger); color: var(--danger); }
-    .eq-btn.danger.armed { background: var(--danger); color: #fff; }
-    .eq-btn.sm { min-height: 40px; padding: 0 .9rem; font-size: .85rem; }
-    .eq-btn.block { width: 100%; }
-    .eq-btn:disabled { opacity: .6; cursor: default; }
-    .eq-btn[hidden] { display: none; }
-    .eq-stack { display: grid; gap: .6rem; margin-top: .25rem; }
-    .eq-error { margin: 0 0 .75rem; padding: .6rem .8rem; border-radius: 10px; font-size: .88rem; color: var(--danger); border: 1px solid var(--danger); }
-    .eq-error[hidden] { display: none; }
-    .sr { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
-
-    /* Photos in the edit sheet */
-    .eq-photos { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin-bottom: 1rem; }
-    .eq-photo-box {
-        position: relative; aspect-ratio: 4 / 3; border-radius: 12px; overflow: hidden;
-        background: var(--bg-nav-hover); border: 1px solid var(--border); color: var(--text-muted);
-        display: flex; align-items: center; justify-content: center; font-size: 1.6rem;
-    }
-    .eq-photo-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .eq-photo-box img[hidden] { display: none; }
-    .eq-photo-box .busy { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: var(--overlay-bg); color: #fff; font-size: .85rem; font-weight: 600; }
-    .eq-photo.uploading .busy { display: flex; }
-    .eq-photo-label { margin: .4rem 0; font-size: .82rem; font-weight: 600; color: var(--text-secondary); }
-    .eq-photo-btns { display: flex; flex-wrap: wrap; gap: .4rem; }
-    .eq-photo-btns .eq-btn { flex: 1 1 auto; }
-    .eq-note { margin: 0 0 1rem; font-size: .85rem; color: var(--text-secondary); }
-
-    /* Tools list */
-    .eq-tool { display: flex; align-items: center; gap: .9rem; width: 100%; min-height: 56px; padding: .6rem .9rem; border-radius: 12px; cursor: pointer; text-align: left; text-decoration: none;
-               background: var(--bg-card); border: 1px solid var(--border); color: var(--text-primary); font-size: .95rem; font-weight: 600; }
-    .eq-tool i { width: 1.25rem; text-align: center; color: var(--primary); }
-    .eq-tool small { display: block; font-weight: 400; color: var(--text-secondary); font-size: .78rem; }
-    .eq-import-status { margin-top: .75rem; font-size: .9rem; color: var(--text-secondary); }
-    .eq-import-status.err { color: var(--danger); }
-
-    /* Scanner */
-    .eq-cam { position: relative; aspect-ratio: 4 / 3; border-radius: 14px; overflow: hidden; background: #000; margin-bottom: .6rem; }
-    .eq-cam video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-    .eq-cam-idle { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .5rem; color: #cbd5e1; font-size: .9rem; text-align: center; padding: 1rem; }
-    .eq-cam-idle i { font-size: 2rem; }
-    .eq-reticle { position: absolute; left: 12%; right: 12%; top: 22%; bottom: 22%; border: 2px solid rgba(255,255,255,.85); border-radius: 14px; display: none; pointer-events: none; overflow: hidden; }
-    .eq-cam.live .eq-reticle { display: block; }
-    .eq-reticle::after { content: ""; position: absolute; left: 0; right: 0; height: 2px; background: var(--primary); box-shadow: 0 0 8px var(--primary); animation: eqScan 1.8s ease-in-out infinite; }
-    @keyframes eqScan { 0% { top: 0; } 50% { top: calc(100% - 2px); } 100% { top: 0; } }
-    .eq-cam-status { display: flex; align-items: center; gap: .5rem; margin-bottom: .75rem; font-size: .85rem; color: var(--text-secondary); }
-    .eq-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-muted); flex: 0 0 9px; }
-    .eq-dot.live { background: var(--success); }
-    .eq-manual { display: flex; gap: .6rem; }
-    .eq-manual .eq-input { flex: 1; min-width: 0; }
-    .eq-or { margin: 1rem 0 .5rem; font-size: .8rem; color: var(--text-muted); text-align: center; }
-
-    .eq-result { margin-top: 1rem; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--bg-card); }
-    .eq-result.nf { padding: 1rem; text-align: center; }
-    .eq-result img.hero { width: 100%; max-height: 200px; object-fit: cover; display: block; }
-    .eq-result-body { padding: 1rem; }
-    .eq-result h3 { margin: 0 0 .75rem; font-size: 1.15rem; color: var(--text-primary); overflow-wrap: anywhere; }
-    .eq-where { display: flex; gap: .75rem; align-items: flex-start; padding: .75rem; margin-bottom: .75rem; border-radius: 12px; background: var(--bg-nav-active); color: var(--text-nav-active); }
-    .eq-where small { display: block; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; opacity: .85; }
-    .eq-where strong { font-size: 1.05rem; overflow-wrap: anywhere; }
-    .eq-where img { width: 72px; height: 54px; object-fit: cover; border-radius: 8px; margin-left: auto; flex: 0 0 auto; }
-    .eq-kv { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-bottom: .75rem; }
-    .eq-kv div { padding: .5rem .65rem; border-radius: 10px; background: var(--bg-nav-hover); }
-    .eq-kv small { display: block; font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }
-    .eq-kv span { font-weight: 700; color: var(--text-primary); overflow-wrap: anywhere; }
-    .eq-kv .full { grid-column: 1 / -1; }
-    .eq-result p.note { margin: 0 0 .75rem; font-size: .9rem; color: var(--text-secondary); }
-    .eq-result-actions { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
-
-    /* Toast */
-    .eq-toast {
-        position: fixed; z-index: 2200; left: 50%; transform: translateX(-50%);
-        bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
-        display: none; max-width: calc(100vw - 2rem); padding: .7rem 1rem; border-radius: 12px;
-        background: var(--text-primary); color: var(--bg-card); font-size: .9rem; box-shadow: var(--shadow-lg);
-    }
-    .eq-toast.show { display: block; }
-    .eq-toast.err { background: var(--danger); color: #fff; }
-
-    /* ---------- Tablet ---------- */
-    @media (min-width: 600px) {
-        .eq-scrim { align-items: center; }
-        .eq-sheet { border-radius: 20px; }
-        .eq-stat b { font-size: 1.5rem; }
-        .eq-stat span { font-size: .78rem; }
-        .eq-title h1 { font-size: 1.75rem; }
-    }
-
-    /* ---------- Desktop: cards become a table-style list ---------- */
-    @media (min-width: 900px) {
-        .eq-selects .sort-wrap { display: none; }
-        .eq-selects { grid-template-columns: 260px; }
-        .eq-list { gap: 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow-sm); }
-
-        .eq-headrow, .eq-row {
-            display: grid;
-            grid-template-columns: 56px minmax(0, 2.2fr) minmax(0, 1.1fr) 72px minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.6fr);
-            grid-template-areas: "thumb main code qty cat loc notes";
-            column-gap: 1rem; align-items: center;
-        }
-        .eq-headrow.admin, .eq-row.admin {
-            grid-template-columns: 56px minmax(0, 2.2fr) minmax(0, 1.1fr) 72px minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.6fr) 44px;
-            grid-template-areas: "thumb main code qty cat loc notes edit";
-        }
-        .eq-headrow {
-            padding: .6rem 1rem; background: var(--bg-nav-hover); border: 1px solid var(--border); border-bottom: 0;
-            border-radius: 14px 14px 0 0; font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-secondary);
-        }
-        .eq-headrow button { background: none; border: 0; padding: .4rem 0; text-align: left; font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit; cursor: pointer; }
-        .eq-headrow button[aria-sort="ascending"]::after  { content: " ▲"; font-size: .65rem; }
-        .eq-headrow button[aria-sort="descending"]::after { content: " ▼"; font-size: .65rem; }
-        .eq-headrow button:hover { color: var(--text-primary); }
-        .eq-list { border-radius: 0 0 14px 14px; border-top: 0; }
-
-        .eq-row { padding: .6rem 1rem; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; box-shadow: none; }
-        .eq-row:last-child { border-bottom: 0; }
-        .eq-row:hover { background: var(--bg-nav-hover); }
-        .eq-name::after { border-radius: 0; }
-        .eq-name { -webkit-line-clamp: 2; }
-
-        .eq-tags { display: contents; }
-        .eq-tag { padding: 0; background: none; border-radius: 0; font-size: .85rem; font-weight: 500; }
-        .eq-code { grid-area: code; font-size: .8rem; }
-        .eq-cat  { grid-area: cat; }
-        .eq-loc  { grid-area: loc; }
-        .eq-qty  { text-align: left; }
-        .eq-qty small { display: none; }
-        .eq-notes { display: block; grid-area: notes; font-size: .82rem; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .eq-stats { max-width: 760px; }
-    }
-    @media (hover: hover) {
-        .eq-chip:hover { border-color: var(--primary); }
-        .eq-tool:hover, .eq-btn.ghost:hover, .eq-more:hover { border-color: var(--primary); }
-        .eq-edit:hover { background: var(--bg-nav-hover); color: var(--text-primary); }
-        .eq-scan-btn:hover, .eq-fab:hover { filter: brightness(1.08); }
-    }
-    @media (prefers-reduced-motion: reduce) {
-        .eq *, .eq-scrim * { transition: none !important; animation: none !important; }
-    }
-</style>
-
-<div class="eq">
-
-    <header class="eq-head-row">
-        <div class="eq-title">
-            <h1><i class="fas fa-box" style="color: var(--primary);"></i> Equipment</h1>
-            <p>Find gear, check where it lives, scan barcodes</p>
+    <header class="sw-head">
+        <div>
+            <h1>Equipment</h1>
+            <p id="gSummary"></p>
         </div>
-        {% if current_user.is_admin %}
-        <button type="button" class="eq-icon-btn" id="eqTools" aria-label="Admin tools"><i class="fas fa-ellipsis-h"></i></button>
-        {% endif %}
+        <div class="sw-head-actions">
+            {% if current_user.is_admin %}
+            <div class="sw-menu-wrap">
+                <button type="button" class="btn btn-secondary" id="gMoreBtn" aria-haspopup="true" aria-expanded="false">Import / export <i class="fas fa-chevron-down" style="font-size:.65rem"></i></button>
+                <div class="sw-menu" id="gMore" role="menu">
+                    <label role="menuitem" class="gear-menu-file"><i class="fas fa-file-arrow-up"></i> Import CSV<input type="file" id="gCsv" accept=".csv" class="sr-only"></label>
+                    <button type="button" id="gExport" role="menuitem"><i class="fas fa-file-arrow-down"></i> Export CSV</button>
+                    <button type="button" id="gTemplate" role="menuitem"><i class="fas fa-file-csv"></i> Download CSV template</button>
+                </div>
+            </div>
+            <button type="button" class="btn btn-secondary" id="gLabels"><i class="fas fa-qrcode"></i> Print labels</button>
+            <button type="button" class="btn btn-primary" id="gAdd"><i class="fas fa-plus"></i> Add type</button>
+            {% endif %}
+        </div>
     </header>
 
-    <!-- Search + scan -->
-    <div class="eq-bar">
-        <div class="eq-search" id="eqSearchWrap">
-            <i class="fas fa-search"></i>
-            <input type="search" id="eqSearch" class="eq-input" placeholder="Name, barcode, location…"
-                   autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search" aria-label="Search equipment">
-            <button type="button" class="eq-clear" id="eqClear" aria-label="Clear search"><i class="fas fa-times"></i></button>
-        </div>
-        <button type="button" class="eq-scan-btn" id="eqScanOpen"><i class="fas fa-barcode"></i> Scan</button>
-    </div>
-
-    <!-- Stats -->
-    <section class="eq-stats" aria-label="Summary">
-        <div class="eq-stat"><b id="stItems">{{ equipment|length }}</b><span>Items</span></div>
-        <div class="eq-stat"><b id="stUnits">—</b><span>Units</span></div>
-        <div class="eq-stat"><b id="stCats">—</b><span>Categories</span></div>
-        <div class="eq-stat"><b id="stLocs">—</b><span>Locations</span></div>
-    </section>
-
-    <div class="eq-links">
-        <a href="{{ url_for('unit_tracking.checkout_page') }}"><i class="fas fa-people-carry-box"></i> Scan out / in
-            {% if units_out %}<span style="color:var(--text-secondary); font-weight:500;">· {{ units_out }} out</span>{% endif %}</a>
-    </div>
+    {% if quarantined %}
+    <details class="sw-notice bad" id="gQuarantine" {{ 'open' if request.args.get('status') == 'quarantined' }}>
+        <summary>{{ quarantined|length }} item{{ '' if quarantined|length == 1 else 's' }} in quarantine</summary>
+        <ul class="gear-qlist">
+            {% for q in quarantined %}
+            <li>
+                <a href="{{ url_for('equipment.equipment_detail', id=q.equipment_id, unit=q.unit_id) }}#unit-{{ q.unit_id }}"><code>{{ q.asset_tag }}</code></a>
+                <span>{{ q.equipment_name }}: {{ q.reason }}
+                    <span class="sub">{{ q.quarantined_at }} by {{ q.quarantined_by or 'unknown' }}{% if q.event_title %} · after {{ q.event_title }}{% endif %}</span></span>
+                {% if current_user.is_admin %}
+                <button type="button" class="btn btn-secondary btn-sm" data-release='{{ q|tojson }}'>Release…</button>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </details>
+    {% endif %}
 
     {% if stale_checkouts %}
-    <details class="eq-alert bad">
-        <summary><i class="fas fa-triangle-exclamation"></i> {{ stale_checkouts|length }} unit{{ '' if stale_checkouts|length == 1 else 's' }} still out from finished events</summary>
+    <details class="sw-notice bad">
+        <summary>{{ stale_checkouts|length }} item{{ '' if stale_checkouts|length == 1 else 's' }} still out from finished events</summary>
         <ul>
             {% for c in stale_checkouts[:20] %}
             <li><a href="{{ url_for('equipment.equipment_detail', id=c.equipment_id, unit=c.unit_id) }}#unit-{{ c.unit_id }}"><code>{{ c.asset_tag }}</code></a>
-                {{ c.equipment_name }} — <a href="{{ url_for('unit_tracking.checkout_page', event_id=c.event_id) }}">{{ c.event_title }}</a> ({{ c.event_date }})</li>
+                {{ c.equipment_name }}, out on <a href="{{ url_for('unit_tracking.checkout_page', event_id=c.event_id) }}">{{ c.event_title }}</a> ({{ c.event_date }})</li>
             {% endfor %}
         </ul>
     </details>
@@ -379,319 +57,142 @@
 
     {% if maint_alerts %}
     {% set n_over = maint_alerts|selectattr('due.state', 'equalto', 'overdue')|list|length %}
-    <details class="eq-alert {{ 'bad' if n_over }}">
-        <summary><i class="fas fa-screwdriver-wrench"></i>
-            {% if n_over %}{{ n_over }} unit{{ '' if n_over == 1 else 's' }} overdue for testing{% endif %}{% if n_over and maint_alerts|length > n_over %}, {% endif %}{% if maint_alerts|length > n_over %}{{ maint_alerts|length - n_over }} due within 30 days{% endif %}
+    <details class="sw-notice {{ 'bad' if n_over }}">
+        <summary>
+            {% if n_over %}{{ n_over }} item{{ '' if n_over == 1 else 's' }} overdue for testing{% endif %}{% if n_over and maint_alerts|length > n_over %}, {% endif %}{% if maint_alerts|length > n_over %}{{ maint_alerts|length - n_over }} due within 30 days{% endif %}
         </summary>
         <ul>
             {% for a in maint_alerts[:30] %}
             <li><a href="{{ url_for('equipment.equipment_detail', id=a.equipment_id, unit=a.id) }}#unit-{{ a.id }}"><code>{{ a.asset_tag }}</code></a>
-                {{ a.equipment_name }} — {{ a.due.kind_label }}
-                <span class="{{ 'over' if a.due.state == 'overdue' }}">{{ 'overdue since' if a.due.state == 'overdue' else 'due' }} {{ a.due.date_text }}</span></li>
+                {{ a.equipment_name }}: {{ a.due.kind_label }}
+                {{ 'overdue since' if a.due.state == 'overdue' else 'due' }} {{ a.due.date_text }}</li>
             {% endfor %}
         </ul>
     </details>
     {% endif %}
 
-    <!-- Filters -->
-    <div class="eq-chips" id="eqChips" role="group" aria-label="Filter by category"></div>
-    <div class="eq-selects">
-        <select id="eqLoc" class="eq-input" aria-label="Filter by location"><option value="">All locations</option></select>
-        <select id="eqSort" class="eq-input sort-wrap" aria-label="Sort by">
-            <option value="name-1">Name A–Z</option>
-            <option value="name--1">Name Z–A</option>
-            <option value="quantity_owned--1">Most units</option>
-            <option value="quantity_owned-1">Fewest units</option>
-            <option value="category-1">Category</option>
-            <option value="location-1">Location</option>
-            <option value="barcode-1">Barcode</option>
-        </select>
+    <div class="gear-toolbar">
+        <div class="sw-filters" id="gStatus" role="group" aria-label="Filter by status"></div>
+        <div class="gear-toolbar-right">
+            <input type="search" id="gFilter" class="sw-input" placeholder="Filter this list…" autocomplete="off" spellcheck="false" aria-label="Filter this list">
+            <select id="gCat" class="sw-input" aria-label="Category"><option value="">All categories</option></select>
+            <select id="gLoc" class="sw-input" aria-label="Location"><option value="">All locations</option></select>
+        </div>
     </div>
 
-    <div class="eq-meta"><span id="eqMeta"></span><button type="button" class="eq-link-btn" id="eqReset" hidden>Clear filters</button></div>
-
-    <!-- List -->
-    <div class="eq-headrow{% if current_user.is_admin %} admin{% endif %}" id="eqHeadRow" role="row">
-        <span></span>
-        <button type="button" data-col="name">Name</button>
-        <button type="button" data-col="barcode">Barcode</button>
-        <button type="button" data-col="quantity_owned">Qty</button>
-        <button type="button" data-col="category">Category</button>
-        <button type="button" data-col="location">Location</button>
-        <span>Notes</span>
-        {% if current_user.is_admin %}<span></span>{% endif %}
+    <div class="gear-selbar" id="gSelBar" hidden>
+        <strong id="gSelCount"></strong>
+        <button type="button" class="btn btn-primary btn-sm" id="gSelLabels"><i class="fas fa-qrcode"></i> Print labels</button>
+        <button type="button" class="btn-link" id="gSelClear">Clear</button>
     </div>
-    <div class="eq-list" id="eqList"></div>
-    <button type="button" class="eq-more" id="eqMore" hidden></button>
 
-    <div class="eq-empty" id="eqEmpty" hidden>
-        <i class="fas fa-search"></i>
-        <strong id="eqEmptyTitle">Nothing found</strong>
-        <span id="eqEmptyText"></span>
+    <div class="gear-list{% if current_user.is_admin %} can-select{% endif %}" id="gTable">
+        <div class="gear-row gear-headrow" id="gHead" role="row">
+            {% if current_user.is_admin %}<span class="c-sel"><input type="checkbox" id="gSelAll" aria-label="Select all shown"></span>{% endif %}
+            <span class="c-thumb"></span>
+            <button type="button" class="c-name" data-col="name">Name</button>
+            <button type="button" class="c-cat" data-col="category">Category</button>
+            <button type="button" class="c-loc" data-col="location">Location</button>
+            <button type="button" class="c-stock" data-col="owned">Stock</button>
+        </div>
+        <div id="gRows"></div>
     </div>
+    <button type="button" class="btn btn-secondary btn-block" id="gShowMore" hidden style="margin-top:.75rem"></button>
+
+    <div class="sw-blank" id="gEmpty" hidden><strong id="gEmptyTitle"></strong><span id="gEmptyText"></span></div>
 </div>
-
-{% if current_user.is_admin %}
-<button type="button" class="eq-fab" id="eqAdd" aria-label="Add item"><i class="fas fa-plus"></i> Add item</button>
-
-<!-- Add / edit sheet -->
-<div class="eq-scrim" id="shEdit" aria-hidden="true">
-    <div class="eq-sheet" role="dialog" aria-modal="true" aria-labelledby="eqEditTitle">
-        <div class="eq-sheet-head">
-            <h2 id="eqEditTitle">Add equipment</h2>
-            <button type="button" class="eq-x" data-close aria-label="Close"><i class="fas fa-times"></i></button>
-        </div>
-        <form class="eq-sheet-body" id="eqForm" autocomplete="off" novalidate>
-            <div class="eq-field">
-                <label for="fName">Name *</label>
-                <input class="eq-input" id="fName" type="text" maxlength="200" placeholder="e.g. 20m XLR Cable">
-            </div>
-            <div class="eq-two">
-                <div class="eq-field">
-                    <label for="fBarcode">Barcode *</label>
-                    <input class="eq-input" id="fBarcode" type="text" maxlength="100" placeholder="EQ-001" autocapitalize="characters">
-                </div>
-                <div class="eq-field">
-                    <label for="fQty">Quantity</label>
-                    <input class="eq-input" id="fQty" type="number" inputmode="numeric" min="1" value="1">
-                </div>
-            </div>
-            <div class="eq-field">
-                <label for="fCat">Category</label>
-                <input class="eq-input" id="fCat" type="text" list="dlCats" maxlength="100" placeholder="e.g. Audio, Lighting">
-                <datalist id="dlCats"></datalist>
-            </div>
-            <div class="eq-field">
-                <label for="fLoc">Storage location</label>
-                <input class="eq-input" id="fLoc" type="text" list="dlLocs" maxlength="200" placeholder="e.g. Rack A, Shelf 3">
-                <datalist id="dlLocs"></datalist>
-            </div>
-            <div class="eq-field">
-                <label for="fNotes">Notes</label>
-                <textarea class="eq-input" id="fNotes" rows="3" placeholder="Optional notes…"></textarea>
-            </div>
-
-            <div id="eqPhotosWrap">
-                <div class="eq-photos">
-                    <div class="eq-photo" data-kind="item">
-                        <div class="eq-photo-box"><img alt="" hidden><i class="fas fa-camera ph"></i><div class="busy">Uploading…</div></div>
-                        <div class="eq-photo-label">Item photo</div>
-                        <div class="eq-photo-btns">
-                            <label class="eq-btn ghost sm"><span class="up-label">Upload</span><input type="file" accept="image/*" class="sr"></label>
-                            <button type="button" class="eq-btn danger sm" data-remove hidden>Remove</button>
-                        </div>
-                    </div>
-                    <div class="eq-photo" data-kind="loc">
-                        <div class="eq-photo-box"><img alt="" hidden><i class="fas fa-map-marker-alt ph"></i><div class="busy">Uploading…</div></div>
-                        <div class="eq-photo-label">Where it lives</div>
-                        <div class="eq-photo-btns">
-                            <label class="eq-btn ghost sm"><span class="up-label">Upload</span><input type="file" accept="image/*" class="sr"></label>
-                            <button type="button" class="eq-btn danger sm" data-remove hidden>Remove</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <p class="eq-note" id="eqPhotosNote" hidden>Save the item first, then you can add photos.</p>
-
-            <p class="eq-error" id="eqErr" role="alert" hidden></p>
-            <div class="eq-stack">
-                <button type="submit" class="eq-btn primary block" id="eqSave">Add item</button>
-                <button type="button" class="eq-btn danger block" id="eqDelete" hidden>Delete item</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- Admin tools sheet -->
-<div class="eq-scrim" id="shTools" aria-hidden="true">
-    <div class="eq-sheet" role="dialog" aria-modal="true" aria-labelledby="eqToolsTitle">
-        <div class="eq-sheet-head">
-            <h2 id="eqToolsTitle">Admin tools</h2>
-            <button type="button" class="eq-x" data-close aria-label="Close"><i class="fas fa-times"></i></button>
-        </div>
-        <div class="eq-sheet-body">
-            <div class="eq-stack">
-                <label class="eq-tool" style="cursor:pointer;">
-                    <i class="fas fa-file-upload"></i>
-                    <span>Import CSV<small>Add many items at once</small></span>
-                    <input type="file" id="csvFile" accept=".csv" class="sr">
-                </label>
-                <button type="button" class="eq-tool" id="toolExport"><i class="fas fa-file-download"></i><span>Export CSV<small>Download the full inventory</small></span></button>
-                <button type="button" class="eq-tool" id="toolTemplate"><i class="fas fa-file-csv"></i><span>CSV template<small>Blank file with the right columns</small></span></button>
-                <a class="eq-tool" href="{{ url_for('equipment.barcode_page') }}"><i class="fas fa-qrcode"></i><span>QR codes<small>Generate and print labels</small></span></a>
-            </div>
-            <div class="eq-import-status" id="eqImport" role="status"></div>
-        </div>
-    </div>
-</div>
-{% endif %}
-
-<!-- Scan sheet -->
-<div class="eq-scrim" id="shScan" aria-hidden="true">
-    <div class="eq-sheet" role="dialog" aria-modal="true" aria-labelledby="eqScanTitle">
-        <div class="eq-sheet-head">
-            <h2 id="eqScanTitle">Scan a barcode or QR</h2>
-            <button type="button" class="eq-x" data-close aria-label="Close"><i class="fas fa-times"></i></button>
-        </div>
-        <div class="eq-sheet-body">
-            <div class="eq-cam" id="eqCam">
-                <div class="eq-cam-idle" id="eqCamIdle"><i class="fas fa-camera"></i><span>Camera is off</span></div>
-                <div class="eq-reticle"></div>
-            </div>
-            <div class="eq-cam-status"><span class="eq-dot" id="eqDot"></span><span id="eqCamStatus">Camera off</span></div>
-            <button type="button" class="eq-btn primary block" id="eqCamBtn"><i class="fas fa-video"></i> Start camera</button>
-
-            <div class="eq-or">or type / paste a barcode</div>
-            <div class="eq-manual">
-                <input type="text" id="eqManual" class="eq-input" placeholder="Barcode…" autocomplete="off" spellcheck="false" enterkeyhint="go">
-                <button type="button" class="eq-btn ghost" id="eqManualGo">Find</button>
-            </div>
-
-            <div id="eqResult" aria-live="polite"></div>
-        </div>
-    </div>
-</div>
-
-<div class="eq-toast" id="eqToast" role="status" aria-live="polite"></div>
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
-<script src="{{ url_for('static', filename='js/sw-scanner.js') }}"></script>
 <script>
 (function () {
     const IS_ADMIN = {{ 'true' if current_user.is_admin else 'false' }};
     let items = {{ equipment_json | tojson }};
-    const PAGE = 40;
-    const st = { q: '', cat: '', loc: '', col: 'name', dir: 1, shown: PAGE };
-    // Filled in below for admins; harmless no-ops for regular crew
-    let openAdd = () => {}, openEdit = () => {}, resetDelete = () => {};
+    const PAGE = 60;
+    const params = new URLSearchParams(location.search);
+    const st = { q: '', cat: '', loc: '', status: params.get('status') || 'all', col: 'name', dir: 1, shown: PAGE };
+    const selected = new Set();
 
     const $  = (s, r = document) => r.querySelector(s);
     const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const esc = SW.esc;
     const cmp = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+    const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-    /* ---------- API ---------- */
-    async function api(url, method, body) {
-        const opts = { method };
-        if (body instanceof FormData) opts.body = body;
-        else if (body) { opts.headers = { 'Content-Type': 'application/json' }; opts.body = JSON.stringify(body); }
-        let res;
-        try { res = await fetch(url, opts); } catch (e) { throw new Error('Network error — check your connection.'); }
-        let data = {};
-        try { data = await res.json(); } catch (e) {}
-        if (!res.ok || data.error) throw new Error(data.error || 'Something went wrong. Please try again.');
-        return data;
-    }
+    const STATUS = [
+        ['all', 'All', () => true],
+        ['out', 'Out', it => it.summary.out > 0],
+        ['quarantined', 'Quarantined', it => it.summary.quarantined > 0],
+        ['attention', 'Needs attention', it => it.summary.quarantined > 0 || it.summary.repair > 0 || !!it.maint],
+    ];
+    if (!STATUS.some(s => s[0] === st.status)) st.status = 'all';
 
-    /* ---------- Toast ---------- */
-    let toastTimer;
-    function toast(msg, isErr) {
-        const t = $('#eqToast');
-        t.textContent = msg; t.classList.toggle('err', !!isErr); t.classList.add('show');
-        clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
-    }
-
-    /* ---------- Sheets ---------- */
-    let lastFocus = null;
-    function openSheet(id) {
-        lastFocus = document.activeElement;
-        const el = $('#' + id);
-        el.classList.add('open'); el.setAttribute('aria-hidden', 'false');
-        document.body.style.overflow = 'hidden';
-    }
-    function closeSheet(id) {
-        const el = $('#' + id);
-        if (!el || !el.classList.contains('open')) return;
-        el.classList.remove('open'); el.setAttribute('aria-hidden', 'true');
-        if (!$('.eq-scrim.open')) document.body.style.overflow = '';
-        if (id === 'shScan') stopScan();
-        if (id === 'shEdit') resetDelete();
-        if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) {} }
-    }
-    $$('.eq-scrim').forEach(s => {
-        s.addEventListener('click', e => { if (e.target === s || e.target.closest('[data-close]')) closeSheet(s.id); });
-    });
-    document.addEventListener('keydown', e => {
-        if (e.key === 'Escape') $$('.eq-scrim.open').forEach(s => closeSheet(s.id));
-    });
-    window.addEventListener('pagehide', stopScan);
-
-    /* ---------- Filtering / sorting ---------- */
     function visibleItems() {
-        const q = st.q.toLowerCase();
+        const words = st.q.toLowerCase().split(/\s+/).filter(Boolean);
+        const test = STATUS.find(s => s[0] === st.status)[2];
         const out = items.filter(it => {
             if (st.cat && (it.category || '') !== st.cat) return false;
             if (st.loc && (it.location || '') !== st.loc) return false;
-            if (!q) return true;
-            return [it.name, it.barcode, it.category, it.location, it.notes].join(' ').toLowerCase().includes(q);
+            if (!test(it)) return false;
+            if (!words.length) return true;
+            const hay = [it.name, it.barcode, it.category, it.location, it.notes].join(' ').toLowerCase();
+            return words.every(w => hay.includes(w));
         });
-        out.sort((a, b) => {
-            if (st.col === 'quantity_owned') return st.dir * ((a.quantity_owned || 1) - (b.quantity_owned || 1));
-            return st.dir * cmp.compare(a[st.col] || '', b[st.col] || '');
-        });
+        out.sort((a, b) => st.col === 'owned'
+            ? st.dir * (a.summary.owned - b.summary.owned)
+            : st.dir * cmp.compare(a[st.col] || '', b[st.col] || ''));
         return out;
     }
 
-    function hl(text) {
-        text = String(text == null ? '' : text);
-        const q = st.q;
-        if (!q) return esc(text);
-        const i = text.toLowerCase().indexOf(q.toLowerCase());
-        if (i < 0) return esc(text);
-        return esc(text.slice(0, i)) + '<mark>' + esc(text.slice(i, i + q.length)) + '</mark>' + esc(text.slice(i + q.length));
+    function stockHtml(it) {
+        const s = it.summary, ind = it.tracking === 'individual';
+        const main = ind ? `<b>${s.available}</b> of ${s.owned} available`
+            : (s.out ? `<b>${s.available}</b> of ${s.owned} in storage` : `<b>${s.owned}</b> in storage`);
+        const pills = [];
+        if (s.out) pills.push(`<span class="pill out">${s.out} out</span>`);
+        if (s.quarantined) pills.push(`<span class="pill quarantined">${s.quarantined} quarantined</span>`);
+        if (s.repair) pills.push(`<span class="pill repair">${s.repair} in repair</span>`);
+        const m = it.maint;
+        if (m && m.overdue) pills.push(`<span class="pill overdue">${m.overdue} test overdue</span>`);
+        else if (m && m.due_soon) pills.push(`<span class="pill due_soon">${m.due_soon} test due</span>`);
+        return `<span class="gear-stock-main">${main}</span>${pills.length ? `<span class="gear-pills">${pills.join('')}</span>` : ''}`;
     }
 
     function rowHtml(it) {
-        const thumb = it.picture_url ? `<img src="${esc(it.picture_url)}" alt="" loading="lazy">` : '<i class="fas fa-box"></i>';
-        const cat = it.category ? `<span class="eq-tag eq-cat">${hl(it.category)}</span>` : '';
-        const loc = it.location ? `<span class="eq-tag eq-loc"><i class="fas fa-map-marker-alt"></i>${hl(it.location)}</span>` : '';
-        const m = it.maint;
-        const due = !m ? '' : m.overdue
-            ? `<span class="eq-tag eq-due over" title="Test or inspection overdue"><i class="fas fa-screwdriver-wrench"></i>${m.overdue} overdue</span>`
-            : `<span class="eq-tag eq-due" title="Test or inspection due within 30 days"><i class="fas fa-screwdriver-wrench"></i>${m.due_soon} due soon</span>`;
-        const edit = IS_ADMIN ? `<button type="button" class="eq-edit" data-edit aria-label="Edit ${esc(it.name)}"><i class="fas fa-pen"></i></button>` : '';
-        return `<div class="eq-row${IS_ADMIN ? ' admin' : ''}" data-id="${it.id}">
-            <div class="eq-thumb">${thumb}</div>
-            <a class="eq-name" href="/equipment/${it.id}">${hl(it.name)}</a>
-            <div class="eq-qty"><b>${it.quantity_owned || 1}</b><small>qty</small></div>
-            <div class="eq-tags"><span class="eq-tag eq-code">${hl(it.barcode)}</span>${due}${cat}${loc}</div>
-            <div class="eq-notes" title="${esc(it.notes || '')}">${esc(it.notes || '')}</div>
-            ${edit}
+        const thumb = it.picture_url ? `<img src="${esc(it.picture_url)}" alt="" loading="lazy">` : '';
+        const sel = IS_ADMIN ? `<span class="c-sel"><input type="checkbox" data-sel="${it.id}" ${selected.has(it.id) ? 'checked' : ''} aria-label="Select ${esc(it.name)}"></span>` : '';
+        return `<div class="gear-row" data-id="${it.id}">
+            ${sel}
+            <span class="c-thumb">${thumb}</span>
+            <span class="c-name"><a href="/equipment/${it.id}">${esc(it.name)}</a>
+                <span class="sub"><code>${esc(it.barcode)}</code> · ${it.tracking === 'individual' ? 'tracked individually' : 'counted'}</span></span>
+            <span class="c-cat">${esc(it.category || '')}</span>
+            <span class="c-loc">${esc(it.location || '')}</span>
+            <span class="c-stock">${stockHtml(it)}</span>
         </div>`;
     }
 
     function render() {
         const list = visibleItems();
         const slice = list.slice(0, st.shown);
-        $('#eqList').innerHTML = slice.map(rowHtml).join('');
-        $('#eqHeadRow').style.visibility = list.length ? '' : 'hidden';
+        $('#gRows').innerHTML = slice.map(rowHtml).join('');
+        $('#gTable').hidden = !list.length;
 
-        const more = $('#eqMore');
-        if (list.length > slice.length) { more.hidden = false; more.textContent = `Show more (${list.length - slice.length} left)`; }
-        else more.hidden = true;
+        const more = $('#gShowMore');
+        more.hidden = list.length <= slice.length;
+        if (!more.hidden) more.textContent = `Show ${Math.min(PAGE, list.length - slice.length)} more (${list.length - slice.length} left)`;
 
-        const filtering = !!(st.q || st.cat || st.loc);
-        $('#eqMeta').innerHTML = !items.length ? '' :
-            (filtering ? `Showing <b>${list.length}</b> of ${items.length}` : `<b>${items.length}</b> item${items.length === 1 ? '' : 's'}`);
-        $('#eqReset').hidden = !filtering;
-
-        const empty = $('#eqEmpty');
+        const empty = $('#gEmpty');
         empty.hidden = list.length > 0;
         if (!list.length) {
-            if (!items.length) {
-                $('#eqEmptyTitle').textContent = 'No equipment yet';
-                $('#eqEmptyText').textContent = IS_ADMIN ? 'Tap “Add item” or import a CSV to get started.' : 'Nothing has been added yet.';
-            } else {
-                $('#eqEmptyTitle').textContent = 'Nothing found';
-                $('#eqEmptyText').textContent = 'Try a different search, or clear the filters.';
-            }
+            const none = !items.length;
+            $('#gEmptyTitle').textContent = none ? 'No equipment yet' : 'Nothing matches';
+            $('#gEmptyText').textContent = none ? (IS_ADMIN ? 'Add your first type, or import a CSV.' : 'Nothing has been added yet.')
+                : 'Try a different filter.';
         }
-
-        $$('#eqHeadRow button').forEach(b => b.setAttribute('aria-sort', b.dataset.col === st.col ? (st.dir === 1 ? 'ascending' : 'descending') : 'none'));
-        const sel = $('#eqSort'); sel.value = st.col + '-' + st.dir;
+        $$('#gHead button').forEach(b => b.setAttribute('aria-sort', b.dataset.col === st.col ? (st.dir === 1 ? 'ascending' : 'descending') : 'none'));
+        $$('#gStatus .sw-filter').forEach(b => b.setAttribute('aria-pressed', b.dataset.status === st.status ? 'true' : 'false'));
+        paintSelection(slice);
     }
 
     function refreshFacets() {
@@ -699,353 +200,149 @@
         const locs = [...new Set(items.map(i => i.location).filter(Boolean))].sort(cmp.compare);
         if (st.cat && !cats.includes(st.cat)) st.cat = '';
         if (st.loc && !locs.includes(st.loc)) st.loc = '';
+        const fill = (sel, all, list, val) => {
+            sel.innerHTML = `<option value="">${all}</option>` + list.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+            sel.value = val;
+        };
+        fill($('#gCat'), 'All categories', cats, st.cat);
+        fill($('#gLoc'), 'All locations', locs, st.loc);
 
-        $('#eqChips').innerHTML = ['', ...cats].map(c =>
-            `<button type="button" class="eq-chip" data-cat="${esc(c)}" aria-pressed="${c === st.cat}">${c ? esc(c) : 'All'}</button>`).join('');
-        const ls = $('#eqLoc');
-        ls.innerHTML = '<option value="">All locations</option>' + locs.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
-        ls.value = st.loc;
-        if (IS_ADMIN) {
-            $('#dlCats').innerHTML = cats.map(c => `<option value="${esc(c)}">`).join('');
-            $('#dlLocs').innerHTML = locs.map(l => `<option value="${esc(l)}">`).join('');
-        }
-        $('#stItems').textContent = items.length;
-        $('#stUnits').textContent = items.reduce((s, i) => s + (i.quantity_owned || 1), 0);
-        $('#stCats').textContent = cats.length;
-        $('#stLocs').textContent = locs.length;
+        $('#gStatus').innerHTML = STATUS.map(([key, label, test]) => {
+            const n = items.filter(test).length;
+            return key !== 'all' && !n && st.status !== key ? '' :
+                `<button type="button" class="sw-filter" data-status="${key}">${label}<span class="n">${n}</span></button>`;
+        }).join('');
+
+        const tot = items.reduce((a, i) => ({ owned: a.owned + i.summary.owned, out: a.out + i.summary.out, q: a.q + i.summary.quarantined }), { owned: 0, out: 0, q: 0 });
+        $('#gSummary').textContent = [plural(items.length, 'type'), plural(tot.owned, 'item'),
+            tot.out ? `${tot.out} out` : '', tot.q ? `${tot.q} quarantined` : ''].filter(Boolean).join(' · ');
     }
     function refreshAll() { refreshFacets(); render(); }
 
-    /* ---------- Filter events ---------- */
-    $('#eqSearch').addEventListener('input', e => {
-        st.q = e.target.value.trim(); st.shown = PAGE;
-        $('#eqSearchWrap').classList.toggle('has-text', !!e.target.value);
-        render();
+    /* ---------- filters ---------- */
+    $('#gFilter').addEventListener('input', e => { st.q = e.target.value.trim(); st.shown = PAGE; render(); });
+    $('#gCat').addEventListener('change', e => { st.cat = e.target.value; st.shown = PAGE; render(); });
+    $('#gLoc').addEventListener('change', e => { st.loc = e.target.value; st.shown = PAGE; render(); });
+    $('#gStatus').addEventListener('click', e => {
+        const b = e.target.closest('[data-status]'); if (!b) return;
+        st.status = b.dataset.status; st.shown = PAGE; render();
     });
-    $('#eqClear').addEventListener('click', () => {
-        const s = $('#eqSearch'); s.value = ''; st.q = ''; st.shown = PAGE;
-        $('#eqSearchWrap').classList.remove('has-text'); render(); s.focus();
-    });
-    $('#eqChips').addEventListener('click', e => {
-        const b = e.target.closest('.eq-chip'); if (!b) return;
-        st.cat = b.dataset.cat; st.shown = PAGE;
-        $$('.eq-chip').forEach(c => c.setAttribute('aria-pressed', c === b ? 'true' : 'false'));
-        render();
-    });
-    $('#eqLoc').addEventListener('change', e => { st.loc = e.target.value; st.shown = PAGE; render(); });
-    $('#eqSort').addEventListener('change', e => {
-        const m = e.target.value.match(/^(.*)-(-?1)$/);
-        if (m) { st.col = m[1]; st.dir = parseInt(m[2], 10); st.shown = PAGE; render(); }
-    });
-    $('#eqHeadRow').addEventListener('click', e => {
+    $('#gHead').addEventListener('click', e => {
         const b = e.target.closest('button[data-col]'); if (!b) return;
         if (st.col === b.dataset.col) st.dir *= -1; else { st.col = b.dataset.col; st.dir = 1; }
         render();
     });
-    $('#eqReset').addEventListener('click', () => {
-        st.q = st.cat = st.loc = ''; st.shown = PAGE;
-        const s = $('#eqSearch'); s.value = ''; $('#eqSearchWrap').classList.remove('has-text');
-        refreshFacets(); render();
-    });
-    $('#eqMore').addEventListener('click', () => { st.shown += PAGE; render(); });
-    $('#eqList').addEventListener('click', e => {
-        const b = e.target.closest('[data-edit]');
-        if (b) openEdit(parseInt(b.closest('.eq-row').dataset.id, 10));
-    });
+    $('#gShowMore').addEventListener('click', () => { st.shown += PAGE; render(); });
 
-    /* ============================================================
-       SCANNER (getUserMedia + jsQR for QR + Quagga2 for 1D barcodes)
-       ============================================================ */
-    // Camera + decoding live in static/js/sw-scanner.js (shared with the check-out page)
-    const scanner = SWScanner.create({
-        container: $('#eqCam'),
-        isOpen: () => $('#shScan').classList.contains('open'),
-        onCode: code => lookup(code),
-        onState: (live, text) => {
-            const idle = $('#eqCamIdle'); if (idle) idle.style.display = scanner && scanner.scanning ? 'none' : '';
-            camState(live, text);
-        },
-        onError: msg => toast(msg, true),
-    });
-
-    function camState(live, text) {
-        $('#eqDot').classList.toggle('live', live);
-        $('#eqCamStatus').textContent = text;
-        $('#eqCam').classList.toggle('live', live);
-        const b = $('#eqCamBtn');
-        b.innerHTML = scanner.scanning ? '<i class="fas fa-stop"></i> Stop camera' : '<i class="fas fa-video"></i> Start camera';
+    /* ---------- selection + labels (admins) ---------- */
+    function paintSelection(slice) {
+        if (!IS_ADMIN) return;
+        slice = slice || visibleItems().slice(0, st.shown);
+        $('#gSelBar').hidden = !selected.size;
+        $('#gSelCount').textContent = `${selected.size} selected`;
+        const all = $('#gSelAll');
+        const shown = slice.filter(i => selected.has(i.id)).length;
+        all.checked = !!slice.length && shown === slice.length;
+        all.indeterminate = shown > 0 && shown < slice.length;
+    }
+    function printLabels(ids) {
+        const chosen = items.filter(i => ids.includes(i.id));
+        if (!chosen.length) return SW.toast('Nothing to print labels for', 'error');
+        SWGear.labels({ equipmentIds: ids, hasItems: chosen.some(i => i.tracking === 'individual'),
+                        name: chosen.length === 1 ? chosen[0].name : (ids.length === items.length ? 'all equipment' : null) });
     }
 
-    function startScan() { $('#eqResult').innerHTML = ''; return scanner.start(); }
-    function stopScan() { scanner.stop(); }
-
-    function idFromInput(code) {
-        const m = String(code || '').match(/\/equipment\/(\d+)(?:\/view)?/);
-        return m ? parseInt(m[1], 10) : null;
-    }
-    function unitIdFromInput(code) {                    // per-unit tag: …/equipment/unit/<id>/view
-        const m = String(code || '').match(/\/equipment\/unit\/(\d+)/);
-        return m ? parseInt(m[1], 10) : null;
-    }
-
-    async function lookup(code) {
-        code = String(code || '').trim();
-        if (!code) return;
-        const out = $('#eqResult');
-        out.innerHTML = '<div class="eq-result nf"><i class="fas fa-spinner fa-spin"></i> Looking up…</div>';
-        const unitId = unitIdFromInput(code);
-        if (unitId != null) {
-            let hit = null;
-            try { hit = await api(`/equipment/unit/${unitId}/json`, 'GET'); } catch (e) { hit = null; }
-            if (hit) showFound(hit); else showNotFound(code);
-            return;
-        }
-        const id = idFromInput(code);
-        let item = id != null ? items.find(i => i.id === id) : items.find(i => String(i.barcode).toLowerCase() === code.toLowerCase());
-        if (!item) {                                    // not in the page data (e.g. added by someone else a moment ago)
-            try { item = await api(id != null ? `/equipment/${id}/json` : `/equipment/barcode/${encodeURIComponent(code)}`, 'GET'); }
-            catch (e) { item = null; }
-        }
-        if (item) showFound(item); else showNotFound(code);
-    }
-
-    function showFound(it) {
-        const hero = it.picture_url ? `<img class="hero" src="${esc(it.picture_url)}" alt="">` : '';
-        const where = it.location
-            ? `<div class="eq-where"><i class="fas fa-map-marker-alt" style="margin-top:.2rem;"></i><div><small>Storage location</small><strong>${esc(it.location)}</strong></div>${it.location_picture_url ? `<img src="${esc(it.location_picture_url)}" alt="Where it is stored">` : ''}</div>`
-            : '';
-        $('#eqResult').innerHTML = `<div class="eq-result">${hero}<div class="eq-result-body">
-            <h3>${esc(it.name)}</h3>${unitBlock(it.unit)}${where}
-            <div class="eq-kv">
-                <div><small>Qty owned</small><span>${it.quantity_owned || 1}</span></div>
-                <div><small>Category</small><span>${esc(it.category || '—')}</span></div>
-                <div class="full"><small>Barcode</small><span>${esc(it.barcode)}</span></div>
-            </div>
-            ${it.notes ? `<p class="note">${esc(it.notes)}</p>` : ''}
-            <div class="eq-result-actions">
-                <a class="eq-btn primary" href="/equipment/${it.id}${it.unit ? `?unit=${it.unit.id}#unit-${it.unit.id}` : ''}"><i class="fas fa-file-alt"></i> Details</a>
-                <button type="button" class="eq-btn ghost" id="eqAgain"><i class="fas fa-redo"></i> Scan again</button>
-            </div></div></div>`;
-        $('#eqAgain').addEventListener('click', () => { $('#eqResult').innerHTML = ''; startScan(); });
-        const label = it.unit ? `${it.name} (${it.unit.asset_tag})` : it.name;
-        camState(false, 'Found: ' + label);
-        toast('Found ' + label);
-        $('#eqResult').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-
-    function unitBlock(u) {
-        if (!u) return '';
-        const co = u.checkout;
-        const state = u.status !== 'available' ? u.status : (co ? 'checked out' : (u.is_out ? 'booked' : 'available'));
-        const where = (co ? [`Out on ${esc(co.event_title)} · ${esc(co.checked_out_at)} by ${esc(co.checked_out_by)}`] : []).concat(
-            (u.allocations || []).filter(a => !co || a.event_id !== co.event_id).map(a =>
-            `${esc(a.event_title)}${a.event_date ? ' · ' + esc(a.event_date) : ''}${a.is_checked ? ' · packed' : ''}`)).join('<br>');
-        const d = u.maintenance_due;
-        const dueRow = d && d.state !== 'ok'
-            ? `<div class="full"><small>${esc(d.kind_label)}</small><span style="color:${d.state === 'overdue' ? 'var(--danger)' : 'var(--warning)'};">${d.state === 'overdue' ? 'Overdue since' : 'Due'} ${esc(d.date_text)}</span></div>` : '';
-        return `<div class="eq-kv" style="margin-bottom:.6rem;">
-            <div><small>Unit</small><span class="eq-code">${esc(u.asset_tag)}</span></div>
-            <div><small>Status</small><span>${esc(state.charAt(0).toUpperCase() + state.slice(1))}</span></div>
-            ${u.serial_number ? `<div class="full"><small>Serial</small><span>${esc(u.serial_number)}</span></div>` : ''}
-            <div class="full"><small>Where</small><span>${where || 'In storage'}</span></div>
-            ${dueRow}
-        </div>`;
-    }
-
-    function showNotFound(code) {
-        $('#eqResult').innerHTML = `<div class="eq-result nf"><strong style="color:var(--text-primary);">Not found</strong>
-            <p class="note" style="margin:.4rem 0 .9rem;">No item matches <span class="eq-code">${esc(code)}</span></p>
-            <div class="eq-result-actions" style="${IS_ADMIN ? '' : 'grid-template-columns:1fr;'}">
-                <button type="button" class="eq-btn ghost" id="eqAgain"><i class="fas fa-redo"></i> Try again</button>
-                ${IS_ADMIN ? '<button type="button" class="eq-btn primary" id="eqAddFromScan"><i class="fas fa-plus"></i> Add it</button>' : ''}
-            </div></div>`;
-        $('#eqAgain').addEventListener('click', () => { $('#eqResult').innerHTML = ''; startScan(); });
-        const add = $('#eqAddFromScan');
-        if (add) add.addEventListener('click', () => { closeSheet('shScan'); openAdd(idFromInput(code) ? '' : code); });
-        camState(false, 'No match');
-    }
-
-    $('#eqScanOpen').addEventListener('click', () => {
-        $('#eqResult').innerHTML = ''; $('#eqManual').value = '';
-        openSheet('shScan');
-        startScan();                       // opened from a tap, so the camera prompt is allowed
-    });
-    $('#eqCamBtn').addEventListener('click', () => { if (scanner.scanning) stopScan(); else startScan(); });
-    $('#eqManualGo').addEventListener('click', () => { stopScan(); lookup($('#eqManual').value); });
-    $('#eqManual').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); stopScan(); lookup(e.target.value); } });
-
-    /* ============================================================
-       ADMIN: add / edit / delete / photos / CSV
-       ============================================================ */
     if (IS_ADMIN) {
-        let editingId = null, delTimer = null;
-        const f = { name: $('#fName'), barcode: $('#fBarcode'), qty: $('#fQty'), cat: $('#fCat'), loc: $('#fLoc'), notes: $('#fNotes') };
-        const err = $('#eqErr'), saveBtn = $('#eqSave'), delBtn = $('#eqDelete');
+        $('#gRows').addEventListener('change', e => {
+            const c = e.target.closest('[data-sel]'); if (!c) return;
+            const id = parseInt(c.dataset.sel, 10);
+            if (c.checked) selected.add(id); else selected.delete(id);
+            paintSelection();
+        });
+        $('#gSelAll').addEventListener('change', e => {
+            visibleItems().slice(0, st.shown).forEach(i => e.target.checked ? selected.add(i.id) : selected.delete(i.id));
+            render();
+        });
+        $('#gSelClear').addEventListener('click', () => { selected.clear(); render(); });
+        $('#gSelLabels').addEventListener('click', () => printLabels([...selected]));
+        $('#gLabels').addEventListener('click', () => {
+            if (selected.size) return printLabels([...selected]);
+            const shown = visibleItems();
+            printLabels((shown.length ? shown : items).map(i => i.id));
+        });
 
-        resetDelete = function () { clearTimeout(delTimer); delBtn.classList.remove('armed'); delBtn.textContent = 'Delete item'; };
+        /* ----- menu ----- */
+        const moreBtn = $('#gMoreBtn'), more = $('#gMore');
+        const setMore = on => { more.classList.toggle('open', on); moreBtn.setAttribute('aria-expanded', on ? 'true' : 'false'); };
+        moreBtn.addEventListener('click', e => { e.stopPropagation(); setMore(!more.classList.contains('open')); });
+        document.addEventListener('click', e => { if (!more.contains(e.target)) setMore(false); });
 
-        function paintPhotos(it) {
-            $$('.eq-photo').forEach(p => {
-                const url = p.dataset.kind === 'item' ? it.picture_url : it.location_picture_url;
-                const img = $('img', p), ph = $('.ph', p);
-                img.hidden = !url; ph.style.display = url ? 'none' : '';
-                if (url) img.src = url;
-                $('[data-remove]', p).hidden = !url;
-                $('.up-label', p).textContent = url ? 'Replace' : 'Upload';
+        /* ----- add a type ----- */
+        $('#gAdd').addEventListener('click', () => addType(''));
+        function addType(barcode) {
+            const cats = [...new Set(items.map(i => i.category).filter(Boolean))].sort(cmp.compare);
+            const locs = [...new Set(items.map(i => i.location).filter(Boolean))].sort(cmp.compare);
+            SW.form({
+                title: 'Add an equipment type', submitText: 'Add type',
+                fields: [
+                    { name: 'name', label: 'Name', required: true, maxLength: 200, placeholder: 'e.g. Shure SM58' },
+                    { name: 'barcode', label: 'Barcode / short code', required: true, maxLength: 100, half: true, placeholder: 'e.g. MIC', value: barcode,
+                      hint: 'Printed on the group label. Item tags are numbered from it: MIC-01, MIC-02…' },
+                    { name: 'quantity_owned', label: 'How many do you have?', type: 'number', min: 1, max: 100000, half: true, value: 1 },
+                    { name: 'tracking', label: 'How do you want to track them?', type: 'select', value: 'individual', options: [
+                        { value: 'individual', label: 'Individually: each one gets its own label and history' },
+                        { value: 'bulk', label: 'Just count them: one group label (cables, tape, consumables)' },
+                    ] },
+                    { name: 'category', label: 'Category', half: true, maxLength: 100, suggestions: cats, placeholder: 'e.g. Audio' },
+                    { name: 'location', label: 'Where it lives', half: true, maxLength: 200, suggestions: locs, placeholder: 'e.g. Rack A, shelf 3' },
+                    { name: 'notes', label: 'Notes', type: 'textarea', rows: 2 },
+                ],
+                onSubmit: async v => {
+                    if (v.tracking === 'individual' && v.quantity_owned > 500) throw new Error('Add at most 500 individual items at a time');
+                    const r = await SW.api('POST', '/equipment/add', { ...v, quantity_owned: Math.max(1, v.quantity_owned || 1) });
+                    location.href = '/equipment/' + r.id;          // straight to the new type: photos, items, labels
+                    return true;
+                },
             });
         }
 
-        openAdd = function (barcode) {
-            editingId = null;
-            $('#eqEditTitle').textContent = 'Add equipment';
-            saveBtn.textContent = 'Add item';
-            Object.values(f).forEach(i => i.value = '');
-            f.qty.value = 1; f.barcode.value = barcode || ''; f.barcode.readOnly = false;
-            err.hidden = true; delBtn.hidden = true; resetDelete();
-            $('#eqPhotosWrap').hidden = true; $('#eqPhotosNote').hidden = false;
-            openSheet('shEdit');
-            setTimeout(() => f.name.focus(), 50);
-        };
-
-        openEdit = function (id) {
-            const it = items.find(i => i.id === id); if (!it) return;
-            editingId = id;
-            $('#eqEditTitle').textContent = 'Edit equipment';
-            saveBtn.textContent = 'Save changes';
-            f.name.value = it.name || ''; f.barcode.value = it.barcode || ''; f.barcode.readOnly = true;
-            f.qty.value = it.quantity_owned || 1; f.cat.value = it.category || ''; f.loc.value = it.location || ''; f.notes.value = it.notes || '';
-            err.hidden = true; delBtn.hidden = false; resetDelete();
-            $('#eqPhotosWrap').hidden = false; $('#eqPhotosNote').hidden = true;
-            paintPhotos(it);
-            openSheet('shEdit');
-        };
-
-        $('#eqAdd').addEventListener('click', () => openAdd(''));
-
-        $('#eqForm').addEventListener('submit', async e => {
-            e.preventDefault();
-            const data = {
-                barcode: f.barcode.value.trim(), name: f.name.value.trim(),
-                quantity_owned: Math.max(1, parseInt(f.qty.value, 10) || 1),
-                category: f.cat.value.trim(), location: f.loc.value.trim(), notes: f.notes.value.trim()
-            };
-            const fail = m => { err.textContent = m; err.hidden = false; };
-            if (!data.name)    return fail('Please enter a name.');
-            if (!data.barcode) return fail('Please enter a barcode.');
-            if (!editingId && items.some(i => String(i.barcode).toLowerCase() === data.barcode.toLowerCase()))
-                return fail('That barcode is already in use.');
-
-            err.hidden = true; saveBtn.disabled = true;
-            const label = saveBtn.textContent; saveBtn.textContent = 'Saving…';
-            try {
-                if (editingId) {
-                    await api('/equipment/update/' + editingId, 'PUT', data);
-                    Object.assign(items.find(i => i.id === editingId), data);
-                    toast('Changes saved');
-                } else {
-                    const res = await api('/equipment/add', 'POST', data);
-                    items.push(Object.assign({ id: res.id, picture_url: null, location_picture_url: null }, data));
-                    toast('Item added');
-                }
-                closeSheet('shEdit');
-                refreshAll();
-            } catch (ex) {
-                fail(ex.message.indexOf('Something went wrong') === 0 && !editingId ? 'Couldn’t save — is that barcode already in use?' : ex.message);
-            }
-            saveBtn.disabled = false; saveBtn.textContent = label;
-        });
-
-        delBtn.addEventListener('click', async () => {
-            if (!delBtn.classList.contains('armed')) {
-                delBtn.classList.add('armed'); delBtn.textContent = 'Tap again to delete';
-                delTimer = setTimeout(resetDelete, 3000); return;
-            }
-            clearTimeout(delTimer); delBtn.disabled = true;
-            try {
-                await api('/equipment/delete/' + editingId, 'DELETE');
-                items = items.filter(i => i.id !== editingId);
-                closeSheet('shEdit'); refreshAll(); toast('Item deleted');
-            } catch (ex) { err.textContent = ex.message; err.hidden = false; resetDelete(); }
-            delBtn.disabled = false;
-        });
-
-        /* ----- Photos (shrunk in the browser first — phone photos are huge) ----- */
-        async function shrink(file) {
-            if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size < 1.2 * 1024 * 1024) return file;
-            try {
-                const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
-                const s = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
-                const c = document.createElement('canvas');
-                c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
-                c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
-                const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.85));
-                return blob ? new File([blob], 'photo.jpg', { type: 'image/jpeg' }) : file;
-            } catch (e) { return file; }
-        }
-        function photoUrl(kind, id) { return `/equipment/${id}/${kind === 'item' ? 'picture' : 'location-picture'}`; }
-
-        $$('.eq-photo').forEach(p => {
-            const kind = p.dataset.kind;
-            $('input[type=file]', p).addEventListener('change', async e => {
-                const file = e.target.files[0]; e.target.value = '';
-                if (!file || !editingId) return;
-                p.classList.add('uploading');
-                try {
-                    const fd = new FormData(); fd.append('file', await shrink(file));
-                    const res = await api(photoUrl(kind, editingId), 'POST', fd);
-                    const it = items.find(i => i.id === editingId);
-                    const url = (res.picture_url || res.location_picture_url) + '?t=' + Date.now();
-                    if (kind === 'item') it.picture_url = url; else it.location_picture_url = url;
-                    paintPhotos(it); render(); toast('Photo saved');
-                } catch (ex) { toast(ex.message, true); }
-                p.classList.remove('uploading');
-            });
-            const rm = $('[data-remove]', p); let t;
-            rm.addEventListener('click', async () => {
-                if (!rm.classList.contains('armed')) {
-                    rm.classList.add('armed'); rm.textContent = 'Tap to confirm';
-                    t = setTimeout(() => { rm.classList.remove('armed'); rm.textContent = 'Remove'; }, 3000); return;
-                }
-                clearTimeout(t); rm.classList.remove('armed'); rm.textContent = 'Remove';
-                try {
-                    await api(photoUrl(kind, editingId), 'DELETE');
-                    const it = items.find(i => i.id === editingId);
-                    if (kind === 'item') it.picture_url = null; else it.location_picture_url = null;
-                    paintPhotos(it); render(); toast('Photo removed');
-                } catch (ex) { toast(ex.message, true); }
-            });
-        });
-
-        /* ----- Tools sheet: CSV ----- */
-        $('#eqTools').addEventListener('click', () => { $('#eqImport').textContent = ''; openSheet('shTools'); });
-
+        /* ----- CSV ----- */
         function download(name, text) {
             const a = document.createElement('a');
             a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
             a.download = name; document.body.appendChild(a); a.click(); a.remove();
         }
-        $('#toolTemplate').addEventListener('click', () =>
-            download('equipment_template.csv', 'barcode,name,quantity_owned,category,location,notes\nEQ-001,Example Item,1,Lighting,Storage Room A,Optional notes'));
-        $('#toolExport').addEventListener('click', () => {
-            const rows = [['Barcode', 'Name', 'Qty', 'Category', 'Location', 'Notes']];
-            items.forEach(e => rows.push([e.barcode, e.name, e.quantity_owned || 1, e.category || '', e.location || '', e.notes || '']));
+        $('#gTemplate').addEventListener('click', () => { setMore(false);
+            download('equipment_template.csv', 'barcode,name,quantity_owned,tracking,category,location,notes\nMIC,Shure SM58,6,individual,Audio,Rack A,One label per mic\nGAFF,Gaffer tape,12,bulk,Consumables,Workshop,Counted only'); });
+        $('#gExport').addEventListener('click', () => { setMore(false);
+            const rows = [['barcode', 'name', 'quantity_owned', 'tracking', 'category', 'location', 'notes']];
+            items.forEach(e => rows.push([e.barcode, e.name, e.summary.owned, e.tracking, e.category || '', e.location || '', e.notes || '']));
             download(`equipment_${new Date().toISOString().slice(0, 10)}.csv`,
                 rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n'));
-            toast('Export downloaded');
         });
-        $('#csvFile').addEventListener('change', async e => {
-            const file = e.target.files[0]; e.target.value = '';
+        $('#gCsv').addEventListener('change', async e => {
+            const file = e.target.files[0]; e.target.value = ''; setMore(false);
             if (!file) return;
-            const s = $('#eqImport'); s.className = 'eq-import-status'; s.textContent = 'Importing…';
+            const fd = new FormData(); fd.append('file', file);
             try {
-                const fd = new FormData(); fd.append('file', file);
-                const res = await api('/equipment/import-csv', 'POST', fd);
-                s.textContent = `Imported ${res.imported} item${res.imported === 1 ? '' : 's'}, skipped ${res.skipped}. Refreshing…`;
-                setTimeout(() => location.reload(), 1200);
-            } catch (ex) { s.className = 'eq-import-status err'; s.textContent = ex.message; }
+                const res = await fetch('/equipment/import-csv', { method: 'POST', body: fd });
+                const j = await res.json();
+                if (!res.ok || j.error) throw new Error(j.error || 'Import failed');
+                SW.toast(`Imported ${j.imported}, skipped ${j.skipped} (already there or incomplete)`);
+                if (j.imported) setTimeout(() => location.reload(), 1200);
+            } catch (ex) { SW.toast(ex.message, 'error'); }
         });
+
+        /* ----- release from the quarantine list ----- */
+        $$('[data-release]').forEach(b => b.addEventListener('click', async () => {
+            const q = JSON.parse(b.dataset.release);
+            const r = await SWGear.release({ id: q.unit_id, asset_tag: q.asset_tag }, q);
+            if (r) SW.reloadSoon();
+        }));
+
+        if (params.get('labels')) $('#gLabels').click();      // arriving from the old QR generator link
     }
-    /* ---------- Init ---------- */
+
     refreshAll();
 })();
 </script>

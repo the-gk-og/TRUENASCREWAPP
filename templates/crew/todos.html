@@ -2,7 +2,6 @@
 
 {% from "crew/_event_tasks.html" import task_list %}
 {% block title %}My To-Do List - ShowWise{% endblock %}
-{% block head_extra %}<link rel="stylesheet" href="{{ url_for('static', filename='css/events.css') }}">{% endblock %}
 
 {% block content %}
 <style>
@@ -18,7 +17,7 @@
     .et { margin: 1rem 0 1.25rem; display: grid; gap: .6rem; }
     .et-head { display: flex; justify-content: space-between; align-items: center; gap: .75rem; flex-wrap: wrap; }
     .et-head h2 { margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--text-primary); }
-    .et-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-sm); }
+    .et-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-sm); }
     .et-box > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: .6rem; min-height: 48px; padding: .6rem .9rem; font-weight: 600; color: var(--text-primary); }
     .et-box > summary::-webkit-details-marker { display: none; }
     .et-box > summary::before { content: '\25B8'; color: var(--text-muted); transition: transform .15s; }
@@ -30,7 +29,7 @@
     .et-body { padding: 0 .75rem .75rem; }
     .et-body .sw-progress { margin: 0 0 .7rem; }
     .et-link { display: inline-block; margin-top: .6rem; font-size: .85rem; color: var(--primary); text-decoration: none; }
-    .et-empty { margin: 0; padding: .9rem 1rem; border: 1px dashed var(--border); border-radius: 12px; color: var(--text-muted); font-size: .9rem; text-align: center; }
+    .et-empty { margin: 0; padding: .9rem 1rem; border: 1px dashed var(--border); border-radius: 8px; color: var(--text-muted); font-size: .9rem; text-align: center; }
 
     /* ---------- Header + progress ---------- */
     .td-head h1 { margin: 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: .6rem; }
@@ -41,14 +40,14 @@
         padding: 1rem;
         background: var(--bg-card);
         border: 1px solid var(--border);
-        border-radius: 14px;
+        border-radius: 8px;
         box-shadow: var(--shadow-sm);
     }
     .td-progress-row { display: flex; justify-content: space-between; align-items: baseline; gap: .75rem; }
     .td-progress-text { font-size: .95rem; font-weight: 600; color: var(--text-primary); }
     .td-progress-pct  { font-size: 1.1rem; font-weight: 700; color: var(--primary); }
     .td-bar { height: 8px; margin-top: .65rem; border-radius: 999px; background: var(--bg-nav-hover); overflow: hidden; }
-    .td-bar > span { display: block; height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, var(--primary), var(--success)); transition: width .3s ease; }
+    .td-bar > span { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--primary); transition: width .3s ease; }
 
     /* ---------- Filter tabs ---------- */
     .td-tabs {
@@ -57,7 +56,7 @@
         margin: 0 0 .9rem; padding: .25rem;
         background: var(--bg-nav-hover);
         border: 1px solid var(--border);
-        border-radius: 12px;
+        border-radius: 8px;
     }
     .td-tab {
         min-height: 44px;
@@ -78,7 +77,7 @@
         background: var(--bg-card);
         border: 1px solid var(--border);
         border-left: 4px solid var(--success);
-        border-radius: 14px;
+        border-radius: 8px;
         box-shadow: var(--shadow-sm);
         transition: opacity .25s ease, transform .25s ease;
     }
@@ -125,7 +124,7 @@
     .td-edit {
         flex: 0 0 44px; width: 44px; height: 44px;
         display: flex; align-items: center; justify-content: center;
-        background: none; border: 0; border-radius: 10px;
+        background: none; border: 0; border-radius: 8px;
         color: var(--text-muted); cursor: pointer;
     }
     .td-edit:active { background: var(--bg-nav-hover); }
@@ -136,7 +135,7 @@
     .td-empty {
         margin-top: .5rem; padding: 2rem 1rem; text-align: center;
         color: var(--text-secondary);
-        background: var(--bg-card); border: 1px dashed var(--border); border-radius: 14px;
+        background: var(--bg-card); border: 1px dashed var(--border); border-radius: 8px;
     }
     .td-empty i { font-size: 1.75rem; color: var(--text-muted); margin-bottom: .5rem; display: block; }
     .td-empty strong { display: block; color: var(--text-primary); margin-bottom: .25rem; }
@@ -148,7 +147,7 @@
         height: 56px; padding: 0 1.25rem 0 1.1rem;
         display: flex; align-items: center; gap: .55rem;
         border: 0; border-radius: 999px; cursor: pointer;
-        background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+        background: var(--primary);
         color: #fff; font-size: 1rem; font-weight: 700;
         box-shadow: var(--shadow-md);
     }
@@ -167,14 +166,14 @@
         display: flex; flex-direction: column;
         background: var(--bg-modal);
         border: 1px solid var(--border);
-        border-radius: 20px 20px 0 0;
+        border-radius: 8px 20px 0 0;
         box-shadow: var(--shadow-lg);
         animation: tdUp .22s ease-out;
     }
     @keyframes tdUp { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
     .td-sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1rem .5rem 1.25rem; }
     .td-sheet-head h2 { margin: 0; font-size: 1.15rem; font-weight: 700; color: var(--text-primary); }
-    .td-x { width: 44px; height: 44px; border: 0; background: none; border-radius: 10px; font-size: 1.1rem; color: var(--text-secondary); cursor: pointer; }
+    .td-x { width: 44px; height: 44px; border: 0; background: none; border-radius: 8px; font-size: 1.1rem; color: var(--text-secondary); cursor: pointer; }
     .td-form { overflow-y: auto; padding: .25rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom, 0px)); -webkit-overflow-scrolling: touch; }
 
     .td-field { margin-bottom: 1rem; }
@@ -186,7 +185,7 @@
         color: var(--text-primary);
         background: var(--bg-input);
         border: 1px solid var(--border-input);
-        border-radius: 12px;
+        border-radius: 8px;
     }
     textarea.td-input { min-height: 84px; resize: vertical; }
     .td-input:focus { outline: none; border-color: var(--border-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--border-focus) 25%, transparent); }
@@ -195,7 +194,7 @@
     .td-seg input { position: absolute; opacity: 0; pointer-events: none; }
     .td-seg label {
         display: flex; align-items: center; justify-content: center; gap: .4rem;
-        min-height: 48px; border-radius: 12px; cursor: pointer;
+        min-height: 48px; border-radius: 8px; cursor: pointer;
         background: var(--bg-input); border: 1px solid var(--border-input);
         color: var(--text-secondary); font-size: .9rem; font-weight: 600;
     }
@@ -204,14 +203,14 @@
     .td-seg input:checked + label { border-color: var(--primary); background: var(--bg-nav-active); color: var(--text-nav-active); }
     .td-seg input:focus-visible + label { outline: 2px solid var(--border-focus); outline-offset: 2px; }
 
-    .td-error { margin: 0 0 .75rem; padding: .6rem .8rem; border-radius: 10px; font-size: .88rem; color: var(--danger); border: 1px solid var(--danger); }
+    .td-error { margin: 0 0 .75rem; padding: .6rem .8rem; border-radius: 8px; font-size: .88rem; color: var(--danger); border: 1px solid var(--danger); }
     .td-error[hidden] { display: none; }
 
     .td-actions { display: grid; gap: .6rem; margin-top: .25rem; }
     .td-save, .td-del {
-        min-height: 50px; border-radius: 12px; font-size: 1rem; font-weight: 700; cursor: pointer; border: 0;
+        min-height: 50px; border-radius: 8px; font-size: 1rem; font-weight: 700; cursor: pointer; border: 0;
     }
-    .td-save { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #fff; }
+    .td-save { background: var(--primary); color: #fff; }
     .td-save:disabled { opacity: .6; cursor: default; }
     .td-del { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
     .td-del.armed { background: var(--danger); color: #fff; }
@@ -224,7 +223,7 @@
         transform: translateX(-50%);
         display: none; align-items: center; gap: .9rem;
         max-width: calc(100vw - 2rem);
-        padding: .7rem 1rem; border-radius: 12px;
+        padding: .7rem 1rem; border-radius: 8px;
         background: var(--text-primary); color: var(--bg-card);
         font-size: .9rem; box-shadow: var(--shadow-lg);
     }
@@ -234,7 +233,7 @@
     /* ---------- Larger screens ---------- */
     @media (min-width: 640px) {
         .td-scrim { align-items: center; }
-        .td-sheet { border-radius: 20px; }
+        .td-sheet { border-radius: 8px; }
         .td-head h1 { font-size: 1.75rem; }
     }
     @media (hover: hover) {
@@ -417,7 +416,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/sw-ui.js') }}"></script>
 <script src="{{ url_for('static', filename='js/event-tasks.js') }}"></script>
 <script>
 (function () {

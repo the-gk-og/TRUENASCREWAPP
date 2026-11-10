@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Admin Console - ShowWise{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/events.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
 {% endblock %}
 
@@ -140,7 +139,7 @@
     <span class="close" onclick="hideModal('qrModal')">&times;</span>
     <h2 style="margin-bottom:.5rem"><i class="fas fa-qrcode"></i> Invite QR code</h2>
     <p style="color:var(--text-secondary);margin-bottom:1.5rem;font-size:.9rem">Scan to open the signup page with the code filled in</p>
-    <div style="display:flex;justify-content:center;margin-bottom:1.25rem"><div id="qrCodeImage" style="padding:1rem;background:#fff;border:2px solid var(--border);border-radius:12px"></div></div>
+    <div style="display:flex;justify-content:center;margin-bottom:1.25rem"><div id="qrCodeImage" style="padding:1rem;background:#fff;border: 1px solid var(--border);border-radius: 8px"></div></div>
     <code id="qrCodeText" style="display:block;font-size:1.1rem;letter-spacing:2px;color:var(--primary);margin-bottom:1.25rem;font-weight:bold"></code>
     <div style="display:flex;gap:.75rem">
       <button onclick="downloadQR()" class="btn btn-success" style="flex:1"><i class="fas fa-download"></i> QR image</button>
@@ -155,7 +154,6 @@
 
 {% block scripts %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="{{ url_for('static', filename='js/sw-ui.js') }}"></script>
 <script src="{{ url_for('static', filename='js/admin-poster.js') }}"></script>
 <script>
 const A = JSON.parse(document.getElementById('admin-data').textContent);

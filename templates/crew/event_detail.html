@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% from "crew/_event_tasks.html" import task_list %}
 {% block title %}{{ event.title }} - ShowWise{% endblock %}
-{% block head_extra %}<link rel="stylesheet" href="{{ url_for('static', filename='css/events.css') }}">{% endblock %}
 
 {% macro status_chip(s) -%}
   {%- if s in ('accepted','confirmed') %}<span class="sw-chip ok">Confirmed</span>
@@ -216,7 +215,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/sw-ui.js') }}"></script>
 <script src="{{ url_for('static', filename='js/event-io.js') }}"></script>
 <script src="{{ url_for('static', filename='js/event-tasks.js') }}"></script>
 <script>

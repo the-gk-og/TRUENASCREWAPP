@@ -3,9 +3,9 @@
 
 {% block content %}
 <div style="max-width: 600px; margin: 2rem auto;">
-    <div class="card" style="border: 2px solid var(--warning); background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-table-head) 100%);">
+    <div class="card" style="border: 2px solid var(--warning); background: var(--bg-card);">
         <div style="text-align: center; padding: 1rem 0 1.5rem;">
-            <div style="font-size: 3rem; margin-bottom: 0.75rem;">🔐</div>
+            <div style="font-size: 3rem; margin-bottom: 0.75rem;"></div>
             <h2 style="color: #92400e; margin-bottom: 0.5rem;">Two-Factor Authentication Required</h2>
             <p style="color: #78350f;">Your administrator requires you to set up 2FA before continuing.</p>
         </div>
@@ -101,7 +101,7 @@
         <!-- ==================== EMAIL OTP FALLBACK SECTION ==================== -->
         <div id="emailFallbackSection" style="display: none;">
             <div style="text-align: center; padding: 1rem 0 1.5rem;">
-                <div style="font-size: 2.5rem; margin-bottom: 0.75rem;">📧</div>
+                <div style="font-size: 2.5rem; margin-bottom: 0.75rem;"></div>
                 <h3 style="color: var(--text-primary); margin-bottom: 0.5rem;">Use Email Instead</h3>
             </div>
 
@@ -177,7 +177,7 @@ window.addEventListener('DOMContentLoaded', () => {
             document.getElementById('secretContainer').style.display = 'block';
             document.getElementById('qrContainer').innerHTML =
                 `<img src="${d.qr_code}" alt="QR Code"
-                      style="max-width:220px;border-radius:8px;border:2px solid var(--border);padding:0.75rem;">`;
+                      style="max-width:220px;border-radius:8px;border: 1px solid var(--border);padding:0.75rem;">`;
         }
     });
 });

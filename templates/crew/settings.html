@@ -251,7 +251,7 @@
         <div class="cb-grid">
             <div class="cb-card" id="cbcard-none" onclick="applyCb('none')">
                 <div class="cb-card-preview">
-                    <span class="cbp-dot" style="background:#6366f1"></span>
+                    <span class="cbp-dot" style="background:#2557d6"></span>
                     <span class="cbp-dot" style="background:#10b981"></span>
                     <span class="cbp-dot" style="background:#ef4444"></span>
                     <span class="cbp-dot" style="background:#f59e0b"></span>
@@ -352,7 +352,7 @@
         </div>
 
         <!-- Skip 2FA for OAuth toggle -->
-        <div style="background:var(--bg-table-head);border:1px solid var(--border);border-radius:10px;padding:1.25rem;margin-bottom:1.25rem;">
+        <div style="background:var(--bg-table-head);border:1px solid var(--border);border-radius: 8px;padding:1.25rem;margin-bottom:1.25rem;">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;">
                 <div>
                     <h4 style="margin:0 0 0.25rem;color:var(--text-primary);font-size:0.95rem;">
@@ -384,7 +384,7 @@
         <div class="card-header">
             <h3 class="card-title">
                 <i class="fas fa-envelope-open-text"></i> Email OTP
-                <span style="font-size:0.72rem;background:#fef3c7;color:#92400e;padding:0.2rem 0.6rem;border-radius:20px;font-weight:600;margin-left:0.5rem;vertical-align:middle;">Fallback</span>
+                <span style="font-size:0.72rem;background:#fef3c7;color:#92400e;padding:0.2rem 0.6rem;border-radius: 8px;font-weight:600;margin-left:0.5rem;vertical-align:middle;">Fallback</span>
             </h3>
             {% if email_otp and email_otp.enabled %}
             <span style="color:var(--success);font-weight:600;"><i class="fas fa-check-circle"></i> Enabled</span>
@@ -517,7 +517,7 @@
             <h2 style="margin-bottom: 1rem;"><i class="fas fa-qrcode"></i> Step 1: Scan QR Code</h2>
             <p style="margin-bottom: 1rem;">Scan this QR code with your authenticator app:</p>
             <div style="text-align: center; margin: 2rem 0;">
-                <img id="qrCode" src="" alt="QR Code" style="max-width: 280px; border: 2px solid var(--border); padding: 1rem; border-radius: 8px;">
+                <img id="qrCode" src="" alt="QR Code" style="max-width: 280px; border: 1px solid var(--border); padding: 1rem; border-radius: 8px;">
             </div>
             <p style="margin-bottom: 0.5rem; font-weight: 600;">Or enter this code manually:</p>
             <div style="background: var(--bg-table-head); padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem;">
@@ -624,7 +624,7 @@
 .settings-tab:hover { color: var(--primary); }
 .settings-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
 .tab-badge {
-    padding: 0.15rem 0.5rem; border-radius: 10px;
+    padding: 0.15rem 0.5rem; border-radius: 8px;
     font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
 }
 .tab-badge.success { background: #d1fae5; color: #065f46; }
@@ -654,8 +654,8 @@
 
 .appearance-option-row {
     display: flex; align-items: center; gap: 1.25rem;
-    padding: 1rem; border-radius: 10px;
-    border: 2px solid var(--border);
+    padding: 1rem; border-radius: 8px;
+    border: 1px solid var(--border);
     cursor: pointer; margin-bottom: 0.75rem;
     transition: border-color 0.2s, background 0.2s;
 }
@@ -688,7 +688,7 @@
 @media (max-width: 600px) { .cb-grid { grid-template-columns: 1fr; } }
 .cb-card {
     display: flex; align-items: center; gap: 1rem;
-    padding: 0.9rem 1rem; border: 2px solid var(--border); border-radius: 10px;
+    padding: 0.9rem 1rem; border: 1px solid var(--border); border-radius: 8px;
     cursor: pointer; transition: border-color 0.2s, background 0.2s; position: relative;
 }
 .cb-card:hover { border-color: var(--primary); background: var(--bg-nav-hover); }

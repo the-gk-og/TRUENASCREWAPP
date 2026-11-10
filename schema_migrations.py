@@ -103,9 +103,24 @@ def _m1_pre_versioning_columns(conn: Connection) -> None:
     create_index(conn, 'ix_user_calendar_token', 'user', ['calendar_token'], unique=True)
 
 
+def _m2_equipment_tracking(conn: Connection) -> None:
+    """Every item type is either tracked item by item or only counted. Types that already
+    have tagged units become 'individual'; the rest stay 'bulk' (the column default)."""
+    add_column(conn, 'equipment', 'tracking', "VARCHAR(20) DEFAULT 'bulk'")
+    if not has_table(conn, 'equipment') or not has_table(conn, 'equipment_unit'):
+        return
+    eq, unit = _q(conn, 'equipment'), _q(conn, 'equipment_unit')
+    conn.execute(text(f"UPDATE {eq} SET tracking = 'bulk' WHERE tracking IS NULL"))
+    conn.execute(text(
+        f"UPDATE {eq} SET tracking = 'individual' "
+        f"WHERE id IN (SELECT DISTINCT equipment_id FROM {unit})"))
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, 'pre-versioning columns (all_day, decline_reason, calendar_token, display_name)',
               _m1_pre_versioning_columns),
+    Migration(2, 'equipment.tracking (individual for types that already have units, else bulk)',
+              _m2_equipment_tracking),
 ]
 
 LATEST_VERSION = max(m.version for m in MIGRATIONS)

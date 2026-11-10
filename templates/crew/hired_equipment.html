@@ -30,19 +30,19 @@
 
 <!-- Statistics -->
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
-    <div class="card" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; border: none;">
+    <div class="card sw-stat">
         <p style="opacity: 0.9; font-size: 0.9rem; margin-bottom: 0.5rem;">Active Hires</p>
-        <h2 style="font-size: 2rem; margin: 0; color: white;">{{ active_hired|length }}</h2>
+        <h2 style="font-size: 2rem; margin: 0;">{{ active_hired|length }}</h2>
     </div>
     
-    <div class="card" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none;">
+    <div class="card sw-stat">
         <p style="opacity: 0.9; font-size: 0.9rem; margin-bottom: 0.5rem;">Returned</p>
-        <h2 style="font-size: 2rem; margin: 0; color: white;">{{ returned_hired|length }}</h2>
+        <h2 style="font-size: 2rem; margin: 0;">{{ returned_hired|length }}</h2>
     </div>
     
-    <div class="card" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; border: none;">
+    <div class="card sw-stat">
         <p style="opacity: 0.9; font-size: 0.9rem; margin-bottom: 0.5rem;">Due Soon (7 days)</p>
-        <h2 style="font-size: 2rem; margin: 0; color: white;">
+        <h2 style="font-size: 2rem; margin: 0;">
             {{ active_hired|selectattr('return_date', 'lt', upcoming_threshold)|list|length }}
 
         </h2>

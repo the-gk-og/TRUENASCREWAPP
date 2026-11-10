@@ -33,8 +33,8 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <style>
     :root {
-      --primary: {{ organization.primary_color or '#6366f1' }};
-      --primary-dark: #4f46e5;
+      --primary: {{ organization.primary_color or '#2557d6' }};
+      --primary-dark: #1c45b0;
       --secondary: {{ organization.secondary_color or '#898989' }};
       --dark: #1f2937;
       --light: #f9fafb;
@@ -45,7 +45,7 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      background: var(--primary);
       min-height: 100vh;
       display: flex;
       align-items: center;
@@ -68,7 +68,7 @@
     .card {
       background: white;
       padding: 2.75rem 2.5rem;
-      border-radius: 16px;
+      border-radius: 8px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.3);
       width: 100%;
       max-width: 420px;
@@ -82,8 +82,8 @@
     .header { text-align: center; margin-bottom: 1.75rem; }
     .header .icon {
       width: 64px; height: 64px;
-      background: linear-gradient(135deg, var(--primary), #a855f7);
-      border-radius: 16px;
+      background: var(--primary);
+      border-radius: 8px;
       display: flex; align-items: center; justify-content: center;
       margin: 0 auto 1rem;
       font-size: 1.75rem;
@@ -96,7 +96,7 @@
       background: #f5f3ff;
       color: var(--primary);
       padding: 0.3rem 0.75rem;
-      border-radius: 20px;
+      border-radius: 8px;
       font-size: 0.85rem;
       font-weight: 600;
     }
@@ -107,7 +107,7 @@
     input[type="text"] {
       width: 100%;
       padding: 0.8rem;
-      border: 2px solid var(--border);
+      border: 1px solid var(--border);
       border-radius: 8px;
       font-size: 1.6rem;
       text-align: center;
@@ -120,7 +120,7 @@
     input[type="text"]:focus {
       outline: none;
       border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+      box-shadow: 0 0 0 3px rgba(37, 87, 214,0.12);
     }
 
     .btn {
@@ -136,18 +136,18 @@
       text-decoration: none;
     }
     .btn-primary {
-      background: linear-gradient(135deg, var(--primary), #a855f7);
+      background: var(--primary);
       color: white;
-      box-shadow: 0 4px 12px rgba(99,102,241,0.3);
+      box-shadow: 0 4px 12px rgba(37, 87, 214,0.3);
       margin-bottom: 0.75rem;
     }
-    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(99,102,241,0.4); }
+    .btn-primary:hover { box-shadow: 0 6px 16px rgba(37, 87, 214,0.4); }
     .btn-primary:disabled { opacity: 0.65; transform: none; cursor: not-allowed; }
 
     .btn-ghost {
       background: none;
       color: var(--primary);
-      border: 2px solid var(--border);
+      border: 1px solid var(--border);
       margin-bottom: 0;
     }
     .btn-ghost:hover { border-color: var(--primary); background: #f5f3ff; }
@@ -189,7 +189,7 @@
 
   <div class="card">
     <div class="header">
-      <div class="icon">📧</div>
+      <div class="icon"></div>
       <h1>Check Your Email</h1>
       <p>We'll send a 6-digit code to your email address.</p>
       <span class="email-hint">{{ masked_email }}</span>

@@ -1,0 +1,372 @@
+/*
+ * sw-shell.js - the app shell (top bar) and gear dialogs shared by every page.
+ *
+ *   SWGear.scan()                         camera / typed code -> what is it, with actions
+ *   SWGear.quarantine(unit)               -> Promise<quarantine | null>   (any crew)
+ *   SWGear.release(unit, quarantine)      -> Promise<result | null>       (admins)
+ *   SWGear.history(unitId, {isAdmin})     one timeline of everything that happened to an item
+ *   SWGear.labels({equipmentIds, unitIds, hasItems, name})   print group / item labels (admins)
+ *
+ * Needs sw-ui.js (SW.api, SW.form, SW.dialog, SW.toast). `unit` is {id, asset_tag, equipment_name?}.
+ */
+(function () {
+  'use strict';
+  const SW = window.SW;
+  const esc = SW.esc;
+  const $ = (s, r) => (r || document).querySelector(s);
+
+  // ------------------------------------------------------------ user menu
+  const userBtn = $('#swUserBtn'), userMenu = $('#swUserMenu');
+  if (userBtn && userMenu) {
+    const setOpen = (on) => { userMenu.classList.toggle('open', on); userBtn.setAttribute('aria-expanded', on ? 'true' : 'false'); };
+    userBtn.addEventListener('click', (e) => { e.stopPropagation(); setOpen(!userMenu.classList.contains('open')); });
+    document.addEventListener('click', (e) => { if (!userMenu.contains(e.target)) setOpen(false); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setOpen(false); });
+  }
+
+  // --------------------------------------------------------------- search
+  const input = $('#swSearchInput'), box = $('#swSearchResults');
+  if (input && box) {
+    let timer = 0, seq = 0, hits = [], on = -1;
+    const close = () => { box.hidden = true; on = -1; };
+    const paint = () => box.querySelectorAll('.sw-gs-hit').forEach((a, i) => a.classList.toggle('on', i === on));
+    const show = (groups, q) => {
+      hits = [];
+      if (!groups.length) {
+        box.innerHTML = `<div class="sw-gs-empty">Nothing matches “${esc(q)}”.</div>`;
+      } else {
+        box.innerHTML = groups.map((g) => `<div class="sw-gs-group">${esc(g.label)}</div>` + g.hits.map((h) => {
+          hits.push(h);
+          return `<a class="sw-gs-hit" href="${esc(h.url)}"><span>${esc(h.title)}</span><small>${esc(h.meta || '')}</small></a>`;
+        }).join('')).join('');
+      }
+      on = -1; box.hidden = false;
+    };
+    const run = async () => {
+      const q = input.value.trim();
+      if (q.length < 2) return close();
+      const mine = ++seq;
+      try {
+        const r = await SW.api('GET', '/api/search?q=' + encodeURIComponent(q));
+        if (mine === seq) show(r.groups || [], q);
+      } catch (e) { if (mine === seq) close(); }
+    };
+    input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(run, 180); });
+    input.addEventListener('focus', () => { if (input.value.trim().length >= 2) run(); });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { close(); input.blur(); return; }
+      if (box.hidden || !hits.length) return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); on = (on + 1) % hits.length; paint(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); on = (on - 1 + hits.length) % hits.length; paint(); }
+      else if (e.key === 'Enter') { e.preventDefault(); location.href = hits[Math.max(on, 0)].url; }
+    });
+    document.addEventListener('click', (e) => { if (!$('#swSearch').contains(e.target)) close(); });
+    document.addEventListener('keydown', (e) => {
+      // "/" jumps to search, unless you're typing somewhere
+      if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      e.preventDefault(); input.focus();
+    });
+  }
+
+  // ================================================================ gear
+  const Gear = (window.SWGear = {});
+  const pill = (state, label) => `<span class="pill ${esc(state)}">${esc(label)}</span>`;
+  Gear.pill = pill;
+
+  async function postForm(url, fd) {
+    let res;
+    try { res = await fetch(url, { method: 'POST', body: fd, credentials: 'same-origin', headers: { Accept: 'application/json' } }); }
+    catch (e) { throw new Error('Network error - check your connection and try again'); }
+    let data = {};
+    try { data = await res.json(); } catch (e) {}
+    if (!res.ok || data.error) throw new Error(data.error || `Request failed (${res.status})`);
+    return data;
+  }
+
+  /** Phone photos are huge: shrink before upload. */
+  async function shrink(file) {
+    if (!file || !/^image\/(jpeg|png|webp)$/.test(file.type) || file.size < 1.2 * 1024 * 1024) return file;
+    try {
+      const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+      const s = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
+      c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+      const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.85));
+      return blob ? new File([blob], 'photo.jpg', { type: 'image/jpeg' }) : file;
+    } catch (e) { return file; }
+  }
+  Gear.shrink = shrink;
+
+  // ---------------------------------------------------------- quarantine
+  Gear.quarantine = function (unit, opts) {
+    opts = opts || {};
+    return SW.form({
+      title: `Quarantine ${unit.asset_tag}`,
+      submitText: 'Quarantine', danger: true,
+      fields: [
+        { type: 'info', text: `${unit.equipment_name ? unit.equipment_name + ' · ' : ''}${unit.asset_tag} will be pulled out of use. It can’t be put on a pick list or checked out until an admin releases it.` },
+        { name: 'reason', label: 'What’s wrong with it?', type: 'textarea', required: true, rows: 3,
+          placeholder: 'e.g. Cuts out when the cable is moved', value: opts.reason || '' },
+        { name: 'photo', label: 'Photo (optional)', type: 'file', accept: 'image/*' },
+      ],
+      onSubmit: async (v) => {
+        const fd = new FormData();
+        fd.append('reason', v.reason);
+        if (v.photo) fd.append('photo', await shrink(v.photo));
+        if (opts.eventId) fd.append('event_id', opts.eventId);
+        const r = await postForm(`/equipment/unit/${unit.id}/quarantine`, fd);
+        SW.toast(`${unit.asset_tag} quarantined`);
+        return r.quarantine;
+      },
+    });
+  };
+
+  Gear.release = function (unit, q) {
+    q = q || {};
+    const why = q.reason ? `Quarantined${q.quarantined_at ? ' ' + q.quarantined_at : ''}${q.quarantined_by ? ' by ' + q.quarantined_by : ''}: ${q.reason}` : '';
+    return SW.form({
+      title: `Release ${unit.asset_tag} from quarantine`,
+      submitText: 'Release',
+      fields: [
+        ...(why ? [{ type: 'info', text: why }] : []),
+        { name: 'outcome', label: 'What happens to it?', type: 'select', value: 'available', options: [
+          { value: 'available', label: 'Back in service' },
+          { value: 'repair', label: 'Send for repair (stays out of use)' },
+          { value: 'retired', label: 'Retire it (beyond repair)' },
+        ] },
+        { name: 'kind', label: 'Cleared by', type: 'select', value: 'inspection', half: true, show: (v) => v.outcome === 'available', options: [
+          { value: 'inspection', label: 'Inspection' }, { value: 'repair', label: 'Repair' }, { value: 'pat', label: 'PAT test' },
+        ] },
+        { name: 'next_due', label: 'Next check due (optional)', type: 'date', half: true, show: (v) => v.outcome === 'available' },
+        { name: 'note', label: 'What was checked or fixed?', type: 'textarea', rows: 3,
+          hint: 'Required to put it back in service. Saved to the item’s history.' },
+      ],
+      onSubmit: async (v) => {
+        if (v.outcome === 'available' && !(v.note || '').trim()) throw new Error('Say what was checked or fixed');
+        const r = await SW.api('POST', `/equipment/unit/${unit.id}/release`, v);
+        SW.toast(`${unit.asset_tag}: ${r.quarantine.outcome_label.toLowerCase()}`);
+        return r;
+      },
+    });
+  };
+
+  // -------------------------------------------------------------- history
+  const ICONS = { out: 'arrow-right-from-bracket', return: 'arrow-right-to-bracket', maintenance: 'screwdriver-wrench',
+                  quarantine: 'triangle-exclamation', release: 'circle-check', created: 'plus' };
+  Gear.history = async function (unitId, opts) {
+    opts = opts || {};
+    const d = SW.dialog({ title: 'History', wide: true });
+    d.body.innerHTML = '<p class="sw-muted">Loading…</p>';
+    const load = async () => {
+      let h;
+      try { h = await SW.api('GET', `/equipment/unit/${unitId}/history`); }
+      catch (e) { d.body.innerHTML = `<p class="sw-error">${esc(e.message)}</p>`; return; }
+      d.setTitle(`History: ${h.unit.asset_tag}`);
+      const due = h.maintenance_due;
+      const rows = h.timeline.map((t) => `<li class="sw-hist-item ${esc(t.kind)}">
+          <span class="sw-hist-dot"><i class="fas fa-${ICONS[t.kind] || 'circle'}"></i></span>
+          <div class="sw-hist-body">
+            <div class="sw-hist-title">${esc(t.title)}
+              ${opts.isAdmin && t.maintenance_id ? `<button type="button" class="btn-link sw-hist-del" data-del="${t.maintenance_id}">Delete</button>` : ''}</div>
+            <div class="sw-hist-meta">${esc(t.when)}${t.by ? ' · ' + esc(t.by) : ''}${t.event_title ? ' · after ' + esc(t.event_title) : ''}</div>
+            ${t.detail ? `<div class="sw-hist-detail">${esc(t.detail)}</div>` : ''}
+            ${t.photo_url ? `<a href="${esc(t.photo_url)}" target="_blank" rel="noopener"><img class="sw-hist-photo" src="${esc(t.photo_url)}" alt="Photo of the damage"></a>` : ''}
+          </div></li>`).join('');
+      d.body.innerHTML = (due ? `<p style="margin-bottom:.75rem">${pill(due.state, `Next ${due.kind_label}: ${due.date_text}${due.state === 'overdue' ? ' (overdue)' : ''}`)}</p>` : '')
+        + `<ul class="sw-hist">${rows}</ul>`;
+      d.body.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
+        if (!await SW.confirm('Delete this maintenance record?', { danger: true, okText: 'Delete' })) return;
+        try { await SW.api('DELETE', `/equipment/maintenance/${b.dataset.del}`); load(); }
+        catch (e) { SW.toast(e.message, 'error'); }
+      }));
+    };
+    load();
+  };
+
+  // --------------------------------------------------------------- labels
+  const SIZES = { 'portrait-s': ['portrait', 60, 80], 'portrait-m': ['portrait', 75, 100],
+                  'landscape-s': ['landscape', 90, 55], 'landscape-m': ['landscape', 110, 65] };
+  Gear.labels = function (o) {
+    const nTypes = (o.equipmentIds || []).length, nUnits = (o.unitIds || []).length;
+    const what = o.name || (nUnits ? `${nUnits} item${nUnits === 1 ? '' : 's'}` : `${nTypes} type${nTypes === 1 ? '' : 's'}`);
+    const kinds = [];
+    if (!nUnits) kinds.push({ value: 'group', label: 'Group labels: one per type, for the case or shelf' });
+    if (o.hasItems || nUnits) {
+      kinds.push({ value: 'unit', label: 'Item labels: one for each individual item' });
+      kinds.push({ value: 'both', label: 'Both: the group label, then every item' });
+    }
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem('showwise-labels') || '{}'); } catch (e) {}
+    return SW.form({
+      title: `Print labels: ${what}`,
+      submitText: 'Download PDF',
+      fields: [
+        { name: 'mode', label: 'Which labels?', type: 'select', options: kinds,
+          value: kinds.some((k) => k.value === (o.mode || saved.mode)) ? (o.mode || saved.mode) : kinds[0].value },
+        ...(o.hasItems || nUnits ? [] : [{ type: 'info', text: 'These types are only counted, so they have a group label but no item labels.' }]),
+        { name: 'size', label: 'Label size', type: 'select', value: saved.size || 'portrait-s', options: [
+          { value: 'portrait-s', label: 'Portrait small (60 × 80 mm)' }, { value: 'portrait-m', label: 'Portrait medium (75 × 100 mm)' },
+          { value: 'landscape-s', label: 'Landscape small (90 × 55 mm)' }, { value: 'landscape-m', label: 'Landscape medium (110 × 65 mm)' },
+          { value: 'custom', label: 'Custom size…' },
+        ] },
+        { name: 'layout', label: 'Layout', type: 'select', value: saved.layout || 'portrait', show: (v) => v.size === 'custom',
+          options: [{ value: 'portrait', label: 'Portrait (QR under the name)' }, { value: 'landscape', label: 'Landscape (QR beside the name)' }] },
+        { name: 'w', label: 'Width (mm)', type: 'number', min: 30, max: 200, half: true, value: saved.w || 60, show: (v) => v.size === 'custom' },
+        { name: 'h', label: 'Height (mm)', type: 'number', min: 30, max: 280, half: true, value: saved.h || 80, show: (v) => v.size === 'custom' },
+        { type: 'info', text: 'Prints on A4. Each label has a QR code that opens the item when scanned.' },
+      ],
+      onSubmit: async (v) => {
+        const [layout, w, h] = v.size === 'custom' ? [v.layout, v.w, v.h] : SIZES[v.size];
+        if (!(w >= 30 && w <= 200 && h >= 30 && h <= 280)) throw new Error('Width must be 30–200 mm and height 30–280 mm');
+        try { localStorage.setItem('showwise-labels', JSON.stringify({ mode: v.mode, size: v.size, layout: v.layout, w: v.w, h: v.h })); } catch (e) {}
+        const res = await fetch('/equipment/generate-qrcodes', {
+          method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: v.mode, layout, card_width_mm: w, card_height_mm: h,
+                                 equipment_ids: o.equipmentIds || [], unit_ids: o.unitIds || [], base_url: location.origin }),
+        });
+        if (!res.ok) {
+          let msg = `Could not make the labels (${res.status})`;
+          try { msg = (await res.json()).error || msg; } catch (e) {}
+          throw new Error(msg);
+        }
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(await res.blob());
+        a.download = `labels_${new Date().toISOString().slice(0, 10)}.pdf`;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+        SW.toast('Labels downloaded');
+        return true;
+      },
+    });
+  };
+
+  // ----------------------------------------------------------------- scan
+  const loaded = {};
+  function loadScript(src) {
+    if (!loaded[src]) {
+      loaded[src] = new Promise((resolve) => {
+        const s = document.createElement('script');
+        s.src = src; s.onload = resolve; s.onerror = resolve;      // a missing decoder just means that code type won't read
+        document.head.appendChild(s);
+      });
+    }
+    return loaded[src];
+  }
+  Gear.loadScanner = async function () {
+    const jobs = [];
+    if (typeof jsQR !== 'function') jobs.push(loadScript('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js'));
+    if (typeof Quagga === 'undefined') jobs.push(loadScript('https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js'));
+    if (!window.SWScanner) jobs.push(loadScript((document.documentElement.dataset.scanner) || '/static/js/sw-scanner.js'));
+    await Promise.all(jobs);
+    return window.SWScanner;
+  };
+
+  /** Camera box + status line + typed-code row inside `host`. Returns {start, stop, scanner}. */
+  Gear.scannerUI = async function (host, opts) {
+    host.innerHTML = `
+      <div class="sw-cam"><div class="sw-cam-idle"><i class="fas fa-camera"></i><span>Camera is off</span></div><div class="sw-cam-frame"></div></div>
+      <div class="sw-cam-row">
+        <span class="sw-cam-status"><span class="sw-dot"></span><span class="txt">Camera off</span></span>
+        <button type="button" class="btn btn-secondary btn-sm sw-cam-toggle">Start camera</button>
+      </div>
+      <form class="sw-cam-manual">
+        <input type="text" class="sw-input" placeholder="${esc(opts.placeholder || 'Or type the code on the label')}" autocomplete="off" spellcheck="false" enterkeyhint="go" aria-label="Type a code">
+        <button type="submit" class="btn btn-secondary">Find</button>
+      </form>`;
+    const cam = $('.sw-cam', host), dot = $('.sw-dot', host), txt = $('.txt', host), toggle = $('.sw-cam-toggle', host);
+    const manual = $('.sw-cam-manual input', host);
+    const SWScanner = await Gear.loadScanner();
+    let scanner = null;
+    const paintBtn = () => { toggle.textContent = scanner && scanner.scanning ? 'Stop camera' : 'Start camera'; };
+    if (SWScanner) {
+      scanner = SWScanner.create({
+        container: cam, continuous: !!opts.continuous,
+        isOpen: () => document.body.contains(host),
+        onCode: (code) => opts.onCode(code),
+        onState: (live, text) => {
+          dot.classList.toggle('live', live); txt.textContent = text; cam.classList.toggle('live', live);
+          $('.sw-cam-idle', host).style.display = scanner && scanner.scanning ? 'none' : '';
+          paintBtn();
+        },
+        onError: (msg) => SW.toast(msg, 'error'),
+      });
+    } else { txt.textContent = 'Scanner could not load - type the code instead'; toggle.hidden = true; }
+    const api = {
+      scanner,
+      start: () => scanner && scanner.start(),
+      stop: () => scanner && scanner.stop(),
+      status: (text) => { txt.textContent = text; },
+    };
+    toggle.addEventListener('click', () => { if (scanner.scanning) api.stop(); else api.start(); });
+    $('.sw-cam-manual', host).addEventListener('submit', (e) => {
+      e.preventDefault();
+      const code = manual.value.trim();
+      if (!code) return;
+      if (!opts.continuous) api.stop();
+      manual.value = '';
+      opts.onCode(code);
+    });
+    return api;
+  };
+
+  Gear.scan = async function () {
+    let ui = null;
+    const d = SW.dialog({ title: 'Scan a label', onClose: () => ui && ui.stop() });
+    const camHost = document.createElement('div'), out = document.createElement('div');
+    out.setAttribute('aria-live', 'polite');
+    d.body.append(camHost, out);
+
+    const again = () => { out.innerHTML = ''; ui.start(); };
+    const lookup = async (code) => {
+      out.innerHTML = '<p class="sw-muted" style="margin-top:.9rem">Looking up…</p>';
+      let r;
+      try { r = await SW.api('POST', '/api/scan', { code }); }
+      catch (e) {
+        out.innerHTML = `<div class="sw-scan-result"><strong>Not found</strong><p class="sw-muted">${esc(e.message)}</p>
+          <div class="sw-actions"><button type="button" class="btn btn-secondary" data-again>Scan again</button></div></div>`;
+        $('[data-again]', out).onclick = again;
+        return;
+      }
+      const eq = r.equipment, u = r.unit, s = eq.summary;
+      const counts = eq.tracking === 'individual'
+        ? `${s.available} of ${s.owned} available${s.out ? ` · ${s.out} out` : ''}${s.quarantined ? ` · ${s.quarantined} quarantined` : ''}`
+        : `${s.available} of ${s.owned} in storage${s.out ? ` · ${s.out} out` : ''}`;
+      const co = u && u.checkout;
+      const where = !u ? '' : u.quarantine ? `Held in quarantine since ${esc(u.quarantine.quarantined_at)}` : co ? `Out on ${esc(co.event_title)} since ${esc(co.checked_out_at)}`
+        : (u.allocations && u.allocations.length ? `Booked for ${esc(u.allocations[0].event_title)}` : 'In storage');
+      const canQuarantine = u && !['quarantined', 'retired', 'lost'].includes(u.status);
+      out.innerHTML = `<div class="sw-scan-result">
+          ${eq.picture_url ? `<img class="thumb" src="${esc(eq.picture_url)}" alt="">` : ''}
+          <div class="main">
+            <strong>${esc(eq.name)}</strong>
+            ${u ? `<div><code>${esc(u.asset_tag)}</code> ${pill(u.state, u.state_label)}</div>` : `<div class="sw-muted">Group label</div>`}
+            ${u && u.quarantine ? `<div class="sw-scan-why">${esc(u.quarantine.reason)}</div>` : ''}
+            <dl>
+              ${u ? `<dt>Where</dt><dd>${where}</dd>` : ''}
+              <dt>Lives in</dt><dd>${esc(eq.location || 'No location set')}</dd>
+              <dt>Stock</dt><dd>${counts}</dd>
+              ${u && u.maintenance_due && u.maintenance_due.state !== 'ok' ? `<dt>${esc(u.maintenance_due.kind_label)}</dt><dd>${u.maintenance_due.state === 'overdue' ? 'Overdue since' : 'Due'} ${esc(u.maintenance_due.date_text)}</dd>` : ''}
+            </dl>
+          </div>
+          <div class="sw-actions">
+            ${canQuarantine ? '<button type="button" class="btn btn-outline-danger sw-left" data-q>Quarantine</button>' : ''}
+            <button type="button" class="btn btn-secondary" data-again>Scan again</button>
+            <a class="btn btn-primary" href="${esc(r.url)}">Open</a>
+          </div></div>`;
+      $('[data-again]', out).onclick = again;
+      const qb = $('[data-q]', out);
+      if (qb) qb.onclick = async () => {
+        const q = await Gear.quarantine({ id: u.id, asset_tag: u.asset_tag, equipment_name: eq.name });
+        if (q) lookup(u.asset_tag);
+      };
+    };
+    ui = await Gear.scannerUI(camHost, { onCode: lookup });
+    ui.start();
+  };
+
+  const scanBtn = $('#swScanBtn');
+  if (scanBtn) scanBtn.addEventListener('click', () => Gear.scan());
+})();

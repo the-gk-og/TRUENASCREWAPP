@@ -101,13 +101,13 @@ def test_explicit_modes_and_return_button(app, alice, mic):
 def test_scan_errors(app, alice, mic):
     ev = mk_event('Gig')
     assert scan(alice, ev, 'NOPE').status_code == 404
-    r = scan(alice, ev, 'MIC')                                     # the item barcode, not a unit
-    assert r.status_code == 404 and 'unit tags' in r.get_json()['error']
+    r = scan(alice, ev, 'MIC')                                     # the group label: asks which item
+    assert r.status_code == 409 and r.get_json()['conflict'] == 'choose_unit'
     assert alice.post('/equipment/checkout/scan', json={'code': 'MIC-01'}).status_code == 400   # no event
     assert scan(alice, ev, 'MIC-01', mode='sideways').status_code == 400
     db.session.add(Equipment(name='Gaffer tape', barcode='TAPE'))
     db.session.commit()
-    assert 'quantity only' in scan(alice, ev, 'TAPE').get_json()['error']
+    assert scan(alice, ev, 'TAPE').get_json()['conflict'] == 'choose_quantity'   # bulk type: asks how many
 
 
 def test_warns_when_not_on_pick_list_and_auto_allocates(app, alice, mic):
@@ -173,7 +173,7 @@ def test_checkout_page_renders_desktop_and_mobile(app, alice, mic):
     ev = mk_event('Gig')
     for ua in ('Mozilla/5.0 (X11; Linux x86_64)', MOBILE_UA):
         r = alice.get(f'/equipment/checkout?event_id={ev}', headers={'User-Agent': ua})
-        assert r.status_code == 200 and b'sw-scanner.js' in r.data and b'Gig' in r.data
+        assert r.status_code == 200 and b'SWGear.scannerUI' in r.data and b'Gig' in r.data
         assert alice.get(f'/picklist?event_id={ev}', headers={'User-Agent': ua}).data.count(
             f'/equipment/checkout?event_id={ev}'.encode()) >= 1
     assert alice.get('/equipment/checkout').status_code == 200
@@ -274,7 +274,7 @@ def test_due_dates_overdue_and_due_soon(app, alice, mic):
 
     # Shown on the equipment page, item page and dashboard
     page = alice.get('/equipment').data
-    assert b'1 unit overdue for testing' in page and b'1 due within 30 days' in page
+    assert b'1 item overdue for testing' in page and b'1 due within 30 days' in page
     assert b'"maint": {"due_soon": 1, "overdue": 1}' in page or b'"overdue": 1' in page
     detail = alice.get(f'/equipment/{mic}').data
     assert b'Tests and inspections due' in detail and b'overdue since' in detail
@@ -288,4 +288,4 @@ def test_due_dates_overdue_and_due_soon(app, alice, mic):
 
 def test_detail_page_mobile_has_maintenance_ui(app, alice, mic):
     r = alice.get(f'/equipment/{mic}', headers={'User-Agent': MOBILE_UA})
-    assert r.status_code == 200 and b'maintModal' in r.data and b'histModal' in r.data
+    assert r.status_code == 200 and b'data-act="check"' in r.data and b'data-act="history"' in r.data
