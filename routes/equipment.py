@@ -40,10 +40,8 @@ def _remove_file(relative_path: str):
 # List
 # ---------------------------------------------------------------------------
 
-@equipment_bp.route('/equipment')
-@login_required
-@crew_required
-def equipment_list():
+def _equipment_page_data():
+    """Everything the equipment list and manage pages show."""
     from routes.unit_tracking import maintenance_alerts, stale_checkouts, open_quarantines
     equipment      = Equipment.query.all()
     equipment_json = [e.to_dict() for e in equipment]
@@ -56,10 +54,29 @@ def equipment_list():
     for d in equipment_json:
         d['maint'] = per_item.get(d['id'])
         d['summary'] = summaries[d['id']]
-    return render_template('crew/equipment.html', equipment=equipment, equipment_json=equipment_json,
-                           maint_alerts=alerts, stale_checkouts=stale_checkouts(),
-                           quarantined=open_quarantines(),
-                           units_out=sum(s['out'] for s in summaries.values()))
+    return dict(equipment=equipment, equipment_json=equipment_json,
+                maint_alerts=alerts, stale_checkouts=stale_checkouts(),
+                quarantined=open_quarantines(),
+                units_out=sum(s['out'] for s in summaries.values()))
+
+
+@equipment_bp.route('/equipment')
+@login_required
+@crew_required
+def equipment_list():
+    """Find an item, see if one is free and where it lives."""
+    return render_template('crew/equipment.html', **_equipment_page_data())
+
+
+@equipment_bp.route('/equipment/manage')
+@login_required
+@crew_required
+def equipment_manage():
+    """Admin tools: add equipment, print labels, CSV import/export, release quarantine."""
+    if not current_user.is_admin:
+        flash('Only admins can manage equipment')
+        return redirect(url_for('equipment.equipment_list'))
+    return render_template('crew/equipment_manage.html', attention_open=True, **_equipment_page_data())
 
 
 def equipment_summaries(equipment):
@@ -318,9 +335,9 @@ def update_unit(uid):
             # Quarantine has its own record (who, why, what was decided), so it can't be
             # switched on or off by editing the status field.
             if status == 'quarantined':
-                return jsonify({'error': 'Use “Quarantine” to pull an item out of use'}), 400
+                return jsonify({'error': 'Use “Report a problem” to take an item out of use'}), 400
             if u.status == 'quarantined':
-                return jsonify({'error': f'{u.asset_tag} is quarantined. Release it from quarantine first'}), 409
+                return jsonify({'error': f'{u.asset_tag} is out of use. Mark it as checked first'}), 409
         u.status = status
     if 'serial_number' in data:
         u.serial_number = (data.get('serial_number') or '').strip() or None
@@ -701,7 +718,7 @@ def import_csv():
 @crew_required
 def barcode_page():
     """The separate QR generator page is gone: labels are printed from the equipment list."""
-    return redirect(url_for('equipment.equipment_list', labels=1))
+    return redirect(url_for('equipment.equipment_manage', labels=1))
 
 
 @equipment_bp.route('/equipment/generate-barcodes', methods=['POST'])

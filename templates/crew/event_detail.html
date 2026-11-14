@@ -28,10 +28,28 @@
     {% if can_manage %}<button class="btn btn-secondary" data-act="duplicate"><i class="fas fa-copy"></i>Duplicate</button>{% endif %}
     <a class="btn btn-secondary" href="{{ url_for('events.export_event_pdf', event_id=event.id) }}"><i class="fas fa-file-pdf"></i>PDF</a>
     <button class="btn btn-secondary btn-icon" data-act="io" title="Import / export" aria-label="Import / export" aria-haspopup="dialog"><i class="fas fa-ellipsis-h"></i></button>
-    {% if can_manage %}<button class="btn btn-danger" data-act="delete-event"><i class="fas fa-trash"></i>Delete</button>{% endif %}
+    {% if can_manage %}<button class="btn btn-outline-danger" data-act="delete-event"><i class="fas fa-trash"></i>Delete</button>{% endif %}
   </div>
 </div>
 
+{# One section at a time: a big event stays readable. The tab is kept in the address (#team),
+   so the page comes back to the same place after a change. #}
+{% set ns = namespace(waiting=0, declined=0) %}
+{% for p in team %}{% for x in p.shifts %}
+  {% if x.a.status == 'rejected' %}{% set ns.declined = ns.declined + 1 %}
+  {% elif x.a.status not in ('accepted', 'confirmed') %}{% set ns.waiting = ns.waiting + 1 %}{% endif %}
+{% endfor %}{% endfor %}
+{% set tasks_done = tasks|selectattr('done')|list|length %}
+<nav class="ev-tabs" role="tablist" aria-label="Event sections">
+  <button type="button" role="tab" data-tab="overview" aria-selected="true">Overview</button>
+  <button type="button" role="tab" data-tab="team" aria-selected="false">Team <span class="n">{{ team|length }}</span></button>
+  <button type="button" role="tab" data-tab="tasks" aria-selected="false">Tasks <span class="n" data-task-count>{{ tasks_done }}/{{ tasks|length }}</span></button>
+  <button type="button" role="tab" data-tab="schedule" aria-selected="false">Schedule <span class="n">{{ schedules|length }}</span></button>
+  <button type="button" role="tab" data-tab="run" aria-selected="false">Run list <span class="n">{{ run_items|length }}</span></button>
+  <button type="button" role="tab" data-tab="notes" aria-selected="false">Notes <span class="n">{{ notes|length }}</span></button>
+</nav>
+
+<section class="ev-pane" data-pane="overview">
 {% if on_team %}
 <div class="card sw-mine">
   <div class="sw-card-head"><h3><i class="fas fa-user-check"></i> Your shifts</h3></div>
@@ -63,9 +81,46 @@
 <div class="card"><div class="md-content">{{ event.description|md }}</div></div>
 {% endif %}
 
-<div class="sw-layout">
-<div>
 
+<div class="ev-overview">
+  <div class="card">
+    <div class="sw-card-head"><h3>At a glance</h3></div>
+    <div class="ev-glance">
+      <button type="button" data-goto="team"><i class="fas fa-users"></i><span><strong>{{ team|length }} {{ 'person' if team|length == 1 else 'people' }} on the team</strong>
+        <small>{% if not team %}Nobody yet{% elif ns.waiting or ns.declined %}{% if ns.waiting %}{{ ns.waiting }} shift{{ '' if ns.waiting == 1 else 's' }} awaiting a response{% endif %}{% if ns.waiting and ns.declined %} · {% endif %}{% if ns.declined %}{{ ns.declined }} declined{% endif %}{% else %}Everyone has confirmed{% endif %}</small></span></button>
+      <button type="button" data-goto="tasks"><i class="fas fa-list-check"></i><span><strong>{% if tasks %}{{ tasks_done }} of {{ tasks|length }} tasks done{% else %}No tasks{% endif %}</strong>
+        <small>{% if tasks and tasks_done == tasks|length %}All finished{% elif tasks %}{{ tasks|length - tasks_done }} still to do{% else %}Nothing to do yet{% endif %}</small></span></button>
+      <button type="button" data-goto="schedule"><i class="fas fa-clock"></i><span><strong>{{ schedules|length }} schedule item{{ '' if schedules|length == 1 else 's' }}</strong>
+        <small>{% if schedules %}Starts with {{ schedules[0].title }}{% else %}No times set{% endif %}</small></span></button>
+      <button type="button" data-goto="run"><i class="fas fa-list-ol"></i><span><strong>{{ run_items|length }} run list item{{ '' if run_items|length == 1 else 's' }}</strong>
+        <small>{% if run_items %}The running order for the show{% else %}No running order yet{% endif %}</small></span></button>
+      <button type="button" data-goto="notes"><i class="fas fa-sticky-note"></i><span><strong>{{ notes|length }} note{{ '' if notes|length == 1 else 's' }}</strong>
+        <small>{% if notes %}Latest from {{ notes[0].created_by|person }}{% else %}Nothing written yet{% endif %}</small></span></button>
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <div class="sw-card-head"><h3>Gear and plans</h3></div>
+      <div style="display:grid;gap:.6rem">
+        <a class="btn btn-primary" href="{{ url_for('unit_tracking.checkout_page', event_id=event.id) }}"><i class="fas fa-qrcode"></i>Scan gear out / in</a>
+        <a class="btn btn-secondary" href="{{ url_for('picklist.picklist', event_id=event.id) }}"><i class="fas fa-list-check"></i>Pick list ({{ event.pick_list_items|length }})</a>
+        <a class="btn btn-secondary" href="{{ url_for('stage_designer.stageplans', event_id=event.id) }}"><i class="fas fa-image"></i>Stage plans ({{ event.stage_plans|length }})</a>
+        <a class="btn btn-secondary" href="{{ url_for('hired_equipment.hired_equipment_list') }}"><i class="fas fa-handshake"></i>Hired equipment ({{ hired|length }})</a>
+      </div>
+    </div>
+    <div class="card">
+      <div class="sw-card-head"><h3>Details</h3></div>
+      <dl class="sw-detail-grid">
+        <dt>Starts</dt><dd>{{ event.event_date.strftime('%a %d %b %Y') }}{% if not event.all_day %}, {{ event.event_date.strftime('%I:%M %p').lstrip('0') }}{% endif %}</dd>
+        <dt>Ends</dt><dd>{{ end.strftime('%a %d %b %Y') }}{% if not event.all_day %}, {{ end.strftime('%I:%M %p').lstrip('0') }}{% endif %}</dd>
+        {% if event.created_by %}<dt>Created by</dt><dd>{{ event.created_by|person }}</dd>{% endif %}
+      </dl>
+    </div>
+  </div>
+</div>
+</section>
+
+<section class="ev-pane" data-pane="team" hidden>
   <!-- TEAM & SHIFTS -->
   <div class="card">
     <div class="sw-card-head">
@@ -78,8 +133,9 @@
       </div>
       {% endif %}
     </div>
+    {% if team|length > 6 %}<input type="search" class="sw-input ev-find" id="evFind" placeholder="Find a person…" autocomplete="off" aria-label="Find a person">{% endif %}
     {% for p in team %}
-    <div class="sw-person {{ 'me' if p.user.id == current_user.id }}">
+    <div class="sw-person {{ 'me' if p.user.id == current_user.id }}" data-person="{{ p.user.shown_name|lower }}">
       <div class="sw-person-head">
         <div class="sw-person-name"><span class="sw-avatar">{{ p.user.shown_name[0]|upper }}</span>{{ p.user.shown_name }}
           {% if p.crew and p.crew.role and not p.shifts %}<span class="sw-chip plain">{{ p.crew.role }}</span>{% endif %}</div>
@@ -97,7 +153,7 @@
           <div class="sw-shift-meta">{% if x.s.role %}<span class="sw-chip plain">{{ x.s.role }}</span>{% endif %}{{ status_chip(x.a.status) }}</div>
           {% if x.a.notes %}<div class="md-content" style="margin-top:.3rem;font-size:.88rem">{{ x.a.notes|md }}</div>{% endif %}
           {% if x.a.status == 'rejected' and x.a.decline_reason %}<div class="sw-muted" style="font-size:.85rem;margin-top:.25rem">Reason: {{ x.a.decline_reason }}</div>{% endif %}
-          {% if task_shifts.get(x.s.id) %}<div class="sw-shift-tasks"><a class="sw-chip plain" href="#tasks"><i class="fas fa-list-check"></i><span data-shift-tasks="{{ x.s.id }}">{{ task_shifts[x.s.id][0] }}/{{ task_shifts[x.s.id][1] }} tasks</span></a></div>{% endif %}
+          {% if task_shifts.get(x.s.id) %}<div class="sw-shift-tasks"><a class="sw-chip plain" href="#tasks" data-goto="tasks"><i class="fas fa-list-check"></i><span data-shift-tasks="{{ x.s.id }}">{{ task_shifts[x.s.id][0] }}/{{ task_shifts[x.s.id][1] }} tasks</span></a></div>{% endif %}
         </div>
         {% if can_manage %}
         <div class="sw-shift-btns">
@@ -114,10 +170,13 @@
     {% endfor %}
   </div>
 
+</section>
+
+<section class="ev-pane" data-pane="tasks" hidden>
   <!-- TASKS -->
-  <div class="card" id="tasks" data-task-group>
+  <div class="card" data-task-group>
     <div class="sw-card-head">
-      <h3><i class="fas fa-list-check"></i> Tasks (<span data-task-count>{{ tasks|selectattr('done')|list|length }}/{{ tasks|length }}</span>)</h3>
+      <h3><i class="fas fa-list-check"></i> Tasks (<span data-task-count>{{ tasks_done }}/{{ tasks|length }}</span>)</h3>
       {% if can_tasks %}<button class="btn btn-sm btn-primary" data-act="add-task"><i class="fas fa-plus"></i>Add task</button>{% endif %}
     </div>
     {% if tasks %}
@@ -126,6 +185,9 @@
     {% else %}<div class="sw-empty">No tasks yet.{% if can_tasks %} Use “Add task” to make one, or the <i class="fas fa-list-check"></i> button on a shift to add one to that shift.{% endif %}</div>{% endif %}
   </div>
 
+</section>
+
+<section class="ev-pane" data-pane="schedule" hidden>
   <!-- SCHEDULE -->
   <div class="card">
     <div class="sw-card-head"><h3><i class="fas fa-clock"></i> Schedule ({{ schedules|length }})</h3>
@@ -147,6 +209,9 @@
     <div class="sw-gallery" data-gallery="schedule" hidden></div>
   </div>
 
+</section>
+
+<section class="ev-pane" data-pane="run" hidden>
   <!-- RUN LIST -->
   <div class="card">
     <div class="sw-card-head"><h3><i class="fas fa-list-ol"></i> Run list ({{ run_items|length }})</h3>
@@ -175,6 +240,9 @@
     <div class="sw-gallery" data-gallery="run" hidden></div>
   </div>
 
+</section>
+
+<section class="ev-pane" data-pane="notes" hidden>
   <!-- NOTES -->
   <div class="card">
     <div class="sw-card-head"><h3><i class="fas fa-sticky-note"></i> Notes ({{ notes|length }})</h3>
@@ -189,27 +257,7 @@
     </div>
     {% else %}<div class="sw-empty">No notes yet.</div>{% endfor %}
   </div>
-</div>
-
-<div>
-  <div class="card">
-    <div class="sw-card-head"><h3>Quick links</h3></div>
-    <div style="display:grid;gap:.6rem">
-      <a class="btn btn-secondary" href="{{ url_for('picklist.picklist', event_id=event.id) }}"><i class="fas fa-list-check"></i>Pick list ({{ event.pick_list_items|length }})</a>
-      <a class="btn btn-secondary" href="{{ url_for('stage_designer.stageplans', event_id=event.id) }}"><i class="fas fa-image"></i>Stage plans ({{ event.stage_plans|length }})</a>
-      <a class="btn btn-secondary" href="{{ url_for('hired_equipment.hired_equipment_list') }}"><i class="fas fa-handshake"></i>Hired equipment ({{ hired|length }})</a>
-    </div>
-  </div>
-  <div class="card">
-    <div class="sw-card-head"><h3>Details</h3></div>
-    <dl class="sw-detail-grid">
-      <dt>Starts</dt><dd>{{ event.event_date.strftime('%a %d %b %Y') }}{% if not event.all_day %}, {{ event.event_date.strftime('%I:%M %p').lstrip('0') }}{% endif %}</dd>
-      <dt>Ends</dt><dd>{{ end.strftime('%a %d %b %Y') }}{% if not event.all_day %}, {{ end.strftime('%I:%M %p').lstrip('0') }}{% endif %}</dd>
-      {% if event.created_by %}<dt>Created by</dt><dd>{{ event.created_by|person }}</dd>{% endif %}
-    </dl>
-  </div>
-</div>
-</div>
+</section>
 
 <script type="application/json" id="page-data">{{ page_data|tojson }}</script>
 {% endblock %}
@@ -308,6 +356,32 @@ const actions = {
 document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-act]');
   if (b && actions[b.dataset.act]) { e.preventDefault(); actions[b.dataset.act](b); }
+});
+
+/* ---------- tabs ---------- */
+const TABS = [...document.querySelectorAll('.ev-tabs [data-tab]')].map((b) => b.dataset.tab);
+function showTab(name, push) {
+  if (!TABS.includes(name)) name = 'overview';
+  document.querySelectorAll('.ev-tabs [data-tab]').forEach((b) => b.setAttribute('aria-selected', b.dataset.tab === name ? 'true' : 'false'));
+  document.querySelectorAll('.ev-pane').forEach((p) => { p.hidden = p.dataset.pane !== name; });
+  if (push) history.replaceState(null, '', name === 'overview' ? location.pathname + location.search : '#' + name);
+  const on = document.querySelector(`.ev-tabs [data-tab="${name}"]`);
+  if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('.ev-tabs [data-tab], [data-goto]');
+  if (!t) return;
+  e.preventDefault();
+  showTab(t.dataset.tab || t.dataset.goto, true);
+  if (t.dataset.goto) window.scrollTo({ top: 0 });
+});
+window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
+showTab(location.hash.slice(1) || 'overview');
+
+const find = document.getElementById('evFind');
+if (find) find.addEventListener('input', () => {
+  const q = find.value.trim().toLowerCase();
+  document.querySelectorAll('[data-person]').forEach((p) => { p.hidden = !!q && !p.dataset.person.includes(q); });
 });
 
 const runList = document.getElementById('runList');

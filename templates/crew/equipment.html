@@ -11,95 +11,34 @@
         </div>
         <div class="sw-head-actions">
             {% if current_user.is_admin %}
-            <div class="sw-menu-wrap">
-                <button type="button" class="btn btn-secondary" id="gMoreBtn" aria-haspopup="true" aria-expanded="false">Import / export <i class="fas fa-chevron-down" style="font-size:.65rem"></i></button>
-                <div class="sw-menu" id="gMore" role="menu">
-                    <label role="menuitem" class="gear-menu-file"><i class="fas fa-file-arrow-up"></i> Import CSV<input type="file" id="gCsv" accept=".csv" class="sr-only"></label>
-                    <button type="button" id="gExport" role="menuitem"><i class="fas fa-file-arrow-down"></i> Export CSV</button>
-                    <button type="button" id="gTemplate" role="menuitem"><i class="fas fa-file-csv"></i> Download CSV template</button>
-                </div>
-            </div>
-            <button type="button" class="btn btn-secondary" id="gLabels"><i class="fas fa-qrcode"></i> Print labels</button>
-            <button type="button" class="btn btn-primary" id="gAdd"><i class="fas fa-plus"></i> Add type</button>
+            <a class="btn btn-secondary" href="{{ url_for('equipment.equipment_manage') }}"><i class="fas fa-sliders"></i> Manage equipment</a>
             {% endif %}
         </div>
     </header>
 
-    {% if quarantined %}
-    <details class="sw-notice bad" id="gQuarantine" {{ 'open' if request.args.get('status') == 'quarantined' }}>
-        <summary>{{ quarantined|length }} item{{ '' if quarantined|length == 1 else 's' }} in quarantine</summary>
-        <ul class="gear-qlist">
-            {% for q in quarantined %}
-            <li>
-                <a href="{{ url_for('equipment.equipment_detail', id=q.equipment_id, unit=q.unit_id) }}#unit-{{ q.unit_id }}"><code>{{ q.asset_tag }}</code></a>
-                <span>{{ q.equipment_name }}: {{ q.reason }}
-                    <span class="sub">{{ q.quarantined_at }} by {{ q.quarantined_by or 'unknown' }}{% if q.event_title %} · after {{ q.event_title }}{% endif %}</span></span>
-                {% if current_user.is_admin %}
-                <button type="button" class="btn btn-secondary btn-sm" data-release='{{ q|tojson }}'>Release…</button>
-                {% endif %}
-            </li>
-            {% endfor %}
-        </ul>
-    </details>
-    {% endif %}
-
-    {% if stale_checkouts %}
-    <details class="sw-notice bad">
-        <summary>{{ stale_checkouts|length }} item{{ '' if stale_checkouts|length == 1 else 's' }} still out from finished events</summary>
-        <ul>
-            {% for c in stale_checkouts[:20] %}
-            <li><a href="{{ url_for('equipment.equipment_detail', id=c.equipment_id, unit=c.unit_id) }}#unit-{{ c.unit_id }}"><code>{{ c.asset_tag }}</code></a>
-                {{ c.equipment_name }}, out on <a href="{{ url_for('unit_tracking.checkout_page', event_id=c.event_id) }}">{{ c.event_title }}</a> ({{ c.event_date }})</li>
-            {% endfor %}
-        </ul>
-    </details>
-    {% endif %}
-
-    {% if maint_alerts %}
-    {% set n_over = maint_alerts|selectattr('due.state', 'equalto', 'overdue')|list|length %}
-    <details class="sw-notice {{ 'bad' if n_over }}">
-        <summary>
-            {% if n_over %}{{ n_over }} item{{ '' if n_over == 1 else 's' }} overdue for testing{% endif %}{% if n_over and maint_alerts|length > n_over %}, {% endif %}{% if maint_alerts|length > n_over %}{{ maint_alerts|length - n_over }} due within 30 days{% endif %}
-        </summary>
-        <ul>
-            {% for a in maint_alerts[:30] %}
-            <li><a href="{{ url_for('equipment.equipment_detail', id=a.equipment_id, unit=a.id) }}#unit-{{ a.id }}"><code>{{ a.asset_tag }}</code></a>
-                {{ a.equipment_name }}: {{ a.due.kind_label }}
-                {{ 'overdue since' if a.due.state == 'overdue' else 'due' }} {{ a.due.date_text }}</li>
-            {% endfor %}
-        </ul>
-    </details>
-    {% endif %}
-
-    <div class="gear-toolbar">
-        <div class="sw-filters" id="gStatus" role="group" aria-label="Filter by status"></div>
-        <div class="gear-toolbar-right">
-            <input type="search" id="gFilter" class="sw-input" placeholder="Filter this list…" autocomplete="off" spellcheck="false" aria-label="Filter this list">
-            <select id="gCat" class="sw-input" aria-label="Category"><option value="">All categories</option></select>
-            <select id="gLoc" class="sw-input" aria-label="Location"><option value="">All locations</option></select>
+    {# What people come here for: find an item, see if one is free and where it lives. #}
+    <div class="gear-find">
+        <div class="gear-find-box">
+            <i class="fas fa-magnifying-glass"></i>
+            <input type="search" id="gFilter" placeholder="Find equipment…" autocomplete="off" spellcheck="false" aria-label="Find equipment">
         </div>
+        <select id="gShow" class="sw-input" aria-label="Show"></select>
     </div>
+    <div class="sw-filters gear-cats" id="gCats" role="group" aria-label="Category"></div>
 
-    <div class="gear-selbar" id="gSelBar" hidden>
-        <strong id="gSelCount"></strong>
-        <button type="button" class="btn btn-primary btn-sm" id="gSelLabels"><i class="fas fa-qrcode"></i> Print labels</button>
-        <button type="button" class="btn-link" id="gSelClear">Clear</button>
-    </div>
-
-    <div class="gear-list{% if current_user.is_admin %} can-select{% endif %}" id="gTable">
+    <div class="gear-list" id="gTable">
         <div class="gear-row gear-headrow" id="gHead" role="row">
-            {% if current_user.is_admin %}<span class="c-sel"><input type="checkbox" id="gSelAll" aria-label="Select all shown"></span>{% endif %}
             <span class="c-thumb"></span>
             <button type="button" class="c-name" data-col="name">Name</button>
-            <button type="button" class="c-cat" data-col="category">Category</button>
-            <button type="button" class="c-loc" data-col="location">Location</button>
-            <button type="button" class="c-stock" data-col="owned">Stock</button>
+            <button type="button" class="c-loc" data-col="location">Where it lives</button>
+            <button type="button" class="c-stock" data-col="available">Available</button>
         </div>
         <div id="gRows"></div>
     </div>
     <button type="button" class="btn btn-secondary btn-block" id="gShowMore" hidden style="margin-top:.75rem"></button>
 
     <div class="sw-blank" id="gEmpty" hidden><strong id="gEmptyTitle"></strong><span id="gEmptyText"></span></div>
+    {% if current_user.is_admin %}{% include 'crew/_gear_attention.html' %}{% endif %}
 </div>
 {% endblock %}
 
@@ -110,8 +49,7 @@
     let items = {{ equipment_json | tojson }};
     const PAGE = 60;
     const params = new URLSearchParams(location.search);
-    const st = { q: '', cat: '', loc: '', status: params.get('status') || 'all', col: 'name', dir: 1, shown: PAGE };
-    const selected = new Set();
+    const st = { q: '', cat: '', status: params.get('status') || 'all', col: 'name', dir: 1, shown: PAGE };
 
     const $  = (s, r = document) => r.querySelector(s);
     const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
@@ -120,11 +58,14 @@
     const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
     const STATUS = [
-        ['all', 'All', () => true],
-        ['out', 'Out', it => it.summary.out > 0],
-        ['quarantined', 'Quarantined', it => it.summary.quarantined > 0],
+        ['all', 'Show everything', () => true],
+        ['free', 'Available now', it => it.summary.available > 0],
+        ['out', 'Out at the moment', it => it.summary.out > 0],
+        ['quarantined', 'Out of use', it => it.summary.quarantined > 0],
         ['attention', 'Needs attention', it => it.summary.quarantined > 0 || it.summary.repair > 0 || !!it.maint],
     ];
+    // Problems with gear are for admins; crew only need to know what's free
+    if (!IS_ADMIN) STATUS.splice(3);
     if (!STATUS.some(s => s[0] === st.status)) st.status = 'all';
 
     function visibleItems() {
@@ -132,44 +73,42 @@
         const test = STATUS.find(s => s[0] === st.status)[2];
         const out = items.filter(it => {
             if (st.cat && (it.category || '') !== st.cat) return false;
-            if (st.loc && (it.location || '') !== st.loc) return false;
             if (!test(it)) return false;
             if (!words.length) return true;
             const hay = [it.name, it.barcode, it.category, it.location, it.notes].join(' ').toLowerCase();
             return words.every(w => hay.includes(w));
         });
-        out.sort((a, b) => st.col === 'owned'
-            ? st.dir * (a.summary.owned - b.summary.owned)
+        out.sort((a, b) => st.col === 'available'
+            ? st.dir * (a.summary.available - b.summary.available)
             : st.dir * cmp.compare(a[st.col] || '', b[st.col] || ''));
         return out;
     }
 
     function stockHtml(it) {
-        const s = it.summary, ind = it.tracking === 'individual';
-        const main = ind ? `<b>${s.available}</b> of ${s.owned} available`
-            : (s.out ? `<b>${s.available}</b> of ${s.owned} in storage` : `<b>${s.owned}</b> in storage`);
+        const s = it.summary;
+        const main = s.available > 0
+            ? `<span class="gear-free"><b>${s.available}</b> available</span><span class="gear-of">of ${s.owned}</span>`
+            : `<span class="gear-free none">None available</span><span class="gear-of">of ${s.owned}</span>`;
         const pills = [];
         if (s.out) pills.push(`<span class="pill out">${s.out} out</span>`);
-        if (s.quarantined) pills.push(`<span class="pill quarantined">${s.quarantined} quarantined</span>`);
-        if (s.repair) pills.push(`<span class="pill repair">${s.repair} in repair</span>`);
-        const m = it.maint;
+        if (IS_ADMIN && s.quarantined) pills.push(`<span class="pill quarantined">${s.quarantined} out of use</span>`);
+        if (IS_ADMIN && s.repair) pills.push(`<span class="pill repair">${s.repair} in repair</span>`);
+        const m = IS_ADMIN ? it.maint : null;
         if (m && m.overdue) pills.push(`<span class="pill overdue">${m.overdue} test overdue</span>`);
         else if (m && m.due_soon) pills.push(`<span class="pill due_soon">${m.due_soon} test due</span>`);
         return `<span class="gear-stock-main">${main}</span>${pills.length ? `<span class="gear-pills">${pills.join('')}</span>` : ''}`;
     }
 
     function rowHtml(it) {
-        const thumb = it.picture_url ? `<img src="${esc(it.picture_url)}" alt="" loading="lazy">` : '';
-        const sel = IS_ADMIN ? `<span class="c-sel"><input type="checkbox" data-sel="${it.id}" ${selected.has(it.id) ? 'checked' : ''} aria-label="Select ${esc(it.name)}"></span>` : '';
-        return `<div class="gear-row" data-id="${it.id}">
-            ${sel}
+        const thumb = it.picture_url ? `<img src="${esc(it.picture_url)}" alt="" loading="lazy">` : '<i class="fas fa-box"></i>';
+        const loc = it.location ? `<i class="fas fa-location-dot"></i> ${esc(it.location)}` : '<span class="gear-noloc">No location set</span>';
+        return `<a class="gear-row" href="/equipment/${it.id}">
             <span class="c-thumb">${thumb}</span>
-            <span class="c-name"><a href="/equipment/${it.id}">${esc(it.name)}</a>
-                <span class="sub"><code>${esc(it.barcode)}</code> · ${it.tracking === 'individual' ? 'tracked individually' : 'counted'}</span></span>
-            <span class="c-cat">${esc(it.category || '')}</span>
-            <span class="c-loc">${esc(it.location || '')}</span>
+            <span class="c-name"><strong>${esc(it.name)}</strong>
+                <span class="sub">${[it.category, it.barcode].filter(Boolean).map(esc).join(' · ')}</span></span>
+            <span class="c-loc">${loc}</span>
             <span class="c-stock">${stockHtml(it)}</span>
-        </div>`;
+        </a>`;
     }
 
     function render() {
@@ -187,45 +126,39 @@
         if (!list.length) {
             const none = !items.length;
             $('#gEmptyTitle').textContent = none ? 'No equipment yet' : 'Nothing matches';
-            $('#gEmptyText').textContent = none ? (IS_ADMIN ? 'Add your first type, or import a CSV.' : 'Nothing has been added yet.')
-                : 'Try a different filter.';
+            $('#gEmptyText').textContent = none ? (IS_ADMIN ? 'Add some from Manage equipment.' : 'Nothing has been added yet.')
+                : 'Check the spelling, or clear the search and category.';
         }
         $$('#gHead button').forEach(b => b.setAttribute('aria-sort', b.dataset.col === st.col ? (st.dir === 1 ? 'ascending' : 'descending') : 'none'));
-        $$('#gStatus .sw-filter').forEach(b => b.setAttribute('aria-pressed', b.dataset.status === st.status ? 'true' : 'false'));
-        paintSelection(slice);
+        $$('#gCats .sw-filter').forEach(b => b.setAttribute('aria-pressed', b.dataset.cat === st.cat ? 'true' : 'false'));
     }
 
     function refreshFacets() {
         const cats = [...new Set(items.map(i => i.category).filter(Boolean))].sort(cmp.compare);
-        const locs = [...new Set(items.map(i => i.location).filter(Boolean))].sort(cmp.compare);
         if (st.cat && !cats.includes(st.cat)) st.cat = '';
-        if (st.loc && !locs.includes(st.loc)) st.loc = '';
-        const fill = (sel, all, list, val) => {
-            sel.innerHTML = `<option value="">${all}</option>` + list.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
-            sel.value = val;
-        };
-        fill($('#gCat'), 'All categories', cats, st.cat);
-        fill($('#gLoc'), 'All locations', locs, st.loc);
+        $('#gCats').hidden = cats.length < 2;
+        $('#gCats').innerHTML = [['', 'All']].concat(cats.map(c => [c, c])).map(([v, label]) =>
+            `<button type="button" class="sw-filter" data-cat="${esc(v)}">${esc(label)}</button>`).join('');
 
-        $('#gStatus').innerHTML = STATUS.map(([key, label, test]) => {
+        $('#gShow').innerHTML = STATUS.map(([key, label, test]) => {
             const n = items.filter(test).length;
             return key !== 'all' && !n && st.status !== key ? '' :
-                `<button type="button" class="sw-filter" data-status="${key}">${label}<span class="n">${n}</span></button>`;
+                `<option value="${key}">${label}${key === 'all' ? '' : ` (${n})`}</option>`;
         }).join('');
+        $('#gShow').value = st.status;
 
         const tot = items.reduce((a, i) => ({ owned: a.owned + i.summary.owned, out: a.out + i.summary.out, q: a.q + i.summary.quarantined }), { owned: 0, out: 0, q: 0 });
         $('#gSummary').textContent = [plural(items.length, 'type'), plural(tot.owned, 'item'),
-            tot.out ? `${tot.out} out` : '', tot.q ? `${tot.q} quarantined` : ''].filter(Boolean).join(' · ');
+            tot.out ? `${tot.out} out` : '', IS_ADMIN && tot.q ? `${tot.q} out of use` : ''].filter(Boolean).join(' · ');
     }
     function refreshAll() { refreshFacets(); render(); }
 
     /* ---------- filters ---------- */
     $('#gFilter').addEventListener('input', e => { st.q = e.target.value.trim(); st.shown = PAGE; render(); });
-    $('#gCat').addEventListener('change', e => { st.cat = e.target.value; st.shown = PAGE; render(); });
-    $('#gLoc').addEventListener('change', e => { st.loc = e.target.value; st.shown = PAGE; render(); });
-    $('#gStatus').addEventListener('click', e => {
-        const b = e.target.closest('[data-status]'); if (!b) return;
-        st.status = b.dataset.status; st.shown = PAGE; render();
+    $('#gShow').addEventListener('change', e => { st.status = e.target.value; st.shown = PAGE; render(); });
+    $('#gCats').addEventListener('click', e => {
+        const b = e.target.closest('[data-cat]'); if (!b) return;
+        st.cat = b.dataset.cat; st.shown = PAGE; render();
     });
     $('#gHead').addEventListener('click', e => {
         const b = e.target.closest('button[data-col]'); if (!b) return;
@@ -234,116 +167,10 @@
     });
     $('#gShowMore').addEventListener('click', () => { st.shown += PAGE; render(); });
 
-    /* ---------- selection + labels (admins) ---------- */
-    function paintSelection(slice) {
-        if (!IS_ADMIN) return;
-        slice = slice || visibleItems().slice(0, st.shown);
-        $('#gSelBar').hidden = !selected.size;
-        $('#gSelCount').textContent = `${selected.size} selected`;
-        const all = $('#gSelAll');
-        const shown = slice.filter(i => selected.has(i.id)).length;
-        all.checked = !!slice.length && shown === slice.length;
-        all.indeterminate = shown > 0 && shown < slice.length;
-    }
-    function printLabels(ids) {
-        const chosen = items.filter(i => ids.includes(i.id));
-        if (!chosen.length) return SW.toast('Nothing to print labels for', 'error');
-        SWGear.labels({ equipmentIds: ids, hasItems: chosen.some(i => i.tracking === 'individual'),
-                        name: chosen.length === 1 ? chosen[0].name : (ids.length === items.length ? 'all equipment' : null) });
-    }
-
-    if (IS_ADMIN) {
-        $('#gRows').addEventListener('change', e => {
-            const c = e.target.closest('[data-sel]'); if (!c) return;
-            const id = parseInt(c.dataset.sel, 10);
-            if (c.checked) selected.add(id); else selected.delete(id);
-            paintSelection();
-        });
-        $('#gSelAll').addEventListener('change', e => {
-            visibleItems().slice(0, st.shown).forEach(i => e.target.checked ? selected.add(i.id) : selected.delete(i.id));
-            render();
-        });
-        $('#gSelClear').addEventListener('click', () => { selected.clear(); render(); });
-        $('#gSelLabels').addEventListener('click', () => printLabels([...selected]));
-        $('#gLabels').addEventListener('click', () => {
-            if (selected.size) return printLabels([...selected]);
-            const shown = visibleItems();
-            printLabels((shown.length ? shown : items).map(i => i.id));
-        });
-
-        /* ----- menu ----- */
-        const moreBtn = $('#gMoreBtn'), more = $('#gMore');
-        const setMore = on => { more.classList.toggle('open', on); moreBtn.setAttribute('aria-expanded', on ? 'true' : 'false'); };
-        moreBtn.addEventListener('click', e => { e.stopPropagation(); setMore(!more.classList.contains('open')); });
-        document.addEventListener('click', e => { if (!more.contains(e.target)) setMore(false); });
-
-        /* ----- add a type ----- */
-        $('#gAdd').addEventListener('click', () => addType(''));
-        function addType(barcode) {
-            const cats = [...new Set(items.map(i => i.category).filter(Boolean))].sort(cmp.compare);
-            const locs = [...new Set(items.map(i => i.location).filter(Boolean))].sort(cmp.compare);
-            SW.form({
-                title: 'Add an equipment type', submitText: 'Add type',
-                fields: [
-                    { name: 'name', label: 'Name', required: true, maxLength: 200, placeholder: 'e.g. Shure SM58' },
-                    { name: 'barcode', label: 'Barcode / short code', required: true, maxLength: 100, half: true, placeholder: 'e.g. MIC', value: barcode,
-                      hint: 'Printed on the group label. Item tags are numbered from it: MIC-01, MIC-02…' },
-                    { name: 'quantity_owned', label: 'How many do you have?', type: 'number', min: 1, max: 100000, half: true, value: 1 },
-                    { name: 'tracking', label: 'How do you want to track them?', type: 'select', value: 'individual', options: [
-                        { value: 'individual', label: 'Individually: each one gets its own label and history' },
-                        { value: 'bulk', label: 'Just count them: one group label (cables, tape, consumables)' },
-                    ] },
-                    { name: 'category', label: 'Category', half: true, maxLength: 100, suggestions: cats, placeholder: 'e.g. Audio' },
-                    { name: 'location', label: 'Where it lives', half: true, maxLength: 200, suggestions: locs, placeholder: 'e.g. Rack A, shelf 3' },
-                    { name: 'notes', label: 'Notes', type: 'textarea', rows: 2 },
-                ],
-                onSubmit: async v => {
-                    if (v.tracking === 'individual' && v.quantity_owned > 500) throw new Error('Add at most 500 individual items at a time');
-                    const r = await SW.api('POST', '/equipment/add', { ...v, quantity_owned: Math.max(1, v.quantity_owned || 1) });
-                    location.href = '/equipment/' + r.id;          // straight to the new type: photos, items, labels
-                    return true;
-                },
-            });
-        }
-
-        /* ----- CSV ----- */
-        function download(name, text) {
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
-            a.download = name; document.body.appendChild(a); a.click(); a.remove();
-        }
-        $('#gTemplate').addEventListener('click', () => { setMore(false);
-            download('equipment_template.csv', 'barcode,name,quantity_owned,tracking,category,location,notes\nMIC,Shure SM58,6,individual,Audio,Rack A,One label per mic\nGAFF,Gaffer tape,12,bulk,Consumables,Workshop,Counted only'); });
-        $('#gExport').addEventListener('click', () => { setMore(false);
-            const rows = [['barcode', 'name', 'quantity_owned', 'tracking', 'category', 'location', 'notes']];
-            items.forEach(e => rows.push([e.barcode, e.name, e.summary.owned, e.tracking, e.category || '', e.location || '', e.notes || '']));
-            download(`equipment_${new Date().toISOString().slice(0, 10)}.csv`,
-                rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n'));
-        });
-        $('#gCsv').addEventListener('change', async e => {
-            const file = e.target.files[0]; e.target.value = ''; setMore(false);
-            if (!file) return;
-            const fd = new FormData(); fd.append('file', file);
-            try {
-                const res = await fetch('/equipment/import-csv', { method: 'POST', body: fd });
-                const j = await res.json();
-                if (!res.ok || j.error) throw new Error(j.error || 'Import failed');
-                SW.toast(`Imported ${j.imported}, skipped ${j.skipped} (already there or incomplete)`);
-                if (j.imported) setTimeout(() => location.reload(), 1200);
-            } catch (ex) { SW.toast(ex.message, 'error'); }
-        });
-
-        /* ----- release from the quarantine list ----- */
-        $$('[data-release]').forEach(b => b.addEventListener('click', async () => {
-            const q = JSON.parse(b.dataset.release);
-            const r = await SWGear.release({ id: q.unit_id, asset_tag: q.asset_tag }, q);
-            if (r) SW.reloadSoon();
-        }));
-
-        if (params.get('labels')) $('#gLabels').click();      // arriving from the old QR generator link
-    }
-
     refreshAll();
+    // On a computer you can just start typing; on a phone that would pop the keyboard up
+    if (window.matchMedia('(min-width: 600px)').matches) $('#gFilter').placeholder = 'Find equipment by name, code or where it lives';
+    if (window.matchMedia('(hover: hover) and (min-width: 900px)').matches) $('#gFilter').focus();
 })();
 </script>
 {% endblock %}

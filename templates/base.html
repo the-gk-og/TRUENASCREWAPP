@@ -102,10 +102,11 @@
             </div>
             <div class="nav-section">
                 <div class="nav-section-title">Gear</div>
-                {{ nav('equipment.equipment_list', 'box', 'Equipment', ['equipment.equipment_list', 'equipment.equipment_detail'], gear_quarantined()) }}
+                {{ nav('equipment.equipment_list', 'box', 'Equipment', ['equipment.equipment_list', 'equipment.equipment_detail'], None) }}
                 {{ nav('picklist.picklist', 'list-check', 'Pick lists') }}
-                {{ nav('unit_tracking.checkout_page', 'right-left', 'Check out / in') }}
+                {{ nav('unit_tracking.checkout_page', 'qrcode', 'Scan gear out / in') }}
                 {{ nav('hired_equipment.hired_equipment_list', 'truck', 'Hired gear') }}
+                {% if current_user.is_admin %}{{ nav('equipment.equipment_manage', 'sliders', 'Manage equipment', None, gear_quarantined()) }}{% endif %}
             </div>
             <div class="nav-section">
                 <div class="nav-section-title">Plans</div>
@@ -184,6 +185,16 @@
 
         {% block content %}{% endblock %}
     </main>
+
+    {% if not cast_only %}
+    {# Phones: the four things people reach for at an event, always under the thumb #}
+    <nav class="sw-tabbar" aria-label="Quick">
+        <a href="{{ url_for('crew.dashboard') }}" class="{{ 'on' if ep == 'crew.dashboard' }}"><i class="fas fa-house"></i><span>Today</span></a>
+        <a href="{{ url_for('unit_tracking.checkout_page') }}" class="{{ 'on' if ep == 'unit_tracking.checkout_page' }}"><i class="fas fa-qrcode"></i><span>Scan gear</span></a>
+        <a href="{{ url_for('picklist.picklist') }}" class="{{ 'on' if ep == 'picklist.picklist' }}"><i class="fas fa-list-check"></i><span>Pick list</span></a>
+        <button type="button" onclick="toggleSidebar()"><i class="fas fa-bars"></i><span>More</span></button>
+    </nav>
+    {% endif %}
     {% endif %}
 
     <script>

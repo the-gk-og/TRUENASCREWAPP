@@ -101,8 +101,8 @@
     .dash-meta i { color: var(--primary); width: 1rem; text-align: center; }
 
     .dash-btn {
-        display: flex; align-items: center; justify-content: center; gap: 0.5rem;
-        min-height: 46px;
+        display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+        min-height: 40px;
         margin-top: 0.9rem;
         padding: 0 1rem;
         border-radius: 8px;
@@ -112,6 +112,23 @@
         text-decoration: none;
     }
     .dash-btn:active { transform: scale(0.98); }
+
+    /* ---------- Today's event: three big buttons ---------- */
+    .dash-today-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: .6rem; margin-top: 1rem; }
+    .dash-big {
+        display: flex; align-items: center; gap: .9rem;
+        min-height: 64px; padding: .7rem 1rem;
+        border: 1px solid var(--border-strong); border-radius: 8px;
+        background: var(--bg-card); color: var(--text-primary);
+        text-decoration: none; font-size: 1.1rem; font-weight: 700;
+    }
+    .dash-big i { font-size: 1.5rem; width: 2rem; text-align: center; color: var(--primary); }
+    .dash-big small { display: block; font-size: .82rem; font-weight: 500; color: var(--text-secondary); }
+    .dash-big.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .dash-big.primary i, .dash-big.primary small { color: inherit; }
+    .dash-big.primary small { opacity: .85; }
+    .dash-big:active { transform: scale(.985); }
+    @media (min-width: 700px) { .dash-today-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
     /* ---------- Stats ---------- */
     .dash-stats {
@@ -316,6 +333,24 @@
         </div>
     </header>
 
+    <!-- An event is on today: lead with it, and the three things people do at one -->
+    {% if today_event %}
+    <section class="dash-next dash-today" aria-label="Today's event">
+        <div class="dash-eyebrow">On today{% if on_today %} · you're on this{% endif %}</div>
+        <h2 class="dash-next-title" style="margin-top:.25rem">{{ today_event.title }}</h2>
+        <ul class="dash-meta">
+            <li><i class="far fa-clock"></i>
+                {% if today_event.all_day %}All day{% else %}{{ today_event.event_date.strftime('%I:%M %p').lstrip('0') }}{% endif %}
+            </li>
+            {% if today_event.location %}<li><i class="fas fa-map-marker-alt"></i> {{ today_event.location }}</li>{% endif %}
+        </ul>
+        <div class="dash-today-actions">
+            <a class="dash-big primary" href="{{ url_for('unit_tracking.checkout_page', event_id=today_event.id) }}"><i class="fas fa-qrcode"></i><span>Scan gear<small>out or back in</small></span></a>
+            <a class="dash-big" href="{{ url_for('picklist.picklist', event_id=today_event.id) }}"><i class="fas fa-list-check"></i><span>Pick list<small>what to pack</small></span></a>
+            <a class="dash-big" href="{{ url_for('events.event_detail', id=today_event.id) }}"><i class="fas fa-circle-info"></i><span>Event details<small>times, crew, notes</small></span></a>
+        </div>
+    </section>
+    {% else %}
     <!-- Your next shift -->
     <section class="dash-next" aria-label="Your next shift">
         {% if next_event %}
@@ -347,6 +382,7 @@
         </a>
         {% endif %}
     </section>
+    {% endif %}
 
     <!-- Stats -->
     <section class="dash-stats" aria-label="Summary">
@@ -356,11 +392,11 @@
         </a>
         <a class="dash-stat" href="{{ url_for('crew.my_schedule') }}">
             <div class="dash-stat-value">{{ my_events_this_week }}</div>
-            <div class="dash-stat-label">My shifts · 7d</div>
+            <div class="dash-stat-label">My shifts this week</div>
         </a>
         <a class="dash-stat" href="{{ url_for('calendar.calendar') }}">
             <div class="dash-stat-value">{{ events_this_week }}</div>
-            <div class="dash-stat-label">All events · 7d</div>
+            <div class="dash-stat-label">Events this week</div>
         </a>
     </section>
 
@@ -378,7 +414,8 @@
             </div>
         </section>
 
-        {% if maint_alerts or gear_out_late %}
+        {# Gear problems are for admins to sort out; crew don't need them on their dashboard #}
+        {% if current_user.is_admin and (maint_alerts or gear_out_late) %}
         <section>
             <h3 class="dash-section-title">
                 <span>Equipment</span>

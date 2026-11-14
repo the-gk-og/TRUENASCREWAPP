@@ -7,7 +7,7 @@ is the plan; a check-out is what actually left the building.
 """
 
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import os
 
@@ -166,6 +166,20 @@ def checkout_page():
     current, archived = _split_events()
     event_id = request.args.get('event_id', type=int)
     event = db.session.get(Event, event_id) if event_id else None
+    # Nobody should have to pick an event in the middle of a bump-in: open on today's
+    # event, else the one already under way, else the next one coming up.
+    auto_picked = False
+    if event is None and not request.args.get('choose'):
+        today = _now().date()
+        on = lambda e: e.event_date.date() if e.event_date else None
+        todays  = [e for e in current if on(e) == today] or [e for e in archived if on(e) == today]
+        started = [e for e in current if on(e) and on(e) < today]
+        open_ids = {eid for (eid,) in db.session.query(UnitCheckout.event_id)
+                    .filter(UnitCheckout.returned_at.is_(None)).distinct()}
+        just_done = [e for e in archived if e.id in open_ids and on(e) and (today - on(e)).days <= 2]
+        picks = todays or started[-1:] or just_done or current
+        if picks:
+            event, auto_picked = picks[0], True
     # Events that still have units out, even if they've finished
     out_event_ids = {eid for (eid,) in db.session.query(UnitCheckout.event_id)
                      .filter(UnitCheckout.returned_at.is_(None)).distinct()}
@@ -176,6 +190,7 @@ def checkout_page():
         events=[_event_brief(e) for e in current],
         stale_events=[_event_brief(e) for e in stale],
         out_counts=_open_counts(),
+        auto_picked=auto_picked,
     )
 
 
@@ -293,7 +308,7 @@ def checkout_scan():
         return jsonify({'success': True, 'action': 'return', 'unit': _unit_brief(unit),
                         'checkout': co.to_dict(), 'warnings': warnings,
                         'quarantine': q.to_dict() if q else None,
-                        'message': f'{unit.asset_tag} returned' + (' and quarantined' if q else '')})
+                        'message': f'{unit.asset_tag} returned' + (' and taken out of use' if q else '')})
 
     # ── Check out ───────────────────────────────────────────────────────────
     if co and co.event_id == event.id:
@@ -303,7 +318,7 @@ def checkout_scan():
     if unit.status == 'quarantined':
         q = unit.open_quarantine
         why = f': {q.reason}' if q and q.reason else ''
-        return jsonify({'error': f'{unit.asset_tag} is quarantined{why}. It can’t go out until an admin releases it',
+        return jsonify({'error': f'{unit.asset_tag} is out of use{why}. It can’t go out until an admin has checked it',
                         'conflict': 'quarantined', 'unit': _unit_brief(unit),
                         'quarantine': q.to_dict() if q else None}), 409
 
@@ -353,6 +368,44 @@ def return_checkout(cid):
     db.session.commit()
     return jsonify({'success': True, 'checkout': co.to_dict(),
                     'quarantine': q.to_dict() if q else None})
+
+
+UNDO_WINDOW = timedelta(minutes=10)
+
+
+@unit_tracking_bp.route('/equipment/checkout/<int:cid>/undo', methods=['POST'])
+@login_required
+@crew_required
+def undo_scan(cid):
+    """Take back your own scan, for the wrong item scanned in a hurry.
+    Body: {action: 'out' | 'return'}. Only the person who scanned it, within 10 minutes."""
+    co = UnitCheckout.query.get_or_404(cid)
+    action = (request.get_json(silent=True) or {}).get('action')
+    me, cutoff = current_user.username, _now() - UNDO_WINDOW
+    tag = co.unit.asset_tag
+    if action == 'out':
+        if co.returned_at is not None:
+            return jsonify({'error': f'{tag} has already come back'}), 409
+        if co.checked_out_by != me or co.checked_out_at < cutoff:
+            return jsonify({'error': 'Too late to undo that scan. Scan it back in instead'}), 409
+        db.session.delete(co)
+        message = f'{tag} is back in storage'
+    elif action == 'return':
+        if co.returned_at is None:
+            return jsonify({'error': f'{tag} is still out'}), 409
+        if co.returned_by != me or co.returned_at < cutoff:
+            return jsonify({'error': 'Too late to undo that scan. Scan it out again instead'}), 409
+        if co.unit.open_checkout:
+            return jsonify({'error': f'{tag} has already gone out again'}), 409
+        if co.unit.status == 'quarantined':
+            return jsonify({'error': f'{tag} was taken out of use, so it stays returned'}), 409
+        co.returned_at = None
+        co.returned_by = None
+        message = f'{tag} is out on {co.event.title} again'
+    else:
+        return jsonify({'error': 'Unknown action'}), 400
+    db.session.commit()
+    return jsonify({'success': True, 'message': message})
 
 
 def _group_label_answer(eq, event):
@@ -475,7 +528,7 @@ def quarantine(uid):
     if not reason:
         return jsonify({'error': 'Say what is wrong with it'}), 400
     if u.status == 'quarantined':
-        return jsonify({'error': f'{u.asset_tag} is already quarantined'}), 409
+        return jsonify({'error': f'{u.asset_tag} is already out of use'}), 409
     if u.status in ('retired', 'lost'):
         return jsonify({'error': f'{u.asset_tag} is marked {u.status}'}), 409
     photo = None
@@ -499,11 +552,11 @@ def release(uid):
     kind?: inspection|repair|pat, next_due?}. Putting an item back in service
     logs the inspection or repair that cleared it, so a note is required."""
     if not current_user.is_admin:
-        return jsonify({'error': 'Only admins can release an item from quarantine'}), 403
+        return jsonify({'error': 'Only admins can put an item back in use'}), 403
     u = EquipmentUnit.query.get_or_404(uid)
     q = u.open_quarantine
     if u.status != 'quarantined' or not q:
-        return jsonify({'error': f'{u.asset_tag} is not quarantined'}), 409
+        return jsonify({'error': f'{u.asset_tag} is not out of use'}), 409
     data = request.get_json(silent=True) or {}
     outcome = (data.get('outcome') or 'available').strip().lower()
     if outcome not in QUARANTINE_OUTCOMES:
@@ -525,7 +578,7 @@ def release(uid):
         rec = UnitMaintenance(unit_id=u.id, kind=kind, performed_on=date.today(),
                               result='repaired' if kind == 'repair' else 'pass',
                               performed_by=current_user.username, recorded_by=current_user.username,
-                              notes=f'Released from quarantine ({q.reason}). {note}', next_due=next_due)
+                              notes=f'Checked after a problem report ({q.reason}). {note}', next_due=next_due)
         db.session.add(rec)
     q.released_at  = _now()
     q.released_by  = current_user.username
@@ -585,11 +638,11 @@ def unit_timeline(u):
             by=m.performed_by, maintenance_id=m.id)
     for q in u.quarantines:
         d = q.to_dict()
-        add(q.quarantined_at, 'quarantine', 'Quarantined', detail=q.reason or '', by=q.quarantined_by,
+        add(q.quarantined_at, 'quarantine', 'Problem reported: taken out of use', detail=q.reason or '', by=q.quarantined_by,
             photo_url=d['photo_url'],
             event_title=d['event_title'])
         if q.released_at:
-            add(q.released_at, 'release', f'Quarantine closed: {QUARANTINE_OUTCOMES.get(q.outcome, q.outcome or "released")}',
+            add(q.released_at, 'release', f'Checked: {QUARANTINE_OUTCOMES.get(q.outcome, q.outcome or "done").lower()}',
                 detail=q.release_note or '', by=q.released_by)
     if u.created_at:
         # created_at is stored in UTC and everything else in local time: always list it first
@@ -654,9 +707,9 @@ def add_maintenance(uid):
         if set_status not in UNIT_STATUSES:
             return jsonify({'error': 'Unknown status'}), 400
         if set_status == 'quarantined':
-            return jsonify({'error': 'Use “Quarantine” to pull an item out of use'}), 400
+            return jsonify({'error': 'Use “Report a problem” to take an item out of use'}), 400
         if u.status == 'quarantined' and set_status != 'quarantined':
-            return jsonify({'error': f'{u.asset_tag} is quarantined. Release it from quarantine instead'}), 409
+            return jsonify({'error': f'{u.asset_tag} is out of use. Mark it as checked instead'}), 409
         if set_status != 'repair' and not current_user.is_admin:
             return jsonify({'error': 'Only admins can change a unit to ' + set_status}), 403
 

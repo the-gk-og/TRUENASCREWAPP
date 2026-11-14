@@ -156,7 +156,7 @@ class Equipment(db.Model):
 
 TRACKING_MODES = ('individual', 'bulk')
 UNIT_STATUSES = ('available', 'quarantined', 'repair', 'retired', 'lost')
-UNIT_STATUS_LABELS = {'available': 'Available', 'quarantined': 'Quarantined', 'repair': 'In repair',
+UNIT_STATUS_LABELS = {'available': 'Available', 'quarantined': 'Out of use', 'repair': 'In repair',
                       'retired': 'Retired', 'lost': 'Lost'}
 
 
@@ -400,7 +400,7 @@ class UnitQuarantine(db.Model):
 
 
 # What an admin decided when closing a quarantine -> the status the item gets
-QUARANTINE_OUTCOMES = {'available': 'Back in service', 'repair': 'Sent for repair', 'retired': 'Retired'}
+QUARANTINE_OUTCOMES = {'available': 'Back in use', 'repair': 'Sent for repair', 'retired': 'Retired'}
 
 
 class BulkCheckout(db.Model):
