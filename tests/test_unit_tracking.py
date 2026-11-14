@@ -101,13 +101,13 @@ def test_explicit_modes_and_return_button(app, alice, mic):
 def test_scan_errors(app, alice, mic):
     ev = mk_event('Gig')
     assert scan(alice, ev, 'NOPE').status_code == 404
-    r = scan(alice, ev, 'MIC')                                     # the item barcode, not a unit
-    assert r.status_code == 404 and 'unit tags' in r.get_json()['error']
+    r = scan(alice, ev, 'MIC')                                     # the group label: asks which item
+    assert r.status_code == 409 and r.get_json()['conflict'] == 'choose_unit'
     assert alice.post('/equipment/checkout/scan', json={'code': 'MIC-01'}).status_code == 400   # no event
     assert scan(alice, ev, 'MIC-01', mode='sideways').status_code == 400
     db.session.add(Equipment(name='Gaffer tape', barcode='TAPE'))
     db.session.commit()
-    assert 'quantity only' in scan(alice, ev, 'TAPE').get_json()['error']
+    assert scan(alice, ev, 'TAPE').get_json()['conflict'] == 'choose_quantity'   # bulk type: asks how many
 
 
 def test_warns_when_not_on_pick_list_and_auto_allocates(app, alice, mic):
@@ -158,22 +158,26 @@ def test_blocks_repair_retired_and_out_elsewhere_until_confirmed(app, admin, ali
     assert j['action'] == 'return' and j['warnings'][0]['code'] == 'other_event'
 
 
-def test_stale_checkouts_from_finished_events(app, alice, mic):
+def test_stale_checkouts_from_finished_events(app, admin, alice, mic):
     past = Event(title='Last week', event_date=datetime.now() - timedelta(days=7))
     db.session.add(past)
     db.session.commit()
     assert scan(alice, past.id, 'MIC-01').status_code == 200
-    page = alice.get('/equipment/checkout')
+    page = admin.get('/equipment/checkout')
     assert page.status_code == 200 and b'Still out from finished events' in page.data
-    assert b'not returned' in alice.get('/dashboard').data
-    assert b'still out from finished events' in alice.get('/equipment').data
+    assert b'not returned' in admin.get('/dashboard').data
+    assert b'still out from finished events' in admin.get('/equipment').data
+    # Gear problems are for admins to sort out: crew don't see them
+    assert b'Still out from finished events' not in alice.get('/equipment/checkout').data
+    assert b'not returned' not in alice.get('/dashboard').data
+    assert b'still out from finished events' not in alice.get('/equipment').data
 
 
 def test_checkout_page_renders_desktop_and_mobile(app, alice, mic):
     ev = mk_event('Gig')
     for ua in ('Mozilla/5.0 (X11; Linux x86_64)', MOBILE_UA):
         r = alice.get(f'/equipment/checkout?event_id={ev}', headers={'User-Agent': ua})
-        assert r.status_code == 200 and b'sw-scanner.js' in r.data and b'Gig' in r.data
+        assert r.status_code == 200 and b'SWGear.scannerUI' in r.data and b'Gig' in r.data
         assert alice.get(f'/picklist?event_id={ev}', headers={'User-Agent': ua}).data.count(
             f'/equipment/checkout?event_id={ev}'.encode()) >= 1
     assert alice.get('/equipment/checkout').status_code == 200
@@ -249,7 +253,7 @@ def test_delete_maintenance_is_admin_only(app, admin, alice, mic):
     assert UnitMaintenance.query.count() == 0
 
 
-def test_due_dates_overdue_and_due_soon(app, alice, mic):
+def test_due_dates_overdue_and_due_soon(app, admin, alice, mic):
     today = date.today()
     u1, u2, u3 = (tag(t).id for t in ('MIC-01', 'MIC-02', 'MIC-03'))
     long_ago = (today - timedelta(days=400)).isoformat()
@@ -273,12 +277,14 @@ def test_due_dates_overdue_and_due_soon(app, alice, mic):
     assert [(a['asset_tag'], a['due']['state']) for a in alerts] == [('MIC-01', 'overdue'), ('MIC-02', 'due_soon')]
 
     # Shown on the equipment page, item page and dashboard
-    page = alice.get('/equipment').data
-    assert b'1 unit overdue for testing' in page and b'1 due within 30 days' in page
+    page = admin.get('/equipment').data
+    assert b'1 item overdue for testing' in page and b'1 due within 30 days' in page
     assert b'"maint": {"due_soon": 1, "overdue": 1}' in page or b'"overdue": 1' in page
     detail = alice.get(f'/equipment/{mic}').data
     assert b'Tests and inspections due' in detail and b'overdue since' in detail
-    assert b'PAT test' in alice.get('/dashboard').data
+    assert b'PAT test' in admin.get('/dashboard').data
+    assert b'PAT test' not in alice.get('/dashboard').data          # crew aren't shown gear problems
+    assert b'overdue for testing' not in alice.get('/equipment').data
 
     # Retired units drop out of the alerts
     db.session.get(EquipmentUnit, u1).status = 'retired'
@@ -288,4 +294,4 @@ def test_due_dates_overdue_and_due_soon(app, alice, mic):
 
 def test_detail_page_mobile_has_maintenance_ui(app, alice, mic):
     r = alice.get(f'/equipment/{mic}', headers={'User-Agent': MOBILE_UA})
-    assert r.status_code == 200 and b'maintModal' in r.data and b'histModal' in r.data
+    assert r.status_code == 200 and b'data-act="check"' in r.data and b'data-act="history"' in r.data

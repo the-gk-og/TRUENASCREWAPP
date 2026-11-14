@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Roster - ShowWise{% endblock %}
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/events.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/roster.css') }}">
 {% endblock %}
 
@@ -39,6 +38,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/sw-ui.js') }}"></script>
 <script src="{{ url_for('static', filename='js/roster.js') }}"></script>
 {% endblock %}

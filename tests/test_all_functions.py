@@ -342,7 +342,8 @@ class TestEquipmentRoutes:
             'password': 'admin123'
         })
         response = client.get('/equipment/barcodes')
-        assert response.status_code == 200
+        # Labels are printed from the equipment list now; the old page redirects there
+        assert response.status_code == 302 and '/equipment' in response.headers['Location']
 
 
 # ==================== CHAT ROUTES TESTS ====================

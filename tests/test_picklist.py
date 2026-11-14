@@ -94,7 +94,7 @@ def test_pages_render(alice):
     for ua in (None, MOBILE_UA):
         h = {'User-Agent': ua} if ua else {}
         r = alice.get('/picklist', headers=h)
-        assert r.status_code == 200 and b'Archive (2)' in r.data
+        assert r.status_code == 200 and b'Finished events (2)' in r.data
         r = alice.get('/picklist?event_id=%d' % alice.application.evs['old'], headers=h)
         assert r.status_code == 200 and b'Archived' in r.data
         assert b'Gaffer tape' in r.data

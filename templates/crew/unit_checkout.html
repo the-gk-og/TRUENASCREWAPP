@@ -1,157 +1,86 @@
 {% extends "base.html" %}
-{% block title %}Scan out / in — ShowWise{% endblock %}
+{% block title %}Scan gear — ShowWise{% endblock %}
 
+{# Built for a busy bump-in: no choices before the first scan, a result you can read from
+   arm's length (and hear), one button to undo, and scans that wait if the wifi drops. #}
 {% block content %}
-<style>
-    /* One responsive page: built for a phone at the venue door, fine on desktop. */
-    .co { max-width: 980px; margin: 0 auto; padding-bottom: 5rem; }
-    .co * { box-sizing: border-box; }
-    .co button, .co input, .co select { font-family: inherit; -webkit-tap-highlight-color: transparent; }
-    .co h1 { margin: 0; font-size: 1.45rem; display: flex; align-items: center; gap: .6rem; color: var(--text-primary); }
-    .co-sub { margin: .25rem 0 1rem; font-size: .9rem; color: var(--text-secondary); }
-    .co-input, .co-select {
-        width: 100%; min-height: 48px; padding: .6rem .8rem; font-size: 16px;
-        color: var(--text-primary); background: var(--bg-input);
-        border: 1px solid var(--border-input); border-radius: 12px;
-    }
-    .co-btn {
-        min-height: 48px; padding: 0 1rem; border-radius: 12px; cursor: pointer;
-        font-size: .95rem; font-weight: 700; border: 1px solid var(--border);
-        background: var(--bg-card); color: var(--text-primary);
-        display: inline-flex; align-items: center; justify-content: center; gap: .45rem;
-    }
-    .co-btn.primary { border: 0; color: #fff; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); }
-    .co-btn.warn { border: 0; color: #fff; background: var(--warning); }
-    .co-btn.small { min-height: 36px; padding: 0 .7rem; font-size: .82rem; }
-    .co-btn:active { transform: scale(.97); }
-    .co-grid { display: grid; gap: 1rem; }
-    @media (min-width: 860px) { .co-grid { grid-template-columns: minmax(0, 420px) minmax(0, 1fr); align-items: start; } }
-    .co-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 1rem; box-shadow: var(--shadow-sm); }
+<div class="gear co">
+    <header class="sw-head co-head">
+        <div>
+            <h1>Scan gear</h1>
+            {% if event %}
+            <p class="co-for" id="coFor">
+                For <strong>{{ event.title }}</strong> · {{ event.date }}{% if event.archived %} · finished{% endif %}
+                <button type="button" class="btn-link" id="coChange">Change event</button>
+            </p>
+            {% elif events or stale_events %}
+            <p>Choose the event the gear is for.</p>
+            {% else %}
+            <p>There are no events yet. You can still scan gear back in.</p>
+            {% endif %}
+        </div>
+        {% if event %}
+        <div class="sw-head-actions">
+            <a class="btn btn-secondary" href="{{ url_for('picklist.picklist', event_id=event.id) }}"><i class="fas fa-list-check"></i> Pick list</a>
+        </div>
+        {% endif %}
+    </header>
 
-    .co-modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: .35rem; margin: .75rem 0; padding: .25rem;
-                background: var(--bg-nav-hover); border-radius: 12px; }
-    .co-modes button { min-height: 42px; border: 0; border-radius: 9px; background: transparent; color: var(--text-secondary);
-                       font-weight: 700; font-size: .85rem; cursor: pointer; }
-    .co-modes button.on { background: var(--bg-card); color: var(--text-primary); box-shadow: var(--shadow-sm); }
+    <div class="co-event" id="coEventWrap" {% if event %}hidden{% endif %}>
+        <label class="sw-label" for="coEvent">Event</label>
+        <select id="coEvent" class="sw-input">
+            <option value="">Choose an event…</option>
+            {% for e in events %}
+            <option value="{{ e.id }}" {% if event and event.id == e.id %}selected{% endif %}>{{ e.title }} · {{ e.date }}{% if out_counts.get(e.id) %} ({{ out_counts[e.id] }} out){% endif %}</option>
+            {% endfor %}
+            {% if stale_events %}
+            <optgroup label="Finished, gear still out">
+                {% for e in stale_events %}
+                <option value="{{ e.id }}" {% if event and event.id == e.id %}selected{% endif %}>{{ e.title }} · {{ e.date }} ({{ out_counts.get(e.id, 0) }} out)</option>
+                {% endfor %}
+            </optgroup>
+            {% endif %}
+            {% if event and event.archived and event.id not in stale_events|map(attribute='id')|list %}
+            <option value="{{ event.id }}" selected>{{ event.title }} · {{ event.date }} (finished)</option>
+            {% endif %}
+        </select>
+    </div>
 
-    .co-cam { position: relative; aspect-ratio: 4 / 3; border-radius: 14px; overflow: hidden; background: #000; margin-bottom: .6rem; }
-    .co-cam video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-    .co-cam-idle { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
-                   gap: .5rem; color: #cbd5e1; font-size: .9rem; text-align: center; padding: 1rem; }
-    .co-cam-idle i { font-size: 2rem; }
-    .co-cam.live .co-cam-idle { display: none; }
-    .co-cam .flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .5s; }
-    .co-cam .flash.ok   { background: rgba(16,185,129,.45); opacity: 1; transition: none; }
-    .co-cam .flash.warn { background: rgba(245,158,11,.5);  opacity: 1; transition: none; }
-    .co-cam .flash.err  { background: rgba(239,68,68,.5);   opacity: 1; transition: none; }
-    .co-status { display: flex; align-items: center; gap: .5rem; margin-bottom: .6rem; font-size: .85rem; color: var(--text-secondary); }
-    .co-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-muted); flex: 0 0 9px; }
-    .co-dot.live { background: var(--success); }
-    .co-manual { display: flex; gap: .5rem; margin-top: .6rem; }
-    .co-manual .co-input { flex: 1; min-width: 0; }
-
-    .co-result { margin-top: .9rem; padding: .85rem 1rem; border-radius: 12px; border: 2px solid var(--border); background: var(--bg-card); }
-    .co-result.ok   { border-color: var(--success); }
-    .co-result.warn { border-color: var(--warning); }
-    .co-result.err  { border-color: var(--danger); }
-    .co-result h3 { margin: 0; font-size: 1.05rem; display: flex; gap: .5rem; align-items: center; color: var(--text-primary); }
-    .co-result.ok h3 i   { color: var(--success); }
-    .co-result.warn h3 i { color: var(--warning); }
-    .co-result.err h3 i  { color: var(--danger); }
-    .co-result ul { margin: .5rem 0 0; padding-left: 1.2rem; font-size: .88rem; color: var(--text-secondary); }
-    .co-result .row { display: flex; gap: .5rem; margin-top: .75rem; flex-wrap: wrap; }
-
-    .co-tabs { display: flex; gap: .35rem; margin-bottom: .75rem; overflow-x: auto; }
-    .co-tabs button { flex: 0 0 auto; min-height: 40px; padding: 0 .85rem; border-radius: 999px; cursor: pointer; font-weight: 700; font-size: .85rem;
-                      border: 1px solid var(--border); background: var(--bg-card); color: var(--text-secondary); }
-    .co-tabs button.on { background: var(--bg-nav-active); color: var(--text-nav-active); border-color: transparent; }
-    .co-list { list-style: none; margin: 0; padding: 0; }
-    .co-list li { display: flex; align-items: center; gap: .75rem; padding: .6rem .2rem; border-bottom: 1px solid var(--border); }
-    .co-list li:last-child { border-bottom: 0; }
-    .co-list .main { flex: 1; min-width: 0; }
-    .co-list code { font-weight: 700; font-size: .95rem; }
-    .co-list .meta { font-size: .8rem; color: var(--text-secondary); overflow-wrap: anywhere; }
-    .co-list .meta.bad { color: var(--danger); font-weight: 600; }
-    .co-empty { padding: 1.25rem .5rem; text-align: center; color: var(--text-secondary); font-size: .9rem; }
-    .co-stale { margin-top: 1rem; border-left: 4px solid var(--danger); }
-    .co-stale a { color: var(--primary); font-weight: 600; text-decoration: none; }
-    .co-count { display: inline-block; min-width: 1.4rem; padding: 0 .35rem; margin-left: .25rem; border-radius: 999px;
-                background: var(--bg-nav-hover); font-size: .75rem; text-align: center; }
-</style>
-
-<div class="co">
-    <h1><i class="fas fa-people-carry-box"></i> Scan out / in</h1>
-    <p class="co-sub">Pick the event, then scan unit tags. Scan a unit again to return it.</p>
+    <div class="co-queue" id="coQueue" hidden></div>
 
     <div class="co-grid">
-        <div>
-            <div class="co-card">
-                <label for="coEvent" style="font-size:.8rem; font-weight:700; color:var(--text-secondary);">Event</label>
-                <select id="coEvent" class="co-select">
-                    <option value="">— Choose an event —</option>
-                    {% for e in events %}
-                    <option value="{{ e.id }}" {% if event and event.id == e.id %}selected{% endif %}>{{ e.title }} · {{ e.date }}{% if out_counts.get(e.id) %} ({{ out_counts[e.id] }} out){% endif %}</option>
-                    {% endfor %}
-                    {% if stale_events %}
-                    <optgroup label="Finished, gear still out">
-                        {% for e in stale_events %}
-                        <option value="{{ e.id }}" {% if event and event.id == e.id %}selected{% endif %}>{{ e.title }} · {{ e.date }} ({{ out_counts.get(e.id, 0) }} out)</option>
-                        {% endfor %}
-                    </optgroup>
-                    {% endif %}
-                    {% if event and event.archived and event.id not in stale_events|map(attribute='id')|list %}
-                    <option value="{{ event.id }}" selected>{{ event.title }} · {{ event.date }} (finished)</option>
-                    {% endif %}
-                </select>
-
-                <div class="co-modes" role="radiogroup" aria-label="What a scan does">
-                    <button type="button" data-mode="auto" class="on" role="radio" aria-checked="true" title="Out if it's in, back if it's out on this event">Auto</button>
-                    <button type="button" data-mode="out" role="radio" aria-checked="false">Check out</button>
-                    <button type="button" data-mode="return" role="radio" aria-checked="false">Return</button>
+        <section class="card co-scan">
+            <div id="coResult" aria-live="assertive">
+                <div class="co-big idle">
+                    <div class="co-big-word"><i class="fas fa-qrcode"></i> Scan a label</div>
+                    <div class="co-big-item">Scan it once as it goes out. Scan it again when it comes back.</div>
                 </div>
-
-                <div class="co-cam" id="coCam">
-                    <div class="co-cam-idle"><i class="fas fa-camera"></i><span>Camera is off</span></div>
-                    <div class="flash" id="coFlash"></div>
-                </div>
-                <div class="co-status"><span class="co-dot" id="coDot"></span><span id="coCamStatus">Camera off</span></div>
-                <button type="button" class="co-btn primary" id="coCamBtn" style="width:100%;"><i class="fas fa-video"></i> Start camera</button>
-
-                <form class="co-manual" id="coManualForm" autocomplete="off">
-                    <input type="text" id="coManual" class="co-input" placeholder="Type or scan an asset tag…"
-                           spellcheck="false" enterkeyhint="go" aria-label="Asset tag">
-                    <button type="submit" class="co-btn">Go</button>
-                </form>
-
-                <div id="coResult" aria-live="polite"></div>
             </div>
-        </div>
+            <div id="coScanner"></div>
+        </section>
 
         <div>
-            <div class="co-card" id="coLists">
+            <section class="card" id="coLists">
                 {% if event %}
-                <div style="display:flex; justify-content:space-between; gap:.5rem; align-items:baseline; flex-wrap:wrap; margin-bottom:.6rem;">
-                    <strong style="font-size:1.05rem;">{{ event.title }}</strong>
-                    <a href="{{ url_for('picklist.picklist', event_id=event.id) }}" style="font-size:.85rem; color:var(--primary);"><i class="fas fa-list-check"></i> Pick list</a>
+                <div class="co-status" id="coStatus"></div>
+                <div class="sw-filters" role="tablist" style="margin-bottom:.6rem">
+                    <button type="button" class="sw-filter" data-tab="out" aria-pressed="true">Out now<span class="n" id="cntOut">0</span></button>
+                    <button type="button" class="sw-filter" data-tab="expected" aria-pressed="false">Not out yet<span class="n" id="cntExpected">0</span></button>
+                    <button type="button" class="sw-filter" data-tab="returned" aria-pressed="false">Back<span class="n" id="cntReturned">0</span></button>
                 </div>
-                <div class="co-tabs" role="tablist">
-                    <button type="button" data-tab="out" class="on">Out<span class="co-count" id="cntOut">0</span></button>
-                    <button type="button" data-tab="expected">To go<span class="co-count" id="cntExpected">0</span></button>
-                    <button type="button" data-tab="returned">Returned<span class="co-count" id="cntReturned">0</span></button>
-                </div>
-                <ul class="co-list" id="coList"><li class="co-empty">Loading…</li></ul>
+                <ul class="co-list" id="coList"><li class="co-none">Loading…</li></ul>
                 {% else %}
-                <div class="co-empty">Choose an event to see what's out.</div>
+                <p class="co-none">Choose an event to see what’s out.</p>
                 {% endif %}
-            </div>
+            </section>
 
-            {% if stale_events %}
-            <div class="co-card co-stale">
-                <strong><i class="fas fa-triangle-exclamation" style="color:var(--danger);"></i> Still out from finished events</strong>
-                <ul class="co-list">
+            {% if stale_events and current_user.is_admin %}
+            <div class="sw-notice bad">
+                <strong>Still out from finished events</strong>
+                <ul>
                     {% for e in stale_events %}
-                    <li><div class="main"><a href="{{ url_for('unit_tracking.checkout_page', event_id=e.id) }}">{{ e.title }}</a>
-                        <div class="meta">{{ e.date }} · {{ out_counts.get(e.id, 0) }} unit{{ '' if out_counts.get(e.id, 0) == 1 else 's' }} not returned</div></div></li>
+                    <li><a href="{{ url_for('unit_tracking.checkout_page', event_id=e.id) }}">{{ e.title }}</a>
+                        ({{ e.date }}): {{ out_counts.get(e.id, 0) }} item{{ '' if out_counts.get(e.id, 0) == 1 else 's' }} not returned</li>
                     {% endfor %}
                 </ul>
             </div>
@@ -162,34 +91,28 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
-<script src="{{ url_for('static', filename='js/sw-scanner.js') }}"></script>
 <script>
-(function () {
+(async function () {
     const EVENT_ID = {{ event.id if event else 'null' }};
+    const EVENT_DONE = {{ 'true' if event and event.archived else 'false' }};
+    const BASE_MODE = EVENT_ID ? 'auto' : 'return';        // with no event, the only thing a scan can do is bring gear back
     const $ = (s, r = document) => r.querySelector(s);
-    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    let mode = 'auto', tab = 'out', state = null, busy = false;
+    const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+    const esc = SW.esc;
+    let tab = 'out', state = null, busy = false;
 
-    /* ---------- Event + mode ---------- */
     $('#coEvent').addEventListener('change', e => {
-        const v = e.target.value;
-        location.href = v ? `?event_id=${v}` : location.pathname;
+        location.href = e.target.value ? `?event_id=${e.target.value}` : `${location.pathname}?choose=1`;
     });
-    document.querySelectorAll('.co-modes button').forEach(b => b.addEventListener('click', () => {
-        mode = b.dataset.mode;
-        document.querySelectorAll('.co-modes button').forEach(x => {
-            x.classList.toggle('on', x === b); x.setAttribute('aria-checked', x === b ? 'true' : 'false');
-        });
-    }));
+    const change = $('#coChange');
+    if (change) change.addEventListener('click', () => { $('#coEventWrap').hidden = false; $('#coEvent').focus(); });
 
-    /* ---------- Feedback: beep + flash ---------- */
+    /* ---------- sound + buzz so you can scan without looking ---------- */
     let audio = null;
     function beep(kind) {
         try {
             audio = audio || new (window.AudioContext || window.webkitAudioContext)();
-            const tones = { ok: [880], warn: [660, 520], err: [220, 180] }[kind] || [880];
+            const tones = { ok: [880], back: [660, 880], warn: [660, 520], err: [220, 180] }[kind] || [880];
             tones.forEach((f, i) => {
                 const o = audio.createOscillator(), g = audio.createGain();
                 o.frequency.value = f; o.type = kind === 'err' ? 'square' : 'sine';
@@ -198,94 +121,199 @@
                 o.start(t); o.stop(t + 0.12);
             });
         } catch (e) {}
-        const fl = $('#coFlash');
-        fl.className = 'flash ' + kind;
-        setTimeout(() => { fl.className = 'flash'; }, 60);
-        try { navigator.vibrate && navigator.vibrate(kind === 'ok' ? 60 : [80, 60, 80]); } catch (e) {}
+        try { navigator.vibrate && navigator.vibrate(kind === 'ok' || kind === 'back' ? 60 : [80, 60, 80]); } catch (e) {}
     }
 
-    /* ---------- Scanner (shared engine, continuous) ---------- */
-    const scanner = SWScanner.create({
-        container: $('#coCam'),
-        continuous: true,
-        onCode: code => submit({ code }),
-        onState: (live, text) => {
-            $('#coDot').classList.toggle('live', live);
-            $('#coCam').classList.toggle('live', live);
-            $('#coCamStatus').textContent = text;
-            $('#coCamBtn').innerHTML = scanner.scanning ? '<i class="fas fa-stop"></i> Stop camera' : '<i class="fas fa-video"></i> Start camera';
-        },
-        onError: msg => showAlert(msg, 'error'),
-    });
-    $('#coCamBtn').addEventListener('click', () => {
-        if (scanner.scanning) return scanner.stop();
-        if (!EVENT_ID && mode !== 'return') return showResult('err', 'Pick an event first');
-        scanner.start();
-    });
-    window.addEventListener('pagehide', () => scanner.stop());
+    /* ---------- the big result panel ----------
+       kind: ok (went out) | back (came back) | warn (needs an answer) | err (didn't work) */
+    const ICON = { ok: 'arrow-right-from-bracket', back: 'arrow-right-to-bracket', warn: 'circle-question', err: 'circle-xmark', idle: 'qrcode' };
+    function showResult(kind, title, sub, notes, actions, extraHtml) {
+        const box = $('#coResult');
+        box.innerHTML = `<div class="co-big ${kind}">
+            <div class="co-big-word"><i class="fas fa-${ICON[kind]}"></i> <span>${esc(title)}</span></div>
+            ${sub ? `<div class="co-big-item">${esc(sub)}</div>` : ''}
+            ${notes && notes.length ? `<ul class="co-big-notes">${notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
+            ${extraHtml || ''}
+            ${actions && actions.length ? `<div class="co-big-actions">${actions.map((a, i) => `<button type="button" class="btn ${a.cls || 'btn-secondary'}" data-act="${i}">${a.icon ? `<i class="fas fa-${a.icon}"></i> ` : ''}${esc(a.label)}</button>`).join('')}</div>` : ''}
+        </div>`;
+        (actions || []).forEach((a, i) => $(`[data-act="${i}"]`, box).addEventListener('click', a.run));
+        if (window.matchMedia('(max-width: 900px)').matches) box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+    const ready = () => showResult('idle', 'Scan the next label');
 
-    $('#coManualForm').addEventListener('submit', e => {
-        e.preventDefault();
-        const v = $('#coManual').value.trim();
-        if (!v) return;
-        $('#coManual').value = '';
-        submit({ code: v });
-    });
-
-    /* ---------- Scan → server ---------- */
     async function post(url, body) {
-        let r;
-        try {
-            r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
-        } catch (e) { return { ok: false, status: 0, data: { error: 'Network error — check your connection' } }; }
-        return { ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) };
+        try { return { ok: true, data: await SW.api('POST', url, body || {}) }; }
+        catch (e) { return { ok: false, status: e.status, data: Object.assign({ error: e.message }, e.payload || {}) }; }
     }
 
-    async function submit(body) {
+    /* ---------- scanner: on straight away ---------- */
+    const ui = await SWGear.scannerUI($('#coScanner'), {
+        continuous: true, quiet: true, placeholder: 'No camera? Type the code on the label',
+        onCode: code => submit({ code }),
+    });
+    const pause = on => ui.scanner && ui.scanner.pause(on);
+    window.addEventListener('pagehide', () => ui.stop());
+    if (EVENT_ID || BASE_MODE === 'return') ui.start();
+
+    /* ---------- undo + report a problem ---------- */
+    function undoButton(action, cid, tag) {
+        return { label: 'Undo', icon: 'rotate-left', run: async () => {
+            const r = await post(`/equipment/checkout/${cid}/undo`, { action });
+            if (r.ok) { beep('warn'); showResult('idle', 'Undone', r.data.message); }
+            else showResult('err', 'Could not undo', r.data.error);
+            refresh();
+        } };
+    }
+    async function reportProblem(unit, eventId, openCheckoutId) {
+        pause(true);
+        const q = await SWGear.quarantine(unit, {
+            eventId,
+            // Still out? Bring it back first, so it isn't both "out" and "out of use"
+            before: openCheckoutId ? () => SW.api('POST', `/equipment/checkout/${openCheckoutId}/return`, {}) : null,
+        });
+        pause(false);
+        if (q) { showResult('warn', 'Taken out of use', `${unit.asset_tag} · ${unit.equipment_name || ''}`, [q.reason, 'Put it to one side. It can’t go out until someone has checked it.']); refresh(); }
+    }
+    const problemButton = (unit, eventId, cid) => ({ label: 'Report a problem', icon: 'triangle-exclamation', cls: 'btn-secondary', run: () => reportProblem(unit, eventId, cid) });
+
+    /* ---------- one scan ---------- */
+    async function submit(body, fromQueue) {
         if (busy) return;
-        if (!EVENT_ID && mode !== 'return') { beep('err'); return showResult('err', 'Pick an event first'); }
-        busy = true;
-        scanner.pause(true);
-        const { ok, data } = await post('/equipment/checkout/scan', Object.assign({ event_id: EVENT_ID, mode }, body));
+        if (!EVENT_ID && BASE_MODE !== 'return') { beep('err'); return showResult('err', 'Choose an event first'); }
+        busy = true; pause(true);
+        const sent = Object.assign({ event_id: EVENT_ID, mode: BASE_MODE }, body);
+        const { ok, status, data } = await post('/equipment/checkout/scan', sent);
         busy = false;
+
+        if (!ok && status === 0) {                       // no connection: keep it, send it later
+            if (!fromQueue) { queueAdd(sent); beep('warn'); showResult('warn', 'Saved on this phone', sent.code || 'Scan', ['No connection right now. It will be sent as soon as you’re back online. Keep scanning.']); }
+            pause(false);
+            return { offline: true };
+        }
+
+        const u = data.unit, label = u ? `${u.asset_tag} · ${u.equipment_name}` : '';
         if (ok) {
             const warns = (data.warnings || []).map(w => w.message);
-            const kind = warns.length ? 'warn' : 'ok';
-            beep(kind);
-            const name = data.unit ? data.unit.equipment_name : '';
-            showResult(kind, `${data.message}`, name, warns.concat(data.info ? [data.info] : []));
-            scanner.pause(false);
-            refresh();
-            return;
+            const back = data.action === 'return';
+            beep(warns.length ? 'warn' : back ? 'back' : 'ok');
+            const cid = data.checkout.id;
+            showResult(back ? 'back' : 'ok', back ? 'Back in' : 'Going out', label, warns.concat(data.info ? [data.info] : []),
+                data.quarantine ? [] : [undoButton(back ? 'return' : 'out', cid, u.asset_tag),
+                                        problemButton(u, data.checkout.event_id, back ? null : cid)]);
+            pause(false); refresh();
+            return { ok: true };
         }
+        if (data.conflict === 'choose_unit') { beep('warn'); chooseUnit(data); return { ask: true }; }       // camera stays paused
+        if (data.conflict === 'choose_quantity') { beep('warn'); chooseQuantity(data); return { ask: true }; }
         if (data.needs_confirm) {
             beep('warn');
-            showResult('warn', data.unit ? `${data.unit.asset_tag} needs a check` : 'Check this unit',
-                       data.unit ? data.unit.equipment_name : '',
-                       (data.blockers || []).map(b => b.message), [
-                { label: 'Check out anyway', cls: 'warn', run: () => { scanner.pause(false); busy = false; submit(Object.assign({}, body, { force: true, mode: 'out' })); } },
-                { label: 'Skip', run: () => { clearResult(); scanner.pause(false); } },
-            ]);
-            return;                                       // camera stays paused until a choice is made
+            const elsewhere = (data.blockers || []).some(b => b.code === 'out_elsewhere');
+            showResult('warn', elsewhere ? 'Is this coming back?' : 'Check before it goes', label,
+                (data.blockers || []).map(b => b.message), elsewhere ? [
+                    { label: 'Yes, it’s back', cls: 'btn-primary', icon: 'arrow-right-to-bracket', run: () => { pause(false); submit(Object.assign({}, body, { mode: 'return' })); } },
+                    { label: 'No, it’s going out', run: () => { pause(false); submit(Object.assign({}, body, { force: true, mode: 'out' })); } },
+                ] : [
+                    { label: 'Take it anyway', cls: 'btn-primary', run: () => { pause(false); submit(Object.assign({}, body, { force: true, mode: 'out' })); } },
+                    { label: 'Leave it', run: () => { ready(); pause(false); } },
+                ]);
+            return { ask: true };
         }
         beep('err');
-        showResult('err', data.error || 'Could not record that scan', data.unit ? data.unit.equipment_name : '');
-        scanner.pause(false);
+        const title = data.conflict === 'quarantined' ? 'Don’t take this one' : data.conflict === 'not_found' ? 'Label not recognised' : 'That didn’t work';
+        showResult('err', title, label, [data.error || 'Could not record that scan']);
+        pause(false);
+        return { error: data.error || 'Could not record that scan' };
     }
 
-    function showResult(kind, title, sub, notes, actions) {
-        const icon = { ok: 'fa-circle-check', warn: 'fa-triangle-exclamation', err: 'fa-circle-xmark' }[kind];
-        $('#coResult').innerHTML = `<div class="co-result ${kind}">
-            <h3><i class="fas ${icon}"></i><span>${esc(title)}</span></h3>
-            ${sub ? `<div style="font-size:.85rem; color:var(--text-secondary); margin-top:.2rem;">${esc(sub)}</div>` : ''}
-            ${notes && notes.length ? `<ul>${notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
-            ${actions ? `<div class="row">${actions.map((a, i) => `<button type="button" class="co-btn small ${a.cls || ''}" data-act="${i}">${esc(a.label)}</button>`).join('')}</div>` : ''}
-        </div>`;
-        (actions || []).forEach((a, i) => $(`#coResult [data-act="${i}"]`).addEventListener('click', a.run));
+    /* ---------- a group label was scanned ---------- */
+    function chooseUnit(data) {
+        const rows = data.units.map(u => {
+            let note = '', btn = '';
+            if (u.out_here) { note = 'out on this event'; btn = `<button type="button" class="btn btn-secondary" data-pick="${u.id}" data-mode="return">Back in</button>`; }
+            else if (u.status === 'quarantined') note = 'out of use';
+            else {
+                if (u.status !== 'available') note = u.status_label.toLowerCase();
+                else if (u.out_event_title) note = `out on ${u.out_event_title}`;
+                else if (u.allocated_here) note = 'on the pick list';
+                btn = `<button type="button" class="btn ${u.allocated_here ? 'btn-primary' : 'btn-secondary'}" data-pick="${u.id}" data-mode="out">Take out</button>`;
+            }
+            return `<li><div class="main"><code>${esc(u.asset_tag)}</code>${u.serial_number ? ` <span class="meta">S/N ${esc(u.serial_number)}</span>` : ''}
+                ${note ? `<div class="meta">${esc(note)}</div>` : ''}</div>${btn}</li>`;
+        }).join('');
+        showResult('warn', `Which ${data.equipment.name}?`, 'That label is for the whole set. Pick the one in your hand, or scan its own label.', null,
+            [{ label: 'Cancel', run: () => { ready(); pause(false); } }], `<ul class="co-list co-pick">${rows}</ul>`);
+        $$('#coResult [data-pick]').forEach(b => b.addEventListener('click', () =>
+            submit({ unit_id: parseInt(b.dataset.pick, 10), mode: b.dataset.mode })));
     }
-    function clearResult() { $('#coResult').innerHTML = ''; }
 
-    /* ---------- Lists ---------- */
+    function chooseQuantity(data) {
+        const eq = data.equipment;
+        if (!EVENT_ID) { showResult('err', 'Choose an event first'); pause(false); return; }
+        showResult('warn', `How many ${eq.name}?`, `${data.available} of ${data.owned} in storage${data.out_here ? ` · ${data.out_here} already out on this event` : ''}`, null, null,
+            `<form class="co-qty">
+                <button type="button" class="btn btn-secondary co-step" data-step="-1" aria-label="One fewer">−</button>
+                <input type="number" class="sw-input" min="1" max="100000" value="1" inputmode="numeric" aria-label="How many">
+                <button type="button" class="btn btn-secondary co-step" data-step="1" aria-label="One more">+</button>
+                <button type="submit" class="btn btn-primary">Take out</button>
+                <button type="button" class="btn btn-secondary" data-cancel>Cancel</button></form>`);
+        const form = $('#coResult .co-qty'), inp = $('input', form);
+        $$('[data-step]', form).forEach(b => b.addEventListener('click', () => { inp.value = Math.max(1, (parseInt(inp.value, 10) || 0) + parseInt(b.dataset.step, 10)); }));
+        $('[data-cancel]', form).addEventListener('click', () => { ready(); pause(false); });
+        form.addEventListener('submit', async e => {
+            e.preventDefault();
+            const quantity = parseInt(inp.value, 10) || 0;
+            const send = force => post('/equipment/checkout/bulk', { event_id: EVENT_ID, equipment_id: eq.id, quantity, force });
+            let r = await send(false);
+            if (!r.ok && r.data.needs_confirm) {
+                if (!await SW.confirm(`${r.data.error}. Take ${quantity} anyway?`, { okText: 'Take them anyway' })) return;
+                r = await send(true);
+            }
+            if (!r.ok) { beep('err'); return SW.toast(r.data.error, 'error'); }
+            beep('ok'); showResult('ok', 'Going out', `${quantity} × ${eq.name}`); pause(false); refresh();
+        });
+    }
+
+    /* ---------- scans waiting for a connection ---------- */
+    const QKEY = 'showwise-scan-queue';
+    let queue = [], problems = [], flushing = false;
+    try { queue = JSON.parse(localStorage.getItem(QKEY) || '[]'); } catch (e) {}
+    const queueSave = () => { try { localStorage.setItem(QKEY, JSON.stringify(queue)); } catch (e) {} paintQueue(); };
+    function queueAdd(sent) { queue.push({ body: sent, label: sent.code || `item ${sent.unit_id}`, at: Date.now() }); queueSave(); }
+    function paintQueue() {
+        const box = $('#coQueue');
+        box.hidden = !queue.length && !problems.length;
+        box.innerHTML = (queue.length ? `<div class="co-queue-wait"><i class="fas fa-cloud-arrow-up"></i>
+                <span><strong>${queue.length} scan${queue.length === 1 ? '' : 's'} waiting to send.</strong> They are saved on this phone. Keep this page open.</span>
+                <button type="button" class="btn btn-secondary btn-sm" data-send>Send now</button></div>` : '')
+            + (problems.length ? `<div class="co-queue-bad"><strong>${problems.length} saved scan${problems.length === 1 ? '' : 's'} need${problems.length === 1 ? 's' : ''} doing again</strong>
+                <ul>${problems.map(p => `<li><code>${esc(p.label)}</code> ${esc(p.why)}</li>`).join('')}</ul>
+                <button type="button" class="btn btn-secondary btn-sm" data-clear>OK, got it</button></div>` : '');
+        const send = $('[data-send]', box), clear = $('[data-clear]', box);
+        if (send) send.onclick = flush;
+        if (clear) clear.onclick = () => { problems = []; paintQueue(); };
+    }
+    async function flush() {
+        if (flushing || !queue.length || busy) return;
+        flushing = true;
+        let sentCount = 0;
+        while (queue.length) {
+            const item = queue[0];
+            const { ok, status, data } = await post('/equipment/checkout/scan', item.body);
+            if (!ok && status === 0) break;                                  // still offline: try again later
+            queue.shift(); queueSave();
+            if (ok) sentCount++;
+            else problems.push({ label: item.label, why: data.conflict === 'choose_unit' || data.conflict === 'choose_quantity'
+                ? 'was a label for a whole set. Scan it again.' : (data.error || 'could not be recorded. Scan it again.') });
+        }
+        flushing = false;
+        if (sentCount) { SW.toast(`${sentCount} saved scan${sentCount === 1 ? '' : 's'} sent`); refresh(); }
+        paintQueue();
+    }
+    window.addEventListener('online', flush);
+    setInterval(() => { if (queue.length) flush(); }, 15000);
+    paintQueue(); flush();
+
+    /* ---------- lists + the "are we done?" line ---------- */
     async function refresh() {
         if (!EVENT_ID) return;
         try {
@@ -293,51 +321,95 @@
             if (!r.ok) return;
             state = await r.json();
         } catch (e) { return; }
-        $('#cntOut').textContent = state.out.length;
-        $('#cntExpected').textContent = state.expected.length;
-        $('#cntReturned').textContent = state.returned.length;
+        const sum = list => list.reduce((n, b) => n + b.outstanding, 0);
+        const nOut = state.out.length + sum(state.bulk_out);
+        const nExpected = state.expected.length + state.unallocated.reduce((n, x) => n + x.missing, 0) + state.bulk_expected.reduce((n, x) => n + x.missing, 0);
+        const nBack = state.returned.length + state.bulk_returned.length;
+        $('#cntOut').textContent = nOut;
+        $('#cntExpected').textContent = nExpected;
+        $('#cntReturned').textContent = nBack;
+
+        const st = $('#coStatus');
+        if (nOut) {
+            st.className = 'co-status ' + (EVENT_DONE ? 'bad' : 'warn');
+            st.innerHTML = `<b>${nOut}</b><span>${nOut === 1 ? 'item' : 'items'} still to come back${EVENT_DONE ? '. The event has finished.' : ''}</span>`;
+        } else if (nBack) {
+            st.className = 'co-status done';
+            st.innerHTML = `<i class="fas fa-circle-check"></i><span><strong>Everything is back.</strong> Nothing is still out for this event.</span>`;
+        } else {
+            st.className = 'co-status';
+            st.innerHTML = `<span>Nothing has gone out yet.${nExpected ? ` ${nExpected} on the pick list to go.` : ''}</span>`;
+        }
         renderList();
     }
 
     function renderList() {
         if (!state) return;
-        const ul = $('#coList');
-        let rows = [];
+        let rows = [], none = '';
         if (tab === 'out') {
-            rows = state.out.map(c => `<li><div class="main"><code>${esc(c.asset_tag)}</code> <span>${esc(c.equipment_name)}</span>
-                    <div class="meta">Out ${esc(c.checked_out_at)} · ${esc(c.checked_out_by)}</div></div>
-                    <button type="button" class="co-btn small" data-return="${c.id}"><i class="fas fa-rotate-left"></i> Return</button></li>`);
-            if (!rows.length) rows = ['<li class="co-empty">Nothing is out for this event.</li>'];
+            rows = state.out.map(c => `<li><div class="main"><code>${esc(c.asset_tag)}</code> ${esc(c.equipment_name)}
+                    <div class="meta">Taken by ${esc(c.checked_out_by)} · ${esc(c.checked_out_at)}</div></div>
+                    <button type="button" class="btn btn-sm btn-secondary" data-damaged="${c.id}" title="It came back broken or with parts missing">Problem</button>
+                    <button type="button" class="btn btn-sm btn-primary" data-return="${c.id}">Back in</button></li>`)
+                .concat(state.bulk_out.map(b => `<li><div class="main"><strong>${b.outstanding} ×</strong> ${esc(b.equipment_name)}
+                    <div class="meta">Taken by ${esc(b.checked_out_by)} · ${esc(b.checked_out_at)}${b.quantity_returned ? ` · ${b.quantity_returned} already back` : ''}</div></div>
+                    <button type="button" class="btn btn-sm btn-primary" data-bulk-return="${b.id}">Back in…</button></li>`));
+            none = 'Nothing is out for this event.';
         } else if (tab === 'expected') {
-            rows = state.expected.map(u => `<li><div class="main"><code>${esc(u.asset_tag)}</code> <span>${esc(u.equipment_name)}</span>
+            rows = state.expected.map(u => `<li><div class="main"><code>${esc(u.asset_tag)}</code> ${esc(u.equipment_name)}
                     ${u.out_elsewhere ? `<div class="meta bad">Still out on ${esc(u.out_elsewhere.event_title)}</div>` : ''}
-                    ${u.status !== 'available' ? `<div class="meta bad">Marked ${esc(u.status)}</div>` : ''}</div></li>`);
-            rows = rows.concat((state.unallocated || []).map(x => `<li><div class="main"><span>${esc(x.equipment_name)}</span>
-                    <div class="meta">${x.missing} more unit${x.missing === 1 ? '' : 's'} needed — any scanned unit is added to the pick list</div></div></li>`));
-            if (!rows.length) rows = ['<li class="co-empty">Everything on the pick list is out.</li>'];
+                    ${u.status !== 'available' ? `<div class="meta bad">${esc(u.status_label)}</div>` : ''}</div></li>`)
+                .concat(state.unallocated.map(x => `<li><div class="main">${esc(x.equipment_name)}
+                    <div class="meta">${x.missing} more needed. Scan any one and it is added to the pick list.</div></div></li>`))
+                .concat(state.bulk_expected.map(x => `<li><div class="main"><strong>${x.missing} ×</strong> ${esc(x.equipment_name)}
+                    <div class="meta">Scan the label on its box and enter how many.</div></div></li>`));
+            none = 'Everything on the pick list is out.';
         } else {
-            rows = state.returned.map(c => `<li><div class="main"><code>${esc(c.asset_tag)}</code> <span>${esc(c.equipment_name)}</span>
-                    <div class="meta">Back ${esc(c.returned_at)} · ${esc(c.returned_by)} (out ${esc(c.checked_out_at)})</div></div></li>`);
-            if (!rows.length) rows = ['<li class="co-empty">Nothing returned yet.</li>'];
+            rows = state.returned.map(c => `<li><div class="main"><code>${esc(c.asset_tag)}</code> ${esc(c.equipment_name)}
+                    <div class="meta">Back ${esc(c.returned_at)} · ${esc(c.returned_by)}</div></div></li>`)
+                .concat(state.bulk_returned.map(b => `<li><div class="main"><strong>${b.quantity_returned} of ${b.quantity} ×</strong> ${esc(b.equipment_name)}
+                    <div class="meta">Back ${esc(b.returned_at)} · ${esc(b.returned_by)}</div></div></li>`));
+            none = 'Nothing has come back yet.';
         }
-        ul.innerHTML = rows.join('');
+        $('#coList').innerHTML = rows.length ? rows.join('') : `<li class="co-none">${none}</li>`;
     }
 
-    document.querySelectorAll('.co-tabs button').forEach(b => b.addEventListener('click', () => {
+    $$('[data-tab]').forEach(b => b.addEventListener('click', () => {
         tab = b.dataset.tab;
-        document.querySelectorAll('.co-tabs button').forEach(x => x.classList.toggle('on', x === b));
+        $$('[data-tab]').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
         renderList();
     }));
 
-    const lists = $('#coLists');
-    lists.addEventListener('click', async e => {
-        const b = e.target.closest('[data-return]');
-        if (!b) return;
-        b.disabled = true;
-        const { ok, data } = await post(`/equipment/checkout/${b.dataset.return}/return`);
-        if (ok) { beep('ok'); showResult('ok', `${data.checkout.asset_tag} returned`, data.checkout.equipment_name); }
-        else showAlert(data.error || 'Could not return', 'error');
-        refresh();
+    $('#coLists').addEventListener('click', async e => {
+        const ret = e.target.closest('[data-return]'), dmg = e.target.closest('[data-damaged]'), bulk = e.target.closest('[data-bulk-return]');
+        if (ret) {
+            ret.disabled = true;
+            const cid = ret.dataset.return;
+            const { ok, data } = await post(`/equipment/checkout/${cid}/return`);
+            if (ok) { beep('back'); showResult('back', 'Back in', `${data.checkout.asset_tag} · ${data.checkout.equipment_name}`, null, [undoButton('return', cid, data.checkout.asset_tag)]); }
+            else SW.toast(data.error || 'Could not mark it back in', 'error');
+            refresh();
+        } else if (dmg) {
+            const c = state.out.find(x => x.id === parseInt(dmg.dataset.damaged, 10));
+            if (c) reportProblem({ id: c.unit_id, asset_tag: c.asset_tag, equipment_name: c.equipment_name }, EVENT_ID, c.id);
+        } else if (bulk) {
+            const b = state.bulk_out.find(x => x.id === parseInt(bulk.dataset.bulkReturn, 10));
+            if (!b) return;
+            await SW.form({
+                title: `${b.equipment_name} coming back`, submitText: 'Back in',
+                fields: [
+                    { name: 'quantity', label: `How many came back? (${b.outstanding} out)`, type: 'number', min: 0, max: b.outstanding, value: b.outstanding, required: true },
+                    { name: 'close', label: 'The rest won’t come back (used up or lost)', type: 'checkbox',
+                      show: v => v.quantity != null && v.quantity < b.outstanding },
+                ],
+                onSubmit: async v => {
+                    if (!v.quantity && !v.close) throw new Error('Enter how many came back');
+                    await SW.api('POST', `/equipment/checkout/bulk/${b.id}/return`, { quantity: v.quantity, close: !!v.close });
+                    SW.toast(`${v.quantity} × ${b.equipment_name} back in`);
+                },
+            });
+            refresh();
+        }
     });
 
     refresh();

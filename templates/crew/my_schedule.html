@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% block title %}My Schedule - ShowWise{% endblock %}
-{% block head_extra %}<link rel="stylesheet" href="{{ url_for('static', filename='css/events.css') }}">{% endblock %}
 
 {% macro card(i) %}
   <div class="sw-sched st-{{ i.status }}">
@@ -63,7 +62,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/sw-ui.js') }}"></script>
 <script>
 document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => {
   document.querySelectorAll('[data-tab]').forEach(x => { x.className = 'btn btn-sm ' + (x === b ? 'btn-primary' : 'btn-ghost'); });

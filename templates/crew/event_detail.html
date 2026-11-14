@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% from "crew/_event_tasks.html" import task_list %}
 {% block title %}{{ event.title }} - ShowWise{% endblock %}
-{% block head_extra %}<link rel="stylesheet" href="{{ url_for('static', filename='css/events.css') }}">{% endblock %}
 
 {% macro status_chip(s) -%}
   {%- if s in ('accepted','confirmed') %}<span class="sw-chip ok">Confirmed</span>
@@ -27,12 +26,30 @@
   <div class="sw-actions-bar">
     {% if can_edit %}<button class="btn btn-primary" data-act="edit-event"><i class="fas fa-edit"></i>Edit</button>{% endif %}
     {% if can_manage %}<button class="btn btn-secondary" data-act="duplicate"><i class="fas fa-copy"></i>Duplicate</button>{% endif %}
-    <a class="btn btn-secondary" href="{{ url_for('events.export_event_pdf', event_id=event.id) }}"><i class="fas fa-file-pdf"></i>PDF</a>
+    <button class="btn btn-secondary" data-act="pdf"><i class="fas fa-file-pdf"></i>PDF</button>
     <button class="btn btn-secondary btn-icon" data-act="io" title="Import / export" aria-label="Import / export" aria-haspopup="dialog"><i class="fas fa-ellipsis-h"></i></button>
-    {% if can_manage %}<button class="btn btn-danger" data-act="delete-event"><i class="fas fa-trash"></i>Delete</button>{% endif %}
+    {% if can_manage %}<button class="btn btn-outline-danger" data-act="delete-event"><i class="fas fa-trash"></i>Delete</button>{% endif %}
   </div>
 </div>
 
+{# One section at a time: a big event stays readable. The tab is kept in the address (#team),
+   so the page comes back to the same place after a change. #}
+{% set ns = namespace(waiting=0, declined=0) %}
+{% for p in team %}{% for x in p.shifts %}
+  {% if x.a.status == 'rejected' %}{% set ns.declined = ns.declined + 1 %}
+  {% elif x.a.status not in ('accepted', 'confirmed') %}{% set ns.waiting = ns.waiting + 1 %}{% endif %}
+{% endfor %}{% endfor %}
+{% set tasks_done = tasks|selectattr('done')|list|length %}
+<nav class="ev-tabs" role="tablist" aria-label="Event sections">
+  <button type="button" role="tab" data-tab="overview" aria-selected="true">Overview</button>
+  <button type="button" role="tab" data-tab="team" aria-selected="false">Team <span class="n">{{ team|length }}</span></button>
+  <button type="button" role="tab" data-tab="tasks" aria-selected="false">Tasks <span class="n" data-task-count>{{ tasks_done }}/{{ tasks|length }}</span></button>
+  <button type="button" role="tab" data-tab="schedule" aria-selected="false">Schedule <span class="n">{{ schedules|length }}</span></button>
+  <button type="button" role="tab" data-tab="run" aria-selected="false">Run list <span class="n">{{ run_items|length }}</span></button>
+  <button type="button" role="tab" data-tab="notes" aria-selected="false">Notes <span class="n">{{ notes|length }}</span></button>
+</nav>
+
+<section class="ev-pane" data-pane="overview">
 {% if on_team %}
 <div class="card sw-mine">
   <div class="sw-card-head"><h3><i class="fas fa-user-check"></i> Your shifts</h3></div>
@@ -64,23 +81,62 @@
 <div class="card"><div class="md-content">{{ event.description|md }}</div></div>
 {% endif %}
 
-<div class="sw-layout">
-<div>
 
+<div class="ev-overview">
+  <div class="card">
+    <div class="sw-card-head"><h3>At a glance</h3></div>
+    <div class="ev-glance">
+      <button type="button" data-goto="team"><i class="fas fa-users"></i><span><strong>{{ team|length }} {{ 'person' if team|length == 1 else 'people' }} on the team</strong>
+        <small>{% if not team %}Nobody yet{% elif ns.waiting or ns.declined %}{% if ns.waiting %}{{ ns.waiting }} shift{{ '' if ns.waiting == 1 else 's' }} awaiting a response{% endif %}{% if ns.waiting and ns.declined %} · {% endif %}{% if ns.declined %}{{ ns.declined }} declined{% endif %}{% else %}Everyone has confirmed{% endif %}</small></span></button>
+      <button type="button" data-goto="tasks"><i class="fas fa-list-check"></i><span><strong>{% if tasks %}{{ tasks_done }} of {{ tasks|length }} tasks done{% else %}No tasks{% endif %}</strong>
+        <small>{% if tasks and tasks_done == tasks|length %}All finished{% elif tasks %}{{ tasks|length - tasks_done }} still to do{% else %}Nothing to do yet{% endif %}</small></span></button>
+      <button type="button" data-goto="schedule"><i class="fas fa-clock"></i><span><strong>{{ schedules|length }} schedule item{{ '' if schedules|length == 1 else 's' }}</strong>
+        <small>{% if schedules %}Starts with {{ schedules[0].title }}{% else %}No times set{% endif %}</small></span></button>
+      <button type="button" data-goto="run"><i class="fas fa-list-ol"></i><span><strong>{{ run_items|length }} run list item{{ '' if run_items|length == 1 else 's' }}</strong>
+        <small>{% if run_items %}The running order for the show{% else %}No running order yet{% endif %}</small></span></button>
+      <button type="button" data-goto="notes"><i class="fas fa-sticky-note"></i><span><strong>{{ notes|length }} note{{ '' if notes|length == 1 else 's' }}</strong>
+        <small>{% if notes %}Latest from {{ notes[0].created_by|person }}{% else %}Nothing written yet{% endif %}</small></span></button>
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <div class="sw-card-head"><h3>Gear and plans</h3></div>
+      <div style="display:grid;gap:.6rem">
+        <a class="btn btn-primary" href="{{ url_for('unit_tracking.checkout_page', event_id=event.id) }}"><i class="fas fa-qrcode"></i>Scan gear out / in</a>
+        <a class="btn btn-secondary" href="{{ url_for('picklist.picklist', event_id=event.id) }}"><i class="fas fa-list-check"></i>Pick list ({{ event.pick_list_items|length }})</a>
+        <a class="btn btn-secondary" href="{{ url_for('stage_designer.stageplans', event_id=event.id) }}"><i class="fas fa-image"></i>Stage plans ({{ event.stage_plans|length }})</a>
+        <a class="btn btn-secondary" href="{{ url_for('hired_equipment.hired_equipment_list') }}"><i class="fas fa-handshake"></i>Hired equipment ({{ hired|length }})</a>
+      </div>
+    </div>
+    <div class="card">
+      <div class="sw-card-head"><h3>Details</h3></div>
+      <dl class="sw-detail-grid">
+        <dt>Starts</dt><dd>{{ event.event_date.strftime('%a %d %b %Y') }}{% if not event.all_day %}, {{ event.event_date.strftime('%I:%M %p').lstrip('0') }}{% endif %}</dd>
+        <dt>Ends</dt><dd>{{ end.strftime('%a %d %b %Y') }}{% if not event.all_day %}, {{ end.strftime('%I:%M %p').lstrip('0') }}{% endif %}</dd>
+        {% if event.created_by %}<dt>Created by</dt><dd>{{ event.created_by|person }}</dd>{% endif %}
+      </dl>
+    </div>
+  </div>
+</div>
+</section>
+
+<section class="ev-pane" data-pane="team" hidden>
   <!-- TEAM & SHIFTS -->
   <div class="card">
     <div class="sw-card-head">
       <h3><i class="fas fa-users"></i> Team &amp; shifts ({{ team|length }})</h3>
-      {% if can_manage %}
       <div class="sw-actions-bar">
+        {% if can_manage %}
         <button class="btn btn-sm btn-primary" data-act="add-person"><i class="fas fa-user-plus"></i>Add person</button>
         <button class="btn btn-sm btn-ghost" data-act="bulk-add"><i class="fas fa-layer-group"></i>Bulk add shifts</button>
         <button class="btn btn-sm btn-ghost" data-act="add-all">Add all crew</button>
+        {% endif %}
+        <button class="btn btn-sm btn-ghost" data-act="pdf-part" data-part="team" title="Download just this part as a PDF"><i class="fas fa-file-pdf"></i>PDF</button>
       </div>
-      {% endif %}
     </div>
+    {% if team|length > 6 %}<input type="search" class="sw-input ev-find" id="evFind" placeholder="Find a person…" autocomplete="off" aria-label="Find a person">{% endif %}
     {% for p in team %}
-    <div class="sw-person {{ 'me' if p.user.id == current_user.id }}">
+    <div class="sw-person {{ 'me' if p.user.id == current_user.id }}" data-person="{{ p.user.shown_name|lower }}">
       <div class="sw-person-head">
         <div class="sw-person-name"><span class="sw-avatar">{{ p.user.shown_name[0]|upper }}</span>{{ p.user.shown_name }}
           {% if p.crew and p.crew.role and not p.shifts %}<span class="sw-chip plain">{{ p.crew.role }}</span>{% endif %}</div>
@@ -98,7 +154,7 @@
           <div class="sw-shift-meta">{% if x.s.role %}<span class="sw-chip plain">{{ x.s.role }}</span>{% endif %}{{ status_chip(x.a.status) }}</div>
           {% if x.a.notes %}<div class="md-content" style="margin-top:.3rem;font-size:.88rem">{{ x.a.notes|md }}</div>{% endif %}
           {% if x.a.status == 'rejected' and x.a.decline_reason %}<div class="sw-muted" style="font-size:.85rem;margin-top:.25rem">Reason: {{ x.a.decline_reason }}</div>{% endif %}
-          {% if task_shifts.get(x.s.id) %}<div class="sw-shift-tasks"><a class="sw-chip plain" href="#tasks"><i class="fas fa-list-check"></i><span data-shift-tasks="{{ x.s.id }}">{{ task_shifts[x.s.id][0] }}/{{ task_shifts[x.s.id][1] }} tasks</span></a></div>{% endif %}
+          {% if task_shifts.get(x.s.id) %}<div class="sw-shift-tasks"><a class="sw-chip plain" href="#tasks" data-goto="tasks"><i class="fas fa-list-check"></i><span data-shift-tasks="{{ x.s.id }}">{{ task_shifts[x.s.id][0] }}/{{ task_shifts[x.s.id][1] }} tasks</span></a></div>{% endif %}
         </div>
         {% if can_manage %}
         <div class="sw-shift-btns">
@@ -115,26 +171,43 @@
     {% endfor %}
   </div>
 
+</section>
+
+<section class="ev-pane" data-pane="tasks" hidden>
   <!-- TASKS -->
-  <div class="card" id="tasks" data-task-group>
+  <div class="card" data-task-group>
     <div class="sw-card-head">
-      <h3><i class="fas fa-list-check"></i> Tasks (<span data-task-count>{{ tasks|selectattr('done')|list|length }}/{{ tasks|length }}</span>)</h3>
-      {% if can_tasks %}<button class="btn btn-sm btn-primary" data-act="add-task"><i class="fas fa-plus"></i>Add task</button>{% endif %}
+      <h3><i class="fas fa-list-check"></i> Tasks (<span data-task-count>{{ tasks_done }}/{{ tasks|length }}</span>)</h3>
+      <div class="sw-actions-bar">
+        {% if can_tasks %}<button class="btn btn-sm btn-primary" data-act="add-task"><i class="fas fa-plus"></i>Add task</button>{% endif %}
+        <button class="btn btn-sm btn-ghost" data-act="pdf-part" data-part="tasks" title="Download just this part as a PDF"><i class="fas fa-file-pdf"></i>PDF</button>
+      </div>
     </div>
     {% if tasks %}
     <div class="sw-progress" aria-hidden="true"><span data-task-bar></span></div>
     {{ task_list(tasks, manage=can_tasks, today=today) }}
-    {% else %}<div class="sw-empty">No tasks yet.{% if can_tasks %} Use “Add task” to make one, or the <i class="fas fa-list-check"></i> button on a shift to add one to that shift.{% endif %}</div>{% endif %}
+    {% else %}<div class="sw-empty">No tasks yet.{% if can_tasks %} Type one below, or use the <i class="fas fa-list-check"></i> button on a shift to add one to that shift.{% endif %}</div>{% endif %}
+    {% if can_tasks %}
+    <form class="ev-quick" id="taskQuick" autocomplete="off">
+      <input type="text" name="title" class="sw-input" maxlength="200" placeholder="Type a task and press Enter" aria-label="New task">
+      <button type="submit" class="btn btn-primary">Add</button>
+    </form>
+    {% endif %}
   </div>
 
+</section>
+
+<section class="ev-pane" data-pane="schedule" hidden>
   <!-- SCHEDULE -->
   <div class="card">
-    <div class="sw-card-head"><h3><i class="fas fa-clock"></i> Schedule ({{ schedules|length }})</h3>
-      {% if can_manage %}<button class="btn btn-sm btn-primary" data-act="add-sched"><i class="fas fa-plus"></i>Add item</button>{% endif %}</div>
-    {% if schedules %}
-    <div class="sw-timeline">
+    <div class="sw-card-head"><h3><i class="fas fa-clock"></i> Schedule (<span id="schedCount">{{ schedules|length }}</span>)</h3>
+      <div class="sw-actions-bar">
+        {% if can_manage %}<button class="btn btn-sm btn-ghost" data-act="paste-sched"><i class="fas fa-paste"></i>Paste a list</button>{% endif %}
+        <button class="btn btn-sm btn-ghost" data-act="pdf-part" data-part="schedule" title="Download just this part as a PDF"><i class="fas fa-file-pdf"></i>PDF</button>
+      </div></div>
+    <div class="sw-timeline" id="schedList" {% if not schedules %}hidden{% endif %}>
       {% for s in schedules %}
-      <div class="sw-tl-item">
+      <div class="sw-tl-item" data-time="{{ s.scheduled_time.isoformat(timespec='minutes') }}">
         <div class="sw-tl-time">{{ fmt_range(s.scheduled_time, None) }}
           {% if can_manage %}<span class="sw-tl-btns">
             <button class="btn btn-ghost btn-icon" data-act="edit-sched" data-id="{{ s.id }}" title="Edit"><i class="fas fa-pen"></i></button>
@@ -144,14 +217,27 @@
       </div>
       {% endfor %}
     </div>
-    {% else %}<div class="sw-empty">No schedule items.</div>{% endif %}
+    <div class="sw-empty" id="schedEmpty" {% if schedules %}hidden{% endif %}>No schedule items.{% if can_manage %} Type the first one below.{% endif %}</div>
+    {% if can_manage %}
+    <form class="ev-quick" id="schedQuick" autocomplete="off">
+      <input type="time" name="time" class="sw-input ev-q-time" required aria-label="Time">
+      <input type="text" name="title" class="sw-input" maxlength="100" required placeholder="What happens? Press Enter to add" aria-label="What happens">
+      <button type="submit" class="btn btn-primary">Add</button>
+    </form>
+    {% endif %}
     <div class="sw-gallery" data-gallery="schedule" hidden></div>
   </div>
 
+</section>
+
+<section class="ev-pane" data-pane="run" hidden>
   <!-- RUN LIST -->
   <div class="card">
-    <div class="sw-card-head"><h3><i class="fas fa-list-ol"></i> Run list ({{ run_items|length }})</h3>
-      {% if can_manage %}<button class="btn btn-sm btn-primary" data-act="add-run"><i class="fas fa-plus"></i>Add item</button>{% endif %}</div>
+    <div class="sw-card-head"><h3><i class="fas fa-list-ol"></i> Run list (<span id="runCount">{{ run_items|length }}</span>)</h3>
+      <div class="sw-actions-bar">
+        {% if can_manage %}<button class="btn btn-sm btn-ghost" data-act="paste-run"><i class="fas fa-paste"></i>Paste a list</button>{% endif %}
+        <button class="btn btn-sm btn-ghost" data-act="pdf-part" data-part="run" title="Download just this part as a PDF"><i class="fas fa-file-pdf"></i>PDF</button>
+      </div></div>
     <div id="runList">
     {% for r in run_items %}
       <div class="sw-run" data-id="{{ r.id }}">
@@ -172,14 +258,28 @@
       </div>
     {% endfor %}
     </div>
-    {% if not run_items %}<div class="sw-empty">No run list items.</div>{% endif %}
+    <div class="sw-empty" id="runEmpty" {% if run_items %}hidden{% endif %}>No run list items.{% if can_manage %} Type the first one below.{% endif %}</div>
+    {% if can_manage %}
+    <form class="ev-quick" id="runQuick" autocomplete="off">
+      <input type="text" name="title" class="sw-input" maxlength="200" required placeholder="Type the next item and press Enter" aria-label="Next run list item">
+      <input type="text" name="duration" class="sw-input ev-q-s" maxlength="50" placeholder="Length" aria-label="Length">
+      <input type="text" name="cue_type" class="sw-input ev-q-s" maxlength="50" placeholder="Cue" list="evCues" aria-label="Cue type">
+      <datalist id="evCues">{% for c in ['Lighting', 'Sound', 'Video', 'Stage', 'Fly', 'Pyro', 'Spot', 'Other'] %}<option value="{{ c }}">{% endfor %}</datalist>
+      <button type="submit" class="btn btn-primary">Add</button>
+    </form>
+    <p class="sw-hint">Add items one after another without leaving the keyboard. Drag the handle to reorder; use the pencil for a description or notes.</p>
+    {% endif %}
     <div class="sw-gallery" data-gallery="run" hidden></div>
   </div>
 
+</section>
+
+<section class="ev-pane" data-pane="notes" hidden>
   <!-- NOTES -->
   <div class="card">
     <div class="sw-card-head"><h3><i class="fas fa-sticky-note"></i> Notes ({{ notes|length }})</h3>
-      <button class="btn btn-sm btn-primary" data-act="add-note"><i class="fas fa-plus"></i>Add note</button></div>
+      <div class="sw-actions-bar"><button class="btn btn-sm btn-primary" data-act="add-note"><i class="fas fa-plus"></i>Add note</button>
+        <button class="btn btn-sm btn-ghost" data-act="pdf-part" data-part="notes" title="Download just this part as a PDF"><i class="fas fa-file-pdf"></i>PDF</button></div></div>
     {% for n in notes %}
     <div class="sw-note">
       <div class="sw-note-head"><span><strong>{{ n.created_by|person }}</strong> · {{ n.created_at.strftime('%d %b %Y, %I:%M %p') }}</span>
@@ -190,33 +290,12 @@
     </div>
     {% else %}<div class="sw-empty">No notes yet.</div>{% endfor %}
   </div>
-</div>
-
-<div>
-  <div class="card">
-    <div class="sw-card-head"><h3>Quick links</h3></div>
-    <div style="display:grid;gap:.6rem">
-      <a class="btn btn-secondary" href="{{ url_for('picklist.picklist', event_id=event.id) }}"><i class="fas fa-list-check"></i>Pick list ({{ event.pick_list_items|length }})</a>
-      <a class="btn btn-secondary" href="{{ url_for('stage_designer.stageplans', event_id=event.id) }}"><i class="fas fa-image"></i>Stage plans ({{ event.stage_plans|length }})</a>
-      <a class="btn btn-secondary" href="{{ url_for('hired_equipment.hired_equipment_list') }}"><i class="fas fa-handshake"></i>Hired equipment ({{ hired|length }})</a>
-    </div>
-  </div>
-  <div class="card">
-    <div class="sw-card-head"><h3>Details</h3></div>
-    <dl class="sw-detail-grid">
-      <dt>Starts</dt><dd>{{ event.event_date.strftime('%a %d %b %Y') }}{% if not event.all_day %}, {{ event.event_date.strftime('%I:%M %p').lstrip('0') }}{% endif %}</dd>
-      <dt>Ends</dt><dd>{{ end.strftime('%a %d %b %Y') }}{% if not event.all_day %}, {{ end.strftime('%I:%M %p').lstrip('0') }}{% endif %}</dd>
-      {% if event.created_by %}<dt>Created by</dt><dd>{{ event.created_by|person }}</dd>{% endif %}
-    </dl>
-  </div>
-</div>
-</div>
+</section>
 
 <script type="application/json" id="page-data">{{ page_data|tojson }}</script>
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/sw-ui.js') }}"></script>
 <script src="{{ url_for('static', filename='js/event-io.js') }}"></script>
 <script src="{{ url_for('static', filename='js/event-tasks.js') }}"></script>
 <script>
@@ -265,6 +344,64 @@ const actions = {
   respond(b) { SW.respondShift(b.dataset.id, b.dataset.status); },
   io() { EventIO.openMenu(); },
 
+  // PDF: the whole event, or only the parts you tick
+  async pdf() {
+    const parts = [['overview', 'Overview: times, place and description'], ['team', 'Team and shifts'], ['schedule', 'Schedule'],
+                   ['run', 'Run list'], ['tasks', 'Tasks'], ['notes', 'Notes']];
+    await SW.form({
+      title: 'Download PDF', submitText: 'Download',
+      values: Object.fromEntries(parts.map(([k]) => [k, true])),
+      fields: [{ type: 'info', text: 'Untick anything you don’t want printed. For a single part, there is also a PDF button on each tab.' },
+               ...parts.map(([name, label]) => ({ name, label, type: 'checkbox' }))],
+      onSubmit: (v) => {
+        const chosen = parts.map(([k]) => k).filter((k) => v[k]);
+        if (!chosen.length) throw new Error('Tick at least one part');
+        location.href = `/events/${EV.id}/export-pdf` + (chosen.length === parts.length ? '' : '?parts=' + chosen.join(','));
+        return true;
+      },
+    });
+  },
+  'pdf-part'(b) { location.href = `/events/${EV.id}/export-pdf?parts=${b.dataset.part}`; },
+
+  // Paste a whole list typed somewhere else (or copied from a table in Word or Excel)
+  async 'paste-run'() {
+    const r = await SW.form({
+      title: 'Paste a run list', submitText: 'Add these',
+      fields: [{ type: 'info', text: 'One item per line. To include more, separate with a tab or “|”: Item | Length | Cue | Notes. A table copied from Word or Excel works as it is.' },
+               { name: 'text', label: 'Items', type: 'textarea', rows: 10, required: true, placeholder: 'House lights down\nWelcome speech | 5 min | Sound\nAward 1 | 4 min | Lighting' }],
+      onSubmit: async (v) => {
+        const rows = v.text.split('\n').map((l) => l.replace(/^\s*\d+[.)]\s+/, '').split(/\t|\s*\|\s*/).map((c) => c.trim())).filter((c) => c[0]);
+        if (!rows.length) throw new Error('Nothing to add');
+        for (const [title, duration, cue_type, notes] of rows)
+          await SW.api('POST', `/events/${EV.id}/crew-run/add`, { title: title.slice(0, 200), duration: (duration || '').slice(0, 50), cue_type: (cue_type || '').slice(0, 50), notes: notes || '' });
+        return rows.length;
+      },
+    });
+    if (r) done(`${r} item${r === 1 ? '' : 's'} added`);
+  },
+  async 'paste-sched'() {
+    const r = await SW.form({
+      title: 'Paste a schedule', submitText: 'Add these',
+      fields: [{ type: 'info', text: 'One line each, starting with the time: “6:30 pm Doors open” or “18:30 Doors open”.' },
+               { name: 'text', label: 'Schedule', type: 'textarea', rows: 10, required: true, placeholder: '2:00 pm Bump in\n4:00 pm Sound check\n6:30 pm Doors open' }],
+      onSubmit: async (v) => {
+        const items = [];
+        v.text.split('\n').map((l) => l.trim()).filter(Boolean).forEach((line, i) => {
+          const m = line.match(/^(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?[\s\-–|:]+(.+)$/i);
+          if (!m) throw new Error(`Line ${i + 1} needs to start with a time: “${line.slice(0, 40)}”`);
+          let h = parseInt(m[1], 10); const ap = (m[3] || '').toLowerCase();
+          if (ap === 'pm' && h < 12) h += 12;
+          if (ap === 'am' && h === 12) h = 0;
+          if (h > 23) throw new Error(`Line ${i + 1} has a time that doesn’t exist`);
+          items.push({ time: `${String(h).padStart(2, '0')}:${m[2] || '00'}`, title: m[4].trim().slice(0, 100) });
+        });
+        for (const it of items) await SW.api('POST', `/events/${EV.id}/schedule/add`, { title: it.title, scheduled_time: schedDateTime(it.time) });
+        return items.length;
+      },
+    });
+    if (r) done(`${r} item${r === 1 ? '' : 's'} added`);
+  },
+
   async 'add-person'() { if (await SW.shiftForm({ event: RANGE, users: D.users })) done('Shift added'); },
   async 'add-shift'(b) { if (await SW.shiftForm({ event: RANGE, users: D.users, user_id: b.dataset.user })) done('Shift added'); },
   async 'edit-shift'(b) { if (await SW.shiftForm({ event: RANGE, shift: D.assignments[b.dataset.id] })) done('Shift saved'); },
@@ -312,8 +449,116 @@ document.addEventListener('click', (e) => {
   if (b && actions[b.dataset.act]) { e.preventDefault(); actions[b.dataset.act](b); }
 });
 
+/* ---------- tabs ---------- */
+const TABS = [...document.querySelectorAll('.ev-tabs [data-tab]')].map((b) => b.dataset.tab);
+function showTab(name, push) {
+  if (!TABS.includes(name)) name = 'overview';
+  document.querySelectorAll('.ev-tabs [data-tab]').forEach((b) => b.setAttribute('aria-selected', b.dataset.tab === name ? 'true' : 'false'));
+  document.querySelectorAll('.ev-pane').forEach((p) => { p.hidden = p.dataset.pane !== name; });
+  if (push) history.replaceState(null, '', name === 'overview' ? location.pathname + location.search : '#' + name);
+  const on = document.querySelector(`.ev-tabs [data-tab="${name}"]`);
+  if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('.ev-tabs [data-tab], [data-goto]');
+  if (!t) return;
+  e.preventDefault();
+  showTab(t.dataset.tab || t.dataset.goto, true);
+  if (t.dataset.goto) window.scrollTo({ top: 0 });
+});
+window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
+showTab(location.hash.slice(1) || 'overview');
+
+const find = document.getElementById('evFind');
+if (find) find.addEventListener('input', () => {
+  const q = find.value.trim().toLowerCase();
+  document.querySelectorAll('[data-person]').forEach((p) => { p.hidden = !!q && !p.dataset.person.includes(q); });
+});
+
+/* ---------- quick typing: add items one after another, like typing a list ---------- */
+const escH = SW.esc;
+// A time typed on its own belongs to the event's day (or the next morning, for events that run past midnight)
+function schedDateTime(hhmm) {
+  const day = EV.event_date.slice(0, 10), startT = EV.event_date.slice(11, 16);
+  const endDay = (EV.event_end_date || '').slice(0, 10), endT = (EV.event_end_date || '').slice(11, 16);
+  if (endDay > day && hhmm < startT && hhmm <= endT) return `${endDay}T${hhmm}`;
+  return `${day}T${hhmm}`;
+}
+function quick(formId, handler) {
+  const form = document.getElementById(formId);
+  if (!form) return;
+  let busy = false;
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (busy) return;
+    const v = Object.fromEntries(new FormData(form).entries());
+    if (!(v.title || '').trim()) return;
+    busy = true;
+    try { await handler(v, form); }
+    catch (err) { SW.toast(err.message, 'error'); }
+    busy = false;
+  });
+}
+const bump = (id, by) => { const n = document.getElementById(id); if (n) n.textContent = Number(n.textContent) + by; };
+
+quick('runQuick', async (v, form) => {
+  const body = { title: v.title.trim(), duration: v.duration.trim(), cue_type: v.cue_type.trim() };
+  const r = await SW.api('POST', `/events/${EV.id}/crew-run/add`, body);
+  D.runs[r.id] = { id: r.id, description: '', notes: '', ...body };
+  const row = document.createElement('div');
+  row.className = 'sw-run'; row.dataset.id = r.id;
+  row.innerHTML = `<span class="handle" title="Drag to reorder"><i class="fas fa-grip-vertical"></i></span>
+    <span class="num">${document.querySelectorAll('#runList .sw-run').length + 1}</span>
+    <div class="sw-run-main"><div class="sw-run-title">${escH(body.title)}</div>
+      <div class="sw-run-meta">${body.duration ? `<span class="sw-chip plain"><i class="fas fa-hourglass-half"></i>${escH(body.duration)}</span>` : ''}${body.cue_type ? `<span class="sw-chip">${escH(body.cue_type)}</span>` : ''}</div></div>
+    <div class="sw-shift-btns">
+      <button class="btn btn-ghost btn-icon" data-act="edit-run" data-id="${r.id}" title="Edit"><i class="fas fa-pen"></i></button>
+      <button class="btn btn-ghost btn-icon" data-act="del-run" data-id="${r.id}" title="Delete"><i class="fas fa-trash"></i></button></div>`;
+  document.getElementById('runList').appendChild(row);
+  document.getElementById('runEmpty').hidden = true;
+  bump('runCount', 1);
+  document.querySelectorAll('.ev-tabs [data-tab="run"] .n').forEach((n) => { n.textContent = Number(n.textContent) + 1; });
+  form.reset(); form.title.focus();
+  row.scrollIntoView({ block: 'nearest' });
+});
+
+quick('schedQuick', async (v, form) => {
+  const when = schedDateTime(v.time), title = v.title.trim();
+  const r = await SW.api('POST', `/events/${EV.id}/schedule/add`, { title, scheduled_time: when });
+  D.schedules[r.id] = { id: r.id, title, time: when, description: '' };
+  const d = new Date(when);
+  const label = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + ', '
+    + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const item = document.createElement('div');
+  item.className = 'sw-tl-item'; item.dataset.time = when;
+  item.innerHTML = `<div class="sw-tl-time">${escH(label)}
+      <span class="sw-tl-btns">
+        <button class="btn btn-ghost btn-icon" data-act="edit-sched" data-id="${r.id}" title="Edit"><i class="fas fa-pen"></i></button>
+        <button class="btn btn-ghost btn-icon" data-act="del-sched" data-id="${r.id}" title="Delete"><i class="fas fa-trash"></i></button></span></div>
+    <div class="sw-tl-title">${escH(title)}</div>`;
+  const list = document.getElementById('schedList');
+  const after = [...list.children].find((x) => x.dataset.time > when);          // keep it in time order
+  list.insertBefore(item, after || null);
+  list.hidden = false;
+  document.getElementById('schedEmpty').hidden = true;
+  bump('schedCount', 1);
+  document.querySelectorAll('.ev-tabs [data-tab="schedule"] .n').forEach((n) => { n.textContent = Number(n.textContent) + 1; });
+  form.title.value = ''; form.time.focus();
+});
+
+// Tasks have ticks, people and due dates to draw, so the page reloads and puts the cursor back
+quick('taskQuick', async (v) => {
+  await SW.api('POST', `/events/${EV.id}/tasks/add`, { title: v.title.trim() });
+  try { sessionStorage.setItem('ev-focus', 'taskQuick'); } catch (e) {}
+  location.reload();
+});
+try {
+  const f = sessionStorage.getItem('ev-focus');
+  if (f) { sessionStorage.removeItem('ev-focus'); const el = document.querySelector(`#${f} [name=title]`); if (el) el.focus(); }
+} catch (e) {}
+
 const runList = document.getElementById('runList');
-if (runList && runList.querySelector('.handle') && window.Sortable) {
+if (runList && D.can_manage && window.Sortable) {
   Sortable.create(runList, {
     handle: '.handle', animation: 150,
     onEnd: async () => {

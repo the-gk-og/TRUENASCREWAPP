@@ -10,16 +10,16 @@
 
 <div style="display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap; align-items: center;">
     {% if current_user.is_admin %}
-    <button id="addHiredBtn" class="btn btn-success">
+    <button id="addHiredBtn" class="btn btn-primary">
         <i class="fas fa-plus"></i> Add Hired Equipment
     </button>
-    <button id="importCsvBtn" class="btn btn-primary">
+    <button id="importCsvBtn" class="btn btn-secondary">
         <i class="fas fa-file-csv"></i> Import CSV
     </button>
-    <button id="bulkModeBtn" class="btn btn-primary">
+    <button id="bulkModeBtn" class="btn btn-secondary">
         <i class="fas fa-check-square"></i> Bulk Delete Mode
     </button>
-    <button id="selectAllBtn" class="btn btn-primary" style="display: none;">
+    <button id="selectAllBtn" class="btn btn-secondary" style="display: none;">
         <i class="fas fa-check-double"></i> Select All
     </button>
     <span id="selectedCount" style="display: none; color: var(--primary); font-weight: 600; padding: 0.5rem 1rem; background: #f0f4ff; border-radius: 6px;">
@@ -30,19 +30,19 @@
 
 <!-- Statistics -->
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
-    <div class="card" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; border: none;">
+    <div class="card sw-stat">
         <p style="opacity: 0.9; font-size: 0.9rem; margin-bottom: 0.5rem;">Active Hires</p>
-        <h2 style="font-size: 2rem; margin: 0; color: white;">{{ active_hired|length }}</h2>
+        <h2 style="font-size: 2rem; margin: 0;">{{ active_hired|length }}</h2>
     </div>
     
-    <div class="card" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none;">
+    <div class="card sw-stat">
         <p style="opacity: 0.9; font-size: 0.9rem; margin-bottom: 0.5rem;">Returned</p>
-        <h2 style="font-size: 2rem; margin: 0; color: white;">{{ returned_hired|length }}</h2>
+        <h2 style="font-size: 2rem; margin: 0;">{{ returned_hired|length }}</h2>
     </div>
     
-    <div class="card" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; border: none;">
+    <div class="card sw-stat">
         <p style="opacity: 0.9; font-size: 0.9rem; margin-bottom: 0.5rem;">Due Soon (7 days)</p>
-        <h2 style="font-size: 2rem; margin: 0; color: white;">
+        <h2 style="font-size: 2rem; margin: 0;">
             {{ active_hired|selectattr('return_date', 'lt', upcoming_threshold)|list|length }}
 
         </h2>
@@ -412,7 +412,7 @@ function toggleBulkMode() {
     if (bulkMode) {
         checkboxes.forEach(cb => cb.style.display = 'block');
         btn.innerHTML = '<i class="fas fa-trash"></i> Delete Selected';
-        btn.classList.remove('btn-primary');
+        btn.classList.remove('btn-secondary');
         btn.classList.add('btn-danger');
         selectAllBtn.style.display = 'inline-block';
         selectedCount.style.display = 'inline-block';
@@ -424,7 +424,7 @@ function toggleBulkMode() {
         selectedIds.clear();
         btn.innerHTML = '<i class="fas fa-check-square"></i> Bulk Delete Mode';
         btn.classList.remove('btn-danger');
-        btn.classList.add('btn-primary');
+        btn.classList.add('btn-secondary');
         selectAllBtn.style.display = 'none';
         selectedCount.style.display = 'none';
         document.querySelectorAll('.hired-card').forEach(card => card.style.background = 'white');

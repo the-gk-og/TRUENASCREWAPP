@@ -16,18 +16,18 @@
     {% if upcoming %}
     <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 1.5rem;">
         {% for event in upcoming|sort(attribute='event_date') %}
-        <div class="card" style="background: linear-gradient(135deg, #667eea22 0%, #764ba222 100%); border: 2px solid #667eea;">
+        <div class="card" style="background: #2557d622; border: 2px solid #2557d6;">
             <h3 style="margin-bottom: 0.5rem;">{{ event.title }}</h3>
             <p style="color: #666; margin-bottom: 0.5rem;">
-                📅 {{ event|event_when(' · ') }}
+                {{ event|event_when(' · ') }}
             </p>
             {% if event.event_end_date %}
             <p style="color: #666; margin-bottom: 0.5rem;">
-                🏁 {{ event.event_end_date.strftime('%I:%M %p') }}
+                {{ event.event_end_date.strftime('%I:%M %p') }}
             </p>
             {% endif %}
             {% if event.location %}
-            <p style="color: #666; margin-bottom: 0.5rem;">📍 {{ event.location }}</p>
+            <p style="color: #666; margin-bottom: 0.5rem;">{{ event.location }}</p>
             {% endif %}
 
             {% if not current_user.is_admin %}
@@ -44,7 +44,7 @@
             {% endif %}
             {% endif %}
 
-            <p style="color: #666; margin-bottom: 1rem;">👥 {{ event.cast_members|length }} cast members</p>
+            <p style="color: #666; margin-bottom: 1rem;">{{ event.cast_members|length }} cast members</p>
             <a href="{{ url_for('cast.cast_event_detail', id=event.id) }}" class="btn btn-primary">View Details</a>
         </div>
         {% endfor %}
@@ -98,7 +98,7 @@
 
 {% if not events %}
 <div class="card" style="text-align: center; padding: 3rem;">
-    <p style="font-size: 3rem; margin-bottom: 1rem;">🎭</p>
+    <p style="font-size: 3rem; margin-bottom: 1rem;"></p>
     <h3 style="color: var(--dark); margin-bottom: 0.5rem;">No Productions Yet</h3>
     <p style="color: #6b7280;">You haven't been assigned to any productions yet.</p>
 </div>

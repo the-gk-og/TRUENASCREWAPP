@@ -10,7 +10,8 @@ from flask import (
 from flask_login import login_required, current_user
 
 from extensions import db
-from models import Equipment, EquipmentUnit, PickListItem, UNIT_STATUSES
+from models import (Equipment, EquipmentUnit, PickListItem, UnitCheckout, BulkCheckout,
+                    UNIT_STATUSES, UNIT_STATUS_LABELS, TRACKING_MODES)
 from decorators import crew_required
 
 from routes import _is_mobile
@@ -39,12 +40,9 @@ def _remove_file(relative_path: str):
 # List
 # ---------------------------------------------------------------------------
 
-@equipment_bp.route('/equipment')
-@login_required
-@crew_required
-def equipment_list():
-    from routes.unit_tracking import maintenance_alerts, stale_checkouts
-    from models import UnitCheckout
+def _equipment_page_data():
+    """Everything the equipment list and manage pages show."""
+    from routes.unit_tracking import maintenance_alerts, stale_checkouts, open_quarantines
     equipment      = Equipment.query.all()
     equipment_json = [e.to_dict() for e in equipment]
     alerts = maintenance_alerts()
@@ -52,12 +50,64 @@ def equipment_list():
     for a in alerts:
         c = per_item.setdefault(a['equipment_id'], {'overdue': 0, 'due_soon': 0})
         c[a['due']['state']] += 1
+    summaries = equipment_summaries(equipment)
     for d in equipment_json:
         d['maint'] = per_item.get(d['id'])
-    template = 'crew/equipment_mobile.html' if _is_mobile(request.user_agent.string) else 'crew/equipment.html'
-    return render_template(template, equipment=equipment, equipment_json=equipment_json,
-                           maint_alerts=alerts, stale_checkouts=stale_checkouts(),
-                           units_out=UnitCheckout.query.filter(UnitCheckout.returned_at.is_(None)).count())
+        d['summary'] = summaries[d['id']]
+    return dict(equipment=equipment, equipment_json=equipment_json,
+                maint_alerts=alerts, stale_checkouts=stale_checkouts(),
+                quarantined=open_quarantines(),
+                units_out=sum(s['out'] for s in summaries.values()))
+
+
+@equipment_bp.route('/equipment')
+@login_required
+@crew_required
+def equipment_list():
+    """Find an item, see if one is free and where it lives."""
+    return render_template('crew/equipment.html', **_equipment_page_data())
+
+
+@equipment_bp.route('/equipment/manage')
+@login_required
+@crew_required
+def equipment_manage():
+    """Admin tools: add equipment, print labels, CSV import/export, release quarantine."""
+    if not current_user.is_admin:
+        flash('Only admins can manage equipment')
+        return redirect(url_for('equipment.equipment_list'))
+    return render_template('crew/equipment_manage.html', attention_open=True, **_equipment_page_data())
+
+
+def equipment_summaries(equipment):
+    """{equipment_id: {owned, available, out, quarantined, repair}} for the given types,
+    in a fixed number of queries. 'available' means in storage and fit to use."""
+    out_units = {u for (u,) in db.session.query(UnitCheckout.unit_id)
+                 .filter(UnitCheckout.returned_at.is_(None))}
+    bulk_out = {}
+    for b in BulkCheckout.query.filter(BulkCheckout.returned_at.is_(None)).all():
+        bulk_out[b.equipment_id] = bulk_out.get(b.equipment_id, 0) + b.outstanding
+    result = {}
+    for eq in equipment:
+        if eq.is_individual:
+            s = {'owned': 0, 'available': 0, 'out': 0, 'quarantined': 0, 'repair': 0}
+            for u in eq.units:
+                st = u.status or 'available'
+                if st in ('retired', 'lost'):
+                    continue
+                s['owned'] += 1
+                if u.id in out_units:
+                    s['out'] += 1
+                if st in ('quarantined', 'repair'):
+                    s[st] += 1
+                elif u.id not in out_units:
+                    s['available'] += 1
+        else:
+            owned = eq.owned
+            out = min(owned, bulk_out.get(eq.id, 0))
+            s = {'owned': owned, 'available': owned - out, 'out': out, 'quarantined': 0, 'repair': 0}
+        result[eq.id] = s
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -73,11 +123,16 @@ def equipment_detail(id):
     from utils import get_organization
     org = get_organization() or {}
     org_name = current_app.config.get('ORG_NAME') or org.get('name', 'ShowWise')
-    from models import MAINTENANCE_KINDS, MAINTENANCE_LABELS, MAINTENANCE_RESULTS
+    from models import MAINTENANCE_KINDS, MAINTENANCE_LABELS, MAINTENANCE_RESULTS, QUARANTINE_OUTCOMES
     from routes.unit_tracking import maintenance_alerts
+    units = [u.to_dict() for u in eq.units]
     return render_template('crew/equipment_detail.html', item=eq, organisation_name=org_name,
-                           units=[u.to_dict() for u in eq.units],
-                           unit_statuses=UNIT_STATUSES,
+                           units=units,
+                           summary=equipment_summaries([eq])[eq.id],
+                           untagged=max(0, (eq.quantity_owned or 0) - len(units)) if eq.is_individual else 0,
+                           bulk_out=[b.to_dict() for b in eq.bulk_checkouts if b.returned_at is None],
+                           unit_statuses=[(s, UNIT_STATUS_LABELS[s]) for s in UNIT_STATUSES if s != 'quarantined'],
+                           quarantine_outcomes=list(QUARANTINE_OUTCOMES.items()),
                            maintenance_kinds=[(k, MAINTENANCE_LABELS[k]) for k in MAINTENANCE_KINDS],
                            maintenance_results=MAINTENANCE_RESULTS,
                            maint_alerts=maintenance_alerts(equipment_id=eq.id),
@@ -213,6 +268,7 @@ def add_units(id):
         if not 1 <= count <= 500:
             return jsonify({'error': 'count must be between 1 and 500'}), 400
         made = _create_units(eq, count)
+        eq.tracking = 'individual'
         _sync_quantity(eq)
         db.session.commit()
         return jsonify({'success': True, 'units': [u.to_dict(False) for u in made]})
@@ -231,9 +287,23 @@ def add_units(id):
                       serial_number=(data.get('serial_number') or '').strip() or None,
                       notes=(data.get('notes') or '').strip() or None)
     eq.units.append(u)
+    eq.tracking = 'individual'
     _sync_quantity(eq)
     db.session.commit()
     return jsonify({'success': True, 'unit': u.to_dict(False)})
+
+
+@equipment_bp.route('/equipment/<int:id>/units/sync-count', methods=['POST'])
+@login_required
+@crew_required
+def sync_unit_count(id):
+    """Accept the listed items as the whole stock (drops a stale, larger typed count)."""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    eq = Equipment.query.get_or_404(id)
+    eq.quantity_owned = len(eq.units)
+    db.session.commit()
+    return jsonify({'success': True, 'quantity_owned': eq.quantity_owned})
 
 
 def _sync_quantity(eq):
@@ -261,6 +331,13 @@ def update_unit(uid):
         status = _clean_status(data.get('status'))
         if status is None:
             return jsonify({'error': 'Unknown status'}), 400
+        if status != (u.status or 'available'):
+            # Quarantine has its own record (who, why, what was decided), so it can't be
+            # switched on or off by editing the status field.
+            if status == 'quarantined':
+                return jsonify({'error': 'Use “Report a problem” to take an item out of use'}), 400
+            if u.status == 'quarantined':
+                return jsonify({'error': f'{u.asset_tag} is out of use. Mark it as checked first'}), 409
         u.status = status
     if 'serial_number' in data:
         u.serial_number = (data.get('serial_number') or '').strip() or None
@@ -277,7 +354,13 @@ def delete_unit(uid):
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
     u = EquipmentUnit.query.get_or_404(uid)
-    db.session.delete(u)
+    eq = u.equipment
+    for q in u.quarantines:
+        if q.photo:
+            _remove_file(q.photo)
+    eq.units.remove(u)                       # delete-orphan removes the row
+    # Keep the stored count in step, so the type doesn't report an item as untagged
+    eq.quantity_owned = max(len(eq.units), (eq.quantity_owned or 1) - 1)
     db.session.commit()
     return jsonify({'success': True})
 
@@ -328,15 +411,37 @@ def unit_view_public(uid):
 def add_equipment():
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
-    data = request.json
-    eq   = Equipment(
-        barcode=data['barcode'], name=data['name'],
+    data    = request.get_json(silent=True) or {}
+    barcode = (data.get('barcode') or '').strip()
+    name    = (data.get('name') or '').strip()
+    if not barcode or not name:
+        return jsonify({'error': 'Name and barcode are required'}), 400
+    if _tag_taken(barcode):
+        return jsonify({'error': f'Barcode "{barcode}" is already used by another item'}), 409
+    tracking = (data.get('tracking') or 'bulk').strip().lower()
+    if tracking not in TRACKING_MODES:
+        return jsonify({'error': 'Tracking must be individual or bulk'}), 400
+    qty = _clean_quantity(data.get('quantity_owned'), 1)
+    if tracking == 'individual' and qty > 500:
+        return jsonify({'error': 'Add at most 500 individual items at a time'}), 400
+    eq = Equipment(
+        barcode=barcode, name=name,
         category=data.get('category', ''), location=data.get('location', ''),
-        notes=data.get('notes', ''), quantity_owned=data.get('quantity_owned', 1),
+        notes=data.get('notes', ''), quantity_owned=qty, tracking=tracking,
     )
     db.session.add(eq)
+    db.session.flush()
+    if tracking == 'individual':
+        _create_units(eq, qty)
     db.session.commit()
-    return jsonify({'success': True, 'id': eq.id})
+    return jsonify({'success': True, 'id': eq.id, 'item': eq.to_dict()})
+
+
+def _clean_quantity(value, default):
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return default
 
 
 @equipment_bp.route('/equipment/update/<int:id>', methods=['PUT'])
@@ -346,14 +451,36 @@ def update_equipment(id):
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
     eq   = Equipment.query.get_or_404(id)
-    data = request.json
+    data = request.get_json(silent=True) or {}
     eq.name           = data.get('name',           eq.name)
     eq.category       = data.get('category',       eq.category)
     eq.location       = data.get('location',       eq.location)
     eq.notes          = data.get('notes',          eq.notes)
-    eq.quantity_owned = data.get('quantity_owned', eq.quantity_owned)
+
+    tracking = (data.get('tracking') or eq.tracking_mode).strip().lower()
+    if tracking not in TRACKING_MODES:
+        return jsonify({'error': 'Tracking must be individual or bulk'}), 400
+    if tracking != eq.tracking_mode:
+        if tracking == 'bulk':
+            if eq.units:
+                n = len(eq.units)
+                return jsonify({'error': f'This type has {n} tagged item{"" if n == 1 else "s"}. '
+                                         'Remove them before switching to counting only'}), 409
+        else:
+            if BulkCheckout.query.filter_by(equipment_id=eq.id, returned_at=None).first():
+                return jsonify({'error': 'Some of this type is checked out by count. '
+                                         'Return it before switching to individual items'}), 409
+            want = _clean_quantity(data.get('quantity_owned'), eq.quantity_owned or 1) or 1
+            if want > 500:
+                return jsonify({'error': 'Add at most 500 individual items at a time'}), 400
+            eq.quantity_owned = want
+            _create_units(eq, want)
+        eq.tracking = tracking
+    if tracking == 'bulk' and 'quantity_owned' in data:
+        # For individual types the count is the items themselves, not a number you type
+        eq.quantity_owned = _clean_quantity(data.get('quantity_owned'), eq.quantity_owned)
     db.session.commit()
-    return jsonify({'success': True})
+    return jsonify({'success': True, 'item': eq.to_dict()})
 
 
 @equipment_bp.route('/equipment/delete/<int:id>', methods=['DELETE'])
@@ -367,6 +494,10 @@ def delete_equipment(id):
         _remove_file(eq.picture)
     if eq.location_picture:
         _remove_file(eq.location_picture)
+    for u in eq.units:
+        for q in u.quarantines:
+            if q.photo:
+                _remove_file(q.photo)
     db.session.delete(eq)
     db.session.commit()
     return jsonify({'success': True})
@@ -548,14 +679,25 @@ def import_csv():
             except ValueError:
                 qty = 1
 
+            if _tag_taken(barcode):
+                skipped += 1
+                continue
+            # Optional "tracking" column: individual = make one tagged item per unit of quantity
+            individual = _get(row, 'tracking', 'track').lower().startswith('indiv')
+
             try:
-                db.session.add(Equipment(
+                eq = Equipment(
                     barcode=barcode, name=name,
                     category=_get(row, 'category'),
                     location=_get(row, 'location'),
                     notes=_get(row, 'notes'),
                     quantity_owned=qty,
-                ))
+                    tracking='individual' if individual else 'bulk',
+                )
+                db.session.add(eq)
+                if individual:
+                    db.session.flush()
+                    _create_units(eq, min(qty, 500))
                 count += 1
             except Exception as row_exc:
                 errors.append(f"Row {row_num}: {row_exc}")
@@ -575,12 +717,8 @@ def import_csv():
 @login_required
 @crew_required
 def barcode_page():
-    if not current_user.is_admin:
-        flash('Admin access required')
-        return redirect(url_for('equipment.equipment_list'))
-    equipment      = Equipment.query.all()
-    equipment_json = [e.to_dict() for e in equipment]
-    return render_template('crew/barcodes.html', equipment=equipment, equipment_json=equipment_json)
+    """The separate QR generator page is gone: labels are printed from the equipment list."""
+    return redirect(url_for('equipment.equipment_manage', labels=1))
 
 
 @equipment_bp.route('/equipment/generate-barcodes', methods=['POST'])
@@ -606,32 +744,54 @@ def generate_barcodes():
         card_h_mm     = float(data.get('card_height_mm', 80 if layout == 'portrait' else 55))
         base_url      = (data.get('base_url') or request.url_root or '').rstrip('/')
 
-        mode          = data.get('mode', 'item')       # 'item' | 'unit'
+        # 'item' (alias 'group'): one group label per type, for the case or shelf.
+        # 'unit': one label per individual item.  'both': group label, then its items.
+        mode          = data.get('mode', 'item')
+        if mode == 'group':
+            mode = 'item'
+        if mode not in ('item', 'unit', 'both'):
+            return jsonify({'error': 'Unknown label type'}), 400
         unit_ids      = data.get('unit_ids', [])
+        if not equipment_ids and not unit_ids:
+            return jsonify({'error': 'No equipment selected'}), 400
+
+        def _group_tag(e):
+            n = e.owned if e.is_individual else 0
+            label = f"GROUP · {e.barcode or f'ID-{e.id}'}" + (f' · {n} items' if n > 1 else '')
+            return (f'item {e.id}', e.name, label, f'{base_url}/equipment/{e.id}/view')
+
+        def _unit_tag(u):
+            return (f'unit {u.id}', u.equipment.name, f'# {u.asset_tag}',
+                    f'{base_url}/equipment/unit/{u.id}/view')
+
+        items = (Equipment.query.filter(Equipment.id.in_(equipment_ids)).all() if equipment_ids else [])
+        items.sort(key=lambda e: e.name.lower())
+        picked = (EquipmentUnit.query.filter(EquipmentUnit.id.in_(unit_ids)).all() if unit_ids else [])
 
         # Each tag: (log id, name, asset label, QR url)
         tags = []
-        if mode == 'unit':
-            if unit_ids:
-                units = EquipmentUnit.query.filter(EquipmentUnit.id.in_(unit_ids)).all()
-            elif equipment_ids:
-                units = EquipmentUnit.query.filter(EquipmentUnit.equipment_id.in_(equipment_ids)).all()
-            else:
-                return jsonify({'error': 'No equipment selected'}), 400
-            units.sort(key=lambda u: (u.equipment.name.lower(), u.asset_tag))
-            if not units:
-                return jsonify({'error': 'The selected items have no units yet. '
-                                         'Add units on the item page, or print one tag per item.'}), 404
-            tags = [(f'unit {u.id}', u.equipment.name, f'# {u.asset_tag}',
-                     f'{base_url}/equipment/unit/{u.id}/view') for u in units]
-        else:
-            if not equipment_ids:
-                return jsonify({'error': 'No equipment selected'}), 400
-            items = Equipment.query.filter(Equipment.id.in_(equipment_ids)).all()
-            if not items:
+        if mode == 'item':
+            if not items:                      # asked for group labels of specific items
+                items = sorted({u.equipment for u in picked}, key=lambda e: e.name.lower())
+            tags = [_group_tag(e) for e in items]
+            if not tags:
                 return jsonify({'error': 'No equipment found'}), 404
-            tags = [(f'item {e.id}', e.name, f"# {e.barcode or f'ID-{e.id}'}",
-                     f'{base_url}/equipment/{e.id}/view') for e in items]
+        else:
+            by_type = {}
+            for u in picked:
+                by_type.setdefault(u.equipment_id, []).append(u)
+            types = {e.id: e for e in items}
+            for u in picked:
+                types.setdefault(u.equipment_id, u.equipment)
+            for e in sorted(types.values(), key=lambda e: e.name.lower()):
+                units = by_type.get(e.id) if e.id in by_type else list(e.units)
+                units = sorted(units, key=lambda u: u.asset_tag)
+                if mode == 'both':
+                    tags.append(_group_tag(e))
+                tags.extend(_unit_tag(u) for u in units)
+            if not tags:
+                return jsonify({'error': 'The selected types have no individual items yet. '
+                                         'Add items on the type page, or print group labels.'}), 404
 
         # Org name
         from flask import current_app
@@ -986,11 +1146,10 @@ def check_equipment_quantity(id):
 
     allocated = sum((line.quantity or 0) for line in lines if _counts(line))
 
-    units = EquipmentUnit.query.filter_by(equipment_id=id).all()
-    if units:
-        owned = sum(1 for u in units if u.status == 'available')
+    if eq.is_individual:
+        owned = sum(1 for u in eq.units if u.status == 'available')
     else:
-        owned = eq.quantity_owned if eq.quantity_owned is not None else 1
+        owned = eq.owned
     available = max(0, owned - allocated)
     return jsonify({
         'owned': owned, 'allocated': allocated,

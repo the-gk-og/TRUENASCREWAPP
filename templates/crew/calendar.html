@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% block title %}Calendar - ShowWise{% endblock %}
-{% block head_extra %}<link rel="stylesheet" href="{{ url_for('static', filename='css/events.css') }}">{% endblock %}
 
 {% block content %}
 <div class="sw-page-head">
@@ -38,8 +37,8 @@
   </label>
 </div>
 <div class="sw-legend">
-  <span><i style="background:#6366f1"></i>Event</span>
-  <span><i style="background:#4338ca"></i>Event you're on</span>
+  <span><i style="background:#2557d6"></i>Event</span>
+  <span><i style="background:#16337f"></i>Event you're on</span>
   <span><i style="background:#059669"></i>Shift (confirmed)</span>
   <span><i style="background:#f59e0b"></i>Shift (awaiting response)</span>
   <span><i style="background:#fca5a5"></i>Unavailable</span>
@@ -51,7 +50,6 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='vendor/fullcalendar-6.1.15.min.js') }}"></script>
-<script src="{{ url_for('static', filename='js/sw-ui.js') }}"></script>
 <script>
 const CAN_MANAGE = {{ 'true' if can_manage else 'false' }};
 const KEY = 'sw-cal-filters';
@@ -73,11 +71,16 @@ const saveFilters = () => {
 
 // ---- calendar ----
 const narrow = window.innerWidth < 700;
+const VIEWS = ['dayGridMonth', 'timeGridWeek', 'timeGridDay', 'listWeek'];
+const VIEW_KEY = 'sw-cal-view';
+let savedView = null;
+try { savedView = localStorage.getItem(VIEW_KEY); } catch (_) {}
 const cal = new FullCalendar.Calendar($('calendar'), {
   timeZone: 'local',
-  initialView: narrow ? 'listWeek' : 'dayGridMonth',
+  initialView: VIEWS.includes(savedView) ? savedView : (narrow ? 'listWeek' : 'dayGridMonth'),
   firstDay: 1,
-  headerToolbar: { left: 'prev,next today', center: 'title', right: narrow ? 'dayGridMonth,listWeek' : 'dayGridMonth,timeGridWeek,timeGridDay,listWeek' },
+  // Month, Week, Day and List at every width; on a narrow screen the buttons wrap onto their own row
+  headerToolbar: { left: 'prev,next today', center: 'title', right: VIEWS.join(',') },
   buttonText: { today: 'Today', month: 'Month', week: 'Week', day: 'Day', list: 'List' },
   height: 'auto', dayMaxEvents: true, nowIndicator: true, navLinks: true, selectable: true,
   scrollTime: '08:00:00', eventTimeFormat: { hour: 'numeric', minute: '2-digit', meridiem: 'short' },
@@ -92,7 +95,10 @@ const cal = new FullCalendar.Calendar($('calendar'), {
     try { ok(await SW.api('GET', '/api/calendar/feed?' + p)); }
     catch (e) { SW.toast(e.message, 'error'); fail(e); }
   },
-  datesSet: (a) => cal.setOption('height', a.view.type.startsWith('timeGrid') ? 720 : 'auto'),
+  datesSet: (a) => {
+    cal.setOption('height', a.view.type.startsWith('timeGrid') ? 720 : 'auto');
+    try { localStorage.setItem(VIEW_KEY, a.view.type); } catch (_) {}      // come back to the view you were using
+  },
   eventDidMount: (i) => {
     const x = i.event.extendedProps;
     i.el.title = [i.event.title, x.when, x.location].filter(Boolean).join('\n');
