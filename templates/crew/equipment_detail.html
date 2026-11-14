@@ -84,7 +84,7 @@
                             {% endif %}</td>
                         <td class="where">
                             {% if u.quarantine %}
-                            Quarantined {{ u.quarantine.quarantined_at }} by {{ u.quarantine.quarantined_by or 'unknown' }}
+                            Taken out of use {{ u.quarantine.quarantined_at }} by {{ u.quarantine.quarantined_by or 'unknown' }}
                             {% if u.quarantine.photo_url %}· <a href="{{ u.quarantine.photo_url }}" target="_blank" rel="noopener">photo</a>{% endif %}
                             {% endif %}
                             {% if u.checkout %}

@@ -633,6 +633,7 @@ class ShiftAssignment(db.Model):
     assigned_at  = db.Column(db.DateTime, default=datetime.utcnow)
     responded_at = db.Column(db.DateTime, nullable=True)
     decline_reason = db.Column(db.String(500), nullable=True)
+    reminder_sent_at = db.Column(db.DateTime, nullable=True)    # when the "your shift is tomorrow" email went out
     updated_at   = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     user = db.relationship('User', backref='shift_assignments')
 

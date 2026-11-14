@@ -98,6 +98,15 @@
 <!-- ================= NOTIFICATIONS ================= -->
 <section class="adm-pane" id="pane-notifications" hidden>
   <div class="card">
+    <div class="sw-card-head"><h3><i class="fas fa-bell"></i> Shift reminders</h3></div>
+    <p class="sw-muted" style="margin-bottom:1rem">Everyone on a shift gets one email in the 24 hours before it starts, unless they declined it.</p>
+    <label class="sw-check" style="display:flex;gap:.5rem;align-items:center"><input type="checkbox" id="nReminders"> Email people a reminder before their shift</label>
+    <p class="sw-muted" id="nRemindersOff" style="margin-top:.5rem;font-size:.88rem" hidden>Reminders are off. Nobody will be emailed before their shifts.</p>
+    <div class="sw-actions" style="margin-top:1rem;justify-content:flex-start">
+      <button class="btn btn-primary" id="nSaveRem"><i class="fas fa-save"></i>Save</button>
+    </div>
+  </div>
+  <div class="card">
     <div class="sw-card-head"><h3><i class="fas fa-user-times"></i> When someone declines a shift</h3></div>
     <p class="sw-muted" style="margin-bottom:1rem">Choose who gets an email the moment a crew member declines a shift (with their reason, if they gave one).</p>
     <div class="adm-banner" id="nMailWarn" hidden><i class="fas fa-exclamation-triangle"></i><span>Email isn't set up on this server (MAIL_USERNAME is empty), so nothing can be sent yet.</span></div>
@@ -298,6 +307,7 @@ async function loadNotif() {
   try { NOTIF = await SW.api('GET', '/admin/api/notifications'); } catch (e) { SW.toast(e.message, 'error'); return; }
   $('nMailWarn').hidden = NOTIF.mail_configured;
   $('nEnabled').checked = NOTIF.enabled; $('nCreator').checked = NOTIF.include_event_creator;
+  $('nReminders').checked = NOTIF.shift_reminders;
   $('nPeople').innerHTML = NOTIF.people.map((p) => `<label class="adm-person ${NOTIF.user_ids.includes(p.id) ? 'on' : ''}">
     <input type="checkbox" value="${p.id}" ${NOTIF.user_ids.includes(p.id) ? 'checked' : ''}>
     <div><div class="n">${esc(p.name)} ${p.is_admin ? '<span class="adm-badge admin">admin</span>' : ''}</div>
@@ -306,10 +316,14 @@ async function loadNotif() {
 }
 function syncNotif() {
   $('nBody').style.opacity = $('nEnabled').checked ? '1' : '.45';
+  $('nRemindersOff').hidden = $('nReminders').checked;
   $('nPeople').querySelectorAll('.adm-person').forEach((l) => l.classList.toggle('on', l.querySelector('input').checked));
 }
 $('nEnabled').addEventListener('change', syncNotif); $('nPeople').addEventListener('change', syncNotif);
+$('nReminders').addEventListener('change', syncNotif);
+$('nSaveRem').onclick = () => $('nSave').click();
 const notifPayload = () => ({ enabled: $('nEnabled').checked, include_event_creator: $('nCreator').checked,
+  shift_reminders: $('nReminders').checked,
   user_ids: [...$('nPeople').querySelectorAll('input:checked')].map((i) => Number(i.value)) });
 $('nSave').onclick = async () => {
   const body = notifPayload();

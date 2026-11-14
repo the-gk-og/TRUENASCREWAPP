@@ -68,54 +68,57 @@
 }
 
 [data-theme="dark"] {
-    --primary:        #6f9bff;
-    --primary-dark:   #8fb0ff;
-    --primary-soft:   #1c2740;
-    --secondary:      #9aa3b2;
-    --success:        #4cc38a;
-    --danger:         #f07171;
-    --warning:        #e0a030;
+    /* Dark grey, not black: three clear layers (page, card, raised) so cards and inputs stand apart */
+    --primary:        #4f80f0;
+    --primary-dark:   #6a94f5;
+    --primary-soft:   #26334f;
+    --secondary:      #a7afbd;
+    --success:        #45b783;
+    --danger:         #ef6f6f;
+    --warning:        #e3a63a;
 
-    --bg-body:        #101216;
-    --bg-sidebar:     #14171c;
-    --bg-topbar:      #14171c;
-    --bg-card:        #181b21;
-    --bg-input:       #1d2128;
-    --bg-table-head:  #1d2128;
-    --bg-table-hover: #1d2128;
-    --bg-nav-active:  #1c2740;
-    --bg-nav-hover:   #1f232b;
-    --bg-modal:       #181b21;
-    --bg-code:        #1f232b;
+    --bg-body:        #1a1d23;
+    --bg-sidebar:     #15181d;
+    --bg-topbar:      #1f232a;
+    --bg-card:        #23272f;
+    --bg-input:       #1a1d23;
+    --bg-table-head:  #292e37;
+    --bg-table-hover: #292e37;
+    --bg-nav-active:  #2a3a5e;
+    --bg-nav-hover:   #2b3039;
+    --bg-modal:       #252a33;
+    --bg-code:        #2b3039;
 
-    --text-primary:   #e7e9ee;
-    --text-secondary: #a3abba;
-    --text-muted:     #7d8696;
-    --text-inverse:   #101216;
-    --text-nav-active:#a9c1ff;
+    --text-primary:   #e9ebef;
+    --text-secondary: #b4bbc7;
+    --text-muted:     #8b94a3;
+    --text-inverse:   #14171c;
+    --text-nav-active:#b7caff;
 
-    --border:         #2a2f38;
-    --border-strong:  #3a404b;
-    --border-focus:   #6f9bff;
-    --border-input:   #3a404b;
+    --border:         #363c47;
+    --border-strong:  #4a525f;
+    --border-focus:   #7aa2ff;
+    --border-input:   #4a525f;
 
-    --shadow-sm:      0 1px 2px rgba(0, 0, 0, .4);
-    --shadow-md:      0 4px 12px rgba(0, 0, 0, .45);
-    --shadow-lg:      0 16px 40px rgba(0, 0, 0, .65);
+    --shadow-sm:      0 1px 2px rgba(0, 0, 0, .35);
+    --shadow-md:      0 6px 16px rgba(0, 0, 0, .4);
+    --shadow-lg:      0 18px 44px rgba(0, 0, 0, .55);
 
-    --overlay-bg:     rgba(0, 0, 0, .65);
+    --overlay-bg:     rgba(8, 10, 14, .66);
 
-    --ok-bg: #12301f;      --ok-fg: #7fdcab;
-    --warn-bg: #33270c;    --warn-fg: #f0c060;
-    --bad-bg: #3a1616;     --bad-fg: #f5a3a3;
-    --info-bg: #1c2740;    --info-fg: #a9c1ff;
-    --idle-bg: #1f232b;    --idle-fg: #a3abba;
+    --ok-bg: #1c3a2b;      --ok-fg: #8be0b5;
+    --warn-bg: #3d3113;    --warn-fg: #f3cb6d;
+    --bad-bg: #452122;     --bad-fg: #f8adad;
+    --info-bg: #26334f;    --info-fg: #b7caff;
+    --idle-bg: #2b3039;    --idle-fg: #b4bbc7;
 
-    --dark: #e7e9ee;
-    --light: #101216;
+    --dark: #e9ebef;
+    --light: #1a1d23;
+    color-scheme: dark;
 }
-/* Solid buttons need dark text on the lighter dark-mode accent */
-[data-theme="dark"] .btn-primary, [data-theme="dark"] .btn-success, [data-theme="dark"] .btn-danger { color: #0d0f13; }
+/* Solid buttons keep white text in dark mode; the fills are deepened so it stays readable */
+[data-theme="dark"] .btn-success { background: #2c8f63; color: #fff; }
+[data-theme="dark"] .btn-danger { background: #c54646; color: #fff; }
 
 /* ---------- Colour vision modes ---------- */
 [data-colorblind="deuteranopia"] { --primary:#0066cc; --primary-dark:#0052a3; --secondary:#e6aa00; --success:#0099cc; --danger:#cc6600; --warning:#b38600; --text-nav-active:#0066cc; --border-focus:#0066cc; }
@@ -297,7 +300,10 @@ hr { border: 0; border-top: 1px solid var(--border); }
     border: 1px solid transparent; border-radius: var(--radius);
     font: inherit; font-size: .9rem; font-weight: 600; line-height: 1.2; white-space: nowrap;
     text-decoration: none; cursor: pointer;
+    /* a plain .btn looks like a secondary button, never the browser's default grey */
+    background: var(--bg-card); color: var(--text-primary); border-color: var(--border-strong);
 }
+.btn:not([class*="btn-"]):hover:not(:disabled) { background: var(--bg-nav-hover); }
 .btn:disabled { opacity: .55; cursor: default; }
 .btn-primary { background: var(--primary); color: #fff; }
 .btn-primary:hover:not(:disabled) { background: var(--primary-dark); }
@@ -427,7 +433,7 @@ tr:hover td { background: var(--bg-table-hover); }
 
 [data-theme="dark"] ::-webkit-scrollbar { width: 10px; height: 10px; }
 [data-theme="dark"] ::-webkit-scrollbar-track { background: var(--bg-body); }
-[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #2f343e; border-radius: 5px; }
+[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #454c58; border-radius: 5px; }
 
 /* ============================================================
    GEAR: scanner, scan result, item timeline
@@ -686,7 +692,6 @@ tr:hover td { background: var(--bg-table-hover); }
 .co-big.back { background: var(--primary); color: #fff; }
 .co-big.err { background: var(--danger); color: #fff; }
 .co-big.warn { background: var(--warn-bg); color: var(--warn-fg); border-color: var(--warning); }
-[data-theme="dark"] .co-big.ok, [data-theme="dark"] .co-big.back, [data-theme="dark"] .co-big.err { color: #0d0f13; }
 .co-big-notes { margin: .5rem 0 0; padding-left: 1.2rem; font-size: .95rem; }
 .co-big-actions { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: .9rem; }
 .co-big-actions .btn { min-height: 46px; padding: .5rem 1.1rem; font-size: 1rem; flex: 1 1 auto; }
@@ -785,7 +790,6 @@ tr:hover td { background: var(--bg-table-hover); }
     .ev-tabs button { justify-content: center; min-height: 42px; margin: 0; padding: 0 .3rem; font-size: .88rem; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--bg-card); min-width: 0; }
     .ev-tabs button[aria-selected="true"] { background: var(--primary); border-color: var(--primary); color: #fff; }
     .ev-tabs button[aria-selected="true"] .n { background: rgba(255, 255, 255, .22); color: inherit; }
-    [data-theme="dark"] .ev-tabs button[aria-selected="true"] { color: #0d0f13; }
 }
 
 /* ---------- event page: type items straight in ---------- */
@@ -795,3 +799,83 @@ tr:hover td { background: var(--bg-table-hover); }
 .ev-quick .ev-q-time { flex: 0 0 auto; width: auto; }
 .ev-quick .btn { min-height: 42px; }
 .ev-quick + .sw-hint { margin-top: .5rem; }
+
+/* ---------- scanning: look up, or check out / in ---------- */
+.co-what, .sw-scan-what { display: flex; margin-bottom: .8rem; }
+.co-what button, .sw-scan-what button, .sw-scan-what a { flex: 1; min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: .45rem; text-decoration: none; }
+.sw-seg a { padding: .35rem .8rem; border-radius: 4px; font-size: .88rem; font-weight: 600; color: var(--text-secondary); }
+.sw-seg a:hover { color: var(--text-primary); }
+.co-big.info { background: var(--bg-card); border-color: var(--border-strong); }
+.co.looking #coLists { opacity: .55; }
+
+/* ---------- run list clock ---------- */
+.ev-clock { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-bottom: .8rem; font-size: .92rem; color: var(--text-secondary); }
+.ev-clock label { font-weight: 600; color: var(--text-primary); }
+.ev-clock .sw-input { width: auto; min-height: 36px; padding: .3rem .5rem; }
+.ev-at { font-variant-numeric: tabular-nums; color: var(--primary); margin-right: .6rem; }
+.ev-at:empty { display: none; }
+
+/* ---------- pick list: type to add, what is left ---------- */
+.pl-quick { margin: 0 0 .9rem; padding: 0; border: 0; }
+.pl-left { margin-bottom: .6rem; }
+.pl-left[hidden] { display: none; }
+
+/* ---------- scan gear: first-time help ---------- */
+.co-help { margin-bottom: 1rem; padding: .9rem 1.1rem; border: 1px solid var(--border-strong); border-left: 4px solid var(--primary); border-radius: var(--radius-lg); background: var(--bg-card); }
+.co-help ol { margin: .5rem 0 .8rem 1.2rem; display: grid; gap: .35rem; }
+.co-help[hidden] { display: none; }
+
+/* ============================================================
+   DARK MODE: pieces that need their own colours
+   ============================================================ */
+[data-theme="dark"] .co-big.ok { background: #23805a; }
+[data-theme="dark"] .co-big.back { background: #3566d0; }
+[data-theme="dark"] .co-big.err { background: #b93d3d; }
+[data-theme="dark"] .pl-tick[aria-pressed="true"] { background: #2c8f63; border-color: #2c8f63; }
+[data-theme="dark"] .sw-toast.ok { background: #3a414d; }
+[data-theme="dark"] .sw-gs input { background: var(--bg-input); }
+[data-theme="dark"] .card, [data-theme="dark"] .sw-list, [data-theme="dark"] .gear-list, [data-theme="dark"] .pl-list, [data-theme="dark"] .sw-table-wrap { box-shadow: var(--shadow-sm); }
+[data-theme="dark"] .sw-cam, [data-theme="dark"] .sw-cam:not(.live) { background: #101216; }
+[data-theme="dark"] img.sidebar-logo, [data-theme="dark"] .sidebar-logo-wrap img { filter: none; }
+
+/* Older pages colour things inline for light mode. In dark mode, map those light
+   patches and dark inks onto the theme so nothing glows white or vanishes. */
+[data-theme="dark"] :is(.main-content, .modal-content, .sw-dialog) :is(
+    [style*="background: white"], [style*="background:white"], [style*="background-color: white"],
+    [style*="background: #fff"], [style*="background:#fff"], [style*="background-color: #fff"],
+    [style*="#f9fafb"], [style*="#f3f4f6"], [style*="#f8fafc"], [style*="#f1f5f9"], [style*="#e5e7eb"], [style*="#f0f4ff"]) {
+    background: var(--bg-nav-hover) !important; color: var(--text-primary); border-color: var(--border) !important;
+}
+[data-theme="dark"] :is(.main-content, .modal-content, .sw-dialog) :is([style*="#fef3c7"], [style*="#fffbeb"], [style*="#fef9c3"]) {
+    background: var(--warn-bg) !important; color: var(--warn-fg) !important; border-color: #6b5417 !important;
+}
+[data-theme="dark"] :is(.main-content, .modal-content, .sw-dialog) :is([style*="#fef2f2"], [style*="#fee2e2"]) {
+    background: var(--bad-bg) !important; color: var(--bad-fg) !important; border-color: #7a3233 !important;
+}
+[data-theme="dark"] :is(.main-content, .modal-content, .sw-dialog) :is([style*="#f0fdf4"], [style*="#ecfdf5"], [style*="#d1fae5"]) {
+    background: var(--ok-bg) !important; color: var(--ok-fg) !important; border-color: #2c5e45 !important;
+}
+[data-theme="dark"] :is(.main-content, .modal-content, .sw-dialog) :is(
+    [style*="#e0e7ff"], [style*="#eef2ff"], [style*="#f0f9ff"], [style*="#eff6ff"], [style*="#f5f3ff"], [style*="#ede9fe"], [style*="#dbeafe"]) {
+    background: var(--info-bg) !important; color: var(--info-fg) !important; border-color: #3a4d78 !important;
+}
+[data-theme="dark"] :is(.main-content, .modal-content, .sw-dialog) :is(
+    [style*="color: #6b7280"], [style*="color:#6b7280"], [style*="color: #666"], [style*="color:#666"],
+    [style*="color: #9ca3af"], [style*="color:#9ca3af"], [style*="color: #4b5563"], [style*="color:#4b5563"]) { color: var(--text-secondary) !important; }
+[data-theme="dark"] :is(.main-content, .modal-content, .sw-dialog) :is(
+    [style*="color: #374151"], [style*="color:#374151"], [style*="color: #1f2937"], [style*="color:#1f2937"],
+    [style*="color: #111827"], [style*="color:#111827"], [style*="color: #333"], [style*="color:#333"]) { color: var(--text-primary) !important; }
+[data-theme="dark"] :is(.main-content, .modal-content, .sw-dialog) :is([style*="#78350f"], [style*="#92400e"]) { color: var(--warn-fg) !important; }
+[data-theme="dark"] :is(.main-content, .modal-content, .sw-dialog) :is([style*="#7f1d1d"], [style*="#991b1b"]) { color: var(--bad-fg) !important; }
+[data-theme="dark"] :is(.main-content, .modal-content, .sw-dialog) :is([style*="#166534"], [style*="#065f46"]) { color: var(--ok-fg) !important; }
+[data-theme="dark"] :is(.main-content, .modal-content, .sw-dialog) :is(
+    [style*="#1e40af"], [style*="#3730a3"], [style*="#0c4a6e"], [style*="#164e63"], [style*="color: #1c45b0"], [style*="color: #16337f"]) { color: var(--info-fg) !important; }
+
+/* Links are a lighter blue on dark. :where() keeps this as weak as the plain "a" rule,
+   so buttons, nav items and list rows that set their own colour keep it. */
+:where([data-theme="dark"]) a { color: #8fb0ff; }
+[data-theme="dark"] .btn-link, [data-theme="dark"] .sw-crumb:hover, [data-theme="dark"] .sw-back { color: #8fb0ff; }
+[data-theme="dark"] .sw-seg { background: #15181d; }
+[data-theme="dark"] .sw-seg button[aria-pressed="true"], [data-theme="dark"] .sw-seg label.on { background: #3a414d; color: var(--text-primary); }
+[data-theme="dark"] .ev-tabs button[aria-selected="true"], [data-theme="dark"] .sw-tabbar .on { color: #8fb0ff; }
+@media (max-width: 700px) { [data-theme="dark"] .ev-tabs button[aria-selected="true"] { color: #fff; } }

@@ -5,7 +5,7 @@
 {% block head_extra %}
 <style>
 /* Stage Plans page — scoped to avoid changing other ShowWise pages */
-.stageplans-page { --sp-ink: var(--text-primary, #18232d); --sp-muted: var(--text-secondary, #687684); --sp-line: var(--border-color, #e2e8f0); --sp-panel: var(--card-bg, #fff); color: var(--sp-ink); }
+.stageplans-page { --sp-ink: var(--text-primary, #18232d); --sp-muted: var(--text-secondary, #687684); --sp-line: var(--border-strong); --sp-panel: var(--bg-card); color: var(--sp-ink); }
 .stageplans-page .sp-hero { display:flex; align-items:flex-start; justify-content:space-between; gap:1.25rem; flex-wrap:wrap; margin-bottom:1.5rem; }
 .stageplans-page .sp-eyebrow { color:var(--sp-muted); text-transform:uppercase; letter-spacing:.12em; font-size:.72rem; font-weight:800; margin-bottom:.45rem; }
 .stageplans-page .sp-title { font-size:clamp(1.7rem,3vw,2.35rem); line-height:1.15; margin:0 0 .5rem; letter-spacing:-.035em; }
@@ -13,9 +13,9 @@
 .stageplans-page .sp-actions { display:flex; flex-wrap:wrap; gap:.65rem; }
 .stageplans-page .sp-btn { display:inline-flex; align-items:center; justify-content:center; gap:.55rem; min-height:42px; border:1px solid var(--sp-line); border-radius: 8px; padding:.7rem 1rem; font:inherit; font-size:.9rem; font-weight:700; text-decoration:none; cursor:pointer; transition:transform .15s ease, box-shadow .15s ease, opacity .15s ease; }
 .stageplans-page .sp-btn:hover { box-shadow:0 5px 16px #0f172a12; }
-.stageplans-page .sp-btn-primary { color:#fff; background:#1c45b0; border-color:#1c45b0; }
+.stageplans-page .sp-btn-primary { color:#fff; background:var(--primary); border-color:var(--primary); }
 .stageplans-page .sp-btn-secondary { color:var(--sp-ink); background:var(--sp-panel); }
-.stageplans-page .sp-btn-danger { color:#b91c1c; background:var(--sp-panel); border-color:#fecaca; }
+.stageplans-page .sp-btn-danger { color:var(--danger); background:var(--sp-panel); border-color:var(--danger); }
 .stageplans-page .sp-toolbar { display:flex; align-items:end; justify-content:space-between; gap:1rem; flex-wrap:wrap; padding:1rem; border:1px solid var(--sp-line); border-radius: 8px; background:var(--sp-panel); margin-bottom:1.25rem; }
 .stageplans-page .sp-filter { display:flex; flex-direction:column; gap:.4rem; min-width:min(100%,280px); }
 .stageplans-page .sp-filter label { font-size:.78rem; font-weight:800; color:var(--sp-muted); }
@@ -23,28 +23,28 @@
 .stageplans-page .sp-search-wrap { position:relative; flex:1; min-width:min(100%,220px); max-width:360px; }
 .stageplans-page .sp-search-wrap i { position:absolute; left:.85rem; top:50%; transform:translateY(-50%); color:var(--sp-muted); }
 .stageplans-page .sp-search { padding-left:2.4rem; }
-.stageplans-page .sp-event-banner { display:flex; align-items:center; gap:.9rem; padding:1rem 1.1rem; margin-bottom:1.25rem; border:1px solid #c7d2fe; background:color-mix(in srgb, #2557d6 8%, var(--sp-panel)); border-radius: 8px; }
-.stageplans-page .sp-event-icon { display:grid; place-items:center; flex:0 0 42px; width:42px; height:42px; border-radius: 8px; background:#e0e7ff; color:#16337f; }
+.stageplans-page .sp-event-banner { display:flex; align-items:center; gap:.9rem; padding:1rem 1.1rem; margin-bottom:1.25rem; border:1px solid var(--border-strong); background:var(--info-bg); border-radius: 8px; }
+.stageplans-page .sp-event-icon { display:grid; place-items:center; flex:0 0 42px; width:42px; height:42px; border-radius: 8px; background:var(--primary-soft); color:var(--text-nav-active); }
 .stageplans-page .sp-event-banner strong { display:block; margin-bottom:.2rem; }
 .stageplans-page .sp-event-banner small { color:var(--sp-muted); }
 .stageplans-page .sp-results { display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin:0 0 .8rem; color:var(--sp-muted); font-size:.85rem; }
 .stageplans-page .sp-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr)); gap:1rem; }
 .stageplans-page .sp-card { min-width:0; overflow:hidden; border:1px solid var(--sp-line); border-radius: 8px; background:var(--sp-panel); box-shadow:0 2px 8px #0f172a05; transition:transform .18s ease,box-shadow .18s ease; }
 .stageplans-page .sp-card:hover { box-shadow:0 12px 30px #0f172a10; }
-.stageplans-page .sp-preview { position:relative; display:grid; place-items:center; height:190px; overflow:hidden; background:#f1f5f9; border-bottom:1px solid var(--sp-line); cursor:pointer; }
+.stageplans-page .sp-preview { position:relative; display:grid; place-items:center; height:190px; overflow:hidden; background:var(--bg-nav-hover); border-bottom:1px solid var(--sp-line); cursor:pointer; }
 .stageplans-page .sp-preview img { width:100%; height:100%; object-fit:contain; padding:.65rem; }
-.stageplans-page .sp-preview .sp-file-icon { font-size:2.7rem; color:#64748b; }
+.stageplans-page .sp-preview .sp-file-icon { font-size:2.7rem; color:var(--text-muted); }
 .stageplans-page .sp-file-type { position:absolute; top:.7rem; left:.7rem; padding:.3rem .5rem; border-radius:6px; color:#334155; background:#ffffffdf; font-size:.7rem; font-weight:800; text-transform:uppercase; letter-spacing:.05em; }
 .stageplans-page .sp-card-body { padding:1rem; }
 .stageplans-page .sp-card-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:.6rem; }
 .stageplans-page .sp-card-title { margin:0; font-size:1.03rem; line-height:1.35; overflow-wrap:anywhere; }
-.stageplans-page .sp-badge { flex:0 0 auto; display:inline-flex; align-items:center; gap:.35rem; padding:.28rem .48rem; border-radius:6px; background:#eef2ff; color:#16337f; font-size:.68rem; font-weight:800; }
+.stageplans-page .sp-badge { flex:0 0 auto; display:inline-flex; align-items:center; gap:.35rem; padding:.28rem .48rem; border-radius:6px; background:var(--info-bg); color:var(--info-fg); font-size:.68rem; font-weight:800; }
 .stageplans-page .sp-meta { display:flex; flex-direction:column; gap:.35rem; margin:.65rem 0 1rem; color:var(--sp-muted); font-size:.79rem; }
 .stageplans-page .sp-meta span { display:flex; align-items:center; gap:.45rem; overflow-wrap:anywhere; }
 .stageplans-page .sp-card-actions { display:grid; grid-template-columns:1fr 1fr auto; gap:.5rem; }
 .stageplans-page .sp-card-actions .sp-btn { min-width:0; min-height:38px; padding:.55rem .65rem; font-size:.82rem; }
 .stageplans-page .sp-empty { text-align:center; padding:3.5rem 1.25rem; border:1px dashed var(--sp-line); border-radius: 8px; background:var(--sp-panel); }
-.stageplans-page .sp-empty-icon { display:grid; place-items:center; width:64px; height:64px; margin:0 auto 1rem; border-radius: 8px; background:#eef2ff; color:#1c45b0; font-size:1.6rem; }
+.stageplans-page .sp-empty-icon { display:grid; place-items:center; width:64px; height:64px; margin:0 auto 1rem; border-radius: 8px; background:var(--primary-soft); color:var(--text-nav-active); font-size:1.6rem; }
 .stageplans-page .sp-empty h3 { margin:0 0 .45rem; font-size:1.2rem; }
 .stageplans-page .sp-empty p { max-width:440px; margin:0 auto 1.2rem; color:var(--sp-muted); line-height:1.55; }
 .stageplans-page .sp-empty-actions { display:flex; justify-content:center; gap:.65rem; flex-wrap:wrap; }

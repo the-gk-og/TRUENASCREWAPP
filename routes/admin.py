@@ -345,6 +345,7 @@ def _notification_state() -> dict:
         'mail_configured': bool(current_app.config.get('MAIL_USERNAME')),
         'enabled': bool(get_setting('notify.shift_declined.enabled')),
         'include_event_creator': bool(get_setting('notify.shift_declined.include_event_creator')),
+        'shift_reminders': bool(get_setting('notify.shift_reminders.enabled')),
         'user_ids': chosen,
         'people': [{'id': u.id, 'username': u.username, 'name': u.shown_name, 'email': u.email or '',
                     'is_admin': bool(u.is_admin), 'suggested': u in candidates} for u in everyone],
@@ -370,6 +371,8 @@ def api_notifications_save():
     set_setting('notify.shift_declined.enabled', bool(data.get('enabled', True)), current_user.username)
     set_setting('notify.shift_declined.include_event_creator',
                 bool(data.get('include_event_creator', False)), current_user.username)
+    if 'shift_reminders' in data:
+        set_setting('notify.shift_reminders.enabled', bool(data['shift_reminders']), current_user.username)
     db.session.commit()
     return jsonify({'success': True, 'no_email': [valid[i].username for i in ids if not valid[i].email]})
 

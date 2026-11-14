@@ -131,6 +131,7 @@
         <button class="btn btn-sm btn-ghost" data-act="bulk-add"><i class="fas fa-layer-group"></i>Bulk add shifts</button>
         <button class="btn btn-sm btn-ghost" data-act="add-all">Add all crew</button>
         {% endif %}
+        <button class="btn btn-sm btn-ghost" data-act="pdf-part" data-part="callsheet" title="One page: who arrives when"><i class="fas fa-file-pdf"></i>Call sheet</button>
         <button class="btn btn-sm btn-ghost" data-act="pdf-part" data-part="team" title="Download just this part as a PDF"><i class="fas fa-file-pdf"></i>PDF</button>
       </div>
     </div>
@@ -238,13 +239,18 @@
         {% if can_manage %}<button class="btn btn-sm btn-ghost" data-act="paste-run"><i class="fas fa-paste"></i>Paste a list</button>{% endif %}
         <button class="btn btn-sm btn-ghost" data-act="pdf-part" data-part="run" title="Download just this part as a PDF"><i class="fas fa-file-pdf"></i>PDF</button>
       </div></div>
+    <div class="ev-clock" id="runClock">
+      <label for="runStart">Starts at</label>
+      <input type="time" id="runStart" class="sw-input" value="{{ page_data.run_start }}" {% if not can_manage %}disabled{% endif %}>
+      <span id="runTotal"></span>
+    </div>
     <div id="runList">
     {% for r in run_items %}
-      <div class="sw-run" data-id="{{ r.id }}">
+      <div class="sw-run" data-id="{{ r.id }}" data-length="{{ r.duration or '' }}">
         {% if can_manage %}<span class="handle" title="Drag to reorder"><i class="fas fa-grip-vertical"></i></span>{% endif %}
         <span class="num">{{ loop.index }}</span>
         <div class="sw-run-main">
-          <div class="sw-run-title">{{ r.title }}</div>
+          <div class="sw-run-title"><span class="ev-at"></span>{{ r.title }}</div>
           <div class="sw-run-meta">
             {% if r.duration %}<span class="sw-chip plain"><i class="fas fa-hourglass-half"></i>{{ r.duration }}</span>{% endif %}
             {% if r.cue_type %}<span class="sw-chip">{{ r.cue_type }}</span>{% endif %}
@@ -347,16 +353,16 @@ const actions = {
   // PDF: the whole event, or only the parts you tick
   async pdf() {
     const parts = [['overview', 'Overview: times, place and description'], ['team', 'Team and shifts'], ['schedule', 'Schedule'],
-                   ['run', 'Run list'], ['tasks', 'Tasks'], ['notes', 'Notes']];
+                   ['run', 'Run list'], ['tasks', 'Tasks'], ['notes', 'Notes'], ['callsheet', 'Call sheet: who arrives when']];
     await SW.form({
       title: 'Download PDF', submitText: 'Download',
-      values: Object.fromEntries(parts.map(([k]) => [k, true])),
+      values: Object.fromEntries(parts.map(([k]) => [k, k !== 'callsheet'])),
       fields: [{ type: 'info', text: 'Untick anything you don’t want printed. For a single part, there is also a PDF button on each tab.' },
                ...parts.map(([name, label]) => ({ name, label, type: 'checkbox' }))],
       onSubmit: (v) => {
         const chosen = parts.map(([k]) => k).filter((k) => v[k]);
         if (!chosen.length) throw new Error('Tick at least one part');
-        location.href = `/events/${EV.id}/export-pdf` + (chosen.length === parts.length ? '' : '?parts=' + chosen.join(','));
+        location.href = `/events/${EV.id}/export-pdf?parts=` + chosen.join(',');
         return true;
       },
     });
@@ -506,10 +512,10 @@ quick('runQuick', async (v, form) => {
   const r = await SW.api('POST', `/events/${EV.id}/crew-run/add`, body);
   D.runs[r.id] = { id: r.id, description: '', notes: '', ...body };
   const row = document.createElement('div');
-  row.className = 'sw-run'; row.dataset.id = r.id;
+  row.className = 'sw-run'; row.dataset.id = r.id; row.dataset.length = body.duration;
   row.innerHTML = `<span class="handle" title="Drag to reorder"><i class="fas fa-grip-vertical"></i></span>
     <span class="num">${document.querySelectorAll('#runList .sw-run').length + 1}</span>
-    <div class="sw-run-main"><div class="sw-run-title">${escH(body.title)}</div>
+    <div class="sw-run-main"><div class="sw-run-title"><span class="ev-at"></span>${escH(body.title)}</div>
       <div class="sw-run-meta">${body.duration ? `<span class="sw-chip plain"><i class="fas fa-hourglass-half"></i>${escH(body.duration)}</span>` : ''}${body.cue_type ? `<span class="sw-chip">${escH(body.cue_type)}</span>` : ''}</div></div>
     <div class="sw-shift-btns">
       <button class="btn btn-ghost btn-icon" data-act="edit-run" data-id="${r.id}" title="Edit"><i class="fas fa-pen"></i></button>
@@ -520,7 +526,51 @@ quick('runQuick', async (v, form) => {
   document.querySelectorAll('.ev-tabs [data-tab="run"] .n').forEach((n) => { n.textContent = Number(n.textContent) + 1; });
   form.reset(); form.title.focus();
   row.scrollIntoView({ block: 'nearest' });
+  runClock();
 });
+
+/* ---------- run list clock: when each item starts, from the lengths ---------- */
+function lengthMinutes(text) {
+  const t = String(text || '').trim().toLowerCase();
+  if (!t) return null;
+  let m = t.match(/^(\d+):(\d{2})(?::(\d{2}))?$/);
+  if (m) return m[3] ? Number(m[1]) * 60 + Number(m[2]) + Number(m[3]) / 60 : Number(m[1]) + Number(m[2]) / 60;
+  let total = 0, found = false;
+  const re = /(\d+(?:\.\d+)?)\s*(hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)\b/g;
+  while ((m = re.exec(t))) { found = true; total += Number(m[1]) * (m[2][0] === 'h' ? 60 : m[2][0] === 'm' ? 1 : 1 / 60); }
+  if (found) return total;
+  return /^\d+(?:\.\d+)?$/.test(t) ? Number(t) : null;
+}
+function clockText(mins) {
+  mins = ((Math.round(mins) % 1440) + 1440) % 1440;
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
+}
+function runClock() {
+  const rows = [...document.querySelectorAll('#runList .sw-run')], start = document.getElementById('runStart');
+  if (!start) return;
+  const lengths = rows.map((r) => lengthMinutes(r.dataset.length));
+  const timed = lengths.some((x) => x !== null) && /^\d\d:\d\d$/.test(start.value);
+  document.getElementById('runClock').hidden = !lengths.some((x) => x !== null);
+  let at = timed ? Number(start.value.slice(0, 2)) * 60 + Number(start.value.slice(3)) : 0, sum = 0;
+  rows.forEach((r, i) => {
+    r.querySelector('.ev-at').textContent = timed ? clockText(at) : '';
+    at += lengths[i] || 0; sum += lengths[i] || 0;
+  });
+  const missing = lengths.filter((x) => x === null).length, s = Math.round(sum);
+  document.getElementById('runTotal').textContent = !timed ? '' :
+    `Runs ${s >= 60 ? `${Math.floor(s / 60)} h ${String(s % 60).padStart(2, '0')} min` : `${s} min`}, finishing about ${clockText(at)}`
+    + (missing ? ` · ${missing} item${missing === 1 ? ' has' : 's have'} no length` : '');
+}
+const runStart = document.getElementById('runStart');
+if (runStart) {
+  runStart.addEventListener('change', async () => {
+    runClock();
+    try { await SW.api('PUT', `/events/${EV.id}/run-start`, { time: runStart.value }); }
+    catch (err) { SW.toast(err.message, 'error'); }
+  });
+  runClock();
+}
 
 quick('schedQuick', async (v, form) => {
   const when = schedDateTime(v.time), title = v.title.trim();
@@ -564,6 +614,7 @@ if (runList && D.can_manage && window.Sortable) {
     onEnd: async () => {
       const ids = [...runList.querySelectorAll('.sw-run')].map((r) => Number(r.dataset.id));
       runList.querySelectorAll('.num').forEach((n, i) => { n.textContent = i + 1; });
+      runClock();
       try { await SW.api('POST', `/events/${EV.id}/crew-run/reorder`, { item_ids: ids }); }
       catch (err) { SW.toast(err.message, 'error'); }
     },
