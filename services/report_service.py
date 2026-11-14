@@ -1,182 +1,278 @@
-"""services/report_service.py — PDF generation for event briefs."""
+"""services/report_service.py — printable PDFs for an event.
 
-import io, os, re
+One function builds either the whole event pack or just the parts asked for
+(for example only the run list, to hand to the stage manager). The layout is
+plain black on white with thin rules, so it prints cleanly and photocopies well.
+"""
+
+import io, re
 from datetime import datetime
 from xml.sax.saxutils import escape
 
-from reportlab.platypus import (
-    SimpleDocTemplate, Table, TableStyle, Paragraph,
-    Spacer, PageBreak, Image, HRFlowable,
-)
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Flowable, KeepTogether
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch, mm
-from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.units import mm
+
+# key -> heading, in the order they are printed
+PDF_PARTS = {
+    'overview': 'Overview',
+    'team':     'Team and shifts',
+    'schedule': 'Schedule',
+    'run':      'Run list',
+    'tasks':    'Tasks',
+    'notes':    'Notes',
+}
+
+INK, MUTED, RULE, SHADE = (colors.HexColor(c) for c in ('#111418', '#5b6472', '#c9ced6', '#f1f3f5'))
+MARGIN = 18 * mm
+WIDTH  = A4[0] - 2 * MARGIN
 
 
-def generate_event_pdf(event_id: int):
-    """Return (BytesIO, filename) for an event brief PDF."""
-    from models import Event, User
-    from services.user_names import name_for, find_user_by_username
+def _style(name, **kw):
+    base = dict(fontName='Helvetica', fontSize=10, leading=13.5, textColor=INK)
+    base.update(kw)
+    return ParagraphStyle(name, **base)
+
+
+S = {
+    'eyebrow': _style('eyebrow', fontName='Helvetica-Bold', fontSize=9, textColor=MUTED, spaceAfter=2),
+    'title':   _style('title', fontName='Helvetica-Bold', fontSize=22, leading=26, spaceAfter=3),
+    'sub':     _style('sub', fontSize=11, leading=15, textColor=MUTED, spaceAfter=10),
+    'h2':      _style('h2', fontName='Helvetica-Bold', fontSize=13, leading=16, spaceBefore=14, spaceAfter=6),
+    'body':    _style('body'),
+    'bold':    _style('bold', fontName='Helvetica-Bold'),
+    'small':   _style('small', fontSize=8.5, leading=11.5, textColor=MUTED),
+    'head':    _style('head', fontName='Helvetica-Bold', fontSize=8, leading=10, textColor=MUTED),
+    'big':     _style('big', fontName='Helvetica-Bold', fontSize=11, leading=14),
+    'num':     _style('num', fontName='Helvetica-Bold', fontSize=11, leading=14, alignment=1),
+}
+
+
+class _TickBox(Flowable):
+    """An empty square to tick with a pen (filled in when the task is already done)."""
+    def __init__(self, done=False, size=9):
+        super().__init__()
+        self.done, self.width, self.height = done, size, size
+
+    def draw(self):
+        c = self.canv
+        c.setStrokeColor(INK)
+        c.setLineWidth(0.8)
+        c.rect(0, 0, self.width, self.height)
+        if self.done:
+            c.setLineWidth(1.4)
+            c.lines([(2, self.height / 2, self.width * .42, 2), (self.width * .42, 2, self.width - 1.5, self.height - 1.5)])
+
+
+def _plain(text):
+    """Markdown or free text -> safe one-paragraph markup (line breaks kept)."""
+    text = str(text or '').strip()
+    text = re.sub(r'!\[([^\]]*)\]\([^)]*\)', r'\1', text)           # images
+    text = re.sub(r'\[([^\]]+)\]\([^)]*\)', r'\1', text)            # links
+    text = re.sub(r'^\s{0,3}#{1,6}\s*', '', text, flags=re.M)       # headings
+    text = re.sub(r'(\*\*|__|`|~~)', '', text)
+    text = re.sub(r'^\s*[-*+]\s+', '- ', text, flags=re.M)
+    return escape(text).replace('\n', '<br/>')
+
+
+def _p(text, style='body'):
+    return Paragraph(_plain(text), S[style])
+
+
+def _t(dt):
+    return dt.strftime('%I:%M %p').lstrip('0').lower()
+
+
+def _d(dt):
+    return dt.strftime('%a %d %b').replace(' 0', ' ')
+
+
+def _when(start, end=None, all_day=False):
+    if all_day:
+        return f'{_d(start)} to {_d(end)}, all day' if end and end.date() != start.date() else f'{_d(start)}, all day'
+    if not end:
+        return f'{_d(start)}, {_t(start)}'
+    if end.date() == start.date():
+        return f'{_d(start)}, {_t(start)} - {_t(end)}'
+    return f'{_d(start)} {_t(start)} to {_d(end)} {_t(end)}'
+
+
+def _table(head, rows, widths, extra=()):
+    data = [[Paragraph(escape(h), S['head']) for h in head]] + rows
+    t = Table(data, colWidths=widths, repeatRows=1)
+    t.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LINEBELOW', (0, 0), (-1, 0), 1, INK),
+        ('LINEBELOW', (0, 1), (-1, -1), 0.5, RULE),
+        ('TOPPADDING', (0, 0), (-1, 0), 2), ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
+        ('TOPPADDING', (0, 1), (-1, -1), 6), ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4), ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        *extra,
+    ]))
+    return t
+
+
+def _nothing(text):
+    return Paragraph(escape(text), S['small'])
+
+
+# ── sections ────────────────────────────────────────────────────────────────
+
+def _overview(event, end):
+    from services.event_times import times_for, range_text
+    from services.user_names import name_for
+    rows = [['When', _when(event.event_date, end, event.all_day)]]
+    for t in times_for(event):
+        rows.append([t.label, range_text(t).replace('→', 'to').replace('–', '-')])
+    rows.append(['Where', event.location or 'Not set'])
+    if event.created_by:
+        rows.append(['Organiser', name_for(event.created_by) or event.created_by])
+    table = Table([[Paragraph(escape(k), S['small']), _p(v)] for k, v in rows], colWidths=[28 * mm, WIDTH - 28 * mm])
+    table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'), ('LINEBELOW', (0, 0), (-1, -1), 0.5, RULE),
+        ('TOPPADDING', (0, 0), (-1, -1), 5), ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    out = [table]
+    if event.description:
+        out += [Spacer(1, 8), _p(event.description)]
+    return out
+
+
+def _team(event):
+    from extensions import db
+    from models import Shift, ShiftAssignment, User
+    people = {}
+    for ca in event.crew_assignments:
+        user = User.query.filter_by(username=ca.crew_member).first()
+        if user:
+            people.setdefault(user.id, {'user': user, 'role': ca.role or '', 'shifts': []})
+    pairs = (db.session.query(ShiftAssignment, Shift).join(Shift, ShiftAssignment.shift_id == Shift.id)
+             .filter(Shift.event_id == event.id).order_by(Shift.shift_date).all())
+    for a, s in pairs:
+        if a.user:
+            people.setdefault(a.user.id, {'user': a.user, 'role': '', 'shifts': []})['shifts'].append((a, s))
+    if not people:
+        return [_nothing('Nobody is on this event yet.')]
+    status = lambda st: 'Confirmed' if st in ('accepted', 'confirmed') else 'Declined' if st == 'rejected' else 'Awaiting reply'
+    rows = []
+    for p in sorted(people.values(), key=lambda p: p['user'].shown_name.lower()):
+        name = Paragraph(escape(p['user'].shown_name), S['bold'])
+        if not p['shifts']:
+            rows.append([name, _nothing('No shift times set'), _p(p['role']), ''])
+        for i, (a, s) in enumerate(p['shifts']):
+            rows.append([name if i == 0 else '', _p(_when(s.shift_date, s.shift_end_date)), _p(s.role or ''), _p(status(a.status))])
+    return [_table(['Name', 'Shift', 'Role', 'Reply'], rows, [WIDTH * .26, WIDTH * .36, WIDTH * .2, WIDTH * .18])]
+
+
+def _schedule(event):
+    from models import EventSchedule
+    items = EventSchedule.query.filter_by(event_id=event.id).order_by(EventSchedule.scheduled_time).all()
+    if not items:
+        return [_nothing('No schedule items.')]
+    one_day = len({s.scheduled_time.date() for s in items}) == 1
+    rows = [[Paragraph(escape(_t(s.scheduled_time) if one_day else f'{_d(s.scheduled_time)}, {_t(s.scheduled_time)}'), S['big']),
+             [Paragraph(escape(s.title), S['big'])] + ([_p(s.description, 'small')] if s.description else [])]
+            for s in items]
+    w = 24 * mm if one_day else 44 * mm
+    return [_table(['Time', 'What'], rows, [w, WIDTH - w])]
+
+
+def _run(event):
+    from models import CrewRunItem
+    items = CrewRunItem.query.filter_by(event_id=event.id).order_by(CrewRunItem.order_number, CrewRunItem.id).all()
+    if not items:
+        return [_nothing('No run list items.')]
+    rows = []
+    for n, r in enumerate(items, start=1):
+        what = [Paragraph(escape(r.title), S['big'])]
+        if r.description:
+            what.append(_p(r.description, 'small'))
+        rows.append([Paragraph(str(n), S['num']), what, _p(r.duration or ''), _p(r.cue_type or ''), _p(r.notes or '', 'small')])
+    return [_table(['#', 'Item', 'Length', 'Cue', 'Notes'], rows,
+                   [10 * mm, WIDTH * .42, 20 * mm, 22 * mm, WIDTH * .58 - 52 * mm],
+                   extra=[('BACKGROUND', (0, 1), (0, -1), SHADE)])]
+
+
+def _tasks(event):
+    from routes.event_tasks import tasks_for_event
+    tasks = tasks_for_event(event)
+    if not tasks:
+        return [_nothing('No tasks.')]
+    rows = []
+    for t in tasks:
+        what = [Paragraph(escape(t['title']), S['bold'])]
+        if t['description']:
+            what.append(_p(t['description'], 'small'))
+        due = datetime.strptime(t['due'], '%Y-%m-%d').strftime('%a %d %b').replace(' 0', ' ') if t['due'] else ''
+        rows.append([_TickBox(t['done']), what, _p(t['assignee'] or 'Anyone'), _p(due)])
+    return [_table(['', 'Task', 'Who', 'Due'], rows, [9 * mm, WIDTH - 9 * mm - 40 * mm - 26 * mm, 40 * mm, 26 * mm])]
+
+
+def _notes(event):
+    from models import EventNote
+    from services.user_names import name_for
+    notes = EventNote.query.filter_by(event_id=event.id).order_by(EventNote.created_at.desc()).all()
+    if not notes:
+        return [_nothing('No notes.')]
+    out = []
+    for n in notes:
+        out.append(KeepTogether([
+            Paragraph(f'<b>{escape(name_for(n.created_by) or n.created_by or "")}</b> · {n.created_at.strftime("%d %b %Y, %I:%M %p")}', S['small']),
+            _p(n.content), Spacer(1, 8)]))
+    return out
+
+
+_BUILD = {'overview': lambda e, end: _overview(e, end), 'team': lambda e, end: _team(e),
+          'schedule': lambda e, end: _schedule(e), 'run': lambda e, end: _run(e),
+          'tasks': lambda e, end: _tasks(e), 'notes': lambda e, end: _notes(e)}
+
+
+def generate_event_pdf(event_id: int, parts=None):
+    """Return (BytesIO, filename). `parts` is a list of PDF_PARTS keys; None or empty means all of them."""
+    from models import Event
     event = Event.query.get_or_404(event_id)
+    chosen = [k for k in PDF_PARTS if not parts or k in parts]
+    if not chosen:
+        chosen = list(PDF_PARTS)
+    single = len(chosen) == 1
+    kind = PDF_PARTS[chosen[0]] if single else 'Event pack'
 
-    def add_header_footer(canvas, doc):
+    end = event.event_end_date
+    printed = datetime.now().strftime('%d %b %Y, %I:%M %p').lstrip('0')
+
+    def frame(canvas, doc):
         canvas.saveState()
-        canvas.setFillColorRGB(0.39, 0.49, 0.94)
-        canvas.rect(0, letter[1] - 40, letter[0], 40, fill=True, stroke=False)
-        canvas.setFillColorRGB(1, 1, 1)
-        canvas.setFont('Helvetica-Bold', 16)
-        canvas.drawString(20 * mm, letter[1] - 25, "EVENT BRIEF")
-        canvas.setFont('Helvetica', 10)
-        canvas.drawRightString(letter[0] - 20 * mm, letter[1] - 25, f"Event ID: {event.id}")
-        canvas.setFillColorRGB(0.5, 0.5, 0.5)
+        canvas.setFont('Helvetica-Bold', 9)
+        canvas.setFillColor(INK)
+        canvas.drawString(MARGIN, A4[1] - 11 * mm, event.title[:70])
+        canvas.setFont('Helvetica', 9)
+        canvas.setFillColor(MUTED)
+        canvas.drawRightString(A4[0] - MARGIN, A4[1] - 11 * mm, kind)
+        canvas.setStrokeColor(RULE)
+        canvas.setLineWidth(0.5)
+        canvas.line(MARGIN, A4[1] - 13 * mm, A4[0] - MARGIN, A4[1] - 13 * mm)
         canvas.setFont('Helvetica', 8)
-        canvas.drawString(20 * mm, 15 * mm, f"Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}")
-        canvas.drawRightString(letter[0] - 20 * mm, 15 * mm, f"Page {canvas.getPageNumber()}")
-        canvas.setStrokeColorRGB(0.8, 0.8, 0.8)
-        canvas.line(20 * mm, 20 * mm, letter[0] - 20 * mm, 20 * mm)
+        canvas.drawString(MARGIN, 10 * mm, f'ShowWise · printed {printed}')
+        canvas.drawRightString(A4[0] - MARGIN, 10 * mm, f'Page {canvas.getPageNumber()}')
         canvas.restoreState()
 
-    pdf_buffer = io.BytesIO()
-    doc        = SimpleDocTemplate(pdf_buffer, pagesize=letter,
-                                   topMargin=50, bottomMargin=30,
-                                   leftMargin=20*mm, rightMargin=20*mm)
-    story  = []
-    styles = getSampleStyleSheet()
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=19 * mm, bottomMargin=17 * mm,
+                            leftMargin=MARGIN, rightMargin=MARGIN,
+                            title=f'{event.title} - {kind}', author='ShowWise')
+    story = [Paragraph(escape(kind.upper()), S['eyebrow']),
+             Paragraph(escape(event.title), S['title']),
+             Paragraph(escape(_when(event.event_date, end, event.all_day) + (f' · {event.location}' if event.location else '')), S['sub'])]
+    for key in chosen:
+        if not single:
+            story.append(Paragraph(escape(PDF_PARTS[key]), S['h2']))
+        story += _BUILD[key](event, end)
 
-    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=28,
-                                  textColor=colors.HexColor('#6366f1'), spaceAfter=8,
-                                  spaceBefore=20, alignment=TA_CENTER, fontName='Helvetica-Bold')
-    sub_style   = ParagraphStyle('Sub', parent=styles['Normal'], fontSize=11,
-                                  textColor=colors.HexColor('#6b7280'), spaceAfter=20,
-                                  alignment=TA_CENTER)
-    sec_style   = ParagraphStyle('Sec', parent=styles['Heading2'], fontSize=14,
-                                  textColor=colors.HexColor('#1f2937'), spaceAfter=12,
-                                  spaceBefore=20, fontName='Helvetica-Bold')
-    body_style  = ParagraphStyle('Body', parent=styles['Normal'], fontSize=10,
-                                  leading=14, textColor=colors.HexColor('#374151'))
-    wrap_style  = ParagraphStyle('Wrap', parent=styles['Normal'], fontSize=9,
-                                  leading=12, textColor=colors.HexColor('#374151'))
-    small_style = ParagraphStyle('Small', parent=styles['Normal'], fontSize=8,
-                                  leading=11, textColor=colors.HexColor('#4b5563'))
-    note_h_sty  = ParagraphStyle('NoteH', parent=styles['Normal'], fontSize=9,
-                                  textColor=colors.HexColor('#78350f'), fontName='Helvetica-Bold')
-    note_b_sty  = ParagraphStyle('NoteB', parent=styles['Normal'], fontSize=9,
-                                  leading=12, textColor=colors.HexColor('#78350f'))
-
-    story.append(Spacer(1, 0.3*inch))
-    story.append(Paragraph(event.title, title_style))
-    story.append(Paragraph(event.event_date.strftime('%A, %B %d, %Y'), sub_style))
-    story.append(HRFlowable(width="100%", thickness=2, color=colors.HexColor('#e5e7eb'),
-                             spaceBefore=10, spaceAfter=20))
-
-    story.append(Paragraph("EVENT OVERVIEW", sec_style))
-    start_time = event.event_date.strftime('%I:%M %p')
-    if event.event_end_date:
-        duration = (event.event_end_date - event.event_date).total_seconds() / 3600
-        time_info = f"{start_time} - {event.event_end_date.strftime('%I:%M %p')} ({duration:.1f} hours)"
-    else:
-        time_info = f"{start_time} (Duration: TBD)"
-
-    from services.event_times import times_for, range_text
-    ev_times = times_for(event)
-    if ev_times:
-        time_info = '<br/>'.join([time_info] + [f'<b>{escape(t.label)}:</b> {escape(range_text(t))}' for t in ev_times])
-
-    ov_data = [
-        [Paragraph('<b>Time:</b>' if not ev_times else '<b>Times:</b>', body_style), Paragraph(time_info, body_style)],
-        [Paragraph('<b>Location:</b>',   body_style), Paragraph(event.location or 'TBD', body_style)],
-        [Paragraph('<b>Created By:</b>', body_style), Paragraph(escape(name_for(event.created_by) or 'N/A'), body_style)],
-        [Paragraph('<b>Created:</b>',    body_style), Paragraph(event.created_at.strftime('%B %d, %Y'), body_style)],
-    ]
-    ov_table = Table(ov_data, colWidths=[1.5*inch, 4.5*inch])
-    ov_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f3f4f6')),
-        ('ALIGN', (0, 0), (0, -1), 'RIGHT'), ('ALIGN', (1, 0), (1, -1), 'LEFT'),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('TOPPADDING', (0, 0), (-1, -1), 10), ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
-        ('LEFTPADDING', (0, 0), (-1, -1), 12), ('RIGHTPADDING', (0, 0), (-1, -1), 12),
-        ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#e5e7eb')),
-        ('ROWBACKGROUNDS', (0, 0), (-1, -1), [colors.white, colors.HexColor('#f9fafb')]),
-    ]))
-    story.append(ov_table)
-    story.append(Spacer(1, 0.2*inch))
-
-    if event.description:
-        story.append(Paragraph("DESCRIPTION", sec_style))
-        story.append(Paragraph(event.description.replace('\n', '<br/>'), body_style))
-        story.append(Spacer(1, 0.2*inch))
-
-    if getattr(event, 'schedules', None):
-        story.append(Paragraph("EVENT SCHEDULE", sec_style))
-        rows = [[Paragraph('<b>Time</b>', wrap_style),
-                 Paragraph('<b>Activity</b>', wrap_style),
-                 Paragraph('<b>Details</b>', wrap_style)]]
-        for s in sorted(event.schedules, key=lambda x: x.scheduled_time):
-            rows.append([
-                Paragraph(s.scheduled_time.strftime('%I:%M %p'), wrap_style),
-                Paragraph(s.title, wrap_style),
-                Paragraph(s.description or '', small_style),
-            ])
-        t = Table(rows, colWidths=[1*inch, 1.8*inch, 3.2*inch])
-        t.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#6366f1')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING', (0, 0), (-1, -1), 8), ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-            ('LEFTPADDING', (0, 0), (-1, -1), 10), ('RIGHTPADDING', (0, 0), (-1, -1), 10),
-            ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#e5e7eb')),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f3f4f6')]),
-        ]))
-        story.append(t)
-        story.append(Spacer(1, 0.2*inch))
-
-    if getattr(event, 'notes', None):
-        story.append(Paragraph("EVENT NOTES", sec_style))
-        for note in sorted(event.notes, key=lambda x: x.created_at, reverse=True):
-            nd = [
-                [Paragraph(f"<b>{escape(name_for(note.created_by))}</b> • {note.created_at.strftime('%b %d, %Y at %I:%M %p')}", note_h_sty)],
-                [Paragraph(note.content, note_b_sty)],
-            ]
-            nt = Table(nd, colWidths=[5.8*inch])
-            nt.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#fef3c7')),
-                ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#78350f')),
-                ('TOPPADDING', (0, 0), (-1, -1), 10), ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
-                ('LEFTPADDING', (0, 0), (-1, -1), 12), ('RIGHTPADDING', (0, 0), (-1, -1), 12),
-                ('BOX', (0, 0), (-1, -1), 2, colors.HexColor('#fbbf24')),
-            ]))
-            story.append(nt)
-            story.append(Spacer(1, 0.1*inch))
-
-    if getattr(event, 'crew_assignments', None):
-        story.append(Paragraph("CREW ASSIGNMENTS", sec_style))
-        rows = [[Paragraph('<b>Crew Member</b>', wrap_style),
-                 Paragraph('<b>Role</b>', wrap_style),
-                 Paragraph('<b>Contact</b>', wrap_style)]]
-        for a in event.crew_assignments:
-            u = find_user_by_username(a.crew_member)
-            rows.append([
-                Paragraph(escape(u.shown_name if u else a.crew_member), wrap_style),
-                Paragraph(a.role or 'Crew Member', wrap_style),
-                Paragraph(u.email if u and u.email else 'N/A', small_style),
-            ])
-        t = Table(rows, colWidths=[2*inch, 2*inch, 2*inch])
-        t.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#ec4899')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING', (0, 0), (-1, -1), 8), ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-            ('LEFTPADDING', (0, 0), (-1, -1), 10), ('RIGHTPADDING', (0, 0), (-1, -1), 10),
-            ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#e5e7eb')),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#fce7f3')]),
-        ]))
-        story.append(t)
-        story.append(Spacer(1, 0.2*inch))
-
-    doc.build(story, onFirstPage=add_header_footer, onLaterPages=add_header_footer)
-    pdf_buffer.seek(0)
-    safe_title = re.sub(r'\W+', '_', event.title)
-    filename   = f"{safe_title}_Event_Brief_{event.event_date.strftime('%Y%m%d')}.pdf"
-    return pdf_buffer, filename
+    doc.build(story, onFirstPage=frame, onLaterPages=frame)
+    buf.seek(0)
+    safe = re.sub(r'\W+', '_', event.title).strip('_') or 'event'
+    filename = f"{safe}_{re.sub(r'[^a-z]+', '_', kind.lower())}_{event.event_date.strftime('%Y%m%d')}.pdf"
+    return buf, filename

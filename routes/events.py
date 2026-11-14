@@ -1226,11 +1226,18 @@ def create_recurring_event():
 @login_required
 @crew_required
 def export_event_pdf(event_id):
-    from services.report_service import generate_event_pdf
+    """The whole event pack, or only some parts: ?parts=run or ?parts=schedule,run
+    (overview, team, schedule, run, tasks, notes)."""
+    from services.report_service import generate_event_pdf, PDF_PARTS
+    asked = [p.strip() for p in (request.args.get('parts') or '').split(',') if p.strip()]
+    unknown = [p for p in asked if p not in PDF_PARTS]
+    if unknown:
+        return jsonify({'error': f'Unknown part: {unknown[0]}'}), 400
+    Event.query.get_or_404(event_id)
     try:
-        pdf_buffer, filename = generate_event_pdf(event_id)
+        pdf_buffer, filename = generate_event_pdf(event_id, asked)
         return send_file(pdf_buffer, mimetype='application/pdf',
-                         as_attachment=True, download_name=filename)
+                         as_attachment=not request.args.get('view'), download_name=filename)
     except Exception as exc:
         import traceback
         traceback.print_exc()

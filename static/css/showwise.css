@@ -787,3 +787,11 @@ tr:hover td { background: var(--bg-table-hover); }
     .ev-tabs button[aria-selected="true"] .n { background: rgba(255, 255, 255, .22); color: inherit; }
     [data-theme="dark"] .ev-tabs button[aria-selected="true"] { color: #0d0f13; }
 }
+
+/* ---------- event page: type items straight in ---------- */
+.ev-quick { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin-top: .9rem; padding-top: .9rem; border-top: 1px solid var(--border); }
+.ev-quick .sw-input { flex: 1 1 200px; min-width: 0; min-height: 42px; padding: .5rem .7rem; }
+.ev-quick .ev-q-s { flex: 0 1 110px; }
+.ev-quick .ev-q-time { flex: 0 0 auto; width: auto; }
+.ev-quick .btn { min-height: 42px; }
+.ev-quick + .sw-hint { margin-top: .5rem; }
