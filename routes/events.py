@@ -39,6 +39,7 @@ from services.availability_service import find_conflicts
 from services.email_service import send_shift_assignment_emails_async
 from services.user_names import name_for
 from services.event_times import times_json, times_for
+from services.report_service import run_start_for
 from services.notification_service import (
     send_discord_event_announcement, schedule_event_notifications,
 )
@@ -397,6 +398,7 @@ def event_detail(id):
         'notes': {n.id: {'id': n.id, 'content': n.content} for n in notes},
         'attachments': attachments,
         'can_manage': manager,
+        'run_start': run_start_for(event).strftime('%H:%M'),
         'tasks': {t['id']: t for t in tasks},
         'task_users': [{'id': p['user'].id, 'name': p['user'].shown_name} for p in team],
         'task_shifts': [{'id': s.id, 'label': shift_label(s)}
@@ -1121,6 +1123,22 @@ def delete_crew_run_item(item_id):
     _renumber(CrewRunItem, event_id)
     db.session.commit()
     return jsonify({'success': True})
+
+
+@events_bp.route('/events/<int:event_id>/run-start', methods=['PUT'])
+@login_required
+@crew_required
+@manager_required
+def set_run_start(event_id):
+    """When the run list starts ('HH:MM'), used for the clock beside each item. Empty = the event's start."""
+    from services.settings_service import set_setting
+    event = Event.query.get_or_404(event_id)
+    hhmm = str(body().get('time') or '').strip()
+    if hhmm and not re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d', hhmm):
+        raise ApiError('Enter the time like 19:30')
+    set_setting(f'event.run_start.{event.id}', hhmm, current_user.username)
+    db.session.commit()
+    return jsonify({'success': True, 'time': run_start_for(event).strftime('%H:%M')})
 
 
 @events_bp.route('/events/<int:event_id>/crew-run/reorder', methods=['POST'])

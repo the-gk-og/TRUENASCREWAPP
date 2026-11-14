@@ -6,6 +6,7 @@ ShowWise — Flask application factory.
 from flask import Flask, render_template, request
 import os
 import atexit
+from datetime import datetime, timedelta
 import secrets
 
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -149,6 +150,12 @@ def create_app(config_name: str | None = None):
     # Create/upgrade tables and columns (versioned, see schema_migrations.py)
     ensure_schema(app)
 
+    if not app.testing:
+        try:
+            _start_shift_reminders(app)
+        except Exception as exc:
+            print(f"⚠️  Shift reminders not started: {exc}")
+
     # Backend client
     with app.app_context():
         try:
@@ -190,6 +197,27 @@ def ensure_schema(app):
     except Exception as exc:
         db.session.rollback()
         print(f"⚠️  Schema upgrade failed: {exc}")
+
+
+def _start_shift_reminders(app):
+    """Once an hour, email people whose shift starts in the next 24 hours (admins can turn it off)."""
+    from apscheduler.schedulers.background import BackgroundScheduler
+
+    def run():
+        with app.app_context():
+            try:
+                from services.shift_reminders import send_due_shift_reminders
+                n = send_due_shift_reminders()
+                if n:
+                    print(f"✓ Sent {n} shift reminder{'s' if n != 1 else ''}")
+            except Exception as exc:
+                db.session.rollback()
+                print(f"⚠️  Shift reminders failed: {exc}")
+
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(run, 'interval', hours=1, next_run_time=datetime.now() + timedelta(minutes=2))
+    scheduler.start()
+    atexit.register(lambda: scheduler.shutdown(wait=False))
 
 
 def _start_heartbeat(app, backend):

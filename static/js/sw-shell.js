@@ -350,7 +350,12 @@
     const d = SW.dialog({ title: 'Scan a label', onClose: () => ui && ui.stop() });
     const camHost = document.createElement('div'), out = document.createElement('div');
     out.setAttribute('aria-live', 'polite');
-    d.body.append(camHost, out);
+    // Switch between looking an item up (here) and checking gear out or in (the Scan gear page)
+    const seg = document.createElement('div');
+    seg.className = 'sw-seg sw-scan-what';
+    seg.innerHTML = '<button type="button" aria-pressed="true"><i class="fas fa-magnifying-glass"></i> Look it up</button>'
+      + '<a href="/equipment/checkout"><i class="fas fa-right-left"></i> Check out / in</a>';
+    d.body.append(seg, camHost, out);
 
     const again = () => { out.innerHTML = ''; ui.start(); };
     const lookup = async (code) => {

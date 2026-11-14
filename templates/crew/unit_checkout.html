@@ -50,6 +50,10 @@
 
     <div class="co-grid">
         <section class="card co-scan">
+            <div class="sw-seg co-what" role="group" aria-label="What a scan does">
+                <button type="button" data-what="move" aria-pressed="true"><i class="fas fa-right-left"></i> Check out / in</button>
+                <button type="button" data-what="look" aria-pressed="false"><i class="fas fa-magnifying-glass"></i> Just look it up</button>
+            </div>
             <div id="coResult" aria-live="assertive">
                 <div class="co-big idle">
                     <div class="co-big-word"><i class="fas fa-qrcode"></i> Scan a label</div>
@@ -100,6 +104,7 @@
     const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
     const esc = SW.esc;
     let tab = 'out', state = null, busy = false;
+    let what = new URLSearchParams(location.search).get('look') ? 'look' : 'move';   // move = check out/in, look = only show what it is
 
     $('#coEvent').addEventListener('change', e => {
         location.href = e.target.value ? `?event_id=${e.target.value}` : `${location.pathname}?choose=1`;
@@ -126,7 +131,7 @@
 
     /* ---------- the big result panel ----------
        kind: ok (went out) | back (came back) | warn (needs an answer) | err (didn't work) */
-    const ICON = { ok: 'arrow-right-from-bracket', back: 'arrow-right-to-bracket', warn: 'circle-question', err: 'circle-xmark', idle: 'qrcode' };
+    const ICON = { ok: 'arrow-right-from-bracket', back: 'arrow-right-to-bracket', warn: 'circle-question', err: 'circle-xmark', idle: 'qrcode', info: 'circle-info' };
     function showResult(kind, title, sub, notes, actions, extraHtml) {
         const box = $('#coResult');
         box.innerHTML = `<div class="co-big ${kind}">
@@ -139,7 +144,38 @@
         (actions || []).forEach((a, i) => $(`[data-act="${i}"]`, box).addEventListener('click', a.run));
         if (window.matchMedia('(max-width: 900px)').matches) box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
-    const ready = () => showResult('idle', 'Scan the next label');
+    const ready = () => showResult('idle', 'Scan the next label', what === 'look' ? 'Looking up only. Nothing is checked out or in.' : '');
+
+    /* ---------- switch: check out / in, or just look something up ---------- */
+    function setWhat(w) {
+        what = w;
+        $$('.co-what button').forEach(b => b.setAttribute('aria-pressed', b.dataset.what === w ? 'true' : 'false'));
+        document.querySelector('.co').classList.toggle('looking', w === 'look');
+        showResult('idle', 'Scan a label', w === 'look' ? 'Looking up only: it shows what the item is and where it lives. Nothing is checked out or in.'
+            : 'Scan it once as it goes out. Scan it again when it comes back.');
+    }
+    $$('.co-what button').forEach(b => b.addEventListener('click', () => setWhat(b.dataset.what)));
+
+    async function lookup(code) {
+        busy = true; pause(true);
+        let r;
+        try { r = await SW.api('POST', '/api/scan', { code }); }
+        catch (e) {
+            busy = false; beep('err');
+            showResult('err', e.status === 0 ? 'No connection' : 'Label not recognised', code, [e.message]);
+            pause(false);
+            return;
+        }
+        busy = false; beep('ok');
+        const eq = r.equipment, u = r.unit, s = eq.summary, co = u && u.checkout;
+        const where = !u ? null : u.quarantine ? `Out of use: ${u.quarantine.reason}` : co ? `Out on ${co.event_title} since ${co.checked_out_at}` : 'In storage';
+        const canReport = u && !['quarantined', 'retired', 'lost'].includes(u.status);
+        showResult('info', eq.name, u ? `${u.asset_tag} · ${u.state_label}` : 'Label for the whole set',
+            [where, `Lives in: ${eq.location || 'no location set'}`, `${s.available} of ${s.owned} available`].filter(Boolean),
+            [{ label: 'Open its page', icon: 'arrow-up-right-from-square', run: () => { location.href = r.url; } }]
+                .concat(canReport ? [problemButton({ id: u.id, asset_tag: u.asset_tag, equipment_name: eq.name }, EVENT_ID, null)] : []));
+        pause(false);
+    }
 
     async function post(url, body) {
         try { return { ok: true, data: await SW.api('POST', url, body || {}) }; }
@@ -149,11 +185,12 @@
     /* ---------- scanner: on straight away ---------- */
     const ui = await SWGear.scannerUI($('#coScanner'), {
         continuous: true, quiet: true, placeholder: 'No camera? Type the code on the label',
-        onCode: code => submit({ code }),
+        onCode: code => what === 'look' ? lookup(code) : submit({ code }),
     });
     const pause = on => ui.scanner && ui.scanner.pause(on);
     window.addEventListener('pagehide', () => ui.stop());
     if (EVENT_ID || BASE_MODE === 'return') ui.start();
+    if (what === 'look') setWhat('look');
 
     /* ---------- undo + report a problem ---------- */
     function undoButton(action, cid, tag) {

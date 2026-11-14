@@ -795,3 +795,18 @@ tr:hover td { background: var(--bg-table-hover); }
 .ev-quick .ev-q-time { flex: 0 0 auto; width: auto; }
 .ev-quick .btn { min-height: 42px; }
 .ev-quick + .sw-hint { margin-top: .5rem; }
+
+/* ---------- scanning: look up, or check out / in ---------- */
+.co-what, .sw-scan-what { display: flex; margin-bottom: .8rem; }
+.co-what button, .sw-scan-what button, .sw-scan-what a { flex: 1; min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: .45rem; text-decoration: none; }
+.sw-seg a { padding: .35rem .8rem; border-radius: 4px; font-size: .88rem; font-weight: 600; color: var(--text-secondary); }
+.sw-seg a:hover { color: var(--text-primary); }
+.co-big.info { background: var(--bg-card); border-color: var(--border-strong); }
+.co.looking #coLists { opacity: .55; }
+
+/* ---------- run list clock ---------- */
+.ev-clock { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-bottom: .8rem; font-size: .92rem; color: var(--text-secondary); }
+.ev-clock label { font-weight: 600; color: var(--text-primary); }
+.ev-clock .sw-input { width: auto; min-height: 36px; padding: .3rem .5rem; }
+.ev-at { font-variant-numeric: tabular-nums; color: var(--primary); margin-right: .6rem; }
+.ev-at:empty { display: none; }

@@ -14,6 +14,7 @@ DEFAULTS = {
     'notify.shift_declined.enabled': True,
     'notify.shift_declined.user_ids': [],              # admins/users who get the email
     'notify.shift_declined.include_event_creator': False,
+    'notify.shift_reminders.enabled': True,            # email people the day before their shift
 }
 
 
