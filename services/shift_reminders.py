@@ -52,6 +52,12 @@ def send_due_shift_reminders(now=None, send=None) -> int:
         user, event = a.user, shift.event
         if not user or not user.email or not event:
             continue
+        # Claim it first, so two server workers checking at the same moment can't both send it
+        claimed = ShiftAssignment.query.filter(ShiftAssignment.id == a.id, ShiftAssignment.reminder_sent_at.is_(None)) \
+            .update({'reminder_sent_at': now}, synchronize_session=False)
+        db.session.commit()
+        if not claimed:
+            continue
         try:
             ok = send(recipient_email=user.email, username=user.shown_name, event_title=event.title,
                       event_date=_when(shift), event_location=shift.location or event.location or 'TBD',
@@ -59,9 +65,10 @@ def send_due_shift_reminders(now=None, send=None) -> int:
                       reminder_type='today' if shift.shift_date.date() == now.date() else 'tomorrow')
         except Exception as exc:                       # one bad address shouldn't stop the rest
             print(f'⚠️  Shift reminder to {user.username} failed: {exc}')
-            continue
-        if ok is not False:
-            a.reminder_sent_at = now
+            ok = False
+        if ok is False:                                # didn't go: let the next run try again
+            ShiftAssignment.query.filter_by(id=a.id).update({'reminder_sent_at': None}, synchronize_session=False)
+            db.session.commit()
+        else:
             sent += 1
-    db.session.commit()
     return sent

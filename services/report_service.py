@@ -28,27 +28,51 @@ PDF_PARTS = {
 PACK_PARTS = [k for k in PDF_PARTS if k != 'callsheet']
 
 INK, MUTED, RULE, SHADE = (colors.HexColor(c) for c in ('#111418', '#5b6472', '#c9ced6', '#f1f3f5'))
+
+
+def _register_fonts():
+    """Use DejaVu Sans when the server has it: it prints accented, Greek and Cyrillic names, which
+    the built-in Helvetica can't. Falls back to Helvetica so a missing font never breaks a PDF."""
+    import os
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    for folder in ('/usr/share/fonts/truetype/dejavu', '/usr/share/fonts/TTF', '/usr/share/fonts/dejavu',
+                   '/usr/share/fonts/dejavu-sans-fonts', '/Library/Fonts', 'C:/Windows/Fonts'):
+        regular, bold = os.path.join(folder, 'DejaVuSans.ttf'), os.path.join(folder, 'DejaVuSans-Bold.ttf')
+        if os.path.exists(regular) and os.path.exists(bold):
+            try:
+                pdfmetrics.registerFont(TTFont('SW-Regular', regular))
+                pdfmetrics.registerFont(TTFont('SW-Bold', bold))
+                pdfmetrics.registerFontFamily('SW-Regular', normal='SW-Regular', bold='SW-Bold',
+                                              italic='SW-Regular', boldItalic='SW-Bold')
+                return 'SW-Regular', 'SW-Bold'
+            except Exception:
+                break
+    return 'Helvetica', 'Helvetica-Bold'
+
+
+FONT, FONT_BOLD = _register_fonts()
 MARGIN = 18 * mm
 WIDTH  = A4[0] - 2 * MARGIN
 
 
 def _style(name, **kw):
-    base = dict(fontName='Helvetica', fontSize=10, leading=13.5, textColor=INK)
+    base = dict(fontName=FONT, fontSize=10, leading=13.5, textColor=INK)
     base.update(kw)
     return ParagraphStyle(name, **base)
 
 
 S = {
-    'eyebrow': _style('eyebrow', fontName='Helvetica-Bold', fontSize=9, textColor=MUTED, spaceAfter=2),
-    'title':   _style('title', fontName='Helvetica-Bold', fontSize=22, leading=26, spaceAfter=3),
+    'eyebrow': _style('eyebrow', fontName=FONT_BOLD, fontSize=9, textColor=MUTED, spaceAfter=2),
+    'title':   _style('title', fontName=FONT_BOLD, fontSize=22, leading=26, spaceAfter=3),
     'sub':     _style('sub', fontSize=11, leading=15, textColor=MUTED, spaceAfter=10),
-    'h2':      _style('h2', fontName='Helvetica-Bold', fontSize=13, leading=16, spaceBefore=14, spaceAfter=6),
+    'h2':      _style('h2', fontName=FONT_BOLD, fontSize=13, leading=16, spaceBefore=14, spaceAfter=6),
     'body':    _style('body'),
-    'bold':    _style('bold', fontName='Helvetica-Bold'),
+    'bold':    _style('bold', fontName=FONT_BOLD),
     'small':   _style('small', fontSize=8.5, leading=11.5, textColor=MUTED),
-    'head':    _style('head', fontName='Helvetica-Bold', fontSize=8, leading=10, textColor=MUTED),
-    'big':     _style('big', fontName='Helvetica-Bold', fontSize=11, leading=14),
-    'num':     _style('num', fontName='Helvetica-Bold', fontSize=11, leading=14, alignment=1),
+    'head':    _style('head', fontName=FONT_BOLD, fontSize=8, leading=10, textColor=MUTED),
+    'big':     _style('big', fontName=FONT_BOLD, fontSize=11, leading=14),
+    'num':     _style('num', fontName=FONT_BOLD, fontSize=11, leading=14, alignment=1),
 }
 
 
@@ -324,16 +348,16 @@ def generate_event_pdf(event_id: int, parts=None):
 
     def frame(canvas, doc):
         canvas.saveState()
-        canvas.setFont('Helvetica-Bold', 9)
+        canvas.setFont(FONT_BOLD, 9)
         canvas.setFillColor(INK)
         canvas.drawString(MARGIN, A4[1] - 11 * mm, event.title[:70])
-        canvas.setFont('Helvetica', 9)
+        canvas.setFont(FONT, 9)
         canvas.setFillColor(MUTED)
         canvas.drawRightString(A4[0] - MARGIN, A4[1] - 11 * mm, kind)
         canvas.setStrokeColor(RULE)
         canvas.setLineWidth(0.5)
         canvas.line(MARGIN, A4[1] - 13 * mm, A4[0] - MARGIN, A4[1] - 13 * mm)
-        canvas.setFont('Helvetica', 8)
+        canvas.setFont(FONT, 8)
         canvas.drawString(MARGIN, 10 * mm, f'ShowWise · printed {printed}')
         canvas.drawRightString(A4[0] - MARGIN, 10 * mm, f'Page {canvas.getPageNumber()}')
         canvas.restoreState()

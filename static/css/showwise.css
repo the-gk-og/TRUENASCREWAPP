@@ -810,3 +810,13 @@ tr:hover td { background: var(--bg-table-hover); }
 .ev-clock .sw-input { width: auto; min-height: 36px; padding: .3rem .5rem; }
 .ev-at { font-variant-numeric: tabular-nums; color: var(--primary); margin-right: .6rem; }
 .ev-at:empty { display: none; }
+
+/* ---------- pick list: type to add, what is left ---------- */
+.pl-quick { margin: 0 0 .9rem; padding: 0; border: 0; }
+.pl-left { margin-bottom: .6rem; }
+.pl-left[hidden] { display: none; }
+
+/* ---------- scan gear: first-time help ---------- */
+.co-help { margin-bottom: 1rem; padding: .9rem 1.1rem; border: 1px solid var(--border-strong); border-left: 4px solid var(--primary); border-radius: var(--radius-lg); background: var(--bg-card); }
+.co-help ol { margin: .5rem 0 .8rem 1.2rem; display: grid; gap: .35rem; }
+.co-help[hidden] { display: none; }

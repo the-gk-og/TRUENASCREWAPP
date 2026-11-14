@@ -48,6 +48,16 @@
 
     <div class="co-queue" id="coQueue" hidden></div>
 
+    <div class="co-help" id="coHelp" hidden>
+        <strong>How scanning works</strong>
+        <ol>
+            <li>Point the camera at the label on the item. It beeps and turns <b>green</b>: the item is on its way out.</li>
+            <li>When the item comes back, scan it again. It turns <b>blue</b>: it’s back in.</li>
+            <li>Scanned the wrong thing? Press <b>Undo</b>. Something broken? Press <b>Report a problem</b>.</li>
+        </ol>
+        <button type="button" class="btn btn-primary" id="coHelpOk">Got it</button>
+    </div>
+
     <div class="co-grid">
         <section class="card co-scan">
             <div class="sw-seg co-what" role="group" aria-label="What a scan does">
@@ -109,6 +119,11 @@
     $('#coEvent').addEventListener('change', e => {
         location.href = e.target.value ? `?event_id=${e.target.value}` : `${location.pathname}?choose=1`;
     });
+    // Shown until someone has pressed "Got it" on this device
+    try {
+        if (!localStorage.getItem('showwise-scan-help')) $('#coHelp').hidden = false;
+        $('#coHelpOk').addEventListener('click', () => { localStorage.setItem('showwise-scan-help', '1'); $('#coHelp').hidden = true; });
+    } catch (e) {}
     const change = $('#coChange');
     if (change) change.addEventListener('click', () => { $('#coEventWrap').hidden = false; $('#coEvent').focus(); });
 

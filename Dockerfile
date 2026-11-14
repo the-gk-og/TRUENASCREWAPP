@@ -6,6 +6,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# A font for PDFs that can print accented and non-Latin names
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core \
+    && apt-get clean && find /var/lib/apt/lists -type f -delete
+
 COPY requirements.txt ./
 RUN python -m pip install --upgrade pip \
     && pip install -r requirements.txt

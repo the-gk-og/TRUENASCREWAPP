@@ -15,14 +15,23 @@
         <div class="sw-head-actions">
             <span class="pl-live" id="plLive" title="Changes other people make show up here automatically"><span class="sw-dot live"></span> Live</span>
             {% if current_event %}
-            <a class="btn btn-secondary" href="{{ url_for('unit_tracking.checkout_page', event_id=current_event.id) }}"><i class="fas fa-right-left"></i> Check out / in</a>
+            <a class="btn btn-primary" href="{{ url_for('unit_tracking.checkout_page', event_id=current_event.id) }}"><i class="fas fa-qrcode"></i> Scan gear out / in</a>
             {% endif %}
-            <button type="button" class="btn btn-primary" id="plAdd"><i class="fas fa-plus"></i> Add item</button>
+            <button type="button" class="btn btn-secondary" id="plAdd"><i class="fas fa-plus"></i> Add with options</button>
         </div>
     </header>
 
     <div class="pl-grid">
         <div>
+            {# Type the gear straight in: pick a suggestion for our equipment, or just type anything else #}
+            <form class="ev-quick pl-quick" id="plQuick" autocomplete="off">
+                <input type="text" name="title" class="sw-input" list="plEq" maxlength="200" placeholder="Type what to pack and press Enter" aria-label="Add to the pick list">
+                <datalist id="plEq"></datalist>
+                <input type="number" name="qty" class="sw-input ev-q-s" min="1" max="100000" value="1" inputmode="numeric" aria-label="How many">
+                <button type="submit" class="btn btn-primary">Add</button>
+            </form>
+
+            <div class="co-status pl-left" id="plLeft"></div>
             <div class="pl-progress" aria-live="polite">
                 <span><b id="plDone">{{ n_done }}</b> of <span id="plTotal">{{ items|length }}</span> packed</span>
                 <div class="pl-bar"><span id="plBar" style="width:{{ (n_done / items|length * 100)|int if items else 0 }}%"></span></div>
@@ -81,7 +90,7 @@
             </ul>
             <div class="sw-blank" id="plNone" hidden>Nothing matches that filter.</div>
             {% else %}
-            <div class="sw-blank"><strong>This list is empty</strong>Add the gear this {{ 'event' if current_event else 'job' }} needs.</div>
+            <div class="sw-blank"><strong>This list is empty</strong>Type the gear this {{ 'event' if current_event else 'job' }} needs in the box above.</div>
             {% endif %}
         </div>
 
@@ -131,6 +140,11 @@
         const all = rows(), done = all.filter(r => r.dataset.ck === 'true').length;
         $('#plDone').textContent = done; $('#plTotal').textContent = all.length;
         $('#plBar').style.width = (all.length ? Math.round(done / all.length * 100) : 0) + '%';
+        const left = all.length - done, box = $('#plLeft');
+        box.hidden = !all.length;
+        box.className = 'co-status pl-left ' + (left ? 'warn' : 'done');
+        box.innerHTML = left ? `<b>${left}</b><span>${left === 1 ? 'thing' : 'things'} left to pack</span>`
+            : '<i class="fas fa-circle-check"></i><span><strong>Everything is packed.</strong></span>';
         $('#cntAll').textContent = all.length; $('#cntPending').textContent = all.length - done; $('#cntDone').textContent = done;
         let shown = 0;
         all.forEach(r => {
@@ -206,6 +220,31 @@
     /* ---------- add an item ---------- */
     const eqLabel = e => `${e.name}${e.location ? ' — ' + e.location : ''} [${e.barcode}]`;
     const byLabel = new Map(EQUIPMENT.map(e => [eqLabel(e).toLowerCase(), e]));
+
+    /* Quick add: a suggestion (or an exact name or code) links to our equipment; anything else is added as typed */
+    $('#plEq').innerHTML = EQUIPMENT.map(e => `<option value="${esc(eqLabel(e))}">`).join('');
+    let adding = false;
+    $('#plQuick').addEventListener('submit', async e => {
+        e.preventDefault();
+        const form = e.target, typed = form.title.value.trim(), key = typed.toLowerCase();
+        if (!typed || adding) return;
+        const quantity = Math.max(1, parseInt(form.qty.value, 10) || 1);
+        const eq = byLabel.get(key) || EQUIPMENT.find(x => x.name.toLowerCase() === key || x.barcode.toLowerCase() === key);
+        adding = true;
+        try {
+            if (eq) {
+                const chk = await SW.api('POST', `/equipment/${eq.id}/quantity-check`, { quantity, event_id: EVENT_ID }).catch(() => ({}));
+                if (chk.warning && !await SW.confirm(
+                    `Only ${chk.available} of ${eq.name} ${EVENT_ID ? 'are free for this event' : 'are free right now'}. Add ${quantity} anyway?`,
+                    { okText: 'Add anyway' })) { adding = false; return; }
+            }
+            await SW.api('POST', '/picklist/add', eq ? { equipment_id: eq.id, quantity, event_id: EVENT_ID }
+                                                      : { item_name: typed, quantity, event_id: EVENT_ID });
+            try { sessionStorage.setItem('pl-focus', '1'); } catch (x) {}
+            location.reload();                       // rows carry item chips and live state: redraw from the server
+        } catch (err) { adding = false; SW.toast(err.message, 'error'); }
+    });
+    try { if (sessionStorage.getItem('pl-focus')) { sessionStorage.removeItem('pl-focus'); $('#plQuick [name=title]').focus(); } } catch (x) {}
     $('#plAdd').addEventListener('click', () => SW.form({
         title: 'Add to pick list', submitText: 'Add',
         values: { event_id: EVENT_ID == null ? '' : String(EVENT_ID), quantity: 1, kind: 'equipment' },

@@ -73,7 +73,7 @@
                 <input type="password" id="confirmPassword" required placeholder="Re-enter new password" autocomplete="new-password">
                 <small id="matchText" style="display: block; margin-top: 0.25rem;"></small>
             </div>
-            <button type="submit" class="btn btn-success" id="pwSubmitBtn">
+            <button type="submit" class="btn btn-primary" id="pwSubmitBtn">
                 <i class="fas fa-check"></i> Change Password
             </button>
         </form>
@@ -91,7 +91,7 @@
                     id="profilePreview"
                     src="{% if current_user.profile_picture %}/profile/picture/{{ current_user.username }}{% else %}https://via.placeholder.com/120/6366f1/ffffff?text={{ current_user.shown_name[:1] }}{% endif %}"
                     alt="Profile Picture"
-                    style="width: 120px; height: 120px; border-radius: 50%; border: 3px solid var(--primary); object-fit: cover;"
+                    style="width: 88px; height: 88px; border-radius: 50%; border: 1px solid var(--border-strong); object-fit: cover;"
                 >
             </div>
 
@@ -109,7 +109,7 @@
                     </div>
 
                     <div style="display: flex; gap: 1rem;">
-                        <button type="submit" class="btn btn-success" id="uploadPictureBtn">
+                        <button type="submit" class="btn btn-primary" id="uploadPictureBtn">
                             <i class="fas fa-check"></i> Upload
                         </button>
                         {% if current_user.profile_picture %}
@@ -183,7 +183,7 @@
             </div>
 
             <div style="display: flex; gap: 1rem;">
-                <button type="submit" class="btn btn-success" id="saveAccountBtn">
+                <button type="submit" class="btn btn-primary" id="saveAccountBtn">
                     <i class="fas fa-check"></i> Save Changes
                 </button>
                 <button type="button" class="btn btn-secondary" onclick="toggleAccountEdit()">
@@ -442,7 +442,7 @@
                        oninput="this.value=this.value.replace(/\D/g,'')">
             </div>
             <div style="display:flex;gap:0.75rem;">
-                <button onclick="verifyEmailOtpSetup()" class="btn btn-success" style="flex:2;">
+                <button onclick="verifyEmailOtpSetup()" class="btn btn-primary" style="flex:2;">
                     <i class="fas fa-check"></i> Verify & Enable
                 </button>
                 <button onclick="resendEmailOtpSetup()" class="btn btn-secondary" style="flex:1;" id="emailOtpResendBtn">
@@ -536,7 +536,7 @@
             </div>
             <div style="display: flex; gap: 1rem;">
                 <button onclick="previousStep()" class="btn btn-primary" style="flex: 1;"><i class="fas fa-arrow-left"></i> Back</button>
-                <button onclick="verifySetup()" class="btn btn-success" style="flex: 2;"><i class="fas fa-check"></i> Verify & Enable 2FA</button>
+                <button onclick="verifySetup()" class="btn btn-primary" style="flex: 2;"><i class="fas fa-check"></i> Verify & Enable 2FA</button>
             </div>
         </div>
         <div id="step3" style="display: none;">
@@ -551,7 +551,7 @@
             <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
                 <button onclick="downloadBackupCodes()" class="btn btn-primary"><i class="fas fa-download"></i> Download</button>
                 <button onclick="copyBackupCodes()" class="btn btn-primary"><i class="fas fa-copy"></i> Copy</button>
-                <button onclick="finish2FASetup()" class="btn btn-success" style="margin-left: auto;"><i class="fas fa-check"></i> Finish</button>
+                <button onclick="finish2FASetup()" class="btn btn-primary" style="margin-left: auto;"><i class="fas fa-check"></i> Finish</button>
             </div>
         </div>
     </div>

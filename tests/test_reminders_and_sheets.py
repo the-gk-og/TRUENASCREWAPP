@@ -100,3 +100,13 @@ def test_call_sheet_and_run_clock(app, admin, alice):
     with app.app_context():
         from services.report_service import run_start_for
         assert run_start_for(db.session.get(Event, eid)) == datetime(2026, 11, 10, 18, 0)
+
+
+def test_pdf_prints_accented_and_non_latin_names(app, admin):
+    from services import report_service
+    eid = mk(admin, title='Fête d’été: Привет', location='Salle №2')
+    assert admin.post(f'/events/{eid}/crew-run/add', json={'title': 'Ouverture — Ελληνικά', 'duration': '5 min'}).status_code == 200
+    r = admin.get(f'/events/{eid}/export-pdf')
+    assert r.status_code == 200 and r.data[:4] == b'%PDF'
+    if report_service.FONT != 'Helvetica':             # the server has DejaVu: it is embedded in the file
+        assert b'DejaVu' in r.data
