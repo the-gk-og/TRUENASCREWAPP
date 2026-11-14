@@ -447,3 +447,33 @@ def test_calendar_view_override_is_remembered(admin):
     # the choice sticks on the next visit without the query string
     assert b'id="calendar"' in admin.get('/calendar', headers={'User-Agent': IPHONE}).data
     assert b'id="mcal"' in admin.get('/calendar?view=mobile', headers={'User-Agent': DESKTOP}).data
+
+
+def test_pdf_whole_event_or_chosen_parts(app, admin, alice):
+    eid = mk(admin, title='Awards Night', location='Studio 2')
+    assert admin.post(f'/events/{eid}/crew-run/add', json={'title': 'Welcome **speech**', 'duration': '5 min', 'cue_type': 'Sound'}).status_code == 200
+    assert admin.post(f'/events/{eid}/schedule/add', json={'title': 'Doors <open>', 'scheduled_time': '2026-11-10T17:30'}).status_code == 200
+    assert admin.post(f'/events/{eid}/notes/add', json={'content': 'Bring & check spare batteries'}).status_code == 200
+    assert admin.post(f'/events/{eid}/tasks/add', json={'title': 'Tape cables'}).status_code == 200
+
+    whole = alice.get(f'/events/{eid}/export-pdf')
+    assert whole.status_code == 200 and whole.mimetype == 'application/pdf' and whole.data[:4] == b'%PDF'
+    assert 'Awards_Night_event_pack_20261110.pdf' in whole.headers['Content-Disposition']
+
+    run = alice.get(f'/events/{eid}/export-pdf?parts=run')
+    assert run.status_code == 200 and run.data[:4] == b'%PDF'
+    assert 'Awards_Night_run_list_20261110.pdf' in run.headers['Content-Disposition']
+    assert len(run.data) < len(whole.data)
+
+    two = alice.get(f'/events/{eid}/export-pdf?parts=schedule,run')
+    assert two.status_code == 200 and 'event_pack' in two.headers['Content-Disposition']
+    for part in ('overview', 'team', 'schedule', 'tasks', 'notes'):
+        assert alice.get(f'/events/{eid}/export-pdf?parts={part}').status_code == 200, part
+
+    assert alice.get(f'/events/{eid}/export-pdf?parts=nonsense').status_code == 400
+    assert alice.get('/events/99999/export-pdf').status_code == 404
+
+    # The page offers the part buttons and quick typing to people who can edit
+    page = admin.get(f'/events/{eid}').data.decode()
+    assert 'data-part="run"' in page and 'id="runQuick"' in page and 'id="schedQuick"' in page
+    assert 'id="runQuick"' not in alice.get(f'/events/{eid}').data.decode()
