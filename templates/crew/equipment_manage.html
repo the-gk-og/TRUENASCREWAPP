@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}Manage equipment — ShowWise{% endblock %}
+
+{% block content %}
+<div class="gear">
+    <a class="sw-crumb" href="{{ url_for('equipment.equipment_list') }}"><i class="fas fa-arrow-left"></i> Equipment</a>
+
+    <header class="sw-head">
+        <div>
+            <h1>Manage equipment</h1>
+            <p>Add equipment, print labels, deal with damaged items, and import or export the list.</p>
+        </div>
+        <div class="sw-head-actions">
+            <button type="button" class="btn btn-primary" id="mAdd"><i class="fas fa-plus"></i> Add equipment</button>
+        </div>
+    </header>
+
+    {% if quarantined or stale_checkouts or maint_alerts %}
+    {% include 'crew/_gear_attention.html' %}
+    {% else %}
+    <p class="sw-notice info">Nothing needs attention: nothing out of use, nothing overdue back, no tests due.</p>
+    {% endif %}
+
+    <section class="card gear-manage">
+        <div class="card-header">
+            <h2 class="card-title"><i class="fas fa-qrcode"></i> Labels</h2>
+            <button type="button" class="btn btn-primary" id="mPrint" disabled><i class="fas fa-print"></i> <span id="mPrintText">Print labels</span></button>
+        </div>
+        <p class="sw-hint" style="margin:0 0 .75rem">Tick the equipment you want labels for, then print. You can choose group labels, a label per item, or both.</p>
+        <div class="gear-manage-tools">
+            <input type="search" id="mFilter" class="sw-input" placeholder="Filter this list…" autocomplete="off" aria-label="Filter this list">
+            <button type="button" class="btn btn-secondary btn-sm" id="mAll">Tick all shown</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="mNone">Clear</button>
+        </div>
+        <div class="sw-table-wrap">
+            <table class="sw-table" id="mTable">
+                <thead><tr><th style="width:2.2rem"></th><th>Name</th><th>Code</th><th>Tracked</th><th class="num">Owned</th><th></th></tr></thead>
+                <tbody id="mRows"></tbody>
+            </table>
+        </div>
+        <div class="sw-blank" id="mEmpty" hidden><strong>No equipment yet</strong>Add your first one, or import a CSV below.</div>
+    </section>
+
+    <section class="card">
+        <div class="card-header"><h2 class="card-title"><i class="fas fa-file-csv"></i> Import and export</h2></div>
+        <div class="gear-manage-io">
+            <div>
+                <label class="btn btn-secondary"><i class="fas fa-file-arrow-up"></i> Import CSV<input type="file" id="mCsv" accept=".csv" class="sr-only"></label>
+                <p class="sw-hint">Adds equipment from a spreadsheet. Rows whose code already exists are skipped.</p>
+            </div>
+            <div>
+                <button type="button" class="btn btn-secondary" id="mExport"><i class="fas fa-file-arrow-down"></i> Export CSV</button>
+                <p class="sw-hint">Downloads the whole equipment list.</p>
+            </div>
+            <div>
+                <button type="button" class="btn btn-secondary" id="mTemplate"><i class="fas fa-file-lines"></i> Download template</button>
+                <p class="sw-hint">An example file with the right columns to fill in.</p>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const items = {{ equipment_json | tojson }};
+    const $ = s => document.querySelector(s);
+    const esc = SW.esc;
+    const cmp = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+    const selected = new Set();
+    let q = '';
+    items.sort((a, b) => cmp.compare(a.name, b.name));
+
+    const shown = () => {
+        const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+        return items.filter(it => words.every(w => [it.name, it.barcode, it.category, it.location].join(' ').toLowerCase().includes(w)));
+    };
+
+    function render() {
+        const list = shown();
+        $('#mRows').innerHTML = list.map(it => `<tr>
+            <td><input type="checkbox" data-sel="${it.id}" ${selected.has(it.id) ? 'checked' : ''} aria-label="Select ${esc(it.name)}"></td>
+            <td><a href="/equipment/${it.id}"><strong>${esc(it.name)}</strong></a><span class="sub">${esc(it.category || '')}</span></td>
+            <td><code>${esc(it.barcode)}</code></td>
+            <td>${it.tracking === 'individual' ? 'Each item' : 'By count'}</td>
+            <td class="num">${it.summary.owned}</td>
+            <td class="actions"><a class="btn btn-secondary btn-sm" href="/equipment/${it.id}">Open</a></td>
+        </tr>`).join('') || (items.length ? '<tr><td colspan="6">Nothing matches.</td></tr>' : '');
+        $('#mTable').parentNode.hidden = !items.length;
+        $('#mEmpty').hidden = !!items.length;
+        paint();
+    }
+    function paint() {
+        $('#mPrint').disabled = !selected.size;
+        $('#mPrintText').textContent = selected.size ? `Print labels for ${selected.size}` : 'Print labels';
+    }
+
+    $('#mFilter').addEventListener('input', e => { q = e.target.value.trim(); render(); });
+    $('#mRows').addEventListener('change', e => {
+        const c = e.target.closest('[data-sel]'); if (!c) return;
+        const id = parseInt(c.dataset.sel, 10);
+        if (c.checked) selected.add(id); else selected.delete(id);
+        paint();
+    });
+    $('#mAll').addEventListener('click', () => { shown().forEach(i => selected.add(i.id)); render(); });
+    $('#mNone').addEventListener('click', () => { selected.clear(); render(); });
+    $('#mPrint').addEventListener('click', () => {
+        const ids = [...selected], chosen = items.filter(i => selected.has(i.id));
+        SWGear.labels({ equipmentIds: ids, hasItems: chosen.some(i => i.tracking === 'individual'),
+                        name: chosen.length === 1 ? chosen[0].name : (ids.length === items.length ? 'all equipment' : null) });
+    });
+
+    /* ----- add equipment ----- */
+    $('#mAdd').addEventListener('click', () => {
+        const cats = [...new Set(items.map(i => i.category).filter(Boolean))].sort(cmp.compare);
+        const locs = [...new Set(items.map(i => i.location).filter(Boolean))].sort(cmp.compare);
+        SW.form({
+            title: 'Add equipment', submitText: 'Add',
+            fields: [
+                { name: 'name', label: 'Name', required: true, maxLength: 200, placeholder: 'e.g. Shure SM58' },
+                { name: 'barcode', label: 'Short code', required: true, maxLength: 100, half: true, placeholder: 'e.g. MIC',
+                  hint: 'Printed on the group label. Item tags are numbered from it: MIC-01, MIC-02…' },
+                { name: 'quantity_owned', label: 'How many do you have?', type: 'number', min: 1, max: 100000, half: true, value: 1 },
+                { name: 'tracking', label: 'How do you want to track them?', type: 'select', value: 'individual', options: [
+                    { value: 'individual', label: 'Each item: every one gets its own label and history' },
+                    { value: 'bulk', label: 'By count: one group label (cables, tape, consumables)' },
+                ] },
+                { name: 'category', label: 'Category', half: true, maxLength: 100, suggestions: cats, placeholder: 'e.g. Audio' },
+                { name: 'location', label: 'Where it lives', half: true, maxLength: 200, suggestions: locs, placeholder: 'e.g. Rack A, shelf 3' },
+                { name: 'notes', label: 'Notes', type: 'textarea', rows: 2 },
+            ],
+            onSubmit: async v => {
+                if (v.tracking === 'individual' && v.quantity_owned > 500) throw new Error('Add at most 500 individual items at a time');
+                const r = await SW.api('POST', '/equipment/add', { ...v, quantity_owned: Math.max(1, v.quantity_owned || 1) });
+                location.href = '/equipment/' + r.id;          // straight to the new one: photos, items, labels
+                return true;
+            },
+        });
+    });
+
+    /* ----- CSV ----- */
+    function download(name, text) {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+        a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    }
+    $('#mTemplate').addEventListener('click', () =>
+        download('equipment_template.csv', 'barcode,name,quantity_owned,tracking,category,location,notes\nMIC,Shure SM58,6,individual,Audio,Rack A,One label per mic\nGAFF,Gaffer tape,12,bulk,Consumables,Workshop,Counted only'));
+    $('#mExport').addEventListener('click', () => {
+        const rows = [['barcode', 'name', 'quantity_owned', 'tracking', 'category', 'location', 'notes']];
+        items.forEach(e => rows.push([e.barcode, e.name, e.summary.owned, e.tracking, e.category || '', e.location || '', e.notes || '']));
+        download(`equipment_${new Date().toISOString().slice(0, 10)}.csv`,
+            rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n'));
+    });
+    $('#mCsv').addEventListener('change', async e => {
+        const file = e.target.files[0]; e.target.value = '';
+        if (!file) return;
+        const fd = new FormData(); fd.append('file', file);
+        try {
+            const res = await fetch('/equipment/import-csv', { method: 'POST', body: fd });
+            const j = await res.json();
+            if (!res.ok || j.error) throw new Error(j.error || 'Import failed');
+            SW.toast(`Imported ${j.imported}, skipped ${j.skipped} (already there or incomplete)`);
+            if (j.imported) setTimeout(() => location.reload(), 1200);
+        } catch (ex) { SW.toast(ex.message, 'error'); }
+    });
+
+    render();
+    // Arriving from the old QR generator link: tick everything, ready to print
+    if (new URLSearchParams(location.search).get('labels')) { items.forEach(i => selected.add(i.id)); render(); }
+})();
+</script>
+{% endblock %}

@@ -57,6 +57,14 @@ def dashboard():
                 break
 
     from routes.unit_tracking import maintenance_alerts, stale_checkouts
+
+    # An event on today: the dashboard leads with it and the three things people do at one
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    todays = Event.query.filter(Event.event_date >= day_start,
+                                Event.event_date < day_start + timedelta(days=1)).order_by(Event.event_date).all()
+    mine_today = [e for e in todays if any(a.crew_member.lower() == current_user.username.lower()
+                                           for a in CrewAssignment.query.filter_by(event_id=e.id).all())]
+    today_event = (mine_today or todays or [None])[0]
     maint_alerts = maintenance_alerts()
     gear_out_late = stale_checkouts()
 
@@ -65,6 +73,8 @@ def dashboard():
         maint_alerts=maint_alerts,
         maint_overdue=sum(1 for a in maint_alerts if a['due']['state'] == 'overdue'),
         gear_out_late=gear_out_late,
+        today_event=today_event,
+        on_today=bool(today_event and today_event in mine_today),
         upcoming_events=upcoming_events,
         upcoming_rows=upcoming_rows,
         my_upcoming_events=my_upcoming_events,

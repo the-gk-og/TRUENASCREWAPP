@@ -25,7 +25,7 @@
         <div class="gear-fact"><b>{{ summary.available }}</b><span>{{ 'Available' if individual else 'In storage' }}</span></div>
         <div class="gear-fact"><b>{{ summary.out }}</b><span>Out</span></div>
         {% if individual %}
-        <div class="gear-fact {{ 'bad' if summary.quarantined }}"><b>{{ summary.quarantined }}</b><span>Quarantined</span></div>
+        <div class="gear-fact {{ 'bad' if summary.quarantined }}"><b>{{ summary.quarantined }}</b><span>Out of use</span></div>
         {% if summary.repair %}<div class="gear-fact"><b>{{ summary.repair }}</b><span>In repair</span></div>{% endif %}
         {% endif %}
     </div>
@@ -98,9 +98,9 @@
                         </td>
                         <td class="actions">
                             {% if u.status == 'quarantined' %}
-                                {% if current_user.is_admin %}<button type="button" class="btn btn-secondary btn-sm" data-act="release">Release…</button>{% endif %}
+                                {% if current_user.is_admin %}<button type="button" class="btn btn-secondary btn-sm" data-act="release">Checked…</button>{% endif %}
                             {% elif u.status not in ('retired', 'lost') %}
-                                <button type="button" class="btn btn-outline-danger btn-sm" data-act="quarantine">Quarantine</button>
+                                <button type="button" class="btn btn-outline-danger btn-sm" data-act="quarantine">Report a problem</button>
                             {% endif %}
                             <button type="button" class="btn btn-secondary btn-icon" data-act="check" title="Log a test, inspection or repair" aria-label="Log a check for {{ u.asset_tag }}"><i class="fas fa-screwdriver-wrench"></i></button>
                             <button type="button" class="btn btn-secondary btn-icon" data-act="history" title="History" aria-label="History of {{ u.asset_tag }}"><i class="fas fa-clock-rotate-left"></i></button>
@@ -240,7 +240,7 @@
                   show: v => v.result === 'fail' && u.status === 'available' },
                 ...(IS_ADMIN ? [{ name: 'to_service', label: 'Put it back in service', type: 'checkbox', value: true,
                   show: v => (v.result === 'pass' || v.result === 'repaired') && u.status === 'repair' }] : []),
-                ...(u.status === 'quarantined' ? [{ type: 'info', text: 'This item stays quarantined. Use “Release” to put it back in service.' }] : []),
+                ...(u.status === 'quarantined' ? [{ type: 'info', text: 'This item stays out of use. Use “Checked” to put it back in use.' }] : []),
             ],
             onSubmit: async v => {
                 if (v.performed_on > today) throw new Error('Date can’t be in the future');
@@ -264,7 +264,7 @@
                   hint: 'Changing it means reprinting the label text (the QR code still works).' },
                 { name: 'serial_number', label: 'Serial number', maxLength: 100, half: true },
                 ...(quarantined
-                    ? [{ type: 'info', text: 'Quarantined. Use “Release” to change its status.' }]
+                    ? [{ type: 'info', text: 'Out of use. Use “Checked” to change its status.' }]
                     : [{ name: 'status', label: 'Status', type: 'select', options: STATUSES.map(([value, label]) => ({ value, label })) }]),
                 { name: 'notes', label: 'Notes', type: 'textarea', rows: 2 },
             ],

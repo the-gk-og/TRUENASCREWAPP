@@ -242,7 +242,7 @@ def assign_unit(item_id):
     if unit.status == 'quarantined':
         q = unit.open_quarantine
         why = f': {q.reason}' if q and q.reason else ''
-        return jsonify({'error': f'{unit.asset_tag} is quarantined{why}',
+        return jsonify({'error': f'{unit.asset_tag} is out of use{why}',
                         'conflict': 'quarantined', 'can_force': False}), 409
     if unit.status in ('retired', 'lost') or (unit.status == 'repair' and not force):
         return jsonify({'error': f'{unit.asset_tag} is marked {unit.status}',

@@ -2,7 +2,7 @@
  * sw-shell.js - the app shell (top bar) and gear dialogs shared by every page.
  *
  *   SWGear.scan()                         camera / typed code -> what is it, with actions
- *   SWGear.quarantine(unit)               -> Promise<quarantine | null>   (any crew)
+ *   SWGear.quarantine(unit)               report a problem: takes the item out of use -> Promise<quarantine | null> (any crew)
  *   SWGear.release(unit, quarantine)      -> Promise<result | null>       (admins)
  *   SWGear.history(unitId, {isAdmin})     one timeline of everything that happened to an item
  *   SWGear.labels({equipmentIds, unitIds, hasItems, name})   print group / item labels (admins)
@@ -100,40 +100,73 @@
   }
   Gear.shrink = shrink;
 
-  // ---------------------------------------------------------- quarantine
+  // ------------------------------------------------- report a problem
+  // No typing needed: tap what's wrong, optionally add a note or photo. The item is
+  // taken out of use until an admin has looked at it.
+  const PROBLEMS = [
+    ['Broken or damaged', 'hammer'], ['Parts missing', 'puzzle-piece'],
+    ['Won’t turn on', 'power-off'], ['Something else', 'ellipsis'],
+  ];
   Gear.quarantine = function (unit, opts) {
     opts = opts || {};
-    return SW.form({
-      title: `Quarantine ${unit.asset_tag}`,
-      submitText: 'Quarantine', danger: true,
-      fields: [
-        { type: 'info', text: `${unit.equipment_name ? unit.equipment_name + ' · ' : ''}${unit.asset_tag} will be pulled out of use. It can’t be put on a pick list or checked out until an admin releases it.` },
-        { name: 'reason', label: 'What’s wrong with it?', type: 'textarea', required: true, rows: 3,
-          placeholder: 'e.g. Cuts out when the cable is moved', value: opts.reason || '' },
-        { name: 'photo', label: 'Photo (optional)', type: 'file', accept: 'image/*' },
-      ],
-      onSubmit: async (v) => {
-        const fd = new FormData();
-        fd.append('reason', v.reason);
-        if (v.photo) fd.append('photo', await shrink(v.photo));
-        if (opts.eventId) fd.append('event_id', opts.eventId);
-        const r = await postForm(`/equipment/unit/${unit.id}/quarantine`, fd);
-        SW.toast(`${unit.asset_tag} quarantined`);
-        return r.quarantine;
-      },
+    return new Promise((resolve) => {
+      let result = null, picked = null, sending = false;
+      const d = SW.dialog({ title: `Problem with ${unit.asset_tag}`, onClose: () => resolve(result) });
+      d.body.innerHTML = `
+        <p class="sw-confirm-text">${unit.equipment_name ? esc(unit.equipment_name) + '. ' : ''}What’s wrong with it?</p>
+        <div class="sw-problem-grid">${PROBLEMS.map(([label, icon], i) =>
+          `<button type="button" class="sw-problem" data-i="${i}" aria-pressed="false"><i class="fas fa-${icon}"></i><span>${esc(label)}</span></button>`).join('')}</div>
+        <div class="sw-field"><label class="sw-label" for="swProbNote">Anything to add? <span class="sw-muted" id="swProbOpt">(optional)</span></label>
+          <textarea id="swProbNote" rows="2" class="sw-input" placeholder="e.g. cuts out when the cable is moved">${esc(opts.reason || '')}</textarea></div>
+        <div class="sw-field"><label class="btn btn-secondary sw-problem-photo"><i class="fas fa-camera"></i> <span>Add a photo</span>
+          <input type="file" accept="image/*" capture="environment" class="sr-only"></label></div>
+        <p class="sw-hint" style="margin-bottom:.9rem">It will be taken out of use until someone has checked it.</p>
+        <div class="sw-error" hidden></div>
+        <div class="sw-actions">
+          <button type="button" class="btn btn-secondary" data-cancel>Cancel</button>
+          <button type="button" class="btn btn-danger" data-send>Take it out of use</button>
+        </div>`;
+      const note = $('#swProbNote', d.body), file = $('input[type=file]', d.body), err = $('.sw-error', d.body), send = $('[data-send]', d.body);
+      d.body.querySelectorAll('.sw-problem').forEach((b) => b.addEventListener('click', () => {
+        picked = PROBLEMS[b.dataset.i][0];
+        d.body.querySelectorAll('.sw-problem').forEach((x) => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+        $('#swProbOpt', d.body).textContent = picked === 'Something else' ? '(please say what)' : '(optional)';
+        err.hidden = true;
+      }));
+      file.addEventListener('change', () => { $('.sw-problem-photo span', d.body).textContent = file.files[0] ? 'Photo added' : 'Add a photo'; });
+      $('[data-cancel]', d.body).onclick = () => d.close();
+      send.onclick = async () => {
+        if (sending) return;
+        const extra = note.value.trim();
+        const fail = (m) => { err.textContent = m; err.hidden = false; };
+        if (!picked && !extra) return fail('Tap what’s wrong with it');
+        if (picked === 'Something else' && !extra) return fail('Say what’s wrong with it');
+        const reason = picked && picked !== 'Something else' ? (extra ? `${picked}: ${extra}` : picked) : extra;
+        sending = true; send.disabled = true; send.textContent = 'Saving…';
+        try {
+          if (opts.before) await opts.before();
+          const fd = new FormData();
+          fd.append('reason', reason);
+          if (file.files[0]) fd.append('photo', await shrink(file.files[0]));
+          if (opts.eventId) fd.append('event_id', opts.eventId);
+          result = (await postForm(`/equipment/unit/${unit.id}/quarantine`, fd)).quarantine;
+          SW.toast(`${unit.asset_tag} taken out of use`);
+          d.close();
+        } catch (e) { sending = false; send.disabled = false; send.textContent = 'Take it out of use'; fail(e.message); }
+      };
     });
   };
 
   Gear.release = function (unit, q) {
     q = q || {};
-    const why = q.reason ? `Quarantined${q.quarantined_at ? ' ' + q.quarantined_at : ''}${q.quarantined_by ? ' by ' + q.quarantined_by : ''}: ${q.reason}` : '';
+    const why = q.reason ? `Taken out of use${q.quarantined_at ? ' ' + q.quarantined_at : ''}${q.quarantined_by ? ' by ' + q.quarantined_by : ''}: ${q.reason}` : '';
     return SW.form({
-      title: `Release ${unit.asset_tag} from quarantine`,
-      submitText: 'Release',
+      title: `${unit.asset_tag}: checked?`,
+      submitText: 'Save',
       fields: [
         ...(why ? [{ type: 'info', text: why }] : []),
         { name: 'outcome', label: 'What happens to it?', type: 'select', value: 'available', options: [
-          { value: 'available', label: 'Back in service' },
+          { value: 'available', label: 'It’s fine: put it back in use' },
           { value: 'repair', label: 'Send for repair (stays out of use)' },
           { value: 'retired', label: 'Retire it (beyond repair)' },
         ] },
@@ -142,7 +175,7 @@
         ] },
         { name: 'next_due', label: 'Next check due (optional)', type: 'date', half: true, show: (v) => v.outcome === 'available' },
         { name: 'note', label: 'What was checked or fixed?', type: 'textarea', rows: 3,
-          hint: 'Required to put it back in service. Saved to the item’s history.' },
+          hint: 'Needed to put it back in use. Saved to the item’s history.' },
       ],
       onSubmit: async (v) => {
         if (v.outcome === 'available' && !(v.note || '').trim()) throw new Error('Say what was checked or fixed');
@@ -291,7 +324,7 @@
           $('.sw-cam-idle', host).style.display = scanner && scanner.scanning ? 'none' : '';
           paintBtn();
         },
-        onError: (msg) => SW.toast(msg, 'error'),
+        onError: (msg) => { if (!opts.quiet) SW.toast(msg, 'error'); },      // the status line already says it
       });
     } else { txt.textContent = 'Scanner could not load - type the code instead'; toggle.hidden = true; }
     const api = {
@@ -332,10 +365,10 @@
       }
       const eq = r.equipment, u = r.unit, s = eq.summary;
       const counts = eq.tracking === 'individual'
-        ? `${s.available} of ${s.owned} available${s.out ? ` · ${s.out} out` : ''}${s.quarantined ? ` · ${s.quarantined} quarantined` : ''}`
+        ? `${s.available} of ${s.owned} available${s.out ? ` · ${s.out} out` : ''}${s.quarantined ? ` · ${s.quarantined} out of use` : ''}`
         : `${s.available} of ${s.owned} in storage${s.out ? ` · ${s.out} out` : ''}`;
       const co = u && u.checkout;
-      const where = !u ? '' : u.quarantine ? `Held in quarantine since ${esc(u.quarantine.quarantined_at)}` : co ? `Out on ${esc(co.event_title)} since ${esc(co.checked_out_at)}`
+      const where = !u ? '' : u.quarantine ? `Out of use since ${esc(u.quarantine.quarantined_at)}` : co ? `Out on ${esc(co.event_title)} since ${esc(co.checked_out_at)}`
         : (u.allocations && u.allocations.length ? `Booked for ${esc(u.allocations[0].event_title)}` : 'In storage');
       const canQuarantine = u && !['quarantined', 'retired', 'lost'].includes(u.status);
       out.innerHTML = `<div class="sw-scan-result">
@@ -352,7 +385,7 @@
             </dl>
           </div>
           <div class="sw-actions">
-            ${canQuarantine ? '<button type="button" class="btn btn-outline-danger sw-left" data-q>Quarantine</button>' : ''}
+            ${canQuarantine ? '<button type="button" class="btn btn-outline-danger sw-left" data-q>Report a problem</button>' : ''}
             <button type="button" class="btn btn-secondary" data-again>Scan again</button>
             <a class="btn btn-primary" href="${esc(r.url)}">Open</a>
           </div></div>`;

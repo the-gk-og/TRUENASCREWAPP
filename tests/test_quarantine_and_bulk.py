@@ -273,7 +273,7 @@ def test_quarantine_photo_upload_and_timeline(app, admin, alice, mic, tmp_path, 
     h = alice.get(f'/equipment/unit/{u.id}/history').get_json()
     kinds = [t['kind'] for t in h['timeline']]
     assert kinds[-1] == 'created' and set(kinds) >= {'quarantine', 'release', 'maintenance'}
-    assert len(h['quarantines']) == 1 and h['quarantines'][0]['outcome_label'] == 'Back in service'
+    assert len(h['quarantines']) == 1 and h['quarantines'][0]['outcome_label'] == 'Back in use'
 
 
 def test_migration_marks_types_with_units_individual(app):
@@ -320,3 +320,64 @@ def test_every_main_page_renders(app, admin, alice, mic, tape):
                     '/events', f'/events/{ev}', '/calendar', '/hired-equipment', '/todos', '/settings'):
             r = c.get(url)
             assert r.status_code == 200, (url, r.status_code)
+
+
+def test_manage_page_is_for_admins(app, admin, alice, mic, tape):
+    page = admin.get('/equipment/manage')
+    assert page.status_code == 200
+    assert b'Manage equipment' in page.data and b'Import CSV' in page.data and b'Print labels' in page.data
+
+    r = alice.get('/equipment/manage')                                   # crew are sent back to the list
+    assert r.status_code == 302 and r.headers['Location'].endswith('/equipment')
+
+    # The list is for finding gear: the admin tools are not on it
+    listing = admin.get('/equipment').data
+    assert b'Import CSV' not in listing and b'/equipment/manage' in listing
+    assert b'Import CSV' not in alice.get('/equipment').data
+
+    # The old QR generator link lands on the manage page, ready to print
+    assert admin.get('/equipment/barcodes').headers['Location'].endswith('/equipment/manage?labels=1')
+
+
+# ── Busy-event helpers: undo, opening on today's event, the today card ──────
+
+def test_undo_your_own_scan(app, admin, alice, mic):
+    ev = mk_event('Gig')
+    cid = scan(alice, ev, 'MIC-01').get_json()['checkout']['id']
+    undo = lambda c, i, action: c.post(f'/equipment/checkout/{i}/undo', json={'action': action})
+
+    assert undo(admin, cid, 'out').status_code == 409            # someone else's scan
+    assert undo(alice, cid, 'sideways').status_code == 400
+    assert undo(alice, cid, 'return').status_code == 409         # it hasn't come back
+    assert undo(alice, cid, 'out').status_code == 200            # wrong item: as if it never left
+    assert UnitCheckout.query.count() == 0
+
+    cid = scan(alice, ev, 'MIC-01').get_json()['checkout']['id']
+    assert scan(alice, ev, 'MIC-01').get_json()['action'] == 'return'
+    assert undo(alice, cid, 'return').status_code == 200         # scanned back by mistake: out again
+    assert tag('MIC-01').open_checkout.id == cid
+
+    # Too late once ten minutes have passed
+    co = db.session.get(UnitCheckout, cid)
+    co.checked_out_at = datetime.now() - timedelta(minutes=11)
+    db.session.commit()
+    assert undo(alice, cid, 'out').status_code == 409
+
+
+def test_scan_page_opens_on_todays_event(app, admin, alice, mic):
+    assert b'no events yet' in alice.get('/equipment/checkout').data
+    later = mk_event('Next week', days=7)
+    page = alice.get('/equipment/checkout').data.decode()
+    assert f'const EVENT_ID = {later};' in page                   # nothing today: the next one coming up
+
+    today = Event(title='Tonight', event_date=datetime.now().replace(hour=23, minute=59))
+    db.session.add(today)
+    db.session.commit()
+    page = alice.get('/equipment/checkout').data.decode()
+    assert f'const EVENT_ID = {today.id};' in page and 'Tonight' in page
+    assert f'const EVENT_ID = {later};' in alice.get(f'/equipment/checkout?event_id={later}').data.decode()
+    assert 'const EVENT_ID = null;' in alice.get('/equipment/checkout?choose=1').data.decode()
+
+    # The dashboard leads with today's event and its three buttons
+    dash = alice.get('/dashboard').data.decode()
+    assert 'On today' in dash and f'/equipment/checkout?event_id={today.id}' in dash and f'/picklist?event_id={today.id}' in dash

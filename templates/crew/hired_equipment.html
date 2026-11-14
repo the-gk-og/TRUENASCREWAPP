@@ -10,16 +10,16 @@
 
 <div style="display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap; align-items: center;">
     {% if current_user.is_admin %}
-    <button id="addHiredBtn" class="btn btn-success">
+    <button id="addHiredBtn" class="btn btn-primary">
         <i class="fas fa-plus"></i> Add Hired Equipment
     </button>
-    <button id="importCsvBtn" class="btn btn-primary">
+    <button id="importCsvBtn" class="btn btn-secondary">
         <i class="fas fa-file-csv"></i> Import CSV
     </button>
-    <button id="bulkModeBtn" class="btn btn-primary">
+    <button id="bulkModeBtn" class="btn btn-secondary">
         <i class="fas fa-check-square"></i> Bulk Delete Mode
     </button>
-    <button id="selectAllBtn" class="btn btn-primary" style="display: none;">
+    <button id="selectAllBtn" class="btn btn-secondary" style="display: none;">
         <i class="fas fa-check-double"></i> Select All
     </button>
     <span id="selectedCount" style="display: none; color: var(--primary); font-weight: 600; padding: 0.5rem 1rem; background: #f0f4ff; border-radius: 6px;">
@@ -412,7 +412,7 @@ function toggleBulkMode() {
     if (bulkMode) {
         checkboxes.forEach(cb => cb.style.display = 'block');
         btn.innerHTML = '<i class="fas fa-trash"></i> Delete Selected';
-        btn.classList.remove('btn-primary');
+        btn.classList.remove('btn-secondary');
         btn.classList.add('btn-danger');
         selectAllBtn.style.display = 'inline-block';
         selectedCount.style.display = 'inline-block';
@@ -424,7 +424,7 @@ function toggleBulkMode() {
         selectedIds.clear();
         btn.innerHTML = '<i class="fas fa-check-square"></i> Bulk Delete Mode';
         btn.classList.remove('btn-danger');
-        btn.classList.add('btn-primary');
+        btn.classList.add('btn-secondary');
         selectAllBtn.style.display = 'none';
         selectedCount.style.display = 'none';
         document.querySelectorAll('.hired-card').forEach(card => card.style.background = 'white');
