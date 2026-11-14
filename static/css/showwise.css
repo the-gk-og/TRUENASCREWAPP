@@ -779,3 +779,11 @@ tr:hover td { background: var(--bg-table-hover); }
 .ev-glance button::after { content: "›"; color: var(--text-muted); font-size: 1.2rem; }
 .ev-find { width: 100%; max-width: 320px; min-height: 38px; padding: .45rem .65rem; margin-bottom: .75rem; }
 @media (max-width: 900px) { .ev-overview { grid-template-columns: minmax(0, 1fr); } }
+/* Phones: all six tabs visible at once (two rows of three) instead of scrolling off the edge */
+@media (max-width: 700px) {
+    .ev-tabs { position: static; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .4rem; overflow: visible; padding: 0; border-bottom: 0; }
+    .ev-tabs button { justify-content: center; min-height: 42px; margin: 0; padding: 0 .3rem; font-size: .88rem; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--bg-card); min-width: 0; }
+    .ev-tabs button[aria-selected="true"] { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .ev-tabs button[aria-selected="true"] .n { background: rgba(255, 255, 255, .22); color: inherit; }
+    [data-theme="dark"] .ev-tabs button[aria-selected="true"] { color: #0d0f13; }
+}
