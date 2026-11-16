@@ -405,6 +405,68 @@
     ui.start();
   };
 
+  // ------------------------------------------- works with bad wifi
+  // 1. The service worker keeps the event-day pages so they open with no connection.
+  // 2. A bar says so when the device is offline.
+  // 3. Scans queued on the Scan gear page are sent from whatever page is open once the
+  //    connection is back (the Scan gear page sends its own, and shows any that failed).
+  const QKEY = 'showwise-scan-queue';
+  const readQueue = () => { try { return JSON.parse(localStorage.getItem(QKEY) || '[]'); } catch (e) { return []; } };
+  const offlineBar = $('#swOffline');
+  let reachable = navigator.onLine;       // navigator.onLine says "has wifi", not "can reach ShowWise": ask the server
+  async function checkConnection() {
+    const was = reachable;
+    try { await fetch('/sw.js', { method: 'HEAD', cache: 'no-store' }); reachable = true; }
+    catch (e) { reachable = false; }
+    paintOffline();
+    if (reachable && !was) sendQueuedScans();
+  }
+  function paintOffline() {
+    if (!offlineBar) return;
+    offlineBar.hidden = reachable;
+    const n = readQueue().length;
+    $('#swOfflineQueue').textContent = n ? `${n} scan${n === 1 ? ' is' : 's are'} saved here and will be sent when it comes back.` : '';
+  }
+  let sending = false;
+  async function sendQueuedScans() {
+    if (sending || !reachable || $('#coQueue')) return;        // the Scan gear page handles its own
+    let queue = readQueue();
+    if (!queue.length) return;
+    sending = true;
+    let sent = 0, failed = 0;
+    while (queue.length) {
+      try { await SW.api('POST', '/equipment/checkout/scan', queue[0].body); sent++; }
+      catch (e) { if (e.status === 0) break; failed++; }               // 0 = still no connection: keep the rest
+      queue = readQueue().slice(1);
+      try { localStorage.setItem(QKEY, JSON.stringify(queue)); } catch (e) {}
+    }
+    sending = false;
+    if (sent) SW.toast(`${sent} saved scan${sent === 1 ? '' : 's'} sent`);
+    if (failed) SW.toast(`${failed} saved scan${failed === 1 ? '' : 's'} could not be recorded. Scan ${failed === 1 ? 'it' : 'them'} again.`, 'error');
+    paintOffline();
+  }
+  window.addEventListener('online', checkConnection);
+  window.addEventListener('offline', () => { reachable = false; paintOffline(); });
+  paintOffline();
+  checkConnection().then(sendQueuedScans);
+  setInterval(() => { if (!reachable && !document.hidden) checkConnection(); }, 20000);
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').then(() => navigator.serviceWorker.ready).then((reg) => {
+      // Save the event-day pages and scanner files ahead of time (at most every 10 minutes)
+      let last = 0;
+      try { last = Number(sessionStorage.getItem('showwise-warm') || 0); } catch (e) {}
+      if (!navigator.onLine || !reg.active || Date.now() - last < 10 * 60 * 1000 || !$('.sw-tabbar')) return;
+      try { sessionStorage.setItem('showwise-warm', String(Date.now())); } catch (e) {}
+      reg.active.postMessage({
+        type: 'warm',
+        pages: ['/dashboard', '/equipment/checkout', '/picklist'],
+        files: ['/static/js/sw-scanner.js', 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
+                'https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js'],
+      });
+    }).catch(() => {});
+  }
+
   const scanBtn = $('#swScanBtn');
   if (scanBtn) scanBtn.addEventListener('click', () => Gear.scan());
 })();
