@@ -1,0 +1,74 @@
+/* auth.css - loaded last on the signed-out pages (log in, sign up, password reset, two-step
+   codes, suspended). Each of those pages carries its own styles; this file gives them one
+   calm look and makes them follow dark mode. The organisation's colour still drives the
+   heading and the main button (--primary is set per page from the org settings). */
+
+:root {
+    --auth-page: #f1f3f6;
+    --auth-card: #ffffff;
+    --auth-ink: #171a1f;
+    --auth-muted: #5b6472;
+    --auth-line: #d3d8e0;
+    --auth-field: #ffffff;
+    --auth-soft: #f1f3f6;
+}
+[data-theme="dark"] {
+    --auth-page: #1a1d23;
+    --auth-card: #23272f;
+    --auth-ink: #e9ebef;
+    --auth-muted: #b4bbc7;
+    --auth-line: #4a525f;
+    --auth-field: #1a1d23;
+    --auth-soft: #2b3039;
+    color-scheme: dark;
+}
+
+/* A plain page instead of a wall of brand colour with floating circles */
+body { background: var(--auth-page) !important; color: var(--auth-ink) !important; }
+.bg-circle, .background-animation { display: none !important; }
+.container, .login-container, .card {
+    background: var(--auth-card) !important; color: var(--auth-ink) !important;
+    border: 1px solid var(--auth-line) !important; border-top: 4px solid var(--primary, #2557d6) !important;
+    box-shadow: 0 8px 28px rgba(16, 24, 40, .08) !important;
+    animation: none !important; backdrop-filter: none !important;
+}
+* { animation-duration: 0s; }
+.fa-spin, .spinner { animation-duration: 1s !important; }      /* loading spinners still spin */
+
+.header p, .form-header p, .input-hint, .email-hint, .powered-by, .footer, .footer-links a, .timer,
+.divider, .divider span, .back-link, .contact { color: var(--auth-muted) !important; }
+label, .header h2, .form-header h2, h2, h3, strong { color: var(--auth-ink); }
+.divider::before, .divider::after { background: var(--auth-line) !important; }
+.footer, .footer-links { border-color: var(--auth-line) !important; }
+
+input[type="text"], input[type="password"], input[type="email"], input[type="number"], input[type="tel"], .code-input, select, textarea {
+    background: var(--auth-field) !important; color: var(--auth-ink) !important;
+    border: 1px solid var(--auth-line) !important; border-radius: 6px !important;
+}
+input::placeholder { color: var(--auth-muted); opacity: .8; }
+input:focus, .code-input:focus { border-color: var(--primary, #2557d6) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary, #2557d6) 25%, transparent) !important; }
+
+.btn { border-radius: 6px !important; transform: none !important; }
+.btn-primary { box-shadow: none !important; }
+.btn-primary:hover { transform: none !important; filter: brightness(.94); }
+.btn-oauth, .btn-outline, .btn-secondary, .btn-ghost {
+    background: var(--auth-card) !important; color: var(--auth-ink) !important;
+    border: 1px solid var(--auth-line) !important; box-shadow: none !important;
+}
+.btn-oauth:hover, .btn-outline:hover, .btn-secondary:hover, .btn-ghost:hover { background: var(--auth-soft) !important; transform: none !important; }
+
+.invite-banner, .requirements, .tabs, .tab, .reason {
+    background: var(--auth-soft) !important; color: var(--auth-ink) !important; border-color: var(--auth-line) !important;
+}
+.pw-strength { background: var(--auth-soft) !important; }
+
+[data-theme="dark"] .header h1, [data-theme="dark"] .form-header h1, [data-theme="dark"] h1 { color: #b7caff !important; }
+[data-theme="dark"] a, [data-theme="dark"] .forgot-link, [data-theme="dark"] .email-otp-link { color: #8fb0ff !important; }
+[data-theme="dark"] a.btn-primary { color: #fff !important; }
+[data-theme="dark"] .alert-error, [data-theme="dark"] .alert.error { background: #452122 !important; color: #f8adad !important; }
+[data-theme="dark"] .alert-success, [data-theme="dark"] .alert.success { background: #1c3a2b !important; color: #8be0b5 !important; }
+[data-theme="dark"] .alert-info { background: #26334f !important; color: #b7caff !important; }
+
+/* text that sets its own dark colour inline: follow the card instead */
+.invite-banner *, .requirements *, .reason * { color: inherit !important; }
+.remember-me, .remember-me *, .checkbox-row, .checkbox-row * { color: var(--auth-ink) !important; }

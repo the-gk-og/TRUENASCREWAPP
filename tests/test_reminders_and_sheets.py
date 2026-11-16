@@ -110,3 +110,25 @@ def test_pdf_prints_accented_and_non_latin_names(app, admin):
     assert r.status_code == 200 and r.data[:4] == b'%PDF'
     if report_service.FONT != 'Helvetica':             # the server has DejaVu: it is embedded in the file
         assert b'DejaVu' in r.data
+
+
+def test_offline_support_files_are_served(app, admin):
+    anon = app.test_client()
+    sw = anon.get('/sw.js')                                   # no sign-in needed, and from the site root
+    assert sw.status_code == 200 and 'javascript' in sw.mimetype
+    assert sw.headers['Service-Worker-Allowed'] == '/' and 'no-cache' in sw.headers['Cache-Control']
+    assert b"addEventListener('fetch'" in sw.data and b'forgetPages' in sw.data
+
+    off = anon.get('/offline')
+    assert off.status_code == 200 and b'No connection' in off.data and b'/equipment/checkout' in off.data
+
+    page = admin.get('/dashboard').data.decode()
+    assert 'id="swOffline"' in page and 'site.webmanifest' in page
+
+    import json
+    manifest = json.loads(anon.get('/static/favicon/site.webmanifest').data)
+    assert manifest['start_url'] == '/' and manifest['scope'] == '/' and manifest['display'] == 'standalone'
+    assert any(i['sizes'] == '512x512' and i['purpose'] == 'any' for i in manifest['icons'])
+
+    # The signed-out pages share one stylesheet (and follow dark mode)
+    assert b'css/auth.css' in anon.get('/login').data

@@ -182,6 +182,9 @@
     }
     .divider::before, .divider::after { content:''; flex:1; height:1px; background:#e5e7eb; }
   </style>
+  <!-- One calm look for the signed-out pages, and dark mode if the person uses it -->
+  <link rel="stylesheet" href="{{ asset('css/auth.css') }}">
+  <script>try { document.documentElement.setAttribute('data-theme', localStorage.getItem('showwise-theme') || 'light'); } catch (e) {}</script>
 </head>
 <body>
   <div class="bg-circle bg-circle-1"></div>
