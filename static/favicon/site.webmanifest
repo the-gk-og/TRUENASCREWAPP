@@ -20,21 +20,21 @@
       "purpose": "maskable"
     },
     {
-      "src": "/static/favicon/favicon-96x96.png",
-      "sizes": "96x96",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/static/favicon/web-app-manifest-192x192.png",
+      "src": "/static/favicon/android-chrome-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/static/favicon/web-app-manifest-512x512.png",
+      "src": "/static/favicon/android-chrome-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/favicon/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
       "purpose": "any"
     }
   ],
