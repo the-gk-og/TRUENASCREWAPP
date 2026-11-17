@@ -6,6 +6,7 @@ from flask_login import login_required, current_user
 from extensions import db
 from models import Event, PickListItem, PickListUnit, Equipment, EquipmentUnit, HiredEquipment, UnitCheckout
 from decorators import crew_required
+from services.gear_bookings import line_window
 
 picklist_bp = Blueprint('picklist', __name__)
 
@@ -72,14 +73,22 @@ def picklist():
         if it.equipment and it.equipment.is_individual and it.equipment_id not in unit_options:
             unit_options[it.equipment_id] = [u.to_dict() for u in it.equipment.units]
 
+    archived = bool(event and _event_is_archived(event))
+    from services.gear_bookings import event_gear_warnings
+    gear = event_gear_warnings(event) if event and not archived else None
+
     return render_template(
         'crew/picklist.html',
+        gear=gear,
+        holds={it.id: {'from': it.hold_from.isoformat(timespec='minutes') if it.hold_from else '',
+                       'until': it.hold_until.isoformat(timespec='minutes') if it.hold_until else ''}
+               for it in items},
         items=items,
         events=events,
         current_events=current_events,
         archived_events=archived_events,
         current_event=event,
-        current_event_archived=bool(event and _event_is_archived(event)),
+        current_event_archived=archived,
         all_equipment=all_equipment,
         all_equipment_json=[e.to_dict() for e in all_equipment],
         equipment_json=[e.to_dict() for e in all_equipment],
@@ -247,7 +256,13 @@ def assign_unit(item_id):
     if unit.status in ('retired', 'lost') or (unit.status == 'repair' and not force):
         return jsonify({'error': f'{unit.asset_tag} is marked {unit.status}',
                         'conflict': 'status', 'can_force': unit.status == 'repair'}), 409
+    # Only events whose time overlaps this one clash: reserving a unit for next
+    # month while it's on this week's show is fine.
     clashes = [a for a in unit.allocations() if a['pick_list_item_id'] != item.id]
+    if item.event is not None:
+        from services.gear_bookings import unit_reserved_elsewhere
+        overlapping = {e.id for e in unit_reserved_elsewhere(unit, item.event, line_window(item))}
+        clashes = [a for a in clashes if a['event_id'] is None or a['event_id'] in overlapping]
     if clashes and not force:
         where = ', '.join(a['event_title'] for a in clashes)
         return jsonify({'error': f'{unit.asset_tag} is already allocated to {where}',
@@ -269,3 +284,53 @@ def unassign_unit(item_id, unit_id):
     db.session.delete(link)
     db.session.commit()
     return jsonify({'success': True, 'units': [_unit_chip(u, item.event_id) for u in item.units]})
+
+
+# ---------------------------------------------------------------------------
+# Reservation windows and double-booking warnings
+# ---------------------------------------------------------------------------
+
+def _parse_dt(value):
+    value = (value or '').strip()
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        raise ValueError(f'"{value}" is not a date and time')
+
+
+@picklist_bp.route('/picklist/<int:item_id>/hold', methods=['POST'])
+@login_required
+@crew_required
+def set_hold(item_id):
+    """Hold this line's gear from/until other times than the event's own (blank = the event's)."""
+    item = PickListItem.query.get_or_404(item_id)
+    if item.event_id is None:
+        return jsonify({'error': 'Only lines on an event can be held for dates'}), 400
+    data = request.get_json(silent=True) or {}
+    try:
+        start, end = _parse_dt(data.get('hold_from')), _parse_dt(data.get('hold_until'))
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    if start and end and end < start:
+        return jsonify({'error': 'The hold has to end after it starts'}), 400
+    item.hold_from, item.hold_until = start, end
+    db.session.commit()
+    win = line_window(item)
+    return jsonify({'success': True, 'hold_from': start.isoformat(timespec='minutes') if start else '',
+                    'hold_until': end.isoformat(timespec='minutes') if end else '',
+                    'window': [win[0].isoformat(timespec='minutes'), win[1].isoformat(timespec='minutes')]})
+
+
+@picklist_bp.route('/picklist/warnings')
+@login_required
+@crew_required
+def picklist_warnings():
+    """Double-booking warnings for one event's pick list."""
+    from services.gear_bookings import event_gear_warnings
+    event = Event.query.get_or_404(request.args.get('event_id', type=int) or 0)
+    report = event_gear_warnings(event)
+    report['types'] = [{k: v for k, v in t.items()} for t in report['types']]
+    report['by_line'] = {str(k): v for k, v in report['by_line'].items()}
+    return jsonify(report)

@@ -644,6 +644,18 @@ tr:hover td { background: var(--bg-table-hover); }
 .plu-chip.out { background: var(--info-bg); color: var(--info-fg); }
 .plu-chip button { border: 0; background: none; color: inherit; cursor: pointer; padding: 0 .2rem; font-size: .95rem; line-height: 1; opacity: .65; }
 .plu-chip button:hover { opacity: 1; }
+/* Gear double-booking warnings (services/gear_bookings.py) */
+.pl-warn { margin: .3rem 0 0; padding: 0; list-style: none; font-size: .82rem; }
+.pl-warn li { display: flex; gap: .35rem; align-items: baseline; color: var(--text-primary); }
+.pl-warn li::before { content: "\f071"; font-family: "Font Awesome 6 Free"; font-weight: 900; color: var(--warning); font-size: .75rem; }
+.pl-hold { border: 0; background: none; padding: 0; color: var(--text-secondary); font-size: .8rem; cursor: pointer; text-decoration: underline dotted; }
+.pl-hold:hover { color: var(--primary); }
+.pl-item.clash { box-shadow: inset 3px 0 0 var(--warning); }
+.gb-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.gb-table th, .gb-table td { text-align: left; padding: .45rem .5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+.gb-table th { font-size: .78rem; color: var(--text-secondary); font-weight: 600; }
+.gb-table tr.short td:first-child { box-shadow: inset 3px 0 0 var(--warning); }
+.gb-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .plu-add { min-height: 28px; padding: .1rem .4rem; font-size: .8rem !important; border-style: dashed; max-width: 16rem; }
 .pl-lists .sw-input { margin-bottom: .5rem; }
 .pl-ev { display: block; padding: .45rem .6rem; border-radius: var(--radius); text-decoration: none; color: var(--text-primary); font-size: .92rem; }

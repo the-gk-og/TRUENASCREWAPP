@@ -345,8 +345,12 @@ def checkout_scan():
 
     if co:
         _close(co, note=f'Moved to {event.title} by {current_user.username}')
+    from services.gear_bookings import unit_reserved_elsewhere
+    reserved = [{'code': 'reserved_elsewhere',
+                 'message': f'{unit.asset_tag} is reserved for {other.title}, which overlaps {event.title}'}
+                for other in unit_reserved_elsewhere(unit, event)]
     warnings, info = _picklist_check(unit, event)
-    warnings = blockers + warnings          # overridden blockers stay visible in the result
+    warnings = blockers + reserved + warnings         # overridden blockers stay visible in the result
     if unit.case_link:
         warnings.append({'code': 'in_case', 'message': f'{unit.asset_tag} is packed in case '
                                                        f'{unit.case_link.case.asset_tag}. Scan the case to take it all'})
