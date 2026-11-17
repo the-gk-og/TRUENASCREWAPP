@@ -415,7 +415,8 @@
         </section>
 
         {# Gear problems are for admins to sort out; crew don't need them on their dashboard #}
-        {% if current_user.is_admin and (maint_alerts or gear_out_late) %}
+        {% set low_stock = consumables_low() if current_user.is_admin else [] %}
+        {% if current_user.is_admin and (maint_alerts or gear_out_late or low_stock) %}
         <section>
             <h3 class="dash-section-title">
                 <span>Equipment</span>
@@ -429,6 +430,18 @@
                         <span class="dash-task-main">
                             <div class="dash-task-title">{{ gear_out_late|length }} unit{{ '' if gear_out_late|length == 1 else 's' }} not returned</div>
                             <div class="dash-task-due overdue">From finished events · scan them back in</div>
+                        </span>
+                        <i class="fas fa-chevron-right dash-chevron"></i>
+                    </a>
+                </li>
+                {% endif %}
+                {% if low_stock %}
+                <li>
+                    <a class="dash-task" href="{{ url_for('consumables.shopping_list') }}">
+                        <span class="dash-dot {{ 'high' if low_stock|selectattr('quantity', 'equalto', 0)|list else 'medium' }}"></span>
+                        <span class="dash-task-main">
+                            <div class="dash-task-title">{{ low_stock|length }} consumable{{ '' if low_stock|length == 1 else 's' }} running low</div>
+                            <div class="dash-task-due">{{ low_stock[:3]|map(attribute='name')|join(', ') }}{% if low_stock|length > 3 %} and more{% endif %} · shopping list</div>
                         </span>
                         <i class="fas fa-chevron-right dash-chevron"></i>
                     </a>

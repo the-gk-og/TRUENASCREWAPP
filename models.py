@@ -871,6 +871,48 @@ class AppSetting(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+# ---------------------------------------------------------------------------
+# Consumables: stock counted by quantity (tape, batteries, gels, lamps…). See routes/consumables.py
+# ---------------------------------------------------------------------------
+
+class Consumable(db.Model):
+    id            = db.Column(db.Integer, primary_key=True)
+    name          = db.Column(db.String(200), nullable=False)
+    category      = db.Column(db.String(100))
+    unit          = db.Column(db.String(40), default='each')      # rolls, packs, each, sheets…
+    quantity      = db.Column(db.Integer, nullable=False, default=0)
+    low_threshold = db.Column(db.Integer, nullable=False, default=0)  # low when quantity <= this (0 = never)
+    reorder_qty   = db.Column(db.Integer, nullable=True)            # how many to buy, for the shopping list
+    location      = db.Column(db.String(200))
+    supplier      = db.Column(db.String(200))
+    supplier_url  = db.Column(db.String(500))
+    notes         = db.Column(db.Text)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at    = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    movements     = db.relationship('ConsumableMovement', backref='consumable', lazy='dynamic',
+                                    cascade='all, delete-orphan', order_by='ConsumableMovement.id.desc()')
+
+    @property
+    def is_low(self) -> bool:
+        return (self.low_threshold or 0) > 0 and (self.quantity or 0) <= self.low_threshold
+
+
+class ConsumableMovement(db.Model):
+    """One change to a consumable's stock: use (negative), restock (positive) or a stock count."""
+    id             = db.Column(db.Integer, primary_key=True)
+    consumable_id  = db.Column(db.Integer, db.ForeignKey('consumable.id', ondelete='CASCADE'),
+                               nullable=False, index=True)
+    kind           = db.Column(db.String(20), nullable=False)       # use | restock | count
+    change         = db.Column(db.Integer, nullable=False)          # signed
+    quantity_after = db.Column(db.Integer, nullable=False)
+    event_id       = db.Column(db.Integer, db.ForeignKey('event.id', ondelete='SET NULL'),
+                               nullable=True, index=True)
+    event_title    = db.Column(db.String(200))                      # kept if the event is deleted
+    note           = db.Column(db.String(300))
+    by_username    = db.Column(db.String(80))
+    created_at     = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
 
 # ---------------------------------------------------------------------------
 # Remove an attachment's files from disk once the row is really gone

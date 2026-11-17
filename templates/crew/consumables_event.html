@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Consumables used — {{ event.title }} — ShowWise{% endblock %}
+
+{% block content %}
+<a class="sw-crumb" href="{{ url_for('events.event_detail', id=event.id) }}"><i class="fas fa-arrow-left"></i> {{ event.title }}</a>
+<header class="sw-head">
+    <div>
+        <h1>Consumables for {{ event.title }}</h1>
+        <p>{{ event|event_when }}</p>
+    </div>
+</header>
+
+{% if totals %}
+<section class="card">
+    <div class="card-header"><h2 class="card-title">Totals</h2></div>
+    <div class="sw-table-wrap" style="border:0">
+        <table class="sw-table">
+            <thead><tr><th>Item</th><th class="num">Used</th><th class="num">Put back</th><th class="num">Net</th></tr></thead>
+            <tbody>
+            {% for t in totals %}
+            <tr><td><a href="{{ url_for('consumables.consumable_detail', cid=t.item.id) }}">{{ t.item.name }}</a></td>
+                <td class="num">{{ t.used }}</td><td class="num">{{ t.returned }}</td>
+                <td class="num"><strong>{{ t.used - t.returned }}</strong> {{ t.item.unit or 'each' }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="card">
+    <div class="card-header"><h2 class="card-title">Every change</h2></div>
+    <div class="sw-table-wrap" style="border:0">
+        <table class="sw-table">
+            <thead><tr><th>When</th><th>Item</th><th class="num">Change</th><th>Who</th></tr></thead>
+            <tbody>
+            {% for m in moves %}
+            <tr><td>{{ m.created_at.strftime('%d %b, %H:%M') }}</td>
+                <td>{{ m.consumable.name }}{% if m.note %}<span class="sub">{{ m.note }}</span>{% endif %}</td>
+                <td class="num">{{ '%+d'|format(m.change) }}</td>
+                <td>{{ m.by_username|person }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% else %}
+<div class="sw-blank"><strong>No consumables recorded</strong>When crew use stock, they can pick this event and it shows up here.</div>
+{% endif %}
+{% endblock %}

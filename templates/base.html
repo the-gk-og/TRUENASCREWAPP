@@ -108,6 +108,7 @@
                 {{ nav('picklist.picklist', 'list-check', 'Pick lists') }}
                 {{ nav('unit_tracking.checkout_page', 'qrcode', 'Scan gear out / in') }}
                 {{ nav('hired_equipment.hired_equipment_list', 'truck', 'Hired gear') }}
+                {{ nav('consumables.consumables_list', 'boxes-stacked', 'Consumables', ['consumables.consumables_list', 'consumables.consumable_detail', 'consumables.shopping_list', 'consumables.event_usage'], consumables_low()|length if current_user.is_admin else None) }}
                 {% if current_user.is_admin %}{{ nav('equipment.equipment_manage', 'sliders', 'Manage equipment', None, gear_quarantined()) }}{% endif %}
             </div>
             <div class="nav-section">
