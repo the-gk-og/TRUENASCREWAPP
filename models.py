@@ -811,6 +811,23 @@ class EventTask(db.Model):
     assignee = db.relationship('User', foreign_keys=[assigned_user_id], backref='assigned_event_tasks')
 
 
+class BackstageCall(db.Model):
+    """One call given from the stage manager's call desk ("Half", "Beginners", custom text...).
+
+    The newest row for an event is what the backstage display shows; a row with
+    ``kind == 'clear'`` blanks the display.  Rows are the event's call log.
+    ``sent_at`` is the venue's local wall-clock time, like every event time.
+    """
+    id       = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False, index=True)
+    kind     = db.Column(db.String(30), nullable=False, default='custom')
+    message  = db.Column(db.String(200), nullable=False, default='')
+    sent_by  = db.Column(db.String(80), nullable=False)
+    sent_at  = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    event = db.relationship('Event', backref=db.backref(
+        'backstage_calls', cascade='all, delete-orphan', order_by='BackstageCall.id'))
+
+
 class UserUnavailability(db.Model):
     id                  = db.Column(db.Integer, primary_key=True)
     user_id             = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)

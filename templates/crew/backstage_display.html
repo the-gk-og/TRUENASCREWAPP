@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Backstage · {{ event.title }}</title>
+<style>
+  :root { --bg:#0e1013; --fg:#f2f4f7; --muted:#8b94a3; --accent:#4f80f0; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-family:system-ui,sans-serif; }
+  body { display:flex; flex-direction:column; }
+  header,footer { display:flex; justify-content:space-between; align-items:center; padding:1.2rem 2rem; color:var(--muted); font-size:clamp(1rem,2.2vw,1.6rem); }
+  #clock { font-variant-numeric:tabular-nums; color:var(--fg); font-size:clamp(2rem,6vw,4.5rem); font-weight:600; }
+  main { flex:1; display:flex; align-items:center; justify-content:center; text-align:center; padding:0 4vw; }
+  #call { font-size:clamp(2.5rem,9vw,9rem); font-weight:700; line-height:1.1; }
+  #call.empty { color:var(--muted); font-size:clamp(1.5rem,4vw,3rem); font-weight:400; }
+  #call.flash { animation:flash 1.2s ease-out 3; }
+  @keyframes flash { 0% { color:var(--accent); } 100% { color:var(--fg); } }
+  #count { font-variant-numeric:tabular-nums; color:var(--fg); }
+  button { background:#23272f; color:var(--fg); border:1px solid #333a45; border-radius:8px; padding:.5rem .9rem; font-size:1rem; cursor:pointer; }
+  #stale { color:#f0a04f; }
+</style></head>
+<body>
+<header><span>{{ event.title }}</span><span id="clock">--:--:--</span></header>
+<main><div id="call" class="empty">Waiting for calls…</div></main>
+<footer><span id="next"></span><span><span id="stale"></span> <button id="chime">Chime off</button> <button id="fs">Full screen</button></span></footer>
+<script type="application/json" id="bc-data">{{ state|tojson }}</script>
+<script>
+(function () {
+  const url = '{{ url_for("backstage.call_state", event_id=event.id) }}';
+  let s = JSON.parse(document.getElementById('bc-data').textContent);
+  let offset = new Date(s.now) - Date.now(), lastId = s.last_id, chime = false, ctx = null;
+  try { chime = localStorage.getItem('sw-backstage-chime') === '1'; } catch (e) {}
+  const chimeBtn = document.getElementById('chime');
+  const showChime = () => { chimeBtn.textContent = chime ? 'Chime on' : 'Chime off'; };
+  chimeBtn.onclick = () => {
+    chime = !chime; showChime();
+    try { localStorage.setItem('sw-backstage-chime', chime ? '1' : '0'); } catch (e) {}
+    if (chime) ding();
+  };
+  function ding() {
+    try {
+      ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+      [880, 660].forEach((f, i) => {
+        const o = ctx.createOscillator(), g = ctx.createGain(), t0 = ctx.currentTime + i * 0.35;
+        o.frequency.value = f; o.connect(g); g.connect(ctx.destination);
+        g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.4, t0 + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.8); o.start(t0); o.stop(t0 + 0.85);
+      });
+    } catch (e) {}
+  }
+  document.getElementById('fs').onclick = () => {
+    if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {});
+  };
+  showChime();
+  const pad = (n) => String(n).padStart(2, '0');
+  function paintCall(flash) {
+    const el = document.getElementById('call');
+    el.className = s.call ? '' : 'empty';
+    el.textContent = s.call ? s.call.message : 'Waiting for calls…';
+    if (flash && s.call) { void el.offsetWidth; el.classList.add('flash'); }
+  }
+  function tick() {
+    const now = new Date(Date.now() + offset);
+    document.getElementById('clock').textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+    const n = document.getElementById('next');
+    if (!s.next) { n.textContent = ''; return; }
+    let sec = Math.max(0, Math.round((new Date(s.next.start) - now) / 1000));
+    const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60); sec %= 60;
+    n.innerHTML = '';
+    n.append(`${s.next.label} in `);
+    const c = document.createElement('span'); c.id = 'count';
+    c.textContent = h ? `${h}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`; n.append(c);
+  }
+  async function poll() {
+    try {
+      const r = await fetch(url, {credentials: 'same-origin', cache: 'no-store'});
+      if (r.redirected || !r.ok) throw new Error();
+      s = await r.json(); offset = new Date(s.now) - Date.now();
+      document.getElementById('stale').textContent = '';
+      if (s.last_id !== lastId) { lastId = s.last_id; paintCall(true); if (chime && s.call) ding(); }
+    } catch (e) { document.getElementById('stale').textContent = 'Reconnecting…'; }
+  }
+  paintCall(false); tick();
+  setInterval(tick, 1000); setInterval(poll, 2000);
+})();
+</script>
+</body></html>
