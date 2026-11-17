@@ -13,8 +13,8 @@ from models import User
 from services.settings_service import get_setting
 
 
-def shift_decline_recipients(assignment) -> list[User]:
-    """Users who should be told about this decline (deduplicated, with an email)."""
+def shift_decline_recipients(assignment, need_email: bool = True) -> list[User]:
+    """Users who should be told about this decline (deduplicated; with an email unless need_email=False)."""
     if not get_setting('notify.shift_declined.enabled'):
         return []
     ids = list(get_setting('notify.shift_declined.user_ids') or [])
@@ -27,7 +27,7 @@ def shift_decline_recipients(assignment) -> list[User]:
             out.append(creator)
     seen, result = set(), []
     for u in out:
-        if u.email and u.id not in seen and u.id != assignment.user_id:
+        if (u.email or not need_email) and u.id not in seen and u.id != assignment.user_id:
             seen.add(u.id)
             result.append(u)
     return result
@@ -69,6 +69,16 @@ def notify_shift_declined(assignment) -> int:
     """Email everyone configured to hear about a declined shift.  Never raises.
     Returns the number of emails that were sent successfully."""
     sent = 0
+    try:                                               # Web Push to anyone who opted in (email or not)
+        from services.push_service import send_async
+        shift, who = assignment.shift, assignment.user
+        ev = shift.event
+        send_async([dict(user_id=u.id, kind='shift_declined', title=f'Shift declined: {who.shown_name}',
+                         body=f"{ev.title if ev else 'Event'} · {shift.role or 'Shift'} · {_when(shift)}",
+                         url=f'/events/{ev.id}' if ev else '/shifts/management')
+                    for u in shift_decline_recipients(assignment, need_email=False)])
+    except Exception as exc:
+        print(f'⚠️  Shift decline push failed: {exc}')
     try:
         from services.email_service import send_html_email
         recipients = shift_decline_recipients(assignment)

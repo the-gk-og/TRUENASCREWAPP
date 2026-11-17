@@ -16,6 +16,7 @@ from models import (
 from decorators import crew_required
 from services.user_names import find_user_by_username
 from services.event_times import upcoming_time_rows, when_text
+from services import push_service
 from services.email_service import (
     send_crew_assignment_email, send_event_reminder_email,
 )
@@ -107,6 +108,9 @@ def assign_crew():
 
     user  = find_user_by_username(data['crew_member'])
     event = Event.query.get(data['event_id'])
+    if user and event:
+        push_service.send_async([dict(user_id=user.id, kind='event_assigned', title=f'Added to {event.title}',
+                                      body=when_text(event), url=f'/events/{event.id}')])
     if user and user.email and event:
         send_crew_assignment_email(
             recipient_email=user.email, username=user.shown_name,
@@ -139,11 +143,14 @@ def assign_all_crew():
     event_id = data.get('event_id')
     event    = Event.query.get_or_404(event_id)
     added    = 0
+    pushes   = []
     for user in User.query.filter(User.user_role.in_(['crew', 'crew_admin'])).all():
         if not CrewAssignment.query.filter_by(event_id=event_id, crew_member=user.username).first():
             db.session.add(CrewAssignment(event_id=event_id, crew_member=user.username,
                                           role='Crew Member', assigned_via='webapp'))
             added += 1
+            pushes.append(dict(user_id=user.id, kind='event_assigned', title=f'Added to {event.title}',
+                               body=when_text(event), url=f'/events/{event.id}'))
             if user.email:
                 send_crew_assignment_email(
                     recipient_email=user.email, username=user.shown_name,
@@ -153,6 +160,7 @@ def assign_all_crew():
                     role='Crew Member',
                 )
     db.session.commit()
+    push_service.send_async(pushes)
     return jsonify({'success': True, 'added': added})
 
 

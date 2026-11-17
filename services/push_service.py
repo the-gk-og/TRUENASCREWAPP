@@ -68,6 +68,12 @@ def set_disabled_kinds(user_id, kinds) -> None:
     db.session.commit()
 
 
+def wants(user_id, kind) -> bool:
+    """True if this user has a device that opted in and hasn't turned this kind off."""
+    return (kind not in disabled_kinds(user_id)
+            and PushSubscription.query.filter_by(user_id=user_id).first() is not None)
+
+
 def send_to_user(user_id, kind, title, body='', url='/dashboard', tag=None) -> int:
     """Push to every device of this user who wants `kind`. Returns how many got it."""
     try:
