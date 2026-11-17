@@ -15,10 +15,10 @@
         </div>
     </header>
 
-    {% if quarantined or stale_checkouts or maint_alerts %}
+    {% if quarantined or stale_checkouts or maint_alerts or consumables_low() %}
     {% include 'crew/_gear_attention.html' %}
     {% else %}
-    <p class="sw-notice info">Nothing needs attention: nothing out of use, nothing overdue back, no tests due.</p>
+    <p class="sw-notice info">Nothing needs attention: nothing out of use, nothing overdue back, no tests due, no consumables low.</p>
     {% endif %}
 
     <section class="card gear-manage">

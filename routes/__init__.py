@@ -35,6 +35,7 @@ def register_blueprints(app):
     from routes.pwa              import pwa_bp
     from routes.backstage        import backstage_bp
     from routes.cases            import cases_bp
+    from routes.consumables      import consumables_bp
 
 
     app.register_blueprint(auth_bp)
@@ -61,3 +62,4 @@ def register_blueprints(app):
     app.register_blueprint(pwa_bp)
     app.register_blueprint(backstage_bp)
     app.register_blueprint(cases_bp)
+    app.register_blueprint(consumables_bp)

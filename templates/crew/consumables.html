@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Consumables — ShowWise{% endblock %}
+
+{% block content %}
+<style>
+    .cons-tools { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-bottom: .75rem; }
+    .cons-tools .sw-input { max-width: 320px; flex: 1 1 200px; }
+    .cons-qty { font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
+    .cons-qty small { font-weight: 500; color: var(--text-secondary); }
+    .cons-step { display: inline-flex; gap: .3rem; }
+    .cons-step .btn { min-width: 40px; }
+    .cons-name { font-weight: 600; color: var(--text-primary); text-decoration: none; }
+    .cons-name:hover { color: var(--primary); }
+    tr.cons-low td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
+    @media (max-width: 700px) { .cons-hide-sm { display: none; } }
+</style>
+
+<header class="sw-head">
+    <div>
+        <h1>Consumables</h1>
+        <p>Stock counted by quantity: tape, batteries, gels, lamps, cable ties. Take some or put some back here, or scan the shelf label.</p>
+    </div>
+    <div class="sw-head-actions">
+        <a class="btn btn-secondary" href="{{ url_for('consumables.shopping_list') }}"><i class="fas fa-cart-shopping"></i> Shopping list{% if low_count %} <span class="pill bad">{{ low_count }}</span>{% endif %}</a>
+        {% if current_user.is_admin %}
+        {% if items %}<a class="btn btn-secondary" id="cLabels" href="{{ url_for('consumables.labels') }}" target="_blank" rel="noopener"><i class="fas fa-qrcode"></i> Shelf labels</a>{% endif %}
+        <button type="button" class="btn btn-primary" id="cAdd"><i class="fas fa-plus"></i> Add item</button>
+        {% endif %}
+    </div>
+</header>
+
+{% if low_count %}
+<p class="sw-notice bad">{{ low_count }} item{{ '' if low_count == 1 else 's' }} running low. <a href="{{ url_for('consumables.shopping_list') }}">See the shopping list</a>.</p>
+{% endif %}
+
+{% if items %}
+<div class="cons-tools">
+    <input type="search" id="cFilter" class="sw-input" placeholder="Find an item…" autocomplete="off" aria-label="Find an item">
+    <div class="sw-filters" role="group" aria-label="Show">
+        <button type="button" class="sw-filter" data-cat="" aria-pressed="true">All</button>
+        <button type="button" class="sw-filter" data-cat="__low" aria-pressed="false">Low<span class="n">{{ low_count }}</span></button>
+        {% for cat in categories %}<button type="button" class="sw-filter" data-cat="{{ cat }}" aria-pressed="false">{{ cat }}</button>{% endfor %}
+    </div>
+</div>
+
+<div class="sw-table-wrap">
+    <table class="sw-table" id="cTable">
+        <thead><tr><th>Item</th><th class="cons-hide-sm">Category</th><th class="cons-hide-sm">Where</th><th class="num">In stock</th><th class="actions">Quick</th></tr></thead>
+        <tbody>
+        {% for c in items %}
+        <tr data-id="{{ c.id }}" data-cat="{{ c.category or '' }}" data-low="{{ 1 if c.is_low else 0 }}"
+            data-text="{{ (c.name ~ ' ' ~ (c.category or '') ~ ' ' ~ (c.location or '') ~ ' ' ~ (c.supplier or ''))|lower }}"
+            class="{{ 'cons-low' if c.is_low }}">
+            <td><a class="cons-name" href="{{ url_for('consumables.consumable_detail', cid=c.id) }}">{{ c.name }}</a>
+                {% if c.is_low %}<span class="pill bad">Low</span>{% endif %}
+                <span class="sub">{% if c.low_threshold %}Alert at {{ c.low_threshold }}{% else %}No low-stock alert{% endif %}</span></td>
+            <td class="cons-hide-sm">{{ c.category or '—' }}</td>
+            <td class="cons-hide-sm">{{ c.location or '—' }}</td>
+            <td class="num"><span class="cons-qty" data-qty>{{ c.quantity }}</span> <small class="sub" style="display:inline">{{ c.unit or 'each' }}</small></td>
+            <td class="actions"><span class="cons-step">
+                <button type="button" class="btn btn-secondary btn-sm" data-step="use" aria-label="Use one {{ c.name }}" title="Use 1">−1</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-step="restock" aria-label="Put back one {{ c.name }}" title="Restock 1">+1</button>
+            </span></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+<p class="sw-blank" id="cNone" hidden><strong>Nothing matches</strong>Try a different search.</p>
+{% else %}
+<div class="sw-blank">
+    <strong>No consumables yet</strong>
+    {% if current_user.is_admin %}Add your tape, batteries, gels and other stock to start counting it.{% else %}An admin can add the stock you want to track.{% endif %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const CONS_ITEMS = {{ items_json|tojson }};
+const CONS_CATEGORIES = {{ categories|tojson }};
+
+window.SWCons = window.SWCons || {};
+SWCons.fields = function () {
+    return [
+        { name: 'name', label: 'Name', required: true, placeholder: 'e.g. Gaffer tape, black 48mm' },
+        { name: 'category', label: 'Category', half: true, suggestions: CONS_CATEGORIES, placeholder: 'Tape, Batteries, Gels…' },
+        { name: 'unit', label: 'Counted in', half: true, placeholder: 'rolls, packs, each', suggestions: ['each', 'rolls', 'packs', 'sheets', 'boxes', 'metres'] },
+        { name: 'quantity', label: 'In stock now', type: 'number', half: true, min: 0 },
+        { name: 'low_threshold', label: 'Low-stock alert at', type: 'number', half: true, min: 0, hint: 'Admins are told when it gets this low. 0 for never.' },
+        { name: 'reorder_qty', label: 'Usually buy', type: 'number', half: true, min: 1, hint: 'For the shopping list (optional)' },
+        { name: 'location', label: 'Where it lives', half: true, placeholder: 'Shelf B2, LX cupboard' },
+        { name: 'supplier', label: 'Supplier', half: true },
+        { name: 'supplier_url', label: 'Supplier link', half: true, placeholder: 'https://' },
+        { name: 'notes', label: 'Notes', type: 'textarea', rows: 2 },
+    ];
+};
+
+document.addEventListener('DOMContentLoaded', function () {
+    const add = document.getElementById('cAdd');
+    if (add) add.addEventListener('click', async function () {
+        const r = await SW.form({
+            title: 'Add a consumable', fields: SWCons.fields(), values: { unit: 'each', quantity: 0, low_threshold: 0 },
+            submitText: 'Add', wide: true,
+            onSubmit: (v) => SW.api('POST', '{{ url_for("consumables.add_consumable") }}', v),
+        });
+        if (r) { SW.toast('Added ' + r.item.name); SW.reloadSoon(); }
+    });
+
+    // Quick −1 / +1 from the list
+    document.querySelectorAll('#cTable [data-step]').forEach(function (b) {
+        b.addEventListener('click', async function () {
+            const tr = b.closest('tr'), id = tr.dataset.id;
+            b.disabled = true;
+            try {
+                const r = await SW.api('POST', `/consumables/${id}/${b.dataset.step}`, { amount: 1 });
+                tr.querySelector('[data-qty]').textContent = r.item.quantity;
+                tr.classList.toggle('cons-low', r.item.is_low);
+                SW.toast(`${b.dataset.step === 'use' ? 'Took' : 'Put back'} 1 ${r.item.name} · ${r.item.quantity} left`);
+            } catch (e) { SW.toast(e.message, 'error'); }
+            b.disabled = false;
+        });
+    });
+
+    // Search + category / low filters
+    const filter = document.getElementById('cFilter');
+    if (!filter) return;
+    let cat = '';
+    function apply() {
+        const q = filter.value.trim().toLowerCase();
+        let shown = 0;
+        document.querySelectorAll('#cTable tbody tr').forEach(function (tr) {
+            const ok = (!q || tr.dataset.text.includes(q)) &&
+                (!cat || (cat === '__low' ? tr.dataset.low === '1' : tr.dataset.cat === cat));
+            tr.hidden = !ok; if (ok) shown++;
+        });
+        document.getElementById('cNone').hidden = shown > 0;
+    }
+    filter.addEventListener('input', apply);
+    document.querySelectorAll('.sw-filter[data-cat]').forEach(function (b) {
+        b.addEventListener('click', function () {
+            cat = b.dataset.cat;
+            document.querySelectorAll('.sw-filter[data-cat]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+            apply();
+        });
+    });
+});
+</script>
+{% endblock %}

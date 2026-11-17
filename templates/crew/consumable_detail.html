@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}{{ c.name }} — Consumables — ShowWise{% endblock %}
+
+{% block content %}
+<style>
+    .cd-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+    @media (min-width: 900px) { .cd-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); } }
+    .cd-stock { display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; }
+    .cd-stock .n { font-size: 3rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+    .cd-stock .u { font-size: 1.1rem; color: var(--text-secondary); }
+    .cd-stock.low .n { color: var(--danger); }
+    .cd-amount { display: flex; align-items: center; gap: .4rem; margin: .9rem 0 .6rem; }
+    .cd-amount button { width: 48px; height: 48px; font-size: 1.3rem; }
+    .cd-amount input { width: 90px; height: 48px; text-align: center; font-size: 1.3rem; font-weight: 700; }
+    .cd-go { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-top: .9rem; }
+    .cd-go .btn { min-height: 56px; font-size: 1.05rem; font-weight: 700; }
+    .cd-facts { display: grid; grid-template-columns: auto 1fr; gap: .3rem .9rem; margin: .9rem 0 0; font-size: .92rem; }
+    .cd-facts dt { color: var(--text-secondary); }
+    .cd-facts dd { margin: 0; overflow-wrap: anywhere; }
+    .cd-change { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .cd-change.neg { color: var(--danger); }
+    .cd-change.pos { color: var(--success, var(--ok-fg)); }
+</style>
+
+<a class="sw-crumb" href="{{ url_for('consumables.consumables_list') }}"><i class="fas fa-arrow-left"></i> Consumables</a>
+
+<header class="sw-head">
+    <div>
+        <h1>{{ c.name }}</h1>
+        <p>{{ c.category or 'Consumable' }}{% if c.location %} · {{ c.location }}{% endif %}</p>
+    </div>
+    {% if current_user.is_admin %}
+    <div class="sw-head-actions">
+        <button type="button" class="btn btn-secondary" id="cdCount"><i class="fas fa-clipboard-check"></i> Stock count</button>
+        <a class="btn btn-secondary" href="{{ url_for('consumables.labels', ids=c.id) }}" target="_blank" rel="noopener"><i class="fas fa-qrcode"></i> Shelf label</a>
+        <button type="button" class="btn btn-secondary" id="cdEdit"><i class="fas fa-pen"></i> Edit</button>
+        <button type="button" class="btn btn-danger" id="cdDelete" aria-label="Delete"><i class="fas fa-trash"></i></button>
+    </div>
+    {% endif %}
+</header>
+
+<div class="cd-grid">
+    <section class="card">
+        <div class="cd-stock {{ 'low' if c.is_low }}" id="cdStock">
+            <span class="n" id="cdQty">{{ c.quantity }}</span><span class="u">{{ c.unit or 'each' }} in stock</span>
+            <span class="pill bad" id="cdLow" {{ 'hidden' if not c.is_low }}>Low</span>
+        </div>
+        <p class="sw-hint">{% if c.low_threshold %}Admins are told when it gets down to {{ c.low_threshold }}.{% else %}No low-stock alert set.{% endif %}
+            {% if used_30 %}{{ used_30 }} used in the last 30 days.{% endif %}</p>
+
+        <div class="cd-amount">
+            <button type="button" class="btn btn-secondary" id="cdMinus" aria-label="Fewer">−</button>
+            <input type="number" class="sw-input" id="cdAmount" value="1" min="1" inputmode="numeric" aria-label="How many">
+            <button type="button" class="btn btn-secondary" id="cdPlus" aria-label="More">+</button>
+            <span class="sw-hint" style="margin:0">{{ c.unit or 'each' }}</span>
+        </div>
+        <div class="form-group">
+            <label for="cdEvent">For event</label>
+            <select id="cdEvent" class="sw-input">
+                <option value="">No event</option>
+                {% for e in events %}<option value="{{ e.id }}" {{ 'selected' if e.id == default_event }}>{{ e.title }} · {{ e.event_date.strftime('%d %b') }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="cdNote">Note <span class="sw-hint" style="display:inline">(optional)</span></label>
+            <input type="text" id="cdNote" class="sw-input" maxlength="300" placeholder="e.g. marking out the stage">
+        </div>
+        <div class="cd-go">
+            <button type="button" class="btn btn-primary" data-act="use"><i class="fas fa-minus"></i> Use</button>
+            <button type="button" class="btn btn-secondary" data-act="restock"><i class="fas fa-plus"></i> Restock</button>
+        </div>
+
+        <dl class="cd-facts">
+            {% if c.supplier or c.supplier_url %}<dt>Supplier</dt><dd>{% if c.supplier_url %}<a href="{{ c.supplier_url }}" target="_blank" rel="noopener noreferrer">{{ c.supplier or 'Buy online' }} <i class="fas fa-arrow-up-right-from-square" style="font-size:.75em"></i></a>{% else %}{{ c.supplier }}{% endif %}</dd>{% endif %}
+            {% if c.reorder_qty %}<dt>Usually buy</dt><dd>{{ c.reorder_qty }} {{ c.unit or 'each' }}</dd>{% endif %}
+            {% if c.notes %}<dt>Notes</dt><dd style="white-space:pre-wrap">{{ c.notes }}</dd>{% endif %}
+        </dl>
+    </section>
+
+    <section class="card">
+        <div class="card-header"><h2 class="card-title">History</h2></div>
+        {% if history %}
+        <div class="sw-table-wrap" style="border:0">
+            <table class="sw-table">
+                <thead><tr><th>When</th><th>Change</th><th>Who / what for</th><th class="num">Left</th><th></th></tr></thead>
+                <tbody>
+                {% for m in history %}
+                <tr>
+                    <td>{{ m.created_at.strftime('%d %b, %H:%M') }}</td>
+                    <td><span class="cd-change {{ 'neg' if m.change < 0 else 'pos' }}">{{ '%+d'|format(m.change) }}</span>
+                        <span class="sub">{{ {'use': 'Used', 'restock': 'Restocked', 'count': 'Stock count'}.get(m.kind, m.kind) }}</span></td>
+                    <td>{{ m.by_username|person }}
+                        {% if m.event_id %}<span class="sub">for <a href="{{ url_for('consumables.event_usage', event_id=m.event_id) }}">{{ m.event_title }}</a></span>
+                        {% elif m.event_title %}<span class="sub">for {{ m.event_title }}</span>{% endif %}
+                        {% if m.note %}<span class="sub">{{ m.note }}</span>{% endif %}</td>
+                    <td class="num">{{ m.quantity_after }}</td>
+                    <td class="actions">{% if loop.first and (m.by_username == current_user.username or current_user.is_admin) %}
+                        <button type="button" class="btn btn-secondary btn-sm" data-undo="{{ m.id }}">Undo</button>{% endif %}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="sw-hint">Nothing used or restocked yet.</p>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if current_user.is_admin %}
+<script>
+const CD_ITEM = {{ item_json|tojson }};
+</script>
+{% endif %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const id = {{ c.id }};
+    const amount = document.getElementById('cdAmount');
+    const n = () => Math.max(1, parseInt(amount.value, 10) || 1);
+    document.getElementById('cdMinus').addEventListener('click', () => { amount.value = Math.max(1, n() - 1); });
+    document.getElementById('cdPlus').addEventListener('click', () => { amount.value = n() + 1; });
+
+    document.querySelectorAll('[data-act]').forEach(function (b) {
+        b.addEventListener('click', async function () {
+            b.disabled = true;
+            try {
+                const r = await SW.api('POST', `/consumables/${id}/${b.dataset.act}`, {
+                    amount: n(), event_id: document.getElementById('cdEvent').value || null,
+                    note: document.getElementById('cdNote').value,
+                });
+                SW.toast(`${b.dataset.act === 'use' ? 'Used' : 'Restocked'} ${n()} · ${r.item.quantity} ${r.item.unit} left`);
+                SW.reloadSoon();
+            } catch (e) { SW.toast(e.message, 'error'); b.disabled = false; }
+        });
+    });
+
+    document.querySelectorAll('[data-undo]').forEach(function (b) {
+        b.addEventListener('click', async function () {
+            try { await SW.api('POST', `/consumables/movement/${b.dataset.undo}/undo`); SW.toast('Undone'); SW.reloadSoon(); }
+            catch (e) { SW.toast(e.message, 'error'); }
+        });
+    });
+
+    {% if current_user.is_admin %}
+    document.getElementById('cdEdit').addEventListener('click', async function () {
+        const fields = [
+            { name: 'name', label: 'Name', required: true },
+            { name: 'category', label: 'Category', half: true },
+            { name: 'unit', label: 'Counted in', half: true },
+            { name: 'low_threshold', label: 'Low-stock alert at', type: 'number', half: true, min: 0, hint: '0 for never' },
+            { name: 'reorder_qty', label: 'Usually buy', type: 'number', half: true, min: 1 },
+            { name: 'location', label: 'Where it lives', half: true },
+            { name: 'supplier', label: 'Supplier', half: true },
+            { name: 'supplier_url', label: 'Supplier link', placeholder: 'https://' },
+            { name: 'notes', label: 'Notes', type: 'textarea', rows: 2 },
+        ];
+        const r = await SW.form({ title: 'Edit ' + CD_ITEM.name, fields, values: CD_ITEM, submitText: 'Save', wide: true,
+            onSubmit: (v) => SW.api('PUT', `/consumables/${id}`, v) });
+        if (r) { SW.toast('Saved'); SW.reloadSoon(); }
+    });
+    document.getElementById('cdCount').addEventListener('click', async function () {
+        const r = await SW.form({ title: 'Stock count', submitText: 'Set count',
+            fields: [{ type: 'info', name: 'i', text: 'Count what is on the shelf. The history keeps the difference.' },
+                     { name: 'quantity', label: `How many ${CD_ITEM.unit} are there?`, type: 'number', min: 0, required: true }],
+            values: { quantity: CD_ITEM.quantity },
+            onSubmit: (v) => SW.api('POST', `/consumables/${id}/count`, v) });
+        if (r) { SW.toast('Count saved'); SW.reloadSoon(); }
+    });
+    document.getElementById('cdDelete').addEventListener('click', async function () {
+        if (!await SW.confirm(`Delete ${CD_ITEM.name} and its history? This can't be undone.`, { title: 'Delete item?' })) return;
+        try { await SW.api('DELETE', `/consumables/${id}`); location.href = '{{ url_for("consumables.consumables_list") }}'; }
+        catch (e) { SW.toast(e.message, 'error'); }
+    });
+    {% endif %}
+});
+</script>
+{% endblock %}
