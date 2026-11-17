@@ -15,6 +15,13 @@
         {% if i.status == 'pending' %}<span class="sw-chip warn">Awaiting your response</span>
         {% elif i.status in ('accepted','confirmed') %}<span class="sw-chip ok">Confirmed</span>
         {% else %}<span class="sw-chip bad">Declined</span>{% endif %}
+        {% if i.swap %}
+          {% if i.swap.status == 'claimed' %}<span class="sw-chip warn">Swap: {{ i.swap.claimed_by.shown_name }} claimed it · awaiting approval</span>
+          {% else %}<span class="sw-chip">Offered for swap</span>{% endif %}
+          <button class="btn btn-ghost btn-sm" onclick="SWAP.act({{ i.swap.id }}, 'cancel', 'Swap cancelled')">Cancel swap</button>
+        {% elif i.start > now and i.status != 'rejected' %}
+          <button class="btn btn-secondary btn-sm" onclick="SWAP.offer({{ i.assignment.id }})"><i class="fas fa-right-left"></i>Offer swap</button>
+        {% endif %}
         {% if i.end >= now %}
           {% if i.status != 'accepted' and i.status != 'confirmed' %}<button class="btn btn-success btn-sm" onclick="SW.respondShift({{ i.assignment.id }}, 'accepted')">Accept</button>{% endif %}
           {% if i.status != 'rejected' %}<button class="btn btn-ghost btn-sm" onclick="SW.respondShift({{ i.assignment.id }}, 'rejected')">Can't make it</button>{% endif %}
@@ -48,6 +55,42 @@
 <div class="sw-banner"><i class="fas fa-bell"></i> You have {{ pending|length }} shift{{ 's' if pending|length != 1 }} waiting for your response.</div>
 {% endif %}
 
+{% macro swap_card(s, buttons) %}
+  <div class="sw-sched st-pending">
+    <div class="main">
+      <div class="title"><a href="{{ url_for('events.event_detail', id=s.event_id) }}" style="color:inherit;text-decoration:none">{{ s.event_title }}</a>
+        {% if s.role %}<span class="sw-chip plain" style="margin-left:.4rem">{{ s.role }}</span>{% endif %}</div>
+      <div class="when"><i class="fas fa-clock"></i> {{ s.when }}</div>
+      <div class="when"><i class="fas fa-user"></i> Offered by {{ s.offered_by }}{% if s.claimed_by %} · claimed by {{ s.claimed_by }}{% endif %}</div>
+      {% if s.note %}<div class="when"><i class="fas fa-comment"></i> {{ s.note }}</div>{% endif %}
+    </div>
+    <div class="sw-shift-btns">{{ buttons }}</div>
+  </div>
+{% endmacro %}
+
+{% if swap_approvals %}
+<h3 style="margin:1rem 0 .5rem"><i class="fas fa-right-left"></i> Swaps to approve ({{ swap_approvals|length }})</h3>
+{% for s in swap_approvals %}{% set b %}
+  <button class="btn btn-success btn-sm" onclick="SWAP.approve({{ s.id }})">Approve</button>
+  <button class="btn btn-ghost btn-sm" onclick="SWAP.act({{ s.id }}, 'reject', 'Swap rejected')">Reject</button>
+{% endset %}{{ swap_card(s, b) }}{% endfor %}
+{% endif %}
+
+{% if swap_claims %}
+<h3 style="margin:1rem 0 .5rem"><i class="fas fa-hourglass-half"></i> Shifts you've claimed</h3>
+{% for s in swap_claims %}{% set b %}
+  <span class="sw-chip warn">Awaiting approval</span>
+  <button class="btn btn-ghost btn-sm" onclick="SWAP.act({{ s.id }}, 'withdraw', 'Claim withdrawn')">Withdraw</button>
+{% endset %}{{ swap_card(s, b) }}{% endfor %}
+{% endif %}
+
+{% if swap_offers %}
+<h3 style="margin:1rem 0 .5rem"><i class="fas fa-hand-holding"></i> Shifts up for grabs ({{ swap_offers|length }})</h3>
+{% for s in swap_offers %}{% set b %}
+  <button class="btn btn-primary btn-sm" onclick="SWAP.act({{ s.id }}, 'claim', 'Claimed: an admin will approve it')">Take this shift</button>
+{% endset %}{{ swap_card(s, b) }}{% endfor %}
+{% endif %}
+
 <div class="sw-actions-bar" style="margin-bottom:.5rem">
   <button class="btn btn-sm btn-primary" data-tab="up">Upcoming ({{ upcoming|length }})</button>
   <button class="btn btn-sm btn-ghost" data-tab="past">Past</button>
@@ -68,5 +111,40 @@ document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => {
   document.getElementById('tab-up').hidden = b.dataset.tab !== 'up';
   document.getElementById('tab-past').hidden = b.dataset.tab !== 'past';
 });
+
+const SWAP = {
+  async act(id, verb, ok) {
+    if (await SW.run(() => SW.api('POST', `/shifts/swaps/${id}/${verb}`), ok)) SW.reloadSoon();
+  },
+  async approve(id) {
+    try {
+      await SW.api('POST', `/shifts/swaps/${id}/approve`);
+    } catch (e) {
+      if (!/clash/.test(e.message || '')) { SW.toast(e.message, 'error'); return; }
+      if (!(await SW.confirm(e.message + '. Approve anyway?', { okText: 'Approve anyway' }))) return;
+      if (!(await SW.run(() => SW.api('POST', `/shifts/swaps/${id}/approve`, { force: true })))) return;
+    }
+    SW.toast('Swap approved'); SW.reloadSoon();
+  },
+  async offer(aid) {
+    const r = await SW.run(() => SW.api('GET', `/shifts/assignment/${aid}/swap-candidates`));
+    if (!r) return;
+    const fields = [
+      { type: 'info', text: 'Someone takes it once an admin approves. Until then it stays yours. The offer ends when the shift starts.' },
+      { name: 'who', label: 'Who can take it', type: 'select', options: [
+        { value: 'any', label: 'Anyone who is free' }, { value: 'some', label: 'Only people I choose' }] },
+      ...r.people.map((p) => ({ name: 'p' + p.id, type: 'checkbox',
+        label: p.name + (p.clash ? ' (has a clash)' : ''), show: (v) => v.who === 'some' })),
+      { name: 'note', label: 'Note (optional)', type: 'textarea', rows: 2, maxLength: 500 },
+    ];
+    await SW.form({ title: 'Offer this shift', fields, submitText: 'Offer shift',
+      onSubmit: async (v) => {
+        const ids = v.who === 'some' ? r.people.filter((p) => v['p' + p.id]).map((p) => p.id) : [];
+        if (v.who === 'some' && !ids.length) throw new Error('Choose at least one person');
+        await SW.api('POST', `/shifts/assignment/${aid}/swap`, { to_user_ids: ids, note: v.note });
+        SW.toast('Shift offered'); SW.reloadSoon();
+      } });
+  },
+};
 </script>
 {% endblock %}

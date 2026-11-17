@@ -276,8 +276,22 @@ def my_schedule():
     upcoming = [i for i in items if i['end'] >= now]
     past = [i for i in items if i['end'] < now][::-1][:50]
     pending = [i for i in upcoming if i['status'] == 'pending']
+
+    # Shift swaps: my active offer per shift, offers I can take, my claims, and (admins) ones to approve
+    from services import shift_swaps
+    from models import ShiftSwap
+    shift_swaps.expire_started(now)
+    for i in upcoming:
+        i['swap'] = shift_swaps.active_swap_for(i['assignment']) if i['assignment'] else None
+    swap_view = lambda s: {**shift_swaps.serialize(s),
+                           'when': fmt_range(s.assignment.shift.shift_date, s.assignment.shift.shift_end_date)}
+    my_claims = ShiftSwap.query.filter_by(status='claimed', claimed_by_id=current_user.id).all()
     return render_template('/crew/my_schedule.html', upcoming=upcoming, past=past,
-                           pending=pending, now=now)
+                           pending=pending, now=now,
+                           swap_offers=[swap_view(s) for s in shift_swaps.open_offers_for(current_user, now)],
+                           swap_claims=[swap_view(s) for s in my_claims],
+                           swap_approvals=[swap_view(s) for s in shift_swaps.awaiting_approval()]
+                           if shift_swaps.is_shift_admin(current_user) else [])
 
 # ---------------------------------------------------------------------------
 # Unavailability
