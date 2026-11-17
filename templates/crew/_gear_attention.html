@@ -19,8 +19,8 @@
             {% for q in quarantined %}
             <li>
                 <a href="{{ url_for('equipment.equipment_detail', id=q.equipment_id, unit=q.unit_id) }}#unit-{{ q.unit_id }}"><code>{{ q.asset_tag }}</code></a>
-                <span>{{ q.equipment_name }}: {{ q.reason }}
-                    <span class="sub">{{ q.quarantined_at }} by {{ q.quarantined_by or 'unknown' }}{% if q.event_title %} · after {{ q.event_title }}{% endif %}</span></span>
+                <span>{% set f = (q.faults or [])|first %}{% if f %}<span class="pill {{ 'warn' if f.severity == 'minor' else 'bad' }}">{{ f.severity_label }}</span> {% endif %}{{ q.equipment_name }}: {{ q.reason }}
+                    <span class="sub">{{ q.quarantined_at }} by {{ q.quarantined_by or 'unknown' }}{% if q.event_title %} · after {{ q.event_title }}{% endif %}{% set n_ph = (q.faults or [])|sum(attribute='photo_count') %}{% if n_ph %} · <a href="#" data-history="{{ q.unit_id }}"><i class="fas fa-camera"></i> {{ n_ph }} photo{{ '' if n_ph == 1 else 's' }}</a>{% endif %}{% if (q.faults or [])|length > 1 %} · {{ q.faults|length }} reports{% endif %}</span></span>
                 {% if current_user.is_admin %}
                 <button type="button" class="btn btn-secondary btn-sm" data-release='{{ q|tojson }}'>Checked…</button>
                 {% endif %}
@@ -53,6 +53,9 @@
     {% endif %}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-history]').forEach(function (a) {
+        a.addEventListener('click', function (e) { e.preventDefault(); SWGear.history(+a.dataset.history, { isAdmin: true }); });
+    });
     document.querySelectorAll('[data-release]').forEach(function (b) {
         b.addEventListener('click', async function () {
             const q = JSON.parse(b.dataset.release);

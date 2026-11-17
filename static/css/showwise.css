@@ -473,7 +473,7 @@ tr:hover td { background: var(--bg-table-hover); }
 .sw-hist-del { float: right; font-size: .8rem; font-weight: 500; color: var(--danger); }
 .sw-hist-meta { font-size: .82rem; color: var(--text-secondary); }
 .sw-hist-detail { margin-top: .2rem; font-size: .9rem; white-space: pre-wrap; overflow-wrap: anywhere; }
-.sw-hist-photo { margin-top: .4rem; max-width: 180px; max-height: 140px; border-radius: var(--radius); border: 1px solid var(--border); display: block; }
+.sw-hist-photo { margin-top: .4rem; margin-right: .4rem; max-width: 180px; max-height: 140px; border-radius: var(--radius); border: 1px solid var(--border); display: inline-block; vertical-align: top; }
 @media (max-width: 520px) { .sw-scan-text { display: none; } }
 
 /* ============================================================
