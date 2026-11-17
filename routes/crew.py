@@ -16,6 +16,7 @@ from models import (
 from decorators import crew_required
 from services.user_names import find_user_by_username
 from services.event_times import upcoming_time_rows, when_text
+from services import push_service
 from services.email_service import (
     send_crew_assignment_email, send_event_reminder_email,
 )
@@ -107,6 +108,9 @@ def assign_crew():
 
     user  = find_user_by_username(data['crew_member'])
     event = Event.query.get(data['event_id'])
+    if user and event:
+        push_service.send_async([dict(user_id=user.id, kind='event_assigned', title=f'Added to {event.title}',
+                                      body=when_text(event), url=f'/events/{event.id}')])
     if user and user.email and event:
         send_crew_assignment_email(
             recipient_email=user.email, username=user.shown_name,
@@ -139,11 +143,14 @@ def assign_all_crew():
     event_id = data.get('event_id')
     event    = Event.query.get_or_404(event_id)
     added    = 0
+    pushes   = []
     for user in User.query.filter(User.user_role.in_(['crew', 'crew_admin'])).all():
         if not CrewAssignment.query.filter_by(event_id=event_id, crew_member=user.username).first():
             db.session.add(CrewAssignment(event_id=event_id, crew_member=user.username,
                                           role='Crew Member', assigned_via='webapp'))
             added += 1
+            pushes.append(dict(user_id=user.id, kind='event_assigned', title=f'Added to {event.title}',
+                               body=when_text(event), url=f'/events/{event.id}'))
             if user.email:
                 send_crew_assignment_email(
                     recipient_email=user.email, username=user.shown_name,
@@ -153,6 +160,7 @@ def assign_all_crew():
                     role='Crew Member',
                 )
     db.session.commit()
+    push_service.send_async(pushes)
     return jsonify({'success': True, 'added': added})
 
 
@@ -276,8 +284,22 @@ def my_schedule():
     upcoming = [i for i in items if i['end'] >= now]
     past = [i for i in items if i['end'] < now][::-1][:50]
     pending = [i for i in upcoming if i['status'] == 'pending']
+
+    # Shift swaps: my active offer per shift, offers I can take, my claims, and (admins) ones to approve
+    from services import shift_swaps
+    from models import ShiftSwap
+    shift_swaps.expire_started(now)
+    for i in upcoming:
+        i['swap'] = shift_swaps.active_swap_for(i['assignment']) if i['assignment'] else None
+    swap_view = lambda s: {**shift_swaps.serialize(s),
+                           'when': fmt_range(s.assignment.shift.shift_date, s.assignment.shift.shift_end_date)}
+    my_claims = ShiftSwap.query.filter_by(status='claimed', claimed_by_id=current_user.id).all()
     return render_template('/crew/my_schedule.html', upcoming=upcoming, past=past,
-                           pending=pending, now=now)
+                           pending=pending, now=now,
+                           swap_offers=[swap_view(s) for s in shift_swaps.open_offers_for(current_user, now)],
+                           swap_claims=[swap_view(s) for s in my_claims],
+                           swap_approvals=[swap_view(s) for s in shift_swaps.awaiting_approval()]
+                           if shift_swaps.is_shift_admin(current_user) else [])
 
 # ---------------------------------------------------------------------------
 # Unavailability

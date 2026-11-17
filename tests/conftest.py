@@ -29,3 +29,13 @@ def _restore_environ():
     yield
     os.environ.clear()
     os.environ.update(saved)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_web_push(monkeypatch):
+    """Web Push must never reach the network in tests; tests that check pushes swap in their own fake."""
+    from services import push_service
+
+    def refuse(*a, **k):
+        raise AssertionError('a test tried to send a real Web Push')
+    monkeypatch.setattr(push_service, '_webpush', refuse)

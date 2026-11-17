@@ -11,12 +11,15 @@ from datetime import date, datetime, timedelta
 
 import os
 
-from flask import Blueprint, render_template, request, jsonify, abort, send_from_directory
+from flask import (Blueprint, render_template, request, jsonify, abort, send_from_directory,
+                   redirect, url_for)
 from flask_login import login_required, current_user
 
 from extensions import db
+from services.training_service import equipment_skill_warnings
 from models import (Equipment, EquipmentUnit, Event, PickListItem, PickListUnit,
                     UnitCheckout, UnitMaintenance, UnitQuarantine, BulkCheckout,
+                    FaultReport, FaultPhoto, FAULT_CATEGORIES, FAULT_SEVERITIES, User,
                     UNIT_STATUSES, UNIT_STATUS_LABELS, QUARANTINE_OUTCOMES,
                     MAINTENANCE_KINDS, MAINTENANCE_LABELS, MAINTENANCE_RESULTS,
                     latest_due_by_kind, due_state)
@@ -284,6 +287,11 @@ def checkout_scan():
             return _group_label_answer(hit, event)
     if not unit:
         return jsonify({'error': err, 'conflict': 'not_found'}), 404
+    if unit.is_case:
+        # A road case: it and everything packed in it go out / come back together
+        from routes.cases import case_scan
+        body, status = case_scan(unit, event, mode, force)
+        return jsonify(body), status
 
     co = unit.open_checkout
     if event is None and mode != 'return':
@@ -338,8 +346,15 @@ def checkout_scan():
 
     if co:
         _close(co, note=f'Moved to {event.title} by {current_user.username}')
+    from services.gear_bookings import unit_reserved_elsewhere
+    reserved = [{'code': 'reserved_elsewhere',
+                 'message': f'{unit.asset_tag} is reserved for {other.title}, which overlaps {event.title}'}
+                for other in unit_reserved_elsewhere(unit, event)]
     warnings, info = _picklist_check(unit, event)
-    warnings = blockers + warnings          # overridden blockers stay visible in the result
+    warnings = blockers + reserved + warnings + equipment_skill_warnings(current_user, unit.equipment)       # overridden blockers stay visible in the result
+    if unit.case_link:
+        warnings.append({'code': 'in_case', 'message': f'{unit.asset_tag} is packed in case '
+                                                       f'{unit.case_link.case.asset_tag}. Scan the case to take it all'})
     new = UnitCheckout(unit_id=unit.id, event_id=event.id, checked_out_by=current_user.username,
                        checked_out_at=_now(),
                        notes=('Checked out despite: ' + '; '.join(b['message'] for b in blockers))
@@ -465,6 +480,7 @@ def bulk_checkout():
     db.session.add(b)
     db.session.commit()
     return jsonify({'success': True, 'action': 'out', 'checkout': b.to_dict(),
+                    'warnings': equipment_skill_warnings(current_user, eq),
                     'message': f'{qty} × {eq.name} checked out to {event.title}'})
 
 
@@ -498,22 +514,13 @@ def bulk_return(bid):
 # ---------------------------------------------------------------------------
 
 QUARANTINE_PICS_FOLDER = os.path.join('uploads', 'quarantine')
-_IMAGE_EXTS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
 
 def _save_quarantine_photo(file, unit_id):
     """Validated upload -> path relative to uploads/. Raises ValueError with a message."""
-    name = file.filename or ''
-    ext = name.rsplit('.', 1)[1].lower() if '.' in name else ''
-    if ext not in _IMAGE_EXTS:
-        raise ValueError('Photo must be a png, jpg, gif or webp image')
-    from services.upload_security import is_real_image
-    if not is_real_image(file):
-        raise ValueError('That file is not a valid image')
-    os.makedirs(QUARANTINE_PICS_FOLDER, exist_ok=True)
-    filename = f'quarantine_{unit_id}_{datetime.now().strftime("%Y%m%d_%H%M%S_%f")}.{ext}'
-    file.save(os.path.join(QUARANTINE_PICS_FOLDER, filename))
-    return f'quarantine/{filename}'
+    from services.file_service import save_image_upload
+    root, folder = os.path.split(QUARANTINE_PICS_FOLDER)
+    return save_image_upload(file, folder, f'quarantine_{unit_id}', uploads_root=root)
 
 
 @unit_tracking_bp.route('/equipment/unit/<int:uid>/quarantine', methods=['POST'])
@@ -544,50 +551,206 @@ def quarantine(uid):
     return jsonify({'success': True, 'quarantine': q.to_dict(), 'unit': _unit_brief(u)})
 
 
+def release_quarantine(u, q, data):
+    """Close a quarantine as an admin decided, and resolve the fault reports behind it.
+    data: {outcome, note, kind?, next_due?, maintenance_id?}. Returns (record or None, None)
+    or (None, (error, status)). Putting an item back in use needs a note and either logs
+    a new inspection/repair or links one already logged (maintenance_id)."""
+    outcome = (data.get('outcome') or 'available').strip().lower()
+    if outcome not in QUARANTINE_OUTCOMES:
+        return None, ('Unknown outcome', 400)
+    note = (data.get('note') or '').strip()
+    rec = None
+    if data.get('maintenance_id'):
+        rec = db.session.get(UnitMaintenance, _int(data.get('maintenance_id'), 0))
+        if not rec or rec.unit_id != u.id:
+            return None, ('That maintenance record is not for this item', 400)
+    elif outcome == 'available':
+        kind = (data.get('kind') or 'inspection').strip().lower()
+        if kind not in MAINTENANCE_KINDS:
+            return None, ('Unknown check type', 400)
+        if not note:
+            return None, ('Say what was checked or fixed', 400)
+        try:
+            next_due = _parse_date(data.get('next_due'), 'Next due date')
+        except ValueError as e:
+            return None, (str(e), 400)
+        if next_due and next_due <= date.today():
+            return None, ('Next due date must be in the future', 400)
+        rec = UnitMaintenance(unit_id=u.id, kind=kind, performed_on=date.today(),
+                              result='repaired' if kind == 'repair' else 'pass',
+                              performed_by=current_user.username, recorded_by=current_user.username,
+                              notes=f'Checked after a problem report ({q.reason}). {note}', next_due=next_due)
+        db.session.add(rec)
+        db.session.flush()
+    now = _now()
+    q.released_at  = now
+    q.released_by  = current_user.username
+    q.outcome      = outcome
+    q.release_note = note or None
+    u.status = outcome
+    for f in q.fault_reports:
+        if f.resolved_at is None:
+            f.resolved_at, f.resolved_by = now, current_user.username
+            f.resolution_note = note or QUARANTINE_OUTCOMES[outcome]
+            f.maintenance_id = rec.id if rec else None
+    return rec, None
+
+
 @unit_tracking_bp.route('/equipment/unit/<int:uid>/release', methods=['POST'])
 @login_required
 @crew_required
 def release(uid):
     """Admin closes a quarantine. Body: {outcome: available|repair|retired, note,
-    kind?: inspection|repair|pat, next_due?}. Putting an item back in service
-    logs the inspection or repair that cleared it, so a note is required."""
+    kind?: inspection|repair|pat, next_due?, maintenance_id?}. Putting an item back in
+    service logs the inspection or repair that cleared it, so a note is required."""
     if not current_user.is_admin:
         return jsonify({'error': 'Only admins can put an item back in use'}), 403
     u = EquipmentUnit.query.get_or_404(uid)
     q = u.open_quarantine
     if u.status != 'quarantined' or not q:
         return jsonify({'error': f'{u.asset_tag} is not out of use'}), 409
-    data = request.get_json(silent=True) or {}
-    outcome = (data.get('outcome') or 'available').strip().lower()
-    if outcome not in QUARANTINE_OUTCOMES:
-        return jsonify({'error': 'Unknown outcome'}), 400
-    note = (data.get('note') or '').strip()
-    rec = None
-    if outcome == 'available':
-        kind = (data.get('kind') or 'inspection').strip().lower()
-        if kind not in MAINTENANCE_KINDS:
-            return jsonify({'error': 'Unknown check type'}), 400
-        if not note:
-            return jsonify({'error': 'Say what was checked or fixed'}), 400
-        try:
-            next_due = _parse_date(data.get('next_due'), 'Next due date')
-        except ValueError as e:
-            return jsonify({'error': str(e)}), 400
-        if next_due and next_due <= date.today():
-            return jsonify({'error': 'Next due date must be in the future'}), 400
-        rec = UnitMaintenance(unit_id=u.id, kind=kind, performed_on=date.today(),
-                              result='repaired' if kind == 'repair' else 'pass',
-                              performed_by=current_user.username, recorded_by=current_user.username,
-                              notes=f'Checked after a problem report ({q.reason}). {note}', next_due=next_due)
-        db.session.add(rec)
-    q.released_at  = _now()
-    q.released_by  = current_user.username
-    q.outcome      = outcome
-    q.release_note = note or None
-    u.status = outcome
+    rec, err = release_quarantine(u, q, request.get_json(silent=True) or {})
+    if err:
+        return jsonify({'error': err[0]}), err[1]
     db.session.commit()
     return jsonify({'success': True, 'quarantine': q.to_dict(), 'unit': _unit_brief(u),
                     'record': rec.to_dict() if rec else None})
+
+
+# ---------------------------------------------------------------------------
+# Fault reports: scan an item on a phone, say what's wrong, add photos
+# ---------------------------------------------------------------------------
+
+MAX_FAULT_PHOTOS = 6
+
+
+def _wants_json():
+    return request.is_json or 'application/json' in (request.headers.get('Accept') or '')
+
+
+@unit_tracking_bp.route('/equipment/unit/<int:uid>/fault')
+@login_required
+@crew_required
+def fault_form(uid, error=None, code=200):
+    u = EquipmentUnit.query.get_or_404(uid)
+    return render_template('crew/fault_report.html', unit=u, unit_dict=u.to_dict(),
+                           categories=list(FAULT_CATEGORIES.items()),
+                           severities=list(FAULT_SEVERITIES.items()),
+                           event_id=request.args.get('event_id', type=int),
+                           max_photos=MAX_FAULT_PHOTOS,
+                           back_url=_unit_url(u), error=error), code
+
+
+@unit_tracking_bp.route('/equipment/unit/<int:uid>/fault', methods=['POST'])
+@login_required
+@crew_required
+def report_fault(uid):
+    """Any crew member reports a fault. Form: summary, category?, severity, event_id?,
+    photos (one or more image files). Takes the item out of use (an already open
+    quarantine is reused) and tells the gear admins."""
+    u = EquipmentUnit.query.get_or_404(uid)
+    data = request.form if request.form else (request.get_json(silent=True) or {})
+
+    def fail(msg, code):
+        if _wants_json():
+            return jsonify({'error': msg}), code
+        return fault_form(u.id, error=msg, code=code)
+
+    summary = (data.get('summary') or data.get('reason') or '').strip()[:200]
+    category = (data.get('category') or '').strip().lower() or None
+    severity = (data.get('severity') or 'major').strip().lower()
+    if category and category not in FAULT_CATEGORIES:
+        return fail('Unknown category', 400)
+    if severity not in FAULT_SEVERITIES:
+        return fail('Unknown severity', 400)
+    if not summary:
+        if category and category != 'other':
+            summary = FAULT_CATEGORIES[category]
+        else:
+            return fail('Say what is wrong with it', 400)
+    if u.status in ('retired', 'lost'):
+        return fail(f'{u.asset_tag} is marked {u.status}', 409)
+    files = [f for f in request.files.getlist('photos') + request.files.getlist('photo') if f and f.filename]
+    if len(files) > MAX_FAULT_PHOTOS:
+        return fail(f'Up to {MAX_FAULT_PHOTOS} photos', 400)
+    from services.file_service import save_image_upload
+    saved = []
+    try:
+        for f in files:
+            saved.append(save_image_upload(f, 'faults', f'fault_{u.id}'))
+    except ValueError as e:
+        for path in saved:
+            try:
+                os.remove(os.path.join('uploads', path))
+            except OSError:
+                pass
+        return fail(str(e), 400)
+
+    event = db.session.get(Event, _int(data.get('event_id'), 0)) if data.get('event_id') else None
+    reason = f'{FAULT_CATEGORIES[category]}: {summary}' if category and summary != FAULT_CATEGORIES[category] else summary
+    q = quarantine_unit(u, reason, event=event, photo=saved[0] if saved else None)
+    db.session.flush()
+    report = FaultReport(unit_id=u.id, quarantine_id=q.id, event_id=event.id if event else None,
+                         summary=summary, category=category, severity=severity,
+                         reported_by=current_user.username, reported_at=_now())
+    for path in saved:
+        report.photos.append(FaultPhoto(path=path))
+    db.session.add(report)
+    db.session.commit()
+
+    d = report.to_dict()
+    try:
+        from services.notification_service import notify_fault_report
+        admins = [a.email for a in User.query.filter_by(is_admin=True).all()
+                  if a.email and a.username != current_user.username]
+        notify_fault_report(d, admins, url_for('equipment.equipment_detail', id=u.equipment_id,
+                                               unit=u.id, _external=True) + f'#unit-{u.id}')
+    except Exception as exc:                 # noqa: BLE001
+        print(f'❌ Fault notification failed: {exc}')
+
+    if _wants_json():
+        return jsonify({'success': True, 'report': d, 'quarantine': q.to_dict(), 'unit': _unit_brief(u)})
+    return redirect(_unit_url(u))
+
+
+@unit_tracking_bp.route('/equipment/fault/<int:fid>/resolve', methods=['POST'])
+@login_required
+@crew_required
+def resolve_fault(fid):
+    """Admin resolves a fault report: same body as /release. Releases the quarantine it
+    put the item in, which resolves every report on that quarantine."""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Only admins can resolve a fault'}), 403
+    f = FaultReport.query.get_or_404(fid)
+    if f.resolved_at is not None:
+        return jsonify({'error': 'That fault is already resolved'}), 409
+    u, q = f.unit, f.quarantine
+    data = request.get_json(silent=True) or {}
+    if q is not None and q.released_at is None:
+        rec, err = release_quarantine(u, q, data)
+        if err:
+            return jsonify({'error': err[0]}), err[1]
+    else:                                    # its quarantine was closed some other way
+        rec = db.session.get(UnitMaintenance, _int(data.get('maintenance_id'), 0)) \
+            if data.get('maintenance_id') else None
+        if rec and rec.unit_id != u.id:
+            return jsonify({'error': 'That maintenance record is not for this item'}), 400
+        f.resolved_at, f.resolved_by = _now(), current_user.username
+        f.resolution_note = (data.get('note') or '').strip() or None
+        f.maintenance_id = rec.id if rec else None
+    db.session.commit()
+    return jsonify({'success': True, 'report': f.to_dict(), 'unit': _unit_brief(u),
+                    'record': rec.to_dict() if rec else None})
+
+
+@unit_tracking_bp.route('/equipment/fault/photo/<int:pid>')
+@login_required
+@crew_required
+def fault_photo(pid):
+    p = FaultPhoto.query.get_or_404(pid)
+    folder, filename = os.path.split(p.path)
+    return send_from_directory(os.path.join(os.path.abspath('uploads'), folder), filename)
 
 
 @unit_tracking_bp.route('/equipment/quarantine/<int:qid>/photo')
@@ -610,6 +773,7 @@ def unit_history(uid):
                     'checkouts': [c.to_dict() for c in u.checkouts],
                     'maintenance': [m.to_dict() for m in u.maintenance],
                     'quarantines': [q.to_dict() for q in u.quarantines],
+                    'faults': [f.to_dict() for f in u.fault_reports],
                     'timeline': unit_timeline(u),
                     'maintenance_due': u.maintenance_due()})
 
@@ -636,8 +800,21 @@ def unit_timeline(u):
         add(when, 'maintenance', f'{MAINTENANCE_LABELS.get(m.kind, m.kind)}: {m.result}',
             detail=' · '.join(x for x in (m.notes, f'next due {m.next_due.strftime("%d %b %Y")}' if m.next_due else '') if x),
             by=m.performed_by, maintenance_id=m.id)
+    for f in u.fault_reports:
+        fd = f.to_dict()
+        add(f.reported_at, 'fault', 'Fault reported'
+            + (f': {fd["category_label"]}' if fd['category_label'] else '') + ', taken out of use',
+            detail=f.summary, by=f.reported_by, photos=fd['photo_urls'], event_title=fd['event_title'],
+            severity=f.severity, fault_id=f.id, is_open=fd['is_open'])
+        if f.resolved_at and not (f.quarantine and f.quarantine.released_at):
+            add(f.resolved_at, 'release', 'Fault resolved', detail=f.resolution_note or '', by=f.resolved_by)
     for q in u.quarantines:
         d = q.to_dict()
+        if q.fault_reports:                  # the fault row above says it
+            if q.released_at:
+                add(q.released_at, 'release', f'Checked: {QUARANTINE_OUTCOMES.get(q.outcome, q.outcome or "done").lower()}',
+                    detail=q.release_note or '', by=q.released_by)
+            continue
         add(q.quarantined_at, 'quarantine', 'Problem reported: taken out of use', detail=q.reason or '', by=q.quarantined_by,
             photo_url=d['photo_url'],
             event_title=d['event_title'])
@@ -772,6 +949,8 @@ def stale_checkouts():
 
 def _unit_url(u):
     from flask import url_for
+    if u.is_case:
+        return url_for('cases.case_page', uid=u.id)
     return url_for('equipment.equipment_detail', id=u.equipment_id, unit=u.id) + f'#unit-{u.id}'
 
 
@@ -845,4 +1024,5 @@ def scan_lookup():
     if kind == 'unit':
         d['unit'] = hit.to_dict()
         d['url'] = _unit_url(hit)
+        d['fault_url'] = url_for('unit_tracking.fault_form', uid=hit.id)
     return jsonify(d)

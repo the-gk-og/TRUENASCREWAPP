@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Shopping list — Consumables — ShowWise{% endblock %}
+
+{% block content %}
+<style>
+    .shop-group { margin-bottom: 1.1rem; }
+    .shop-group h2 { font-size: 1.02rem; margin-bottom: .5rem; }
+    .shop-row td { vertical-align: middle; }
+    .shop-row label { display: flex; align-items: center; gap: .6rem; cursor: pointer; }
+    .shop-row input[type=checkbox] { width: 20px; height: 20px; flex: 0 0 20px; }
+    .shop-row.got td { opacity: .5; }
+    .shop-row.got .shop-name { text-decoration: line-through; }
+    @media print {
+        .sidebar, .sw-topbar, .sw-tabbar, .sw-head-actions, .sw-crumb, .no-print { display: none !important; }
+        .shop-row.got td { opacity: 1; }
+    }
+</style>
+
+<a class="sw-crumb" href="{{ url_for('consumables.consumables_list') }}"><i class="fas fa-arrow-left"></i> Consumables</a>
+<header class="sw-head">
+    <div>
+        <h1>Shopping list</h1>
+        <p>{% if total %}{{ total }} item{{ '' if total == 1 else 's' }} at or below the low-stock level, {{ now.strftime('%d %b %Y') }}.{% else %}Everything is above its low-stock level.{% endif %}</p>
+    </div>
+    {% if total %}<div class="sw-head-actions"><button type="button" class="btn btn-secondary" onclick="window.print()"><i class="fas fa-print"></i> Print</button></div>{% endif %}
+</header>
+
+{% if total %}
+<p class="sw-hint no-print" style="margin-bottom:.9rem">Tick things off as you shop (only on this device). When it's on the shelf, restock it on its page so the count is right.</p>
+{% for supplier, rows in groups %}
+<section class="shop-group">
+    <h2>{{ supplier or 'No supplier set' }}</h2>
+    <div class="sw-table-wrap">
+        <table class="sw-table">
+            <thead><tr><th>Item</th><th class="num">Have</th><th class="num">Buy</th><th class="actions no-print"></th></tr></thead>
+            <tbody>
+            {% for c, buy in rows %}
+            <tr class="shop-row" data-id="{{ c.id }}">
+                <td><label><input type="checkbox" class="no-print" aria-label="Got {{ c.name }}">
+                    <span><span class="shop-name">{{ c.name }}</span>
+                    <span class="sub">{{ c.category or '' }}{% if c.category and c.location %} · {% endif %}{{ c.location or '' }}</span></span></label></td>
+                <td class="num">{{ c.quantity }} <span class="sub" style="display:inline">/ {{ c.low_threshold }}</span></td>
+                <td class="num"><strong>{{ buy }}</strong> {{ c.unit or 'each' }}</td>
+                <td class="actions no-print">
+                    {% if c.supplier_url %}<a class="btn btn-secondary btn-sm" href="{{ c.supplier_url }}" target="_blank" rel="noopener noreferrer">Buy <i class="fas fa-arrow-up-right-from-square"></i></a>{% endif %}
+                    <a class="btn btn-secondary btn-sm" href="{{ url_for('consumables.consumable_detail', cid=c.id) }}">Restock</a>
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endfor %}
+{% else %}
+<div class="sw-blank"><strong>Nothing to buy</strong>Items show up here once they reach their low-stock level.</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const KEY = 'sw-shop-got';
+    let got = {};
+    try { got = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
+    document.querySelectorAll('.shop-row').forEach(function (tr) {
+        const cb = tr.querySelector('input[type=checkbox]');
+        cb.checked = !!got[tr.dataset.id];
+        tr.classList.toggle('got', cb.checked);
+        cb.addEventListener('change', function () {
+            tr.classList.toggle('got', cb.checked);
+            if (cb.checked) got[tr.dataset.id] = 1; else delete got[tr.dataset.id];
+            try { localStorage.setItem(KEY, JSON.stringify(got)); } catch (e) {}
+        });
+    });
+});
+</script>
+{% endblock %}

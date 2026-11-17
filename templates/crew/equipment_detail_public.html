@@ -31,12 +31,20 @@
 .info-chip .value.qty-val { background: #e0e7ff; color: #3730a3; padding: 0.3rem 0.75rem; border-radius: 8px; display: inline-block; font-size: 1rem; }
 .registered-badge { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem; }
 .registered-badge strong { color: var(--text-primary); }
+.fault-cta { display: flex; align-items: center; justify-content: center; gap: .5rem; min-height: 48px; margin-bottom: 1rem; padding: .7rem 1rem;
+    border-radius: 8px; background: #dc2626; color: #fff; font-weight: 700; text-decoration: none; }
+.fault-cta:hover { background: #b91c1c; color: #fff; }
 </style>
 {% endblock %}
 
 {% block content %}
 
 <p class="registered-badge">Registered to <strong>{{ organisation_name or 'ShowWise' }}</strong></p>
+
+{% if unit and fault_url %}
+<a class="fault-cta" href="{{ fault_url }}"><i class="fas fa-triangle-exclamation"></i> Report a fault with {{ unit.asset_tag }}</a>
+<p class="registered-badge" style="margin-top:-.5rem">Crew: sign in to report it. It is taken out of use until someone has checked it.</p>
+{% endif %}
 
 <div style="margin-bottom:1.5rem;">
     <h1 style="margin:0; font-size:1.75rem;">{{ item.name }}</h1>

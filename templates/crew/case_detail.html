@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}{{ case.asset_tag }} — Case — ShowWise{% endblock %}
+
+{% block content %}
+<div class="gear">
+    <a class="sw-crumb" href="{{ url_for('equipment.equipment_detail', id=case.equipment_id, unit=case.id) }}#unit-{{ case.id }}"><i class="fas fa-arrow-left"></i> {{ case.equipment.name }}</a>
+
+    <header class="sw-head">
+        <div>
+            <h1><i class="fas fa-suitcase"></i> {{ case.asset_tag }}</h1>
+            <p>{{ case.equipment.name }} · <span id="cCount">{{ data.count }}</span> item{{ '' if data.count == 1 else 's' }} inside
+                {% if checkout %} · out on <a href="{{ url_for('unit_tracking.checkout_page', event_id=checkout.event_id) }}">{{ checkout.event_title }}</a>{% endif %}</p>
+        </div>
+        <div class="sw-head-actions">
+            <a class="btn btn-secondary" href="{{ url_for('cases.case_label', uid=case.id) }}" target="_blank" rel="noopener"><i class="fas fa-print"></i> Print contents label</a>
+        </div>
+    </header>
+
+    {% if quarantine %}
+    <div class="sw-notice bad"><strong>This case is out of use.</strong> {{ quarantine.reason }}</div>
+    {% endif %}
+    <div id="cFlags"></div>
+
+    <div class="co-grid">
+        <section class="card">
+            <div class="sw-section-head"><h2>Pack items</h2></div>
+            <p style="color:var(--text-secondary); margin-bottom:.6rem">Scan the label on each item as it goes into the case. An item can only be in one case.</p>
+            <div id="cResult" aria-live="polite"></div>
+            <div id="cScanner"></div>
+        </section>
+
+        <section class="card">
+            <div class="sw-section-head"><h2>What’s inside</h2></div>
+            <ul class="co-list" id="cList"><li class="co-none">Loading…</li></ul>
+        </section>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(async function () {
+    const CASE_ID = {{ case.id }};
+    let data = {{ data | tojson }};
+    const $ = (s, r = document) => r.querySelector(s);
+    const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+    const esc = SW.esc;
+
+    function paint() {
+        $('#cCount').textContent = data.count;
+        const flags = [];
+        if (data.quarantined) flags.push(`<div class="sw-notice bad"><strong>${data.quarantined} item${data.quarantined === 1 ? ' is' : 's are'} out of use.</strong> Take ${data.quarantined === 1 ? 'it' : 'them'} out of the case: ${data.quarantined === 1 ? 'it' : 'they'} won’t go out with it.</div>`);
+        if (data.missing) flags.push(`<div class="sw-notice warn"><strong>${data.missing} item${data.missing === 1 ? ' is' : 's are'} missing from the case.</strong> Scan ${data.missing === 1 ? 'it' : 'them'} back in, or press Found.</div>`);
+        $('#cFlags').innerHTML = flags.join('');
+        $('#cList').innerHTML = data.contents.length ? data.contents.map(c => `<li>
+            <div class="main"><code>${esc(c.asset_tag)}</code> ${esc(c.equipment_name)}
+                ${c.quarantined ? `<div class="meta bad">Out of use${c.quarantine_reason ? `: ${esc(c.quarantine_reason)}` : ''}</div>` : ''}
+                ${c.missing ? `<div class="meta bad">Missing since ${esc(c.missing_at)}${c.missing_by ? ` (${esc(c.missing_by)})` : ''}${c.missing_event ? ` · ${esc(c.missing_event)}` : ''}</div>` : ''}
+                ${!c.quarantined && c.status !== 'available' ? `<div class="meta bad">${esc(c.status_label)}</div>` : ''}
+                ${c.out_event_title ? `<div class="meta">Out on ${esc(c.out_event_title)}</div>` : ''}</div>
+            ${c.missing ? `<button type="button" class="btn btn-sm btn-secondary" data-found="${c.id}">Found</button>` : ''}
+            <button type="button" class="btn btn-sm btn-secondary" data-remove="${c.id}" title="Take it out of this case">Remove</button>
+        </li>`).join('') : '<li class="co-none">Nothing packed yet. Scan an item to add it.</li>';
+    }
+
+    function result(kind, title, notes) {
+        $('#cResult').innerHTML = `<div class="co-big ${kind}"><div class="co-big-word"><span>${esc(title)}</span></div>
+            ${notes && notes.length ? `<ul class="co-big-notes">${notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}</div>`;
+    }
+
+    async function add(body) {
+        try {
+            const r = await SW.api('POST', `/equipment/case/${CASE_ID}/items`, body);
+            data = r.case; paint();
+            result(r.warnings.length ? 'warn' : 'ok', r.message, r.warnings);
+        } catch (e) {
+            const p = e.payload || {};
+            if (p.needs_confirm && await SW.confirm(e.message, { okText: 'Move it here' })) return add(Object.assign({}, body, { move: true }));
+            result('err', e.message);
+        }
+    }
+
+    $('#cList').addEventListener('click', async e => {
+        const rm = e.target.closest('[data-remove]'), found = e.target.closest('[data-found]');
+        try {
+            if (rm) data = (await SW.api('DELETE', `/equipment/case/${CASE_ID}/items/${rm.dataset.remove}`)).case;
+            else if (found) data = (await SW.api('POST', `/equipment/case/${CASE_ID}/items/${found.dataset.found}/found`)).case;
+            else return;
+            paint();
+        } catch (ex) { SW.toast(ex.message, 'error'); }
+    });
+
+    paint();
+    const ui = await SWGear.scannerUI($('#cScanner'), {
+        continuous: true, quiet: true, placeholder: 'Or type the code on the item’s label',
+        onCode: code => add({ code }),
+    });
+    window.addEventListener('pagehide', () => ui.stop());
+})();
+</script>
+{% endblock %}

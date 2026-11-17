@@ -1,0 +1,36 @@
+{# Dashboard: sign-offs that need renewing. Uses training_reminders() from routes/training.py. #}
+{% set tr = training_reminders() %}
+{% if tr.mine or tr.team %}
+<section>
+    <h3 class="dash-section-title">
+        <span>Training</span>
+        <a href="{{ url_for('training.matrix' if tr.team else 'training.my_training') }}">View</a>
+    </h3>
+    <ul class="dash-list">
+        {% for e in tr.mine[:3] %}
+        <li>
+            <a class="dash-task" href="{{ url_for('training.my_training') }}">
+                <span class="dash-dot {{ 'high' if e.state == 'expired' else 'medium' }}"></span>
+                <span class="dash-task-main">
+                    <div class="dash-task-title">Your {{ e.signoff.skill.name }} sign-off</div>
+                    <div class="dash-task-due {{ 'overdue' if e.state == 'expired' }}">{{ 'Expired' if e.state == 'expired' else 'Expires' }} {{ e.signoff.expires_at.strftime('%a %d %b') }}</div>
+                </span>
+                <i class="fas fa-chevron-right dash-chevron"></i>
+            </a>
+        </li>
+        {% endfor %}
+        {% if tr.team %}
+        <li>
+            <a class="dash-task" href="{{ url_for('training.matrix') }}">
+                <span class="dash-dot medium"></span>
+                <span class="dash-task-main">
+                    <div class="dash-task-title">{{ tr.team }} sign-off{{ '' if tr.team == 1 else 's' }} expiring across the team</div>
+                    <div class="dash-task-due">Renew them from the training matrix</div>
+                </span>
+                <i class="fas fa-chevron-right dash-chevron"></i>
+            </a>
+        </li>
+        {% endif %}
+    </ul>
+</section>
+{% endif %}

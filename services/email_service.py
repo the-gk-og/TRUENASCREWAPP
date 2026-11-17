@@ -392,13 +392,22 @@ def send_shift_assignment_emails_async(jobs: list[dict]) -> None:
     (plain strings only - no ORM objects, the work runs after the request ends).
     Failures are logged and never raised: assigning a shift must not fail because email did.
     """
-    if not jobs or not _app or not _app.config.get("MAIL_USERNAME"):
+    if not jobs or not _app:
         return
     app = _app
+    mail_on = bool(app.config.get("MAIL_USERNAME"))
 
     def run():
         with app.app_context():
             for job in jobs:
+                job = dict(job)
+                user_id = job.pop("user_id", None)
+                if user_id:                       # Web Push to the person's devices (if they opted in)
+                    from services.push_service import send_to_user
+                    send_to_user(user_id, "shift_assigned", f"New shift: {job.get('shift_title')}",
+                                 f"{job.get('event_title')} · {job.get('shift_date')}", "/crew/my-schedule")
+                if not mail_on or not job.get("recipient_email"):
+                    continue
                 try:
                     send_shift_assignment_email(**job)
                 except Exception as exc:          # noqa: BLE001

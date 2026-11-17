@@ -88,3 +88,82 @@ def schedule_event_notifications(event) -> None:
             t = threading.Timer(delay, _send, args=[event.id, ntype])
             t.daemon = True
             t.start()
+
+
+def notify_fault_report(report: dict, recipients: list, url: str = '') -> None:
+    """Tell gear admins an item was reported faulty: email each one, and post to Discord
+    if a webhook is set. ``report`` is FaultReport.to_dict() (plain data only: this can run
+    after the request ends). Never raises: reporting a fault must not fail because email did."""
+    from services.email_service import send_email
+    subject = (f"⚠️ Fault reported: {report.get('asset_tag')} {report.get('equipment_name')}"
+               f" ({report.get('severity_label')})")
+    body = (f"{report.get('reported_by') or 'Someone'} reported a fault with "
+            f"{report.get('asset_tag')} ({report.get('equipment_name')}).\n\n"
+            f"What's wrong: {report.get('summary')}\n"
+            + (f"Category: {report['category_label']}\n" if report.get('category_label') else '')
+            + f"Severity: {report.get('severity_label')}\n"
+            + (f"Photos: {report.get('photo_count')}\n" if report.get('photo_count') else '')
+            + "\nThe item has been taken out of use until someone has checked it.\n"
+            + (f"\n{url}\n" if url else ''))
+
+    def run():
+        for to in recipients:
+            try:
+                send_email(subject, to, body)
+            except Exception as exc:                 # noqa: BLE001
+                print(f"❌ Fault email to {to} failed: {exc}")
+        if DISCORD_WEBHOOK_URL:
+            try:
+                requests.post(DISCORD_WEBHOOK_URL, json={'content': f"{subject}\n{report.get('summary')}"
+                                                                   + (f"\n{url}" if url else '')}, timeout=5)
+            except Exception as exc:                 # noqa: BLE001
+                print(f"❌ Discord fault post failed: {exc}")
+
+    try:
+        from flask import current_app
+        app = current_app._get_current_object()
+    except Exception:
+        app = None
+    if app is None or app.config.get('TESTING'):
+        run()                                        # deterministic for tests
+        return
+
+    def threaded():
+        with app.app_context():
+            run()
+    threading.Thread(target=threaded, daemon=True, name='fault-notify').start()
+
+
+def send_low_stock_alert(item, by: str = '', url: str = '') -> dict:
+    """Tell gear admins a consumable has dropped to (or below) its low-stock level.
+    Posts to Discord when a webhook is set and emails every admin with an address.
+    Returns {'discord': bool, 'emailed': int}; never raises."""
+    sent = {'discord': False, 'emailed': 0}
+    unit = item.unit or 'each'
+    line = (f"{item.name} is low: {item.quantity} {unit} left "
+            f"(alert at {item.low_threshold}){' after use by ' + by if by else ''}.")
+    if DISCORD_WEBHOOK_URL:
+        try:
+            fields = [{"name": "Left", "value": f"{item.quantity} {unit}", "inline": True},
+                      {"name": "Location", "value": item.location or '—', "inline": True}]
+            if item.supplier:
+                fields.append({"name": "Supplier", "value": item.supplier, "inline": True})
+            embed = {"title": f"Low stock: {item.name}", "description": line,
+                     "color": 16753920, "fields": fields}
+            if url:
+                embed["url"] = url
+            r = requests.post(DISCORD_WEBHOOK_URL, json={"embeds": [embed]}, timeout=5)
+            sent['discord'] = r.status_code == 204
+        except Exception as exc:
+            print(f"❌ Low-stock Discord alert error: {exc}")
+    try:
+        from models import User
+        from services.email_service import send_email
+        body = line + (f"\n\nOpen it: {url}" if url else '') + \
+            "\n\nThe shopping list in ShowWise has everything that's running low."
+        for admin in User.query.filter(User.is_admin.is_(True), User.email.isnot(None)).all():
+            if send_email(f"Low stock: {item.name}", admin.email, body):
+                sent['emailed'] += 1
+    except Exception as exc:
+        print(f"❌ Low-stock email alert error: {exc}")
+    return sent

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% include 'station/_head.html' %}
+    <title>Set up scan station — ShowWise</title>
+</head>
+<body class="ks-body">
+<main class="ks-pair">
+    <h1><i class="fas fa-barcode"></i> Set up a scan station</h1>
+    {% if paired %}
+    <p class="ks-lead">This device is already the scan station <strong>{{ paired.name }}</strong>.</p>
+    <p><a class="btn btn-primary ks-btn" href="{{ url_for('scan_station.kiosk') }}">Open the scan station</a></p>
+    <p class="sw-muted">Enter a new code below to make it a different station.</p>
+    {% else %}
+    <p class="ks-lead">An admin can create a pairing code under <strong>Admin › Scan stations</strong>. Enter it here to turn this device into a scan station. It can only check gear in and out.</p>
+    {% endif %}
+    <form method="post" action="{{ url_for('scan_station.pair_page') }}" class="ks-pair-form">
+        <label class="sw-label" for="code">Pairing code</label>
+        <input id="code" name="code" class="sw-input ks-code" value="{{ code }}" autocomplete="off"
+               autocapitalize="characters" spellcheck="false" placeholder="ABCD-EFGH" required autofocus>
+        {% if error %}<p class="ks-error" role="alert"><i class="fas fa-circle-xmark"></i> {{ error }}</p>{% endif %}
+        <button type="submit" class="btn btn-primary ks-btn"><i class="fas fa-link"></i> Pair this device</button>
+    </form>
+</main>
+</body>
+</html>

@@ -10,7 +10,7 @@
  *   SW.eventForm({...})            create / edit an event
  *   SW.shiftForm({...})            add / edit a person's shift
  *   SW.bulkShiftForm({...})        pick many people and give them all the same shift
- *   SW.scheduleForm / SW.runForm   schedule + run-list items
+ *   SW.scheduleForm / SW.runForm   schedule items + running-order acts / songs
  *   SW.taskForm({...})             add / edit an event task, shift task or assigned task
  *
  * Everything user-supplied is escaped with SW.esc before touching innerHTML.
@@ -553,6 +553,49 @@
   ];
 
   /**
+   * Run `send(extra)` for a shift save; on a 409 clash ask "save anyway?", on a 409 skill block
+   * (person not signed off) ask an admin for an override reason, then resend. `extra` collects
+   * { force, skill_override_reason } across the retries.
+   */
+  SW.shiftChecks = async function (send) {
+    const extra = { force: false };
+    for (let i = 0; i < 3; i++) {
+      try { return await send(extra); } catch (err) {
+        const p = err && err.payload;
+        if (err.status === 409 && p && p.conflicts && !extra.force) {
+          const list = p.conflicts.map((c) => '• ' + c.title).join('\n');
+          const ok = await SW.confirm(`${err.message}:\n\n${list}\n\nSave anyway?`,
+            { title: 'Scheduling clash', okText: 'Save anyway', danger: true });
+          if (!ok) throw SW.CANCEL;
+          extra.force = true; continue;
+        }
+        if (err.status === 409 && p && p.skill_block && !extra.skill_override_reason) {
+          if (!p.can_override) throw err;
+          const reason = await SW.skillOverrideReason(err.message);
+          if (!reason) throw SW.CANCEL;
+          extra.skill_override_reason = reason; continue;
+        }
+        throw err;
+      }
+    }
+    return send(extra);
+  };
+
+  /** Ask an admin why they are assigning someone who isn't signed off. Resolves with the reason or null. */
+  SW.skillOverrideReason = async function (message) {
+    let reason = null;
+    await SW.form({
+      title: 'Not signed off', submitText: 'Assign anyway',
+      fields: [
+        { type: 'info', text: message },
+        { name: 'reason', label: 'Reason for overriding (kept on record)', type: 'textarea', rows: 2, required: true },
+      ],
+      onSubmit: (v) => { reason = String(v.reason || '').trim(); if (!reason) throw new Error('Give a reason'); },
+    });
+    return reason;
+  };
+
+  /**
    * Add a person's shift to an event, or edit an existing one.
    * add:  { event:{id,start,end}, users:[{id,name}], user_id? }
    * edit: { shift:{assignment_id,username,role,start,end,status,notes}, event:{id,start,end} }
@@ -576,8 +619,8 @@
       ? { role: shift.role, start: SW.toInput(shift.start), end: SW.toInput(shift.end), status: shift.status, notes: shift.notes }
       : { role: '', start: SW.toInput(event.start), end: SW.toInput(event.end), status: 'pending', user_id: user_id || '' };
 
-    const send = async (v, force) => {
-      const body = { role: v.role, start: v.start, end: v.end, status: v.status, notes: v.notes, force };
+    const send = async (v, extra) => {
+      const body = Object.assign({ role: v.role, start: v.start, end: v.end, status: v.status, notes: v.notes }, extra);
       if (!edit) body.user_id = Number(v.user_id);
       return edit
         ? SW.api('PUT', `/events/shift-assignments/${shift.assignment_id}`, body)
@@ -588,16 +631,7 @@
       submitText: edit ? 'Save shift' : 'Add shift',
       onSubmit: async (v) => {
         if (v.end <= v.start) throw new Error('The shift must end after it starts');
-        try { return await send(v, false); } catch (err) {
-          if (err.status === 409 && err.payload && err.payload.conflicts) {
-            const list = err.payload.conflicts.map((c) => '• ' + c.title).join('\n');
-            const ok = await SW.confirm(`${err.message}:\n\n${list}\n\nSave anyway?`,
-              { title: 'Scheduling clash', okText: 'Save anyway', danger: true });
-            if (!ok) throw SW.CANCEL;
-            return send(v, true);
-          }
-          throw err;
-        }
+        return SW.shiftChecks((extra) => send(v, extra));
       },
     });
   };
@@ -700,9 +734,9 @@
         err.hidden = true; submit.disabled = true;
         const label = submit.textContent;
         submit.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding…';
-        const send = (who, force) => SW.api('POST', `/events/${event.id}/team/bulk-add`, {
+        const send = (who, force, reason) => SW.api('POST', `/events/${event.id}/team/bulk-add`, {
           user_ids: who, role: val('role'), start: val('start'), end: val('end'),
-          status: val('status'), notes: val('notes'), force,
+          status: val('status'), notes: val('notes'), force, skill_override_reason: reason || '',
         });
         try {
           const first = await send(ids, false);
@@ -718,6 +752,17 @@
               const again = await send(clashes.map((c) => c.user_id), true);
               added += again.added;
               skipped = skipped.filter((s) => !s.clash).concat(again.skipped || []);
+            }
+          }
+          const untrained = skipped.filter((s) => s.skill);
+          if (untrained.length) {
+            const names = untrained.map((s) => `• ${s.name}: ${s.reason}`).join('\n');
+            const reason = await SW.skillOverrideReason(
+              `${untrained.length} ${untrained.length === 1 ? 'person isn’t' : 'people aren’t'} signed off for this shift and ${untrained.length === 1 ? 'was' : 'were'} not added:\n${names}`);
+            if (reason) {
+              const again = await send(untrained.map((s) => s.user_id), true, reason);
+              added += again.added;
+              skipped = skipped.filter((s) => !s.skill).concat(again.skipped || []);
             }
           }
           result = { added, skipped };
@@ -749,22 +794,23 @@
     });
   };
 
-  const CUES = ['Lighting', 'Sound', 'Video', 'Stage', 'Fly', 'Pyro', 'Spot', 'Other'];
-  SW.runForm = function ({ eventId, item }) {
-    const edit = !!item;
+  const ACT_TYPES = ['Band', 'Act', 'Headliner', 'Support', 'Changeover', 'Interval', 'Speech', 'Other'];
+  /** Add / edit one act (or, with parent_id, a song) in an event's running order. */
+  SW.runForm = function ({ eventId, item, parent_id }) {
+    const edit = !!item, song = !!(parent_id || (item && item.parent_id));
     return SW.form({
-      title: edit ? 'Edit run item' : 'Add run item',
+      title: (edit ? 'Edit ' : 'Add ') + (song ? 'song' : 'act'),
       values: item || {},
       fields: [
-        { name: 'title', label: 'Title', required: true, maxLength: 200 },
-        { name: 'duration', label: 'Duration', half: true, placeholder: 'e.g. 5 min', maxLength: 50 },
-        { name: 'cue_type', label: 'Cue type', half: true, suggestions: CUES, maxLength: 50 },
+        { name: 'title', label: song ? 'Song' : 'Act or segment', required: true, maxLength: 200 },
+        { name: 'duration', label: 'Length', half: true, placeholder: song ? 'e.g. 3:45' : 'e.g. 40 min', maxLength: 50 },
+        ...(song ? [] : [{ name: 'kind', label: 'Type', half: true, suggestions: ACT_TYPES, maxLength: 50 }]),
         { name: 'description', label: 'Description', type: 'markdown', rows: 4 },
         { name: 'notes', label: 'Notes', type: 'textarea', rows: 2 },
       ],
-      submitText: edit ? 'Save' : 'Add item',
+      submitText: edit ? 'Save' : 'Add',
       onSubmit: (v) => edit ? SW.api('PUT', `/events/crew-run/${item.id}/edit`, v)
-        : SW.api('POST', `/events/${eventId}/crew-run/add`, v),
+        : SW.api('POST', `/events/${eventId}/crew-run/add`, parent_id ? { ...v, parent_id } : v),
     });
   };
 

@@ -1,0 +1,25 @@
+<script>
+/** Sign a person off on a skill. Expiry defaults to the skill's validity period. Resolves truthy when saved. */
+SW.trainingSignoff = function ({ user_id, user_name, skill_id, skill_name, months }) {
+    const today = new Date().toISOString().slice(0, 10);
+    const addMonths = (iso, m) => {
+        if (!m) return '';
+        const d = new Date(iso + 'T12:00:00'); const day = d.getDate();
+        d.setMonth(d.getMonth() + Number(m));
+        if (d.getDate() < day) d.setDate(0);
+        return d.toISOString().slice(0, 10);
+    };
+    return SW.form({
+        title: `Sign off: ${skill_name}`, submitText: 'Sign off',
+        values: { signed_at: today, expires_at: addMonths(today, months) },
+        fields: [
+            { type: 'info', text: `You are confirming ${user_name} is competent in ${skill_name}. Your name is recorded.` },
+            { name: 'signed_at', label: 'Signed off on', type: 'date', required: true, half: true },
+            { name: 'expires_at', label: months ? `Expires (default ${months} months)` : 'Expires (leave blank: never)', type: 'date', half: true },
+            { name: 'note', label: 'Note', type: 'textarea', rows: 2, placeholder: 'e.g. Assessed during bump-in, refresher due next season' },
+        ],
+        onSubmit: (v) => SW.api('POST', '/api/training/signoffs', {
+            user_id, skill_id, signed_at: v.signed_at, expires_at: v.expires_at || null, note: v.note }),
+    });
+};
+</script>

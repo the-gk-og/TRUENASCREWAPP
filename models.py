@@ -108,6 +108,8 @@ class Equipment(db.Model):
     picture          = db.Column(db.String(300), nullable=True)
     # Photo of where it lives in storage
     location_picture = db.Column(db.String(300), nullable=True)
+    # A road case / kit type: each of its items can hold other items (see CaseItem)
+    is_case          = db.Column(db.Boolean, default=False)
     # Individual physical units (opt-in: empty for items tracked only by quantity)
     units            = db.relationship('EquipmentUnit', backref='equipment',
                                        cascade='all, delete-orphan',
@@ -125,6 +127,7 @@ class Equipment(db.Model):
             'quantity_owned': self.owned,
             'tracking':       self.tracking_mode,
             'unit_count':     len(self.units),
+            'is_case':        bool(self.is_case),
             'picture_url': (
                 url_for('equipment.serve_equipment_picture', id=self.id)
                 if self.picture else None
@@ -217,7 +220,14 @@ class EquipmentUnit(db.Model):
             d['quarantine']  = q.to_dict() if q else None
             d['state']       = self.state
             d['state_label'] = UNIT_STATE_LABELS[d['state']]
+            d['is_case']     = self.is_case
+            d['in_case']     = self.case_link.to_dict() if self.case_link else None
+            d['contents_count'] = len(self.case_contents) if self.is_case else 0
         return d
+
+    @property
+    def is_case(self):
+        return bool(self.equipment and self.equipment.is_case)
 
     @property
     def open_quarantine(self):
@@ -396,11 +406,83 @@ class UnitQuarantine(db.Model):
             'outcome_label':  QUARANTINE_OUTCOMES.get(self.outcome, ''),
             'release_note':   self.release_note or '',
             'is_open':        self.released_at is None,
+            'faults':         [{'id': f.id, 'severity': f.severity,
+                                'severity_label': FAULT_SEVERITIES.get(f.severity, f.severity),
+                                'photo_count': len(f.photos)} for f in self.fault_reports],
         }
 
 
 # What an admin decided when closing a quarantine -> the status the item gets
 QUARANTINE_OUTCOMES = {'available': 'Back in use', 'repair': 'Sent for repair', 'retired': 'Retired'}
+
+FAULT_CATEGORIES = {'damaged': 'Broken or damaged', 'missing_parts': 'Parts missing',
+                    'no_power': 'Won’t turn on', 'electrical': 'Electrical fault', 'other': 'Something else'}
+FAULT_SEVERITIES = {'minor': 'Minor', 'major': 'Not usable', 'unsafe': 'Unsafe'}
+
+
+class FaultReport(db.Model):
+    """A fault reported from a phone after scanning an item. Puts the item in quarantine;
+    resolved when an admin releases that quarantine (linking the maintenance record)."""
+    __tablename__ = 'fault_report'
+    id              = db.Column(db.Integer, primary_key=True)
+    unit_id         = db.Column(db.Integer, db.ForeignKey('equipment_unit.id', ondelete='CASCADE'),
+                                nullable=False, index=True)
+    quarantine_id   = db.Column(db.Integer, db.ForeignKey('unit_quarantine.id', ondelete='SET NULL'), index=True)
+    event_id        = db.Column(db.Integer, db.ForeignKey('event.id', ondelete='SET NULL'))
+    summary         = db.Column(db.String(200), nullable=False)
+    category        = db.Column(db.String(30))                     # FAULT_CATEGORIES
+    severity        = db.Column(db.String(10), nullable=False, default='major')  # FAULT_SEVERITIES
+    reported_by     = db.Column(db.String(80))
+    reported_at     = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    resolved_by     = db.Column(db.String(80))
+    resolved_at     = db.Column(db.DateTime, index=True)
+    resolution_note = db.Column(db.Text)
+    maintenance_id  = db.Column(db.Integer, db.ForeignKey('unit_maintenance.id', ondelete='SET NULL'))
+    unit        = db.relationship('EquipmentUnit', backref=db.backref(
+        'fault_reports', cascade='all, delete-orphan', order_by='FaultReport.reported_at.desc()'))
+    quarantine  = db.relationship('UnitQuarantine', backref=db.backref(
+        'fault_reports', order_by='FaultReport.reported_at'))
+    maintenance = db.relationship('UnitMaintenance')
+    event       = db.relationship('Event')
+
+    def to_dict(self):
+        from flask import url_for
+        u = self.unit
+        fmt = lambda d: d.strftime('%d %b %Y, %H:%M') if d else ''
+        return {
+            'id':             self.id,
+            'unit_id':        self.unit_id,
+            'asset_tag':      u.asset_tag if u else '',
+            'equipment_id':   u.equipment_id if u else None,
+            'equipment_name': u.equipment.name if u and u.equipment else '',
+            'quarantine_id':  self.quarantine_id,
+            'summary':        self.summary,
+            'category':       self.category or '',
+            'category_label': FAULT_CATEGORIES.get(self.category, ''),
+            'severity':       self.severity,
+            'severity_label': FAULT_SEVERITIES.get(self.severity, self.severity),
+            'event_title':    self.event.title if self.event else '',
+            'reported_by':    self.reported_by or '',
+            'reported_at':    fmt(self.reported_at),
+            'photo_urls':     [url_for('unit_tracking.fault_photo', pid=p.id) for p in self.photos],
+            'photo_count':    len(self.photos),
+            'is_open':        self.resolved_at is None,
+            'resolved_by':    self.resolved_by or '',
+            'resolved_at':    fmt(self.resolved_at),
+            'resolution_note': self.resolution_note or '',
+            'maintenance_id': self.maintenance_id,
+        }
+
+
+class FaultPhoto(db.Model):
+    __tablename__ = 'fault_photo'
+    id         = db.Column(db.Integer, primary_key=True)
+    report_id  = db.Column(db.Integer, db.ForeignKey('fault_report.id', ondelete='CASCADE'),
+                           nullable=False, index=True)
+    path       = db.Column(db.String(300), nullable=False)          # path under uploads/
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    report = db.relationship('FaultReport', backref=db.backref(
+        'photos', cascade='all, delete-orphan', order_by='FaultPhoto.id'))
 
 
 class BulkCheckout(db.Model):
@@ -571,6 +653,10 @@ class PickListItem(db.Model):
     created_at   = db.Column(db.DateTime, default=datetime.utcnow)
     event_id     = db.Column(db.Integer, db.ForeignKey('event.id'))
     equipment_id = db.Column(db.Integer, db.ForeignKey('equipment.id'), nullable=True)
+    # Optional reservation window, when the gear is needed outside the event's own times
+    # (e.g. collected a day early for prep). NULL = the event's window (services/gear_bookings.py).
+    hold_from    = db.Column(db.DateTime, nullable=True)
+    hold_until   = db.Column(db.DateTime, nullable=True)
     equipment    = db.relationship('Equipment', backref='pick_list_items')
     # Specific physical units allocated to this line (only for items that track units)
     unit_links   = db.relationship('PickListUnit', backref='pick_list_item',
@@ -638,6 +724,25 @@ class ShiftAssignment(db.Model):
     user = db.relationship('User', backref='shift_assignments')
 
 
+class ShiftSwap(db.Model):
+    """Someone on a shift offers it up; another crew member claims it; an admin approves
+    (the assignment then moves to the claimer).  See services/shift_swaps.py."""
+    id            = db.Column(db.Integer, primary_key=True)
+    assignment_id = db.Column(db.Integer, db.ForeignKey('shift_assignment.id'), nullable=False, index=True)
+    offered_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    offered_to    = db.Column(db.Text, nullable=True)       # "3,7": only these user ids; empty = anyone eligible
+    note          = db.Column(db.String(500), nullable=True)
+    status        = db.Column(db.String(20), default='open', index=True)   # open/claimed/approved/rejected/cancelled/expired
+    claimed_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    claimed_at    = db.Column(db.DateTime, nullable=True)
+    decided_by    = db.Column(db.String(80), nullable=True)
+    decided_at    = db.Column(db.DateTime, nullable=True)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    assignment = db.relationship('ShiftAssignment', backref=db.backref('swaps', cascade='all, delete-orphan'))
+    offered_by = db.relationship('User', foreign_keys=[offered_by_id])
+    claimed_by = db.relationship('User', foreign_keys=[claimed_by_id])
+
+
 class ShiftNote(db.Model):
     id         = db.Column(db.Integer, primary_key=True)
     shift_id   = db.Column(db.Integer, db.ForeignKey('shift.id'), nullable=False)
@@ -697,18 +802,33 @@ class CastNote(db.Model):
 
 
 class CrewRunItem(db.Model):
+    """One line of an event's running order.
+
+    Top-level rows (parent_id NULL) are acts / segments: a band, a changeover, the interval.
+    Rows with a parent_id are the songs (or items) in that act's set, ordered within it.
+    order_number counts within the row's own level. started_at / ended_at are the actual
+    times, set from the live clock on the night (venue wall-clock time).
+    """
     id           = db.Column(db.Integer, primary_key=True)
     event_id     = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
+    parent_id    = db.Column(db.Integer, db.ForeignKey('crew_run_item.id'), nullable=True)
     order_number = db.Column(db.Integer, nullable=False)
     title        = db.Column(db.String(200), nullable=False)
     description  = db.Column(db.Text)
     duration     = db.Column(db.String(50))
-    cue_type     = db.Column(db.String(50))
+    kind         = db.Column('cue_type', db.String(50))     # Band, Changeover, Interval... (was "cue type")
     notes        = db.Column(db.Text)
+    started_at   = db.Column(db.DateTime)
+    ended_at     = db.Column(db.DateTime)
     created_at   = db.Column(db.DateTime, default=datetime.utcnow)
+    cue_type     = db.synonym('kind')
     event = db.relationship(
         'Event',
         backref=db.backref('crew_run_items', cascade='all, delete-orphan', order_by='CrewRunItem.order_number'),
+    )
+    songs = db.relationship(
+        'CrewRunItem', cascade='all, delete-orphan', order_by='CrewRunItem.order_number',
+        backref=db.backref('parent', remote_side=[id]),
     )
 
 
@@ -811,6 +931,23 @@ class EventTask(db.Model):
     assignee = db.relationship('User', foreign_keys=[assigned_user_id], backref='assigned_event_tasks')
 
 
+class BackstageCall(db.Model):
+    """One call given from the stage manager's call desk ("Half", "Beginners", custom text...).
+
+    The newest row for an event is what the backstage display shows; a row with
+    ``kind == 'clear'`` blanks the display.  Rows are the event's call log.
+    ``sent_at`` is the venue's local wall-clock time, like every event time.
+    """
+    id       = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False, index=True)
+    kind     = db.Column(db.String(30), nullable=False, default='custom')
+    message  = db.Column(db.String(200), nullable=False, default='')
+    sent_by  = db.Column(db.String(80), nullable=False)
+    sent_at  = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    event = db.relationship('Event', backref=db.backref(
+        'backstage_calls', cascade='all, delete-orphan', order_by='BackstageCall.id'))
+
+
 class UserUnavailability(db.Model):
     id                  = db.Column(db.Integer, primary_key=True)
     user_id             = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -871,6 +1008,67 @@ class AppSetting(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+# ---------------------------------------------------------------------------
+# Consumables: stock counted by quantity (tape, batteries, gels, lamps…). See routes/consumables.py
+# ---------------------------------------------------------------------------
+
+class Consumable(db.Model):
+    id            = db.Column(db.Integer, primary_key=True)
+    name          = db.Column(db.String(200), nullable=False)
+    category      = db.Column(db.String(100))
+    unit          = db.Column(db.String(40), default='each')      # rolls, packs, each, sheets…
+    quantity      = db.Column(db.Integer, nullable=False, default=0)
+    low_threshold = db.Column(db.Integer, nullable=False, default=0)  # low when quantity <= this (0 = never)
+    reorder_qty   = db.Column(db.Integer, nullable=True)            # how many to buy, for the shopping list
+    location      = db.Column(db.String(200))
+    supplier      = db.Column(db.String(200))
+    supplier_url  = db.Column(db.String(500))
+    notes         = db.Column(db.Text)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at    = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    movements     = db.relationship('ConsumableMovement', backref='consumable', lazy='dynamic',
+                                    cascade='all, delete-orphan', order_by='ConsumableMovement.id.desc()')
+
+    @property
+    def is_low(self) -> bool:
+        return (self.low_threshold or 0) > 0 and (self.quantity or 0) <= self.low_threshold
+
+
+class ConsumableMovement(db.Model):
+    """One change to a consumable's stock: use (negative), restock (positive) or a stock count."""
+    id             = db.Column(db.Integer, primary_key=True)
+    consumable_id  = db.Column(db.Integer, db.ForeignKey('consumable.id', ondelete='CASCADE'),
+                               nullable=False, index=True)
+    kind           = db.Column(db.String(20), nullable=False)       # use | restock | count
+    change         = db.Column(db.Integer, nullable=False)          # signed
+    quantity_after = db.Column(db.Integer, nullable=False)
+    event_id       = db.Column(db.Integer, db.ForeignKey('event.id', ondelete='SET NULL'),
+                               nullable=True, index=True)
+    event_title    = db.Column(db.String(200))                      # kept if the event is deleted
+    note           = db.Column(db.String(300))
+    by_username    = db.Column(db.String(80))
+    created_at     = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
+
+class PushSubscription(db.Model):
+    """One browser/device that opted in to Web Push (see services/push_service.py)."""
+    __tablename__ = 'push_subscription'
+    id         = db.Column(db.Integer, primary_key=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    endpoint   = db.Column(db.String(700), unique=True, nullable=False)
+    p256dh     = db.Column(db.String(200), nullable=False)
+    auth       = db.Column(db.String(100), nullable=False)
+    user_agent = db.Column(db.String(300))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class PushPreference(db.Model):
+    """Kinds of push a user turned off (JSON list); anything not listed is on."""
+    __tablename__ = 'push_preference'
+    user_id        = db.Column(db.Integer, db.ForeignKey('user.id'), primary_key=True)
+    disabled_kinds = db.Column(db.Text, nullable=False, default='[]')
+
 
 # ---------------------------------------------------------------------------
 # Remove an attachment's files from disk once the row is really gone
@@ -912,3 +1110,80 @@ def _remove_deleted_files(session):
 @_sa_event.listens_for(_Session, 'after_rollback')
 def _forget_pending_deletes(session):
     session.info.pop('pending_file_deletes', None)
+
+
+class CaseItem(db.Model):
+    """A unit packed in a road case / kit (itself a unit of an `is_case` type).
+    unit_id is unique: an item is in at most one case at a time. missing_at is set
+    when someone flags it as not in the case during a scan, cleared when it is found."""
+    __tablename__ = 'case_item'
+    id               = db.Column(db.Integer, primary_key=True)
+    case_id          = db.Column(db.Integer, db.ForeignKey('equipment_unit.id', ondelete='CASCADE'),
+                                 nullable=False, index=True)
+    unit_id          = db.Column(db.Integer, db.ForeignKey('equipment_unit.id', ondelete='CASCADE'),
+                                 nullable=False, unique=True)
+    added_by         = db.Column(db.String(80))
+    added_at         = db.Column(db.DateTime, default=datetime.now)
+    missing_at       = db.Column(db.DateTime)
+    missing_by       = db.Column(db.String(80))
+    missing_event_id = db.Column(db.Integer, db.ForeignKey('event.id', ondelete='SET NULL'))
+    case = db.relationship('EquipmentUnit', foreign_keys=[case_id], backref=db.backref(
+        'case_contents', cascade='all, delete-orphan', order_by='CaseItem.id'))
+    unit = db.relationship('EquipmentUnit', foreign_keys=[unit_id], backref=db.backref(
+        'case_link', uselist=False, cascade='all, delete-orphan'))
+    missing_event = db.relationship('Event')
+
+    def to_dict(self):
+        c = self.case
+        return {
+            'id':             self.id,
+            'case_id':        self.case_id,
+            'case_tag':       c.asset_tag if c else '',
+            'case_name':      c.equipment.name if c and c.equipment else '',
+            'unit_id':        self.unit_id,
+            'missing':        self.missing_at is not None,
+            'missing_at':     self.missing_at.strftime('%d %b %Y, %H:%M') if self.missing_at else '',
+            'missing_by':     self.missing_by or '',
+            'missing_event':  self.missing_event.title if self.missing_event else '',
+        }
+
+
+# Training sign-off tables (kept in their own module; see models_training.py)
+from models_training import *  # noqa: E402,F401,F403
+
+
+# ---------------------------------------------------------------------------
+# Scan stations (kiosk mode at the store-room door); see routes/scan_station.py
+# ---------------------------------------------------------------------------
+
+class ScanStation(db.Model):
+    """A shared tablet/PC that can only scan gear in and out. It holds a device token
+    (only its hash is stored) and is paired with a one-time code an admin hands out."""
+    __tablename__ = 'scan_station'
+    id                 = db.Column(db.Integer, primary_key=True)
+    name               = db.Column(db.String(100), nullable=False)
+    token_hash         = db.Column(db.String(64), unique=True, nullable=True, index=True)
+    pairing_hash       = db.Column(db.String(64), nullable=True, index=True)
+    pairing_expires_at = db.Column(db.DateTime, nullable=True)
+    idle_seconds       = db.Column(db.Integer, default=90)
+    created_by         = db.Column(db.String(80))
+    created_at         = db.Column(db.DateTime, default=datetime.utcnow)
+    paired_at          = db.Column(db.DateTime, nullable=True)
+    last_seen_at       = db.Column(db.DateTime, nullable=True)
+    revoked_at         = db.Column(db.DateTime, nullable=True)
+
+
+class StationBadge(db.Model):
+    """How a person identifies at a scan station: their badge QR and/or a short PIN."""
+    __tablename__ = 'station_badge'
+    id            = db.Column(db.Integer, primary_key=True)
+    user_id       = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'),
+                              unique=True, nullable=False)
+    badge_code    = db.Column(db.String(64), unique=True, nullable=True, index=True)
+    pin_hash      = db.Column(db.String(200), nullable=True)
+    pin_failures  = db.Column(db.Integer, default=0)
+    locked_until  = db.Column(db.DateTime, nullable=True)
+    updated_at    = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = db.relationship('User', backref=db.backref('station_badge', uselist=False,
+                                                      cascade='all, delete-orphan'))

@@ -50,6 +50,32 @@
     </div>
     {% endif %}
 
+    <section class="card" id="bookings">
+        <div class="sw-section-head"><h2>Booked on <span class="count">({{ bookings|length }})</span></h2></div>
+        {% if bookings %}
+        <div style="overflow-x:auto">
+        <table class="gb-table">
+            <thead><tr><th>Event</th><th>When</th><th class="num">Needs</th><th class="num">Out</th>{% if individual %}<th>Items reserved</th>{% endif %}</tr></thead>
+            <tbody>
+            {% for b in bookings %}
+            <tr class="{{ 'short' if b.short }}">
+                <td><a href="{{ url_for('picklist.picklist', event_id=b.event_id) }}">{{ b.event_title }}</a>
+                    {% if b.finished %}<span class="pill">Finished, not all back</span>{% endif %}
+                    {% if b.short %}<div class="pl-meta"><i class="fas fa-triangle-exclamation" style="color:var(--warning)"></i> {{ b.message }}</div>{% endif %}</td>
+                <td>{{ b.when }}</td>
+                <td class="num">{{ b.qty }}</td>
+                <td class="num">{{ b.out or '' }}</td>
+                {% if individual %}<td>{% for t in b.units %}<span class="plu-chip">{{ t }}</span> {% else %}<span class="pl-meta">Any</span>{% endfor %}</td>{% endif %}
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <p class="pl-meta">Not on any upcoming pick list.</p>
+        {% endif %}
+    </section>
+
     <div class="gear-type">
         <div>
             {% if individual %}
@@ -74,7 +100,9 @@
                         {% if current_user.is_admin %}<td class="c-sel"><input type="checkbox" data-sel="{{ u.id }}" aria-label="Select {{ u.asset_tag }}"></td>{% endif %}
                         <td class="c-item"><code>{{ u.asset_tag }}</code>
                             {% if u.serial_number %}<span class="sub">S/N {{ u.serial_number }}</span>{% endif %}
-                            {% if u.notes %}<span class="sub">{{ u.notes }}</span>{% endif %}</td>
+                            {% if u.notes %}<span class="sub">{{ u.notes }}</span>{% endif %}
+                            {% if u.is_case %}<span class="sub"><a href="{{ url_for('cases.case_page', uid=u.id) }}"><i class="fas fa-suitcase"></i> Case: {{ u.contents_count }} item{{ '' if u.contents_count == 1 else 's' }} inside</a></span>{% endif %}
+                            {% if u.in_case %}<span class="sub"><a href="{{ url_for('cases.case_page', uid=u.in_case.case_id) }}"><i class="fas fa-suitcase"></i> In case {{ u.in_case.case_tag }}</a>{% if u.in_case.missing %} · <b style="color:var(--danger)">missing from it</b>{% endif %}</span>{% endif %}</td>
                         <td><span class="pill {{ u.state }}">{{ u.state_label }}</span>
                             {% if u.quarantine %}<span class="why">{{ u.quarantine.reason }}</span>{% endif %}
                             {% if u.maintenance_due and u.maintenance_due.state != 'ok' %}
@@ -318,7 +346,7 @@
     /* ---------- edit the type ---------- */
     $('#tEdit').addEventListener('click', () => SW.form({
         title: 'Edit type',
-        values: { name: ITEM.name, category: ITEM.category, location: ITEM.location, notes: ITEM.notes, quantity_owned: ITEM.quantity_owned },
+        values: { name: ITEM.name, category: ITEM.category, location: ITEM.location, notes: ITEM.notes, quantity_owned: ITEM.quantity_owned, is_case: ITEM.is_case },
         fields: [
             { name: 'name', label: 'Name', required: true, maxLength: 200 },
             { name: 'category', label: 'Category', half: true, maxLength: 100 },
@@ -326,6 +354,7 @@
             ...(ITEM.tracking === 'bulk' ? [{ name: 'quantity_owned', label: 'How many do you own?', type: 'number', min: 0, max: 100000 }]
                 : [{ type: 'info', text: `Owned is the number of items listed (${ITEM.quantity_owned}). Add or remove items to change it.` }]),
             { name: 'notes', label: 'Notes', type: 'textarea', rows: 3 },
+            ...(ITEM.tracking === 'individual' ? [{ name: 'is_case', label: 'These are road cases or kits (each one holds other items)', type: 'checkbox' }] : []),
         ],
         extraButtons: [{ label: 'Delete type', danger: true, onClick: async () => {
             const n = ITEM.unit_count;

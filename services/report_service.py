@@ -1,7 +1,7 @@
 """services/report_service.py — printable PDFs for an event.
 
 One function builds either the whole event pack or just the parts asked for
-(for example only the run list, to hand to the stage manager). The layout is
+(for example only the running order, to hand to the stage manager). The layout is
 plain black on white with thin rules, so it prints cleanly and photocopies well.
 """
 
@@ -20,7 +20,7 @@ PDF_PARTS = {
     'overview': 'Overview',
     'team':     'Team and shifts',
     'schedule': 'Schedule',
-    'run':      'Run list',
+    'run':      'Running order',
     'tasks':    'Tasks',
     'notes':    'Notes',
     'callsheet': 'Call sheet',      # who arrives when: asked for by name, not part of the whole pack
@@ -144,7 +144,7 @@ def duration_minutes(text):
 
 
 def run_start_for(event):
-    """When the run list starts: the time an admin set for this event, else the event's start."""
+    """When the running order starts: the time an admin set for this event, else the event's start."""
     from services.settings_service import get_setting
     hhmm = get_setting(f'event.run_start.{event.id}', '') or ''
     m = re.fullmatch(r'(\d{2}):(\d{2})', hhmm)
@@ -239,36 +239,76 @@ def _schedule(event):
     return [_table(['Time', 'What'], rows, [w, WIDTH - w])]
 
 
+def _signed(mins):
+    m = int(round(mins))
+    return 'on time' if m == 0 else f'{_length(abs(m))} {"late" if m > 0 else "early"}'
+
+
 def _run(event):
-    from models import CrewRunItem
-    items = CrewRunItem.query.filter_by(event_id=event.id).order_by(CrewRunItem.order_number, CrewRunItem.id).all()
-    if not items:
-        return [_nothing('No run list items.')]
-    from datetime import timedelta
-    lengths = [duration_minutes(r.duration) for r in items]
-    timed = any(m is not None for m in lengths)          # no lengths at all: leave the clock column out
-    clock, rows = run_start_for(event), []
-    for n, (r, mins) in enumerate(zip(items, lengths), start=1):
-        what = [Paragraph(escape(r.title), S['big'])]
-        if r.description:
-            what.append(_p(r.description, 'small'))
-        row = [Paragraph(str(n), S['num'])]
-        if timed:
-            row.append(Paragraph(escape(_t(clock)), S['bold']))
-            clock += timedelta(minutes=mins or 0)
-        rows.append(row + [what, _p(r.duration or ''), _p(r.cue_type or ''), _p(r.notes or '', 'small')])
-    if not timed:
-        return [_table(['#', 'Item', 'Length', 'Cue', 'Notes'], rows,
-                       [10 * mm, WIDTH * .42, 20 * mm, 22 * mm, WIDTH * .58 - 52 * mm],
-                       extra=[('BACKGROUND', (0, 1), (0, -1), SHADE)])]
-    missing = sum(1 for m in lengths if m is None)
-    total = f'Running time {_length(sum(m or 0 for m in lengths))}, finishing about {_t(clock)}.'
-    if missing:
-        total += f' {missing} item{"" if missing == 1 else "s"} ha{"s" if missing == 1 else "ve"} no length, so the times after {"it" if missing == 1 else "them"} are early.'
-    return [_table(['#', 'Starts', 'Item', 'Length', 'Cue', 'Notes'], rows,
-                   [10 * mm, 20 * mm, WIDTH * .38, 20 * mm, 22 * mm, WIDTH * .62 - 72 * mm],
-                   extra=[('BACKGROUND', (0, 1), (0, -1), SHADE)]),
-            Spacer(1, 6), Paragraph(escape(total), S['small'])]
+    """The running order: each act / segment in bold with its planned start, its songs listed under
+    it, changeovers and intervals shaded. An "Actual" column appears once the show has been run."""
+    from services.running_order import plan
+    p = plan(event)
+    if not p['acts']:
+        return [_nothing('No running order yet.')]
+    timed, actual = p['timed'], p['started']
+    song_style = _style('song', fontSize=10, leading=13)
+    rows, extra = [], [('BACKGROUND', (0, 1), (0, -1), SHADE)]
+
+    def when(r):
+        return Paragraph(escape(_t(r['planned'])), S['bold'] if r['parent_id'] is None else S['body']) if timed else ''
+
+    def did(r):
+        if not r['started_at']:
+            return ''
+        text = _t(r['started_at'])
+        if r['late'] is not None and round(r['late']):
+            text += f" ({'+' if r['late'] > 0 else '-'}{abs(int(round(r['late'])))})"
+        if r['actual_length'] is not None:
+            text += f"<br/>ran {_length(r['actual_length'])}"
+        return Paragraph(text, S['small'])
+
+    for act in p['acts']:
+        title = escape(act['title']) + (f"  <font size=8 color='#5b6472'>{escape(act['kind'].upper())}</font>" if act['kind'] else '')
+        what = [Paragraph(title, S['big'])]
+        if act['description']:
+            what.append(_p(act['description'], 'small'))
+        if act['notes']:
+            what.append(_p(act['notes'], 'small'))
+        length = act['duration'] or (_length(act['songs_length']) if act['songs_length'] else '')
+        sets = f"{len(act['songs'])} song{'' if len(act['songs']) == 1 else 's'}" if act['songs'] else ''
+        row = [Paragraph(str(act['n']), S['num'])] + ([when(act)] if timed else []) + \
+              [what, [_p(length, 'bold')] + ([_p(sets, 'small')] if sets else [])] + ([did(act)] if actual else [])
+        rows.append(row)
+        if act['quiet']:
+            extra.append(('BACKGROUND', (1, len(rows)), (-1, len(rows)), SHADE))
+        for song in act['songs']:
+            text = [Paragraph(f"{song['n']}.&nbsp;&nbsp;{escape(song['title'])}", song_style)]
+            if song['notes'] or song['description']:
+                text.append(_p(' '.join(x for x in (song['description'], song['notes']) if x), 'small'))
+            rows.append([''] + ([when(song)] if timed else []) + [text, _p(song['duration'], 'body')]
+                        + ([did(song)] if actual else []))
+            extra.append(('LEFTPADDING', (2 if timed else 1, len(rows)), (2 if timed else 1, len(rows)), 16))
+            extra.append(('TOPPADDING', (0, len(rows)), (-1, len(rows)), 2))
+            extra.append(('BOTTOMPADDING', (0, len(rows)), (-1, len(rows)), 2))
+            extra.append(('LINEBELOW', (0, len(rows)), (-1, len(rows)), 0.25, SHADE))
+
+    head = ['#'] + (['Starts'] if timed else []) + ['Act / song', 'Length'] + (['Actual'] if actual else [])
+    fixed = 10 * mm + (20 * mm if timed else 0) + 22 * mm + (30 * mm if actual else 0)
+    widths = [10 * mm] + ([20 * mm] if timed else []) + [WIDTH - fixed, 22 * mm] + ([30 * mm] if actual else [])
+    out = [_table(head, rows, widths, extra=extra)]
+    if timed:
+        total = f"Running time {_length(p['total'])}, {p['count']} item{'' if p['count'] == 1 else 's'}"
+        if p['songs']:
+            total += f", {p['songs']} song{'' if p['songs'] == 1 else 's'}"
+        total += f", finishing about {_t(p['end'])}."
+        if p['missing']:
+            n = p['missing']
+            total += f' {n} item{"" if n == 1 else "s"} ha{"s" if n == 1 else "ve"} no length, so the times after {"it" if n == 1 else "them"} are early.'
+        if p['drift'] is not None:
+            total += f" On the night: {_signed(p['drift'])}."
+        out += [Spacer(1, 6), Paragraph(escape(total), S['small'])]
+    return out
 
 
 def _callsheet(event):

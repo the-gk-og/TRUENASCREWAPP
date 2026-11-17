@@ -252,7 +252,7 @@ def test_pages_render(app, admin, alice):
 
 def test_ics_escaping_and_folding(app, admin):
     mk(admin, title='A, B; C', description='line1\nline2 \\ x ' + 'y' * 120, location='Hall, North')
-    body = admin.get(ics_path(admin)).data.decode()
+    body = admin.get(ics_path(admin) + '/all').data.decode()
     assert 'SUMMARY:A\\, B\\; C' in body and 'LOCATION:Hall\\, North' in body
     assert '\\nline2' in body.replace('\r\n ', '')
     assert all(len(l.encode()) <= 75 for l in body.split('\r\n'))
@@ -333,10 +333,11 @@ def test_ics_link_reset_and_cast_blocked(app, alice):
     assert new_url['webcal_url'].startswith('webcal://') and new_url['url'].startswith('http')
     assert anon.get(old).status_code == 404                           # old slug is dead
     assert anon.get('/' + new_url['url'].split('/', 3)[3]).status_code == 200
-    # cast-only accounts never get a crew feed
+    # cast-only accounts get their own schedule, never the all-events crew feed
     cast = User(username='cassie', is_cast=True, user_role='cast', calendar_token='c' * 43)
     db.session.add(cast); db.session.commit()
-    assert anon.get('/calendar/ics/' + 'c' * 43).status_code == 404
+    assert anon.get('/calendar/ics/' + 'c' * 43).status_code == 200
+    assert anon.get('/calendar/ics/' + 'c' * 43 + '/all').status_code == 404
 
 
 def _outbox(app):
@@ -462,7 +463,7 @@ def test_pdf_whole_event_or_chosen_parts(app, admin, alice):
 
     run = alice.get(f'/events/{eid}/export-pdf?parts=run')
     assert run.status_code == 200 and run.data[:4] == b'%PDF'
-    assert 'Awards_Night_run_list_20261110.pdf' in run.headers['Content-Disposition']
+    assert 'Awards_Night_running_order_20261110.pdf' in run.headers['Content-Disposition']
     assert len(run.data) < len(whole.data)
 
     two = alice.get(f'/events/{eid}/export-pdf?parts=schedule,run')

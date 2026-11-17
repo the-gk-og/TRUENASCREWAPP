@@ -545,7 +545,7 @@ $('btnSubscribe').onclick = async () => {
   catch (e) { SW.toast(e.message, 'error'); return; }
   const d = SW.dialog({ title: 'Sync to your calendar' });
   d.body.innerHTML = `
-    <p class="sw-confirm-text">This is <b>your</b> private calendar link: every event plus your own shifts. Anyone with the link can see your schedule, so don't share it.</p>
+    <p class="sw-confirm-text">This is <b>your</b> private calendar link: your shifts and the events you are on (all-events link: <a href="/settings#calendar">Settings → Calendar</a>). Anyone with the link can see your schedule, so don't share it.</p>
     <div class="sw-field"><input type="text" id="syncUrl" readonly value="${SW.esc(link.url)}" style="width:100%"></div>
     <div class="sw-actions">
       <a class="btn btn-secondary" href="${SW.esc(link.webcal_url)}">Open in calendar app</a>

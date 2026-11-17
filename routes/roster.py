@@ -28,6 +28,7 @@ from extensions import db
 from models import Event, CrewAssignment, Shift, ShiftAssignment, User
 from decorators import crew_required
 from services.availability_service import find_conflicts, expand_unavailability
+from services.training_service import skill_gate, record_override, parse_skill_ids, set_shift_requirements
 from services.email_service import send_shift_assignment_emails_async
 from routes.events import (
     ApiError, manager_required, body, parse_dt, clean_text, event_end,
@@ -154,7 +155,7 @@ def _item(shift, assignment=None):
 
 
 def _email_new_assignment(user, event, shift, notes=''):
-    if user.email and user.id != current_user.id:
+    if user.id != current_user.id:
         send_shift_assignment_emails_async([_shift_email_job(user, event, shift, notes)])
 
 
@@ -238,6 +239,8 @@ def create_shift():
     status = _status(data)
     if status == 'rejected':
         raise ApiError('A new shift cannot start out declined')
+    req_ids = parse_skill_ids(data.get('required_skill_ids'))
+    override = skill_gate(user, data, role=role, extra_ids=req_ids, on=start) if user else None
     conflicts = _check_clash(user.id, start, end, data) if user else []
 
     try:
@@ -247,12 +250,16 @@ def create_shift():
                       created_by=current_user.username)
         db.session.add(shift)
         db.session.flush()
+        if req_ids:
+            set_shift_requirements(shift, req_ids)
         assignment = None
         if user:
             _ensure_crew_row(event, user, role)
             assignment = ShiftAssignment(shift_id=shift.id, user_id=user.id, status=status,
                                          assigned_by=current_user.username, notes=notes)
             db.session.add(assignment)
+            db.session.flush()
+            record_override(override, assignment, event.id)
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
@@ -282,6 +289,9 @@ def edit_assignment(aid):
     role = clean_text(data.get('role', a.shift.role), 'Role', 100)
     status = _status(data, a.status)
     person_changed = user.id != a.user_id
+    override = None
+    if status != 'rejected' and (person_changed or (role or '').lower() != (a.shift.role or '').lower()):
+        override = skill_gate(user, data, role=role, shift=a.shift, on=start)
 
     conflicts = [] if status == 'rejected' else _check_clash(user.id, start, end, data, exclude_assignment_id=a.id)
     try:
@@ -306,6 +316,7 @@ def edit_assignment(aid):
             a.notes = str(data.get('notes') or '').strip()
         _ensure_crew_row(event, user, role)
         db.session.flush()
+        record_override(override, a, event.id)
         if person_changed:
             _tidy_crew_row(old_event.id, old_user)
         if old_event.id != event.id:
@@ -335,6 +346,9 @@ def edit_open_shift(shift_id):
     role = clean_text(data.get('role', shift.role), 'Role', 100)
     user = _get_user(data['user_id']) if data.get('user_id') else None
     status = _status(data)
+    if 'required_skill_ids' in data:
+        set_shift_requirements(shift, data.get('required_skill_ids'))
+    override = skill_gate(user, data, role=role, shift=shift, on=start) if user else None
     conflicts = _check_clash(user.id, start, end, data) if user else []
     notes = str(data.get('notes') or '').strip()
     try:
@@ -347,6 +361,8 @@ def edit_open_shift(shift_id):
             assignment = ShiftAssignment(shift_id=shift.id, user_id=user.id, status=status,
                                          assigned_by=current_user.username, notes=notes)
             db.session.add(assignment)
+            db.session.flush()
+            record_override(override, assignment, event.id)
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
@@ -406,6 +422,9 @@ def drop_shift():
     end = start + length
     event = shift.event
 
+    override = None
+    if new_user and not (a and a.user_id == new_user.id):
+        override = skill_gate(new_user, data, shift=shift, on=start)
     conflicts = []
     if new_user and not (a and a.status == 'rejected'):
         conflicts = _check_clash(new_user.id, start, end, data, exclude_assignment_id=a.id if a else None)
@@ -439,6 +458,9 @@ def drop_shift():
                 db.session.add(a)
                 _ensure_crew_row(event, new_user, shift.role)
                 notify = new_user
+        if override and a is not None:
+            db.session.flush()
+            record_override(override, a, event.id)
         db.session.commit()
     except Exception as exc:
         db.session.rollback()

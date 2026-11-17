@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Report a fault: {{ unit.asset_tag }} — ShowWise{% endblock %}
+
+{# Reached by scanning an item's label on a phone. Tap what's wrong, how bad, snap photos, send.
+   Works as a plain form too; with JS, photos are shrunk before upload. #}
+{% block content %}
+<div class="gear fault">
+    <header class="sw-head">
+        <div>
+            <h1>Report a fault</h1>
+            <p><code>{{ unit.asset_tag }}</code> · {{ unit.equipment.name if unit.equipment else '' }}
+                {{ unit_dict.state_label and ('· ' ~ unit_dict.state_label) }}</p>
+        </div>
+        <div class="sw-head-actions"><a class="btn btn-secondary" href="{{ back_url }}">Cancel</a></div>
+    </header>
+
+    {% if unit.status in ('retired', 'lost') %}
+    <div class="sw-notice bad">{{ unit.asset_tag }} is marked {{ unit.status }}, so it can’t be reported.</div>
+    {% else %}
+    {% if unit_dict.quarantine %}
+    <div class="sw-notice">Already out of use: {{ unit_dict.quarantine.reason }}. Your report will be added to it.</div>
+    {% endif %}
+
+    <form id="faultForm" class="fault-form" method="post" enctype="multipart/form-data"
+          action="{{ url_for('unit_tracking.report_fault', uid=unit.id) }}">
+        {% if event_id %}<input type="hidden" name="event_id" value="{{ event_id }}">{% endif %}
+
+        <fieldset class="sw-field">
+            <legend class="sw-label">What’s wrong?</legend>
+            <div class="sw-problem-grid fault-cats">
+                {% for value, label in categories %}
+                <label class="sw-problem"><input type="radio" name="category" value="{{ value }}" class="sr-only">
+                    <i class="fas fa-{{ {'damaged': 'hammer', 'missing_parts': 'puzzle-piece', 'no_power': 'power-off', 'electrical': 'bolt', 'other': 'ellipsis'}[value] }}"></i>
+                    <span>{{ label }}</span></label>
+                {% endfor %}
+            </div>
+        </fieldset>
+
+        <div class="sw-field">
+            <label class="sw-label" for="faultSummary">Describe it <span class="sw-muted" id="faultOpt">(optional if you picked one above)</span></label>
+            <input id="faultSummary" name="summary" class="sw-input" maxlength="200" autocomplete="off"
+                   placeholder="e.g. cuts out when the cable is moved">
+        </div>
+
+        <fieldset class="sw-field">
+            <legend class="sw-label">How bad?</legend>
+            <div class="sw-seg fault-sev">
+                {% for value, label in severities %}
+                <label class="{{ 'on' if value == 'major' }}"><input type="radio" name="severity" value="{{ value }}" {{ 'checked' if value == 'major' }}>{{ label }}</label>
+                {% endfor %}
+            </div>
+        </fieldset>
+
+        <div class="sw-field">
+            <label class="btn btn-secondary sw-problem-photo"><i class="fas fa-camera"></i> <span>Take or add photos</span>
+                <input type="file" name="photos" accept="image/*" capture="environment" multiple class="sr-only" id="faultPhotos"></label>
+            <div class="fault-thumbs" id="faultThumbs"></div>
+            <p class="sw-hint">Up to {{ max_photos }} photos.</p>
+        </div>
+
+        <p class="sw-hint" style="margin-bottom:.9rem">It will be taken out of use and the gear admins will be told.</p>
+        <div class="sw-error" id="faultErr" {% if not error %}hidden{% endif %}>{{ error or '' }}</div>
+        <div class="sw-actions">
+            <button type="submit" class="btn btn-danger" id="faultSend">Report fault</button>
+        </div>
+    </form>
+    {% endif %}
+</div>
+
+<style>
+.fault { max-width: 560px; margin: 0 auto; }
+.fault-form fieldset { border: 0; padding: 0; margin: 0 0 1rem; }
+.fault-form .sw-field { margin-bottom: 1rem; }
+.fault-cats { grid-template-columns: 1fr 1fr; }
+.fault-cats .sw-problem:has(input:checked) { border-color: var(--danger); background: var(--bad-bg); color: var(--bad-fg); }
+.fault-cats .sw-problem:has(input:checked) i { color: inherit; }
+.fault-sev { display: flex; }
+.fault-sev label { flex: 1; text-align: center; min-height: 40px; display: flex; align-items: center; justify-content: center; position: relative; }
+.fault-thumbs { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .5rem; }
+.fault-thumbs img { width: 72px; height: 72px; object-fit: cover; border-radius: var(--radius); border: 1px solid var(--border); }
+.fault .sw-actions .btn { width: 100%; min-height: 48px; }
+</style>
+<script>
+(function () {
+    const form = document.getElementById('faultForm'); if (!form) return;
+    const photos = document.getElementById('faultPhotos'), thumbs = document.getElementById('faultThumbs');
+    const err = document.getElementById('faultErr'), send = document.getElementById('faultSend');
+    const MAX = {{ max_photos }};
+    let picked = [];
+    form.querySelectorAll('.fault-sev input').forEach(r => r.addEventListener('change', () =>
+        form.querySelectorAll('.fault-sev label').forEach(l => l.classList.toggle('on', l.contains(r) ? r.checked : false))));
+    photos.addEventListener('change', () => {
+        picked = picked.concat(Array.from(photos.files)).slice(0, MAX);   // each camera shot adds one
+        photos.value = '';
+        thumbs.innerHTML = '';
+        picked.forEach(f => { const i = document.createElement('img'); i.src = URL.createObjectURL(f); i.alt = ''; thumbs.append(i); });
+        form.querySelector('.sw-problem-photo span').textContent = picked.length ? `${picked.length} photo${picked.length > 1 ? 's' : ''} · add more` : 'Take or add photos';
+    });
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fail = (m) => { err.textContent = m; err.hidden = false; };
+        const cat = form.querySelector('input[name=category]:checked');
+        const summary = form.summary.value.trim();
+        if (!summary && (!cat || cat.value === 'other')) return fail('Say what’s wrong with it');
+        send.disabled = true; send.textContent = 'Sending…';
+        const fd = new FormData(form);
+        fd.delete('photos');
+        for (const f of picked) fd.append('photos', await SWGear.shrink(f));
+        try {
+            const r = await fetch(form.action, { method: 'POST', body: fd, credentials: 'same-origin', headers: { Accept: 'application/json' } });
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok || data.error) throw new Error(data.error || `Request failed (${r.status})`);
+            SW.toast(`${data.unit.asset_tag} reported and taken out of use`);
+            setTimeout(() => { location.href = {{ back_url|tojson }}; }, 600);
+        } catch (ex) { send.disabled = false; send.textContent = 'Report fault'; fail(ex.message); }
+    });
+})();
+</script>
+{% endblock %}

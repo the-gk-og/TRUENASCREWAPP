@@ -217,3 +217,109 @@ def delete_shift_task(task_id):
     db.session.delete(task)
     db.session.commit()
     return jsonify({'success': True})
+
+
+# --- Swaps -----------------------------------------------------------------
+# Offer → claim → admin approves.  The rules live in services/shift_swaps.py.
+
+from models import ShiftSwap                                      # noqa: E402
+from services import shift_swaps as swaps                         # noqa: E402
+from services.shift_notifications import (                        # noqa: E402
+    notify_swap_offered, notify_swap_claimed, notify_swap_decided)
+
+
+@shifts_bp.errorhandler(swaps.SwapError)
+def _swap_error(err):
+    return jsonify({'error': err.message, **err.extra}), err.status
+
+
+def _swap_or_404(swap_id) -> ShiftSwap:
+    swap = db.session.get(ShiftSwap, swap_id)
+    if not swap:
+        raise swaps.SwapError('Swap not found', 404)
+    return swap
+
+
+@shifts_bp.route('/api/shifts/swaps', methods=['GET'])
+@login_required
+@crew_required
+def list_swaps():
+    """Open offers I can take, my own offers/claims, and (admins) swaps to approve."""
+    swaps.expire_started()
+    mine = (ShiftSwap.query.filter(ShiftSwap.status.in_(swaps.ACTIVE),
+                                   db.or_(ShiftSwap.offered_by_id == current_user.id,
+                                          ShiftSwap.claimed_by_id == current_user.id)).all())
+    return jsonify({
+        'open': [swaps.serialize(s) for s in swaps.open_offers_for(current_user)],
+        'mine': [swaps.serialize(s) for s in mine],
+        'to_approve': [swaps.serialize(s) for s in swaps.awaiting_approval()]
+                      if swaps.is_shift_admin(current_user) else [],
+    })
+
+
+@shifts_bp.route('/shifts/assignment/<int:assignment_id>/swap-candidates', methods=['GET'])
+@login_required
+@crew_required
+def swap_candidates(assignment_id):
+    a = ShiftAssignment.query.get_or_404(assignment_id)
+    if a.user_id != current_user.id and not current_user.is_admin:
+        return jsonify({'error': 'Permission denied'}), 403
+    return jsonify({'people': swaps.eligible_people(a)})
+
+
+@shifts_bp.route('/shifts/assignment/<int:assignment_id>/swap', methods=['POST'])
+@login_required
+@crew_required
+def offer_swap(assignment_id):
+    a = ShiftAssignment.query.get_or_404(assignment_id)
+    data = request.get_json(silent=True) or {}
+    to_ids = data.get('to_user_ids') or []
+    if not isinstance(to_ids, list):
+        raise swaps.SwapError('to_user_ids must be a list')
+    swap = swaps.create_offer(a, current_user, to_ids, str(data.get('note') or ''))
+    notify_swap_offered(swap)
+    return jsonify({'success': True, 'swap': swaps.serialize(swap)})
+
+
+@shifts_bp.route('/shifts/swaps/<int:swap_id>/claim', methods=['POST'])
+@login_required
+@crew_required
+def claim_swap(swap_id):
+    swap = swaps.claim(_swap_or_404(swap_id), current_user)
+    notify_swap_claimed(swap)
+    return jsonify({'success': True, 'swap': swaps.serialize(swap)})
+
+
+@shifts_bp.route('/shifts/swaps/<int:swap_id>/withdraw', methods=['POST'])
+@login_required
+@crew_required
+def withdraw_swap_claim(swap_id):
+    swap = swaps.withdraw_claim(_swap_or_404(swap_id), current_user)
+    return jsonify({'success': True, 'swap': swaps.serialize(swap)})
+
+
+@shifts_bp.route('/shifts/swaps/<int:swap_id>/cancel', methods=['POST'])
+@login_required
+@crew_required
+def cancel_swap(swap_id):
+    swap = swaps.cancel(_swap_or_404(swap_id), current_user)
+    return jsonify({'success': True, 'swap': swaps.serialize(swap)})
+
+
+@shifts_bp.route('/shifts/swaps/<int:swap_id>/approve', methods=['POST'])
+@login_required
+@crew_required
+def approve_swap(swap_id):
+    force = bool((request.get_json(silent=True) or {}).get('force'))
+    swap = swaps.approve(_swap_or_404(swap_id), current_user, force=force)
+    notify_swap_decided(swap)
+    return jsonify({'success': True, 'swap': swaps.serialize(swap)})
+
+
+@shifts_bp.route('/shifts/swaps/<int:swap_id>/reject', methods=['POST'])
+@login_required
+@crew_required
+def reject_swap(swap_id):
+    swap = swaps.reject(_swap_or_404(swap_id), current_user)
+    notify_swap_decided(swap)
+    return jsonify({'success': True, 'swap': swaps.serialize(swap)})

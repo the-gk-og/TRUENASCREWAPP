@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Backstage calls · {{ event.title }} - ShowWise{% endblock %}
+{% block content %}
+<a class="sw-back" href="{{ url_for('events.event_detail', id=event.id) }}">← {{ event.title }}</a>
+<div class="sw-page-head">
+  <div><h1>Backstage calls</h1><div class="sw-chips"><span class="sw-chip" id="bc-now">On display: —</span></div></div>
+  <div class="sw-actions-bar"><a class="btn btn-secondary" target="_blank" href="{{ url_for('backstage.display', event_id=event.id) }}"><i class="fas fa-tv"></i>Open display</a></div>
+</div>
+<div class="card">
+  <div class="sw-card-head"><h3>Give a call</h3></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:.6rem">
+    {% for p in presets %}<button class="btn btn-primary" style="min-height:3.5rem" data-call="{{ p.key }}" title="{{ p.text }}">{{ p.label }}</button>{% endfor %}
+  </div>
+  <form id="bc-custom" style="display:flex;gap:.5rem;margin-top:.9rem">
+    <input class="sw-input" name="message" maxlength="200" placeholder="Custom call, e.g. Stand by for the fire curtain" style="flex:1">
+    <button class="btn btn-secondary" type="submit">Send</button>
+    <button class="btn btn-outline-danger" type="button" data-call="clear">Clear display</button>
+  </form>
+</div>
+<div class="card">
+  <div class="sw-card-head"><h3>Call log</h3></div>
+  <ul id="bc-log" class="sw-list" style="list-style:none;padding:0;margin:0"></ul>
+</div>
+<script type="application/json" id="bc-data">{{ state|tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const eid = {{ event.id }};
+  const t = (iso) => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+  function paint(s) {
+    document.getElementById('bc-now').textContent = 'On display: ' + (s.call ? s.call.message : 'nothing');
+    const ul = document.getElementById('bc-log'); ul.innerHTML = '';
+    if (!s.log || !s.log.length) { ul.innerHTML = '<li class="sw-empty">No calls given yet</li>'; return; }
+    s.log.forEach((c) => {
+      const li = document.createElement('li');
+      li.style.cssText = 'padding:.45rem 0;border-bottom:1px solid var(--border)';
+      li.textContent = `${t(c.sent_at)} · ${c.kind === 'clear' ? '(display cleared)' : c.message} — ${c.sent_by}`;
+      ul.appendChild(li);
+    });
+  }
+  async function send(kind, message) {
+    try { const r = await SW.api('POST', `/events/${eid}/calls`, {kind, message}); paint(r.state); SW.toast('Call sent'); }
+    catch (e) { SW.toast(e.message, 'error'); }
+  }
+  document.querySelectorAll('[data-call]').forEach((b) => b.addEventListener('click', () => send(b.dataset.call)));
+  document.getElementById('bc-custom').addEventListener('submit', (e) => {
+    e.preventDefault(); const i = e.target.message; if (!i.value.trim()) return;
+    send('custom', i.value); i.value = '';
+  });
+  paint(JSON.parse(document.getElementById('bc-data').textContent));
+  setInterval(async () => { try { paint(await SW.api('GET', `/events/${eid}/calls/state`)); } catch (e) {} }, 5000);
+})();
+</script>
+{% endblock %}

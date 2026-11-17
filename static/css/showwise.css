@@ -328,7 +328,7 @@ hr { border: 0; border-top: 1px solid var(--border); }
 .form-group label, .sw-label { display: block; margin-bottom: .3rem; font-weight: 600; font-size: .88rem; color: var(--text-primary); }
 .form-group input, .form-group textarea, .form-group select,
 input[type="text"], input[type="password"], input[type="email"], input[type="number"], input[type="search"], input[type="tel"], input[type="url"],
-input[type="date"], input[type="time"], input[type="datetime-local"], textarea, select {
+input:not([type]), input[type="date"], input[type="time"], input[type="datetime-local"], textarea, select {
     background: var(--bg-input); color: var(--text-primary);
     border: 1px solid var(--border-input); border-radius: var(--radius);
     font: inherit; font-size: .95rem;
@@ -342,7 +342,7 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 @media (max-width: 768px) {
     /* 16px stops iOS zooming into a focused field */
     input[type="text"], input[type="password"], input[type="email"], input[type="number"], input[type="search"],
-    input[type="date"], input[type="time"], input[type="datetime-local"], textarea, select { font-size: 16px; }
+    input:not([type]), input[type="date"], input[type="time"], input[type="datetime-local"], textarea, select { font-size: 16px; }
 }
 [data-theme="dark"] select { color-scheme: dark; }
 [data-theme="dark"] input[type="date"], [data-theme="dark"] input[type="time"], [data-theme="dark"] input[type="datetime-local"] { color-scheme: dark; }
@@ -473,7 +473,7 @@ tr:hover td { background: var(--bg-table-hover); }
 .sw-hist-del { float: right; font-size: .8rem; font-weight: 500; color: var(--danger); }
 .sw-hist-meta { font-size: .82rem; color: var(--text-secondary); }
 .sw-hist-detail { margin-top: .2rem; font-size: .9rem; white-space: pre-wrap; overflow-wrap: anywhere; }
-.sw-hist-photo { margin-top: .4rem; max-width: 180px; max-height: 140px; border-radius: var(--radius); border: 1px solid var(--border); display: block; }
+.sw-hist-photo { margin-top: .4rem; margin-right: .4rem; max-width: 180px; max-height: 140px; border-radius: var(--radius); border: 1px solid var(--border); display: inline-block; vertical-align: top; }
 @media (max-width: 520px) { .sw-scan-text { display: none; } }
 
 /* ============================================================
@@ -644,6 +644,18 @@ tr:hover td { background: var(--bg-table-hover); }
 .plu-chip.out { background: var(--info-bg); color: var(--info-fg); }
 .plu-chip button { border: 0; background: none; color: inherit; cursor: pointer; padding: 0 .2rem; font-size: .95rem; line-height: 1; opacity: .65; }
 .plu-chip button:hover { opacity: 1; }
+/* Gear double-booking warnings (services/gear_bookings.py) */
+.pl-warn { margin: .3rem 0 0; padding: 0; list-style: none; font-size: .82rem; }
+.pl-warn li { display: flex; gap: .35rem; align-items: baseline; color: var(--text-primary); }
+.pl-warn li::before { content: "\f071"; font-family: "Font Awesome 6 Free"; font-weight: 900; color: var(--warning); font-size: .75rem; }
+.pl-hold { border: 0; background: none; padding: 0; color: var(--text-secondary); font-size: .8rem; cursor: pointer; text-decoration: underline dotted; }
+.pl-hold:hover { color: var(--primary); }
+.pl-item.clash { box-shadow: inset 3px 0 0 var(--warning); }
+.gb-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.gb-table th, .gb-table td { text-align: left; padding: .45rem .5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+.gb-table th { font-size: .78rem; color: var(--text-secondary); font-weight: 600; }
+.gb-table tr.short td:first-child { box-shadow: inset 3px 0 0 var(--warning); }
+.gb-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .plu-add { min-height: 28px; padding: .1rem .4rem; font-size: .8rem !important; border-style: dashed; max-width: 16rem; }
 .pl-lists .sw-input { margin-bottom: .5rem; }
 .pl-ev { display: block; padding: .45rem .6rem; border-radius: var(--radius); text-decoration: none; color: var(--text-primary); font-size: .92rem; }

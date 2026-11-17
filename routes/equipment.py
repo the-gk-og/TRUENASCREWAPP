@@ -125,6 +125,7 @@ def equipment_detail(id):
     org_name = current_app.config.get('ORG_NAME') or org.get('name', 'ShowWise')
     from models import MAINTENANCE_KINDS, MAINTENANCE_LABELS, MAINTENANCE_RESULTS, QUARANTINE_OUTCOMES
     from routes.unit_tracking import maintenance_alerts
+    from services.gear_bookings import equipment_bookings
     units = [u.to_dict() for u in eq.units]
     return render_template('crew/equipment_detail.html', item=eq, organisation_name=org_name,
                            units=units,
@@ -136,6 +137,7 @@ def equipment_detail(id):
                            maintenance_kinds=[(k, MAINTENANCE_LABELS[k]) for k in MAINTENANCE_KINDS],
                            maintenance_results=MAINTENANCE_RESULTS,
                            maint_alerts=maintenance_alerts(equipment_id=eq.id),
+                           bookings=equipment_bookings(eq),
                            today=datetime.now().date().isoformat(),
                            highlight_unit=request.args.get('unit', type=int))
 
@@ -386,6 +388,10 @@ def unit_by_tag(tag):
 def unit_view_public(uid):
     """Target of a unit QR code. Crew land on the item page with the unit highlighted."""
     u = EquipmentUnit.query.get_or_404(uid)
+    if current_user.is_authenticated and request.args.get('report'):
+        return redirect(url_for('unit_tracking.fault_form', uid=u.id))
+    if current_user.is_authenticated and u.is_case:
+        return redirect(url_for('cases.case_page', uid=u.id))
     if current_user.is_authenticated:
         return redirect(url_for('equipment.equipment_detail', id=u.equipment_id, unit=u.id)
                         + f'#unit-{u.id}')
@@ -398,6 +404,7 @@ def unit_view_public(uid):
         item=u.equipment, unit=u,
         organisation_name=org_name,
         login_url=url_for('auth.login', next=request.url),
+        fault_url=url_for('auth.login', next=url_for('unit_tracking.fault_form', uid=u.id)),
     )
 
 
@@ -419,6 +426,8 @@ def add_equipment():
     if _tag_taken(barcode):
         return jsonify({'error': f'Barcode "{barcode}" is already used by another item'}), 409
     tracking = (data.get('tracking') or 'bulk').strip().lower()
+    if data.get('is_case'):
+        tracking = 'individual'               # every case has its own label
     if tracking not in TRACKING_MODES:
         return jsonify({'error': 'Tracking must be individual or bulk'}), 400
     qty = _clean_quantity(data.get('quantity_owned'), 1)
@@ -428,6 +437,7 @@ def add_equipment():
         barcode=barcode, name=name,
         category=data.get('category', ''), location=data.get('location', ''),
         notes=data.get('notes', ''), quantity_owned=qty, tracking=tracking,
+        is_case=bool(data.get('is_case')),
     )
     db.session.add(eq)
     db.session.flush()
@@ -456,6 +466,14 @@ def update_equipment(id):
     eq.category       = data.get('category',       eq.category)
     eq.location       = data.get('location',       eq.location)
     eq.notes          = data.get('notes',          eq.notes)
+    if 'is_case' in data:
+        want_case = bool(data.get('is_case'))
+        if not want_case and eq.is_case and any(u.case_contents for u in eq.units):
+            return jsonify({'error': 'Some of these cases still have items packed in them. Unpack them first'}), 409
+        if want_case and not eq.is_individual and (eq.tracking or 'bulk') == 'bulk' \
+                and (data.get('tracking') or 'bulk') != 'individual':
+            return jsonify({'error': 'Cases are tracked one by one. Switch to individual items first'}), 409
+        eq.is_case = want_case
 
     tracking = (data.get('tracking') or eq.tracking_mode).strip().lower()
     if tracking not in TRACKING_MODES:
@@ -1090,16 +1108,9 @@ def generate_barcodes():
         return jsonify({'error': str(exc)}), 500
 
 def _event_window(event):
-    """(start, end) an event holds its equipment for. All-day events and events
-    with no end time hold it until the end of their last day."""
-    from datetime import time as dtime
-    start = event.event_date
-    end   = event.event_end_date or event.event_date
-    if event.all_day:
-        start = datetime.combine(start.date(), dtime.min)
-    if event.all_day or not event.event_end_date:
-        end = datetime.combine(end.date(), dtime.max)
-    return start, max(start, end)
+    """(start, end) an event holds its equipment for (see services/gear_bookings.py)."""
+    from services.gear_bookings import event_window
+    return event_window(event)
 
 
 @equipment_bp.route('/equipment/<int:id>/quantity-check', methods=['POST'])
@@ -1157,3 +1168,27 @@ def check_equipment_quantity(id):
         'event_id': target.id if target else None,
         'warning': requested_qty > available,
     })
+
+# ---------------------------------------------------------------------------
+# "Booked on": upcoming commitments for a type or one unit
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/equipment/<int:id>/bookings')
+@login_required
+@crew_required
+def equipment_bookings_json(id):
+    from services.gear_bookings import equipment_bookings
+    eq = Equipment.query.get_or_404(id)
+    rows = equipment_bookings(eq)
+    for r in rows:
+        r['start'], r['end'] = r['start'].isoformat(timespec='minutes'), r['end'].isoformat(timespec='minutes')
+    return jsonify({'equipment_id': eq.id, 'name': eq.name, 'bookings': rows})
+
+
+@equipment_bp.route('/equipment/unit/<int:uid>/bookings')
+@login_required
+@crew_required
+def unit_bookings_json(uid):
+    from services.gear_bookings import unit_bookings
+    unit = EquipmentUnit.query.get_or_404(uid)
+    return jsonify({'unit_id': unit.id, 'asset_tag': unit.asset_tag, 'bookings': unit_bookings(unit)})

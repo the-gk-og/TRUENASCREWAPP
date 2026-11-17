@@ -2,14 +2,16 @@
     {% set n_q = quarantined|length %}{% set n_stale = stale_checkouts|length %}
     {% set n_over = maint_alerts|selectattr('due.state', 'equalto', 'overdue')|list|length %}
     {% set n_soon = maint_alerts|length - n_over %}
-    {% if n_q or n_stale or maint_alerts %}
+    {% set low_stock = consumables_low() %}{% set n_low = low_stock|length %}
+    {% if n_q or n_stale or maint_alerts or n_low %}
     <details class="sw-notice gear-attn {{ 'bad' if n_q or n_stale or n_over }}" id="gAttention" {{ 'open' if attention_open or request.args.get('status') == 'quarantined' }}>
         <summary>Needs attention:
             {%- set parts = [] -%}
             {%- if n_q %}{% set _ = parts.append(n_q ~ ' out of use') %}{% endif -%}
             {%- if n_stale %}{% set _ = parts.append(n_stale ~ ' not returned') %}{% endif -%}
             {%- if n_over %}{% set _ = parts.append(n_over ~ ' test' ~ ('' if n_over == 1 else 's') ~ ' overdue') %}{% endif -%}
-            {%- if n_soon %}{% set _ = parts.append(n_soon ~ ' test' ~ ('' if n_soon == 1 else 's') ~ ' due soon') %}{% endif %}
+            {%- if n_soon %}{% set _ = parts.append(n_soon ~ ' test' ~ ('' if n_soon == 1 else 's') ~ ' due soon') %}{% endif -%}
+            {%- if n_low %}{% set _ = parts.append(n_low ~ ' consumable' ~ ('' if n_low == 1 else 's') ~ ' low') %}{% endif %}
             {{ parts|join(' · ') }}
         </summary>
 
@@ -19,8 +21,8 @@
             {% for q in quarantined %}
             <li>
                 <a href="{{ url_for('equipment.equipment_detail', id=q.equipment_id, unit=q.unit_id) }}#unit-{{ q.unit_id }}"><code>{{ q.asset_tag }}</code></a>
-                <span>{{ q.equipment_name }}: {{ q.reason }}
-                    <span class="sub">{{ q.quarantined_at }} by {{ q.quarantined_by or 'unknown' }}{% if q.event_title %} · after {{ q.event_title }}{% endif %}</span></span>
+                <span>{% set f = (q.faults or [])|first %}{% if f %}<span class="pill {{ 'warn' if f.severity == 'minor' else 'bad' }}">{{ f.severity_label }}</span> {% endif %}{{ q.equipment_name }}: {{ q.reason }}
+                    <span class="sub">{{ q.quarantined_at }} by {{ q.quarantined_by or 'unknown' }}{% if q.event_title %} · after {{ q.event_title }}{% endif %}{% set n_ph = (q.faults or [])|sum(attribute='photo_count') %}{% if n_ph %} · <a href="#" data-history="{{ q.unit_id }}"><i class="fas fa-camera"></i> {{ n_ph }} photo{{ '' if n_ph == 1 else 's' }}</a>{% endif %}{% if (q.faults or [])|length > 1 %} · {{ q.faults|length }} reports{% endif %}</span></span>
                 {% if current_user.is_admin %}
                 <button type="button" class="btn btn-secondary btn-sm" data-release='{{ q|tojson }}'>Checked…</button>
                 {% endif %}
@@ -49,10 +51,21 @@
             {% endfor %}
         </ul>
         {% endif %}
+        {% if n_low %}
+        <h3>{{ n_low }} consumable{{ '' if n_low == 1 else 's' }} running low · <a href="{{ url_for('consumables.shopping_list') }}">shopping list</a></h3>
+        <ul>
+            {% for c in low_stock[:20] %}
+            <li><a href="{{ url_for('consumables.consumable_detail', cid=c.id) }}">{{ c.name }}</a>: {{ c.quantity }} {{ c.unit or 'each' }} left (alert at {{ c.low_threshold }})</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
     </details>
     {% endif %}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-history]').forEach(function (a) {
+        a.addEventListener('click', function (e) { e.preventDefault(); SWGear.history(+a.dataset.history, { isAdmin: true }); });
+    });
     document.querySelectorAll('[data-release]').forEach(function (b) {
         b.addEventListener('click', async function () {
             const q = JSON.parse(b.dataset.release);

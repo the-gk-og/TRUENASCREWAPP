@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shelf labels — ShowWise</title>
+<style>
+    /* Printed labels are always black on white, whatever the screen theme */
+    body { margin: 0; padding: 16px; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #fff; color: #111; }
+    .bar { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+    .bar button { padding: 8px 14px; font: inherit; font-weight: 600; border-radius: 6px; border: 1px solid #999; background: #fff; color: #111; cursor: pointer; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, 60mm); gap: 4mm; }
+    .label { width: 60mm; height: 40mm; box-sizing: border-box; border: 1px dashed #bbb; border-radius: 3mm; padding: 3mm;
+             display: flex; gap: 3mm; align-items: center; break-inside: avoid; page-break-inside: avoid; }
+    .label img { width: 30mm; height: 30mm; image-rendering: pixelated; flex: 0 0 30mm; }
+    .label strong { display: block; font-size: 11pt; line-height: 1.15; overflow-wrap: anywhere; }
+    .label span { display: block; font-size: 8pt; color: #444; margin-top: 1.5mm; }
+    @media print { .bar { display: none; } body { padding: 0; } }
+</style>
+</head>
+<body>
+<div class="bar">
+    <button type="button" onclick="window.print()">Print</button>
+    <span>{{ labels|length }} label{{ '' if labels|length == 1 else 's' }}. Stick one on each shelf or box: scanning it opens the item so crew can take some or restock.</span>
+</div>
+<div class="grid">
+    {% for c, qr in labels %}
+    <div class="label">
+        <img src="{{ qr }}" alt="QR code for {{ c.name }}">
+        <div><strong>{{ c.name }}</strong>
+            <span>{{ c.location or c.category or '' }}</span>
+            <span>Scan to use or restock</span></div>
+    </div>
+    {% endfor %}
+</div>
+</body>
+</html>

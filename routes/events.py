@@ -8,7 +8,7 @@ The events system.
                   start/end times.  One person can have several shifts per event.
 * Schedule      - timed running order for the event (Markdown descriptions)
 * Notes         - Markdown notes
-* Run list      - ordered cue list (drag to reorder)
+* Running order - acts / segments, each with its songs, planned and actual times
 * PDF export
 
 Permissions
@@ -16,7 +16,7 @@ Permissions
 * Any crew member can create events, add notes, join an event and respond to
   their own shifts.
 * The creator of an event (and admins) can edit it.
-* Admins manage the team, shifts, schedule and run list, and delete events.
+* Admins manage the team, shifts, schedule and running order, and delete events.
 """
 
 import calendar as _cal
@@ -40,6 +40,7 @@ from services.email_service import send_shift_assignment_emails_async
 from services.user_names import name_for
 from services.event_times import times_json, times_for
 from services.report_service import run_start_for
+from services import running_order
 from services.notification_service import (
     send_discord_event_announcement, schedule_event_notifications,
 )
@@ -65,6 +66,10 @@ class ApiError(Exception):
 @events_bp.app_errorhandler(ApiError)
 def _handle_api_error(err):
     return jsonify({'error': err.message, **err.extra}), err.status
+
+
+from services.training_service import (skill_gate, record_override, parse_skill_ids,  # noqa: E402
+                                       set_shift_requirements, required_skills, missing_skills)
 
 
 def is_manager(user=None) -> bool:
@@ -331,6 +336,13 @@ def events_list():
                            event_end=event_end, fmt_range=fmt_range)
 
 
+def _gear_warnings(event):
+    """Double-booked gear for this event (nothing once it has finished)."""
+    from routes.picklist import _event_is_archived
+    from services.gear_bookings import event_gear_warnings
+    return None if _event_is_archived(event) else event_gear_warnings(event)
+
+
 @events_bp.route('/events/<int:id>', methods=['GET'])
 @login_required
 @crew_required
@@ -358,7 +370,7 @@ def event_detail(id):
 
     schedules = EventSchedule.query.filter_by(event_id=id).order_by(EventSchedule.scheduled_time).all()
     notes = EventNote.query.filter_by(event_id=id).order_by(EventNote.created_at.desc()).all()
-    run_items = CrewRunItem.query.filter_by(event_id=id).order_by(CrewRunItem.order_number).all()
+    run_order = running_order.plan(event)
     mine = next((p for p in team if p['user'].id == current_user.id), None)
     manager = is_manager()
     assignable = []
@@ -392,9 +404,7 @@ def event_detail(id):
         'schedules': {s.id: {'id': s.id, 'title': s.title, 'time': s.scheduled_time.isoformat(timespec='minutes'),
                              'description': s.description or ''}
                       for s in schedules},
-        'runs': {r.id: {'id': r.id, 'title': r.title, 'description': r.description or '',
-                        'duration': r.duration or '', 'cue_type': r.cue_type or '', 'notes': r.notes or ''}
-                 for r in run_items},
+        'running_order': running_order.to_json(run_order),
         'notes': {n.id: {'id': n.id, 'content': n.content} for n in notes},
         'attachments': attachments,
         'can_manage': manager,
@@ -411,10 +421,11 @@ def event_detail(id):
         '/crew/event_detail.html',
         event=event, now=datetime.now(), team=team,
         my_shifts=mine['shifts'] if mine else [], on_team=mine is not None,
-        times=times_for(event), schedules=schedules, notes=notes, run_items=run_items, page_data=page_data,
+        times=times_for(event), schedules=schedules, notes=notes, run_order=run_order, page_data=page_data,
         attachments=attachments, tasks=tasks, task_shifts=task_shifts, today=now_str(),
         can_tasks=can_edit_event(event),
         hired=HiredEquipment.query.filter_by(event_id=id).all(),
+        gear=_gear_warnings(event),
         assignable=assignable, can_manage=manager, can_edit=can_edit_event(event),
         series_count=len(series_members(event, 'all')),
         is_series=is_series(event), end=event_end(event), fmt_range=fmt_range,
@@ -581,7 +592,7 @@ def delete_event(id):
 @crew_required
 @manager_required
 def duplicate_event(id):
-    """Copy an event (plus its times, schedule and run list, not the team)."""
+    """Copy an event (plus its times, schedule and running order, not the team)."""
     src = Event.query.get_or_404(id)
     data = request.get_json(silent=True) or {}
     new_start = parse_dt(data['event_date'], 'New date') if data.get('event_date') \
@@ -600,10 +611,7 @@ def duplicate_event(id):
     for t in times_for(src):
         db.session.add(EventTime(event_id=copy.id, label=t.label,
                                  start_time=t.start_time + delta, end_time=t.end_time + delta))
-    for r in CrewRunItem.query.filter_by(event_id=src.id).all():
-        db.session.add(CrewRunItem(event_id=copy.id, order_number=r.order_number, title=r.title,
-                                   description=r.description, duration=r.duration,
-                                   cue_type=r.cue_type, notes=r.notes))
+    running_order.copy_to(src.id, copy.id)
     db.session.commit()
     return jsonify({'success': True, 'id': copy.id})
 
@@ -658,7 +666,7 @@ def _split_shared_shift(a: ShiftAssignment, start, end, role) -> Shift:
 def _shift_email_job(user: User, event: Event, shift: Shift, notes: str = '') -> dict:
     """Plain-string arguments for send_shift_assignment_email (it runs after the request ends)."""
     return dict(
-        recipient_email=user.email, username=user.shown_name,
+        user_id=user.id, recipient_email=user.email, username=user.shown_name,
         event_title=event.title, shift_title=shift.title,
         shift_date=shift.shift_date.strftime('%a %d %b %Y, %I:%M %p'),
         shift_end_time=shift.shift_end_date.strftime('%I:%M %p'),
@@ -692,6 +700,8 @@ def add_team_shift(event_id):
     if status not in ('pending', 'accepted', 'confirmed'):
         raise ApiError('Invalid status')
 
+    req_ids = parse_skill_ids(data.get('required_skill_ids'))
+    override = skill_gate(user, data, role=role, extra_ids=req_ids, on=start)
     conflicts = find_conflicts(user.id, start, end)
     if conflicts and not data.get('force'):
         raise ApiError(f'{user.shown_name} has a clash', 409, conflicts=conflicts)
@@ -708,15 +718,19 @@ def add_team_shift(event_id):
                       positions_needed=1, is_open=False, created_by=current_user.username)
         db.session.add(shift)
         db.session.flush()
+        if req_ids:
+            set_shift_requirements(shift, req_ids)
         assignment = ShiftAssignment(shift_id=shift.id, user_id=user.id, status=status,
                                      assigned_by=current_user.username, notes=notes)
         db.session.add(assignment)
+        db.session.flush()
+        record_override(override, assignment, event.id)
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
         raise ApiError(f'Could not add shift: {exc}', 500)
 
-    if user.email and user.id != current_user.id:          # no email for assigning yourself
+    if user.id != current_user.id:          # no email for assigning yourself
         send_shift_assignment_emails_async([_shift_email_job(user, event, shift, notes)])
     return jsonify({'success': True, 'shift': serialize_assignment(assignment),
                     'warnings': conflicts})
@@ -738,6 +752,8 @@ def add_all_crew(event_id):
     for user in users:
         if user.username in on_team:
             continue
+        if missing_skills(user, required_skills('Crew Member'), event.event_date):
+            continue
         db.session.add(CrewAssignment(event_id=event.id, crew_member=user.username,
                                       role='Crew Member', assigned_via='webapp'))
         shift = Shift(event_id=event.id, title='Crew Member', role='Crew Member',
@@ -749,7 +765,7 @@ def add_all_crew(event_id):
         db.session.add(ShiftAssignment(shift_id=shift.id, user_id=user.id, status='pending',
                                        assigned_by=current_user.username))
         added += 1
-        if user.email and user.id != current_user.id:
+        if user.id != current_user.id:
             emails.append(_shift_email_job(user, event, shift))
     db.session.commit()
     send_shift_assignment_emails_async(emails)
@@ -785,6 +801,9 @@ def bulk_add_team_shifts(event_id):
     if status not in ('pending', 'accepted', 'confirmed'):
         raise ApiError('Invalid status')
     force = bool(data.get('force'))
+    req_ids = parse_skill_ids(data.get('required_skill_ids'))
+    needed = required_skills(role, extra_ids=req_ids)
+    override_reason = str(data.get('skill_override_reason') or '').strip()[:500]
 
     users = {u.id: u for u in User.query.filter(User.id.in_(ids)).all()}
     added, skipped, emails = 0, [], []
@@ -794,6 +813,12 @@ def bulk_add_team_shifts(event_id):
             if not user or user.user_role not in ('crew', 'staff') or (user.is_cast and not user.is_admin):
                 skipped.append({'user_id': uid, 'name': user.shown_name if user else '?',
                                 'reason': 'Cannot be added to events', 'clash': False})
+                continue
+            missing = missing_skills(user, needed, start) if needed else []
+            if missing and not override_reason:
+                skipped.append({'user_id': user.id, 'name': user.shown_name, 'clash': False,
+                                'skill': True, 'missing': missing,
+                                'reason': 'Not signed off: ' + ', '.join(m['name'] for m in missing)})
                 continue
             conflicts = find_conflicts(user.id, start, end)
             if conflicts and not force:
@@ -813,10 +838,17 @@ def bulk_add_team_shifts(event_id):
                           positions_needed=1, is_open=False, created_by=current_user.username)
             db.session.add(shift)
             db.session.flush()
-            db.session.add(ShiftAssignment(shift_id=shift.id, user_id=user.id, status=status,
-                                           assigned_by=current_user.username, notes=notes))
+            if req_ids:
+                set_shift_requirements(shift, req_ids)
+            new_a = ShiftAssignment(shift_id=shift.id, user_id=user.id, status=status,
+                                    assigned_by=current_user.username, notes=notes)
+            db.session.add(new_a)
+            if missing:
+                db.session.flush()
+                record_override({'user_id': user.id, 'reason': override_reason,
+                                 'skill_names': ', '.join(m['name'] for m in missing)}, new_a, event.id)
             added += 1
-            if user.email and user.id != current_user.id:
+            if user.id != current_user.id:
                 emails.append(_shift_email_job(user, event, shift, notes))
         db.session.commit()
     except Exception as exc:
@@ -843,6 +875,9 @@ def edit_team_shift(aid):
     if status not in ('pending', 'accepted', 'confirmed', 'rejected'):
         raise ApiError('Invalid status')
 
+    override = None
+    if status != 'rejected' and (role or '').lower() != (shift.role or '').lower():
+        override = skill_gate(a.user, data, role=role, shift=None, on=start)
     conflicts = [] if status == 'rejected' else \
         find_conflicts(a.user_id, start, end, exclude_assignment_id=a.id)
     if conflicts and not data.get('force'):
@@ -864,6 +899,7 @@ def edit_team_shift(aid):
         ca = CrewAssignment.query.filter_by(event_id=event.id, crew_member=a.user.username).first()
         if ca and role:
             ca.role = role
+        record_override(override, a, event.id)
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
@@ -1067,23 +1103,50 @@ def delete_event_note(note_id):
 
 
 # ---------------------------------------------------------------------------
-# Crew run list
+# Running order (stored as CrewRunItem: acts, each with songs; see services/running_order.py)
 # ---------------------------------------------------------------------------
 
 def _run_payload(data: dict) -> dict:
+    kind = data.get('kind', data.get('cue_type'))          # "cue_type" is the old name, still accepted
     return {
         'title': clean_text(data.get('title'), 'Title', 200, required=True),
         'description': str(data.get('description') or '').strip(),
-        'duration': clean_text(data.get('duration'), 'Duration', 50),
-        'cue_type': clean_text(data.get('cue_type'), 'Cue type', 50),
+        'duration': clean_text(data.get('duration'), 'Length', 50),
+        'kind': clean_text(kind, 'Type', 50),
         'notes': str(data.get('notes') or '').strip(),
     }
 
 
 def _renumber(model, event_id: int):
+    if model is CrewRunItem:
+        return running_order.renumber(event_id)
     for i, item in enumerate(model.query.filter_by(event_id=event_id)
                              .order_by(model.order_number, model.id).all(), start=1):
         item.order_number = i
+
+
+def _act_for(event_id: int, parent_id) -> int | None:
+    """The act a new song goes into (must be a top-level row of the same event)."""
+    if parent_id in (None, ''):
+        return None
+    try:
+        parent = db.session.get(CrewRunItem, int(parent_id))
+    except (TypeError, ValueError):
+        parent = None
+    if not parent or parent.event_id != event_id:
+        raise ApiError('That act is not in this running order', 404)
+    return parent.parent_id or parent.id                    # adding "into" a song puts it in that song's act
+
+
+def _order_json(event: Event) -> dict:
+    return running_order.to_json(running_order.plan(event))
+
+
+@events_bp.route('/events/<int:event_id>/running-order')
+@login_required
+@crew_required
+def get_running_order(event_id):
+    return jsonify(_order_json(Event.query.get_or_404(event_id)))
 
 
 @events_bp.route('/events/<int:event_id>/crew-run/add', methods=['POST'])
@@ -1092,11 +1155,13 @@ def _renumber(model, event_id: int):
 @manager_required
 def add_crew_run_item(event_id):
     Event.query.get_or_404(event_id)
-    max_order = db.session.query(db.func.max(CrewRunItem.order_number)).filter_by(event_id=event_id).scalar() or 0
-    item = CrewRunItem(event_id=event_id, order_number=max_order + 1, **_run_payload(body()))
+    data = body()
+    parent_id = _act_for(event_id, data.get('parent_id'))
+    item = CrewRunItem(event_id=event_id, parent_id=parent_id,
+                       order_number=running_order.next_number(event_id, parent_id), **_run_payload(data))
     db.session.add(item)
     db.session.commit()
-    return jsonify({'success': True, 'id': item.id, 'order_number': item.order_number})
+    return jsonify({'success': True, 'id': item.id, 'order_number': item.order_number, 'parent_id': parent_id})
 
 
 @events_bp.route('/events/crew-run/<int:item_id>/edit', methods=['PUT'])
@@ -1118,7 +1183,7 @@ def edit_crew_run_item(item_id):
 def delete_crew_run_item(item_id):
     item = CrewRunItem.query.get_or_404(item_id)
     event_id = item.event_id
-    db.session.delete(item)
+    db.session.delete(item)                                 # an act takes its songs with it
     db.session.flush()
     _renumber(CrewRunItem, event_id)
     db.session.commit()
@@ -1130,7 +1195,7 @@ def delete_crew_run_item(item_id):
 @crew_required
 @manager_required
 def set_run_start(event_id):
-    """When the run list starts ('HH:MM'), used for the clock beside each item. Empty = the event's start."""
+    """When the running order starts ('HH:MM'), for the planned times. Empty = the event's start."""
     from services.settings_service import set_setting
     event = Event.query.get_or_404(event_id)
     hhmm = str(body().get('time') or '').strip()
@@ -1146,19 +1211,61 @@ def set_run_start(event_id):
 @crew_required
 @manager_required
 def reorder_crew_run_items(event_id):
-    ids = body().get('item_ids', [])
-    items = {i.id: i for i in CrewRunItem.query.filter_by(event_id=event_id).all()}
-    n = 0
-    for item_id in ids:
-        if item_id in items:
-            n += 1
-            items[item_id].order_number = n
-    for item in sorted(items.values(), key=lambda i: i.order_number):
-        if item.id not in ids:
-            n += 1
-            item.order_number = n
+    """{"tree": [{"id": act, "songs": [ids]}, ...]} - or the older flat {"item_ids": [acts]}."""
+    data = body()
+    order = data.get('tree')
+    if order is None:
+        order = [{'id': i, 'songs': None} for i in data.get('item_ids', [])]
+        keep = {a.id: [s.id for s in songs] for a, songs in running_order.tree(event_id)}
+        for entry in order:
+            entry['songs'] = keep.get(entry['id'], [])
+    if not isinstance(order, list):
+        raise ApiError('Expected a list')
+    running_order.apply_tree(event_id, order)
     db.session.commit()
     return jsonify({'success': True})
+
+
+@events_bp.route('/events/<int:event_id>/running-order/go', methods=['POST'])
+@login_required
+@crew_required
+@manager_required
+def running_order_go(event_id):
+    """Start a row now ({"item_id": n}), or the next one in the order when no id is given."""
+    event = Event.query.get_or_404(event_id)
+    item_id = body().get('item_id')
+    if item_id in (None, ''):
+        item_id = running_order.plan(event)['next_id']
+        if item_id is None:
+            raise ApiError('Nothing left in the running order')
+    item = db.session.get(CrewRunItem, item_id) if isinstance(item_id, int) else None
+    if not item or item.event_id != event_id:
+        raise ApiError('That item is not in this running order', 404)
+    running_order.go(item)
+    db.session.commit()
+    return jsonify({'success': True, **_order_json(event)})
+
+
+@events_bp.route('/events/<int:event_id>/running-order/stop', methods=['POST'])
+@login_required
+@crew_required
+@manager_required
+def running_order_stop(event_id):
+    event = Event.query.get_or_404(event_id)
+    running_order.stop(event_id)
+    db.session.commit()
+    return jsonify({'success': True, **_order_json(event)})
+
+
+@events_bp.route('/events/<int:event_id>/running-order/reset', methods=['POST'])
+@login_required
+@crew_required
+@manager_required
+def running_order_reset(event_id):
+    event = Event.query.get_or_404(event_id)
+    running_order.reset(event_id)
+    db.session.commit()
+    return jsonify({'success': True, **_order_json(event)})
 
 
 # ---------------------------------------------------------------------------
