@@ -15,6 +15,9 @@
     <button class="settings-tab" onclick="switchTab('appearance')" id="tab-appearance">
         <i class="fas fa-palette"></i> Appearance
     </button>
+    <button class="settings-tab" onclick="switchTab('calendar')" id="tab-calendar">
+        <i class="fas fa-calendar-alt"></i> Calendar
+    </button>
     <button class="settings-tab" onclick="switchTab('2fa')" id="tab-2fa">
         <i class="fas fa-mobile-alt"></i> Two-Factor Auth
         {% if tfa and tfa.enabled %}
@@ -455,6 +458,33 @@
 
 </div>
 
+<!-- ==================== CALENDAR TAB ==================== -->
+<div class="tab-panel" id="panel-calendar">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-calendar-alt"></i> Calendar subscription</h3>
+        </div>
+        <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+            Add ShowWise to Google Calendar, Apple Calendar or Outlook. Your calendar app checks these links
+            for changes by itself, so new shifts and time changes show up after it refreshes.
+            <strong>These links are private to you</strong> &mdash; anyone who has one can see that schedule, so don't share them.
+        </p>
+        <div id="calFeeds"><p style="color: var(--text-muted);">Loading&hellip;</p></div>
+        <div class="cb-info-box" style="margin-top: 1.25rem;">
+            <i class="fas fa-info-circle"></i>
+            <div>
+                <strong>Google Calendar:</strong> open calendar.google.com &rarr; <em>Other calendars &plus;</em> &rarr; <em>From URL</em>, paste the link. Google refreshes every few hours.<br>
+                <strong>Apple Calendar (iPhone / Mac):</strong> tap <em>Add to Apple / Outlook</em>, or <em>File &rarr; New Calendar Subscription</em> and paste the link.<br>
+                <strong>Outlook:</strong> <em>Add calendar &rarr; Subscribe from web</em> and paste the link.
+            </div>
+        </div>
+        <div style="margin-top: 1.25rem;">
+            <button type="button" class="btn btn-danger" id="calReset"><i class="fas fa-sync-alt"></i> Reset links</button>
+            <span style="color: var(--text-muted); font-size: .85rem; margin-left: .5rem;">Makes new links &mdash; the old ones stop working straight away.</span>
+        </div>
+    </div>
+</div>
+
 <!-- ==================== DISCORD TAB ==================== -->
 {% if current_user.discord_id %}
 <div class="tab-panel" id="panel-discord">
@@ -713,6 +743,50 @@
 
 {% block scripts %}
 <script>
+// ---- Calendar subscription ----
+(function () {
+    const box = () => document.getElementById('calFeeds');
+    const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const row = (title, sub, url, webcal) => `
+        <div style="margin-bottom: 1rem;">
+            <label style="font-weight: 600; display:block;">${title}</label>
+            <div style="color: var(--text-secondary); font-size: .85rem; margin-bottom: .4rem;">${sub}</div>
+            <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+                <input type="text" readonly value="${esc(url)}" class="cal-feed-url" style="flex:1 1 260px; min-width:0;" onclick="this.select()">
+                <button type="button" class="btn btn-primary cal-copy" data-url="${esc(url)}"><i class="fas fa-copy"></i> Copy</button>
+                <a class="btn btn-secondary" href="${esc(webcal)}"><i class="fab fa-apple"></i> Add to Apple / Outlook</a>
+            </div>
+        </div>`;
+    function render(l) {
+        let html = row('My schedule', 'Your shifts plus the events you are crewing or cast in.', l.url, l.webcal_url);
+        if (l.all_url) html += row('All events', 'Every event on the ShowWise calendar.', l.all_url, l.all_webcal_url);
+        box().innerHTML = html;
+        box().querySelectorAll('.cal-copy').forEach(b => b.onclick = async () => {
+            try { await navigator.clipboard.writeText(b.dataset.url); }
+            catch (_) { const i = b.parentElement.querySelector('input'); i.select(); document.execCommand('copy'); }
+            if (window.SW && SW.toast) SW.toast('Link copied');
+        });
+    }
+    async function load() {
+        try { const r = await fetch('/api/calendar/sync-link'); if (!r.ok) throw new Error(); render(await r.json()); }
+        catch (_) { box().innerHTML = '<p style="color: var(--danger);">Could not load your calendar links.</p>'; }
+    }
+    window.addEventListener('DOMContentLoaded', () => {
+        if (!box()) return;
+        load();
+        document.getElementById('calReset').onclick = async () => {
+            const msg = 'Make new calendar links? The old ones stop working straight away, so you will need to add the new link to your calendar app again.';
+            const ok = (window.SW && SW.confirm) ? await SW.confirm(msg, { title: 'Reset calendar links', danger: true, okText: 'Reset links' }) : confirm(msg);
+            if (!ok) return;
+            try {
+                const r = await fetch('/api/calendar/sync-link/reset', { method: 'POST' });
+                if (!r.ok) throw new Error();
+                render(await r.json());
+                if (window.SW && SW.toast) SW.toast('New links created');
+            } catch (_) { if (window.SW && SW.toast) SW.toast('Could not reset the links', 'error'); }
+        };
+    });
+})();
 // ---- Tab switching ----
 function switchTab(name) {
     document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));

@@ -228,7 +228,7 @@ $('btnSubscribe').onclick = async () => {
   };
   const render = (l) => {
     d.body.innerHTML = `
-      <p class="sw-confirm-text">This is <b>your</b> private calendar link. It contains every event plus your own shifts,
+      <p class="sw-confirm-text">This is <b>your</b> private calendar link. It has your shifts and the events you are on (an all-events link is in <a href="/settings#calendar">Settings → Calendar</a>),
         and your calendar app keeps it up to date. Anyone who has the link can see your schedule, so don't share it.</p>
       <div class="sw-field"><input type="text" id="syncUrl" readonly value="${SW.esc(l.url)}" style="width:100%"></div>
       <div class="sw-actions">
