@@ -1,6 +1,6 @@
 /*
  * event-io.js - the "Import / export" menu on the event page, plus the
- * PDF / photo gallery shown under the schedule and the run list.
+ * PDF / photo gallery shown under the schedule and the running order.
  *
  *   EventIO.init({ eventId, canManage, attachments, counts })
  *   EventIO.openMenu()
@@ -16,7 +16,7 @@
   const MAX_FILE = 15 * 1024 * 1024;
   const KINDS = {
     schedule: { label: 'Schedule', icon: 'fa-clock', where: 'under the schedule' },
-    run: { label: 'Run list', icon: 'fa-list-ol', where: 'under the run list' },
+    run: { label: 'Running order', icon: 'fa-list-ol', where: 'under the running order' },
   };
   let CFG = null;
   let refreshMenuFiles = () => {};

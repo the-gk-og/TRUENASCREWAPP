@@ -8,7 +8,7 @@ The events system.
                   start/end times.  One person can have several shifts per event.
 * Schedule      - timed running order for the event (Markdown descriptions)
 * Notes         - Markdown notes
-* Run list      - ordered cue list (drag to reorder)
+* Running order - acts / segments, each with its songs, planned and actual times
 * PDF export
 
 Permissions
@@ -16,7 +16,7 @@ Permissions
 * Any crew member can create events, add notes, join an event and respond to
   their own shifts.
 * The creator of an event (and admins) can edit it.
-* Admins manage the team, shifts, schedule and run list, and delete events.
+* Admins manage the team, shifts, schedule and running order, and delete events.
 """
 
 import calendar as _cal
@@ -40,6 +40,7 @@ from services.email_service import send_shift_assignment_emails_async
 from services.user_names import name_for
 from services.event_times import times_json, times_for
 from services.report_service import run_start_for
+from services import running_order
 from services.notification_service import (
     send_discord_event_announcement, schedule_event_notifications,
 )
@@ -358,7 +359,7 @@ def event_detail(id):
 
     schedules = EventSchedule.query.filter_by(event_id=id).order_by(EventSchedule.scheduled_time).all()
     notes = EventNote.query.filter_by(event_id=id).order_by(EventNote.created_at.desc()).all()
-    run_items = CrewRunItem.query.filter_by(event_id=id).order_by(CrewRunItem.order_number).all()
+    run_order = running_order.plan(event)
     mine = next((p for p in team if p['user'].id == current_user.id), None)
     manager = is_manager()
     assignable = []
@@ -392,9 +393,7 @@ def event_detail(id):
         'schedules': {s.id: {'id': s.id, 'title': s.title, 'time': s.scheduled_time.isoformat(timespec='minutes'),
                              'description': s.description or ''}
                       for s in schedules},
-        'runs': {r.id: {'id': r.id, 'title': r.title, 'description': r.description or '',
-                        'duration': r.duration or '', 'cue_type': r.cue_type or '', 'notes': r.notes or ''}
-                 for r in run_items},
+        'running_order': running_order.to_json(run_order),
         'notes': {n.id: {'id': n.id, 'content': n.content} for n in notes},
         'attachments': attachments,
         'can_manage': manager,
@@ -411,7 +410,7 @@ def event_detail(id):
         '/crew/event_detail.html',
         event=event, now=datetime.now(), team=team,
         my_shifts=mine['shifts'] if mine else [], on_team=mine is not None,
-        times=times_for(event), schedules=schedules, notes=notes, run_items=run_items, page_data=page_data,
+        times=times_for(event), schedules=schedules, notes=notes, run_order=run_order, page_data=page_data,
         attachments=attachments, tasks=tasks, task_shifts=task_shifts, today=now_str(),
         can_tasks=can_edit_event(event),
         hired=HiredEquipment.query.filter_by(event_id=id).all(),
@@ -581,7 +580,7 @@ def delete_event(id):
 @crew_required
 @manager_required
 def duplicate_event(id):
-    """Copy an event (plus its times, schedule and run list, not the team)."""
+    """Copy an event (plus its times, schedule and running order, not the team)."""
     src = Event.query.get_or_404(id)
     data = request.get_json(silent=True) or {}
     new_start = parse_dt(data['event_date'], 'New date') if data.get('event_date') \
@@ -600,10 +599,7 @@ def duplicate_event(id):
     for t in times_for(src):
         db.session.add(EventTime(event_id=copy.id, label=t.label,
                                  start_time=t.start_time + delta, end_time=t.end_time + delta))
-    for r in CrewRunItem.query.filter_by(event_id=src.id).all():
-        db.session.add(CrewRunItem(event_id=copy.id, order_number=r.order_number, title=r.title,
-                                   description=r.description, duration=r.duration,
-                                   cue_type=r.cue_type, notes=r.notes))
+    running_order.copy_to(src.id, copy.id)
     db.session.commit()
     return jsonify({'success': True, 'id': copy.id})
 
@@ -1067,23 +1063,50 @@ def delete_event_note(note_id):
 
 
 # ---------------------------------------------------------------------------
-# Crew run list
+# Running order (stored as CrewRunItem: acts, each with songs; see services/running_order.py)
 # ---------------------------------------------------------------------------
 
 def _run_payload(data: dict) -> dict:
+    kind = data.get('kind', data.get('cue_type'))          # "cue_type" is the old name, still accepted
     return {
         'title': clean_text(data.get('title'), 'Title', 200, required=True),
         'description': str(data.get('description') or '').strip(),
-        'duration': clean_text(data.get('duration'), 'Duration', 50),
-        'cue_type': clean_text(data.get('cue_type'), 'Cue type', 50),
+        'duration': clean_text(data.get('duration'), 'Length', 50),
+        'kind': clean_text(kind, 'Type', 50),
         'notes': str(data.get('notes') or '').strip(),
     }
 
 
 def _renumber(model, event_id: int):
+    if model is CrewRunItem:
+        return running_order.renumber(event_id)
     for i, item in enumerate(model.query.filter_by(event_id=event_id)
                              .order_by(model.order_number, model.id).all(), start=1):
         item.order_number = i
+
+
+def _act_for(event_id: int, parent_id) -> int | None:
+    """The act a new song goes into (must be a top-level row of the same event)."""
+    if parent_id in (None, ''):
+        return None
+    try:
+        parent = db.session.get(CrewRunItem, int(parent_id))
+    except (TypeError, ValueError):
+        parent = None
+    if not parent or parent.event_id != event_id:
+        raise ApiError('That act is not in this running order', 404)
+    return parent.parent_id or parent.id                    # adding "into" a song puts it in that song's act
+
+
+def _order_json(event: Event) -> dict:
+    return running_order.to_json(running_order.plan(event))
+
+
+@events_bp.route('/events/<int:event_id>/running-order')
+@login_required
+@crew_required
+def get_running_order(event_id):
+    return jsonify(_order_json(Event.query.get_or_404(event_id)))
 
 
 @events_bp.route('/events/<int:event_id>/crew-run/add', methods=['POST'])
@@ -1092,11 +1115,13 @@ def _renumber(model, event_id: int):
 @manager_required
 def add_crew_run_item(event_id):
     Event.query.get_or_404(event_id)
-    max_order = db.session.query(db.func.max(CrewRunItem.order_number)).filter_by(event_id=event_id).scalar() or 0
-    item = CrewRunItem(event_id=event_id, order_number=max_order + 1, **_run_payload(body()))
+    data = body()
+    parent_id = _act_for(event_id, data.get('parent_id'))
+    item = CrewRunItem(event_id=event_id, parent_id=parent_id,
+                       order_number=running_order.next_number(event_id, parent_id), **_run_payload(data))
     db.session.add(item)
     db.session.commit()
-    return jsonify({'success': True, 'id': item.id, 'order_number': item.order_number})
+    return jsonify({'success': True, 'id': item.id, 'order_number': item.order_number, 'parent_id': parent_id})
 
 
 @events_bp.route('/events/crew-run/<int:item_id>/edit', methods=['PUT'])
@@ -1118,7 +1143,7 @@ def edit_crew_run_item(item_id):
 def delete_crew_run_item(item_id):
     item = CrewRunItem.query.get_or_404(item_id)
     event_id = item.event_id
-    db.session.delete(item)
+    db.session.delete(item)                                 # an act takes its songs with it
     db.session.flush()
     _renumber(CrewRunItem, event_id)
     db.session.commit()
@@ -1130,7 +1155,7 @@ def delete_crew_run_item(item_id):
 @crew_required
 @manager_required
 def set_run_start(event_id):
-    """When the run list starts ('HH:MM'), used for the clock beside each item. Empty = the event's start."""
+    """When the running order starts ('HH:MM'), for the planned times. Empty = the event's start."""
     from services.settings_service import set_setting
     event = Event.query.get_or_404(event_id)
     hhmm = str(body().get('time') or '').strip()
@@ -1146,19 +1171,61 @@ def set_run_start(event_id):
 @crew_required
 @manager_required
 def reorder_crew_run_items(event_id):
-    ids = body().get('item_ids', [])
-    items = {i.id: i for i in CrewRunItem.query.filter_by(event_id=event_id).all()}
-    n = 0
-    for item_id in ids:
-        if item_id in items:
-            n += 1
-            items[item_id].order_number = n
-    for item in sorted(items.values(), key=lambda i: i.order_number):
-        if item.id not in ids:
-            n += 1
-            item.order_number = n
+    """{"tree": [{"id": act, "songs": [ids]}, ...]} - or the older flat {"item_ids": [acts]}."""
+    data = body()
+    order = data.get('tree')
+    if order is None:
+        order = [{'id': i, 'songs': None} for i in data.get('item_ids', [])]
+        keep = {a.id: [s.id for s in songs] for a, songs in running_order.tree(event_id)}
+        for entry in order:
+            entry['songs'] = keep.get(entry['id'], [])
+    if not isinstance(order, list):
+        raise ApiError('Expected a list')
+    running_order.apply_tree(event_id, order)
     db.session.commit()
     return jsonify({'success': True})
+
+
+@events_bp.route('/events/<int:event_id>/running-order/go', methods=['POST'])
+@login_required
+@crew_required
+@manager_required
+def running_order_go(event_id):
+    """Start a row now ({"item_id": n}), or the next one in the order when no id is given."""
+    event = Event.query.get_or_404(event_id)
+    item_id = body().get('item_id')
+    if item_id in (None, ''):
+        item_id = running_order.plan(event)['next_id']
+        if item_id is None:
+            raise ApiError('Nothing left in the running order')
+    item = db.session.get(CrewRunItem, item_id) if isinstance(item_id, int) else None
+    if not item or item.event_id != event_id:
+        raise ApiError('That item is not in this running order', 404)
+    running_order.go(item)
+    db.session.commit()
+    return jsonify({'success': True, **_order_json(event)})
+
+
+@events_bp.route('/events/<int:event_id>/running-order/stop', methods=['POST'])
+@login_required
+@crew_required
+@manager_required
+def running_order_stop(event_id):
+    event = Event.query.get_or_404(event_id)
+    running_order.stop(event_id)
+    db.session.commit()
+    return jsonify({'success': True, **_order_json(event)})
+
+
+@events_bp.route('/events/<int:event_id>/running-order/reset', methods=['POST'])
+@login_required
+@crew_required
+@manager_required
+def running_order_reset(event_id):
+    event = Event.query.get_or_404(event_id)
+    running_order.reset(event_id)
+    db.session.commit()
+    return jsonify({'success': True, **_order_json(event)})
 
 
 # ---------------------------------------------------------------------------

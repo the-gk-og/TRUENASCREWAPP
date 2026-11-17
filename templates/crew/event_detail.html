@@ -45,7 +45,7 @@
   <button type="button" role="tab" data-tab="team" aria-selected="false">Team <span class="n">{{ team|length }}</span></button>
   <button type="button" role="tab" data-tab="tasks" aria-selected="false">Tasks <span class="n" data-task-count>{{ tasks_done }}/{{ tasks|length }}</span></button>
   <button type="button" role="tab" data-tab="schedule" aria-selected="false">Schedule <span class="n">{{ schedules|length }}</span></button>
-  <button type="button" role="tab" data-tab="run" aria-selected="false">Run list <span class="n">{{ run_items|length }}</span></button>
+  <button type="button" role="tab" data-tab="run" aria-selected="false">Running order <span class="n">{{ run_order.count }}</span></button>
   <button type="button" role="tab" data-tab="notes" aria-selected="false">Notes <span class="n">{{ notes|length }}</span></button>
 </nav>
 
@@ -92,8 +92,8 @@
         <small>{% if tasks and tasks_done == tasks|length %}All finished{% elif tasks %}{{ tasks|length - tasks_done }} still to do{% else %}Nothing to do yet{% endif %}</small></span></button>
       <button type="button" data-goto="schedule"><i class="fas fa-clock"></i><span><strong>{{ schedules|length }} schedule item{{ '' if schedules|length == 1 else 's' }}</strong>
         <small>{% if schedules %}Starts with {{ schedules[0].title }}{% else %}No times set{% endif %}</small></span></button>
-      <button type="button" data-goto="run"><i class="fas fa-list-ol"></i><span><strong>{{ run_items|length }} run list item{{ '' if run_items|length == 1 else 's' }}</strong>
-        <small>{% if run_items %}The running order for the show{% else %}No running order yet{% endif %}</small></span></button>
+      <button type="button" data-goto="run"><i class="fas fa-list-ol"></i><span><strong>Running order: {{ run_order.count }} act{{ '' if run_order.count == 1 else 's' }}{% if run_order.songs %}, {{ run_order.songs }} song{{ '' if run_order.songs == 1 else 's' }}{% endif %}</strong>
+        <small>{% if run_order.acts %}{{ run_order.acts[0].title }} first{% if run_order.timed %}, about {{ (run_order.total|round|int) // 60 }} h {{ '%02d'|format((run_order.total|round|int) % 60) }}{% endif %}{% else %}No running order yet{% endif %}</small></span></button>
       <button type="button" data-goto="notes"><i class="fas fa-sticky-note"></i><span><strong>{{ notes|length }} note{{ '' if notes|length == 1 else 's' }}</strong>
         <small>{% if notes %}Latest from {{ notes[0].created_by|person }}{% else %}Nothing written yet{% endif %}</small></span></button>
     </div>
@@ -232,9 +232,9 @@
 </section>
 
 <section class="ev-pane" data-pane="run" hidden>
-  <!-- RUN LIST -->
+  <!-- RUNNING ORDER: acts / segments, each with its songs; planned times from the order, actual from the clock -->
   <div class="card">
-    <div class="sw-card-head"><h3><i class="fas fa-list-ol"></i> Run list (<span id="runCount">{{ run_items|length }}</span>)</h3>
+    <div class="sw-card-head"><h3><i class="fas fa-list-ol"></i> Running order (<span id="runCount">{{ run_order.count }}</span>)</h3>
       <div class="sw-actions-bar">
         {% if can_manage %}<button class="btn btn-sm btn-ghost" data-act="paste-run"><i class="fas fa-paste"></i>Paste a list</button>{% endif %}
         <button class="btn btn-sm btn-ghost" data-act="pdf-part" data-part="run" title="Download just this part as a PDF"><i class="fas fa-file-pdf"></i>PDF</button>
@@ -244,40 +244,33 @@
       <input type="time" id="runStart" class="sw-input" value="{{ page_data.run_start }}" {% if not can_manage %}disabled{% endif %}>
       <span id="runTotal"></span>
     </div>
-    <div id="runList">
-    {% for r in run_items %}
-      <div class="sw-run" data-id="{{ r.id }}" data-length="{{ r.duration or '' }}">
-        {% if can_manage %}<span class="handle" title="Drag to reorder"><i class="fas fa-grip-vertical"></i></span>{% endif %}
-        <span class="num">{{ loop.index }}</span>
-        <div class="sw-run-main">
-          <div class="sw-run-title"><span class="ev-at"></span>{{ r.title }}</div>
-          <div class="sw-run-meta">
-            {% if r.duration %}<span class="sw-chip plain"><i class="fas fa-hourglass-half"></i>{{ r.duration }}</span>{% endif %}
-            {% if r.cue_type %}<span class="sw-chip">{{ r.cue_type }}</span>{% endif %}
-          </div>
-          {% if r.description %}<div class="md-content" style="margin-top:.3rem;font-size:.9rem">{{ r.description|md }}</div>{% endif %}
-          {% if r.notes %}<div class="sw-muted" style="margin-top:.3rem;font-size:.85rem;white-space:pre-line">{{ r.notes }}</div>{% endif %}
-        </div>
-        {% if can_manage %}<div class="sw-shift-btns">
-          <button class="btn btn-ghost btn-icon" data-act="edit-run" data-id="{{ r.id }}" title="Edit"><i class="fas fa-pen"></i></button>
-          <button class="btn btn-ghost btn-icon" data-act="del-run" data-id="{{ r.id }}" title="Delete"><i class="fas fa-trash"></i></button></div>{% endif %}
-      </div>
-    {% endfor %}
+    <div class="ro-live" id="roLive" hidden>
+      <div class="ro-live-now"><span class="ro-live-tag" id="roLiveTag">Live</span><div><strong id="roNow"></strong><small id="roNowSub"></small></div>
+        <span class="ro-elapsed" id="roElapsed"></span></div>
+      <div class="ro-live-drift" id="roDrift"></div>
     </div>
-    <div class="sw-empty" id="runEmpty" {% if run_items %}hidden{% endif %}>No run list items.{% if can_manage %} Type the first one below.{% endif %}</div>
+    {% if can_manage %}
+    <div class="ro-controls" id="roControls" {% if not run_order.acts %}hidden{% endif %}>
+      <button class="btn btn-primary" data-act="ro-next" id="roNext"><i class="fas fa-play"></i><span>Start the show</span></button>
+      <button class="btn btn-ghost" data-act="ro-stop" id="roStop" hidden><i class="fas fa-stop"></i>End</button>
+      <button class="btn btn-ghost" data-act="ro-reset" id="roReset" hidden><i class="fas fa-rotate-left"></i>Clear times</button>
+    </div>
+    {% endif %}
+    <div id="runList" class="ro-list"></div>
+    <div class="sw-empty" id="runEmpty" {% if run_order.acts %}hidden{% endif %}>No running order yet.{% if can_manage %} Type the first act below.{% endif %}</div>
     {% if can_manage %}
     <form class="ev-quick" id="runQuick" autocomplete="off">
-      <input type="text" name="title" class="sw-input" maxlength="200" required placeholder="Type the next item and press Enter" aria-label="Next run list item">
+      <input type="text" name="title" class="sw-input" maxlength="200" required placeholder="Next act, e.g. a band, Changeover, Interval" aria-label="Next act or segment">
       <input type="text" name="duration" class="sw-input ev-q-s" maxlength="50" placeholder="Length" aria-label="Length">
-      <input type="text" name="cue_type" class="sw-input ev-q-s" maxlength="50" placeholder="Cue" list="evCues" aria-label="Cue type">
-      <datalist id="evCues">{% for c in ['Lighting', 'Sound', 'Video', 'Stage', 'Fly', 'Pyro', 'Spot', 'Other'] %}<option value="{{ c }}">{% endfor %}</datalist>
-      <button type="submit" class="btn btn-primary">Add</button>
+      <input type="text" name="kind" class="sw-input ev-q-s" maxlength="50" placeholder="Type" list="roKinds" aria-label="Type">
+      <datalist id="roKinds">{% for c in ['Band', 'Act', 'Headliner', 'Support', 'Changeover', 'Interval', 'Speech', 'Other'] %}<option value="{{ c }}">{% endfor %}</datalist>
+      <button type="submit" class="btn btn-primary">Add act</button>
     </form>
-    <p class="sw-hint">Add items one after another without leaving the keyboard. Drag the handle to reorder; use the pencil for a description or notes.</p>
+    <p class="sw-hint">Type an act and press Enter, then type its songs in the box under it. Start a line with “-” to add it as a song of the last act.
+      Drag the handles or use the arrows to reorder; songs can be dragged between acts. Lengths like “40 min”, “1h 15” or “3:45”.</p>
     {% endif %}
     <div class="sw-gallery" data-gallery="run" hidden></div>
   </div>
-
 </section>
 
 <section class="ev-pane" data-pane="notes" hidden>
@@ -304,6 +297,7 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/event-io.js') }}"></script>
 <script src="{{ url_for('static', filename='js/event-tasks.js') }}"></script>
+<script src="{{ url_for('static', filename='js/running-order.js') }}"></script>
 <script>
 const D = JSON.parse(document.getElementById('page-data').textContent);
 const EV = D.event;
@@ -311,7 +305,7 @@ const RANGE = { id: EV.id, start: EV.event_date, end: EV.event_end_date };
 const done = (msg) => { SW.toast(msg); SW.reloadSoon(); };
 EventIO.init({
   eventId: EV.id, canManage: !!D.can_manage, attachments: D.attachments,
-  counts: { schedule: Object.keys(D.schedules).length, run: Object.keys(D.runs).length },
+  counts: { schedule: Object.keys(D.schedules).length, run: D.running_order.count },
 });
 
 async function removeWith(path, what) {
@@ -327,7 +321,7 @@ const actions = {
   async duplicate() {
     const r = await SW.form({
       title: 'Duplicate event', values: { event_date: SW.addHours(EV.event_date, 24 * 7) },
-      fields: [{ type: 'info', text: 'Copies the details, schedule and run list (not the team).' },
+      fields: [{ type: 'info', text: 'Copies the details, schedule and running order (not the team).' },
         { name: 'event_date', label: 'New start', type: 'datetime', required: true }],
       submitText: 'Duplicate',
       onSubmit: (v) => SW.api('POST', `/events/${EV.id}/duplicate`, v),
@@ -353,7 +347,7 @@ const actions = {
   // PDF: the whole event, or only the parts you tick
   async pdf() {
     const parts = [['overview', 'Overview: times, place and description'], ['team', 'Team and shifts'], ['schedule', 'Schedule'],
-                   ['run', 'Run list'], ['tasks', 'Tasks'], ['notes', 'Notes'], ['callsheet', 'Call sheet: who arrives when']];
+                   ['run', 'Running order'], ['tasks', 'Tasks'], ['notes', 'Notes'], ['callsheet', 'Call sheet: who arrives when']];
     await SW.form({
       title: 'Download PDF', submitText: 'Download',
       values: Object.fromEntries(parts.map(([k]) => [k, k !== 'callsheet'])),
@@ -370,21 +364,10 @@ const actions = {
   'pdf-part'(b) { location.href = `/events/${EV.id}/export-pdf?parts=${b.dataset.part}`; },
 
   // Paste a whole list typed somewhere else (or copied from a table in Word or Excel)
-  async 'paste-run'() {
-    const r = await SW.form({
-      title: 'Paste a run list', submitText: 'Add these',
-      fields: [{ type: 'info', text: 'One item per line. To include more, separate with a tab or “|”: Item | Length | Cue | Notes. A table copied from Word or Excel works as it is.' },
-               { name: 'text', label: 'Items', type: 'textarea', rows: 10, required: true, placeholder: 'House lights down\nWelcome speech | 5 min | Sound\nAward 1 | 4 min | Lighting' }],
-      onSubmit: async (v) => {
-        const rows = v.text.split('\n').map((l) => l.replace(/^\s*\d+[.)]\s+/, '').split(/\t|\s*\|\s*/).map((c) => c.trim())).filter((c) => c[0]);
-        if (!rows.length) throw new Error('Nothing to add');
-        for (const [title, duration, cue_type, notes] of rows)
-          await SW.api('POST', `/events/${EV.id}/crew-run/add`, { title: title.slice(0, 200), duration: (duration || '').slice(0, 50), cue_type: (cue_type || '').slice(0, 50), notes: notes || '' });
-        return rows.length;
-      },
-    });
-    if (r) done(`${r} item${r === 1 ? '' : 's'} added`);
-  },
+  'paste-run'() { RunningOrder.actions['paste-run'](); },
+  'ro-next'() { RunningOrder.actions['ro-next'](); },
+  'ro-stop'() { RunningOrder.actions['ro-stop'](); },
+  'ro-reset'() { RunningOrder.actions['ro-reset'](); },
   async 'paste-sched'() {
     const r = await SW.form({
       title: 'Paste a schedule', submitText: 'Add these',
@@ -433,8 +416,6 @@ const actions = {
   'del-sched'(b) { return removeWith(`/events/schedule/${b.dataset.id}/delete`, 'this schedule item'); },
 
   async 'add-run'() { if (await SW.runForm({ eventId: EV.id })) done('Added'); },
-  async 'edit-run'(b) { if (await SW.runForm({ eventId: EV.id, item: D.runs[b.dataset.id] })) done('Saved'); },
-  'del-run'(b) { return removeWith(`/events/crew-run/${b.dataset.id}/delete`, 'this run item'); },
 
   async 'add-task'() { if (await SW.taskForm({ eventId: EV.id, users: D.task_users, shifts: D.task_shifts })) done('Task added'); },
   async 'add-shift-task'(b) {
@@ -507,71 +488,6 @@ function quick(formId, handler) {
 }
 const bump = (id, by) => { const n = document.getElementById(id); if (n) n.textContent = Number(n.textContent) + by; };
 
-quick('runQuick', async (v, form) => {
-  const body = { title: v.title.trim(), duration: v.duration.trim(), cue_type: v.cue_type.trim() };
-  const r = await SW.api('POST', `/events/${EV.id}/crew-run/add`, body);
-  D.runs[r.id] = { id: r.id, description: '', notes: '', ...body };
-  const row = document.createElement('div');
-  row.className = 'sw-run'; row.dataset.id = r.id; row.dataset.length = body.duration;
-  row.innerHTML = `<span class="handle" title="Drag to reorder"><i class="fas fa-grip-vertical"></i></span>
-    <span class="num">${document.querySelectorAll('#runList .sw-run').length + 1}</span>
-    <div class="sw-run-main"><div class="sw-run-title"><span class="ev-at"></span>${escH(body.title)}</div>
-      <div class="sw-run-meta">${body.duration ? `<span class="sw-chip plain"><i class="fas fa-hourglass-half"></i>${escH(body.duration)}</span>` : ''}${body.cue_type ? `<span class="sw-chip">${escH(body.cue_type)}</span>` : ''}</div></div>
-    <div class="sw-shift-btns">
-      <button class="btn btn-ghost btn-icon" data-act="edit-run" data-id="${r.id}" title="Edit"><i class="fas fa-pen"></i></button>
-      <button class="btn btn-ghost btn-icon" data-act="del-run" data-id="${r.id}" title="Delete"><i class="fas fa-trash"></i></button></div>`;
-  document.getElementById('runList').appendChild(row);
-  document.getElementById('runEmpty').hidden = true;
-  bump('runCount', 1);
-  document.querySelectorAll('.ev-tabs [data-tab="run"] .n').forEach((n) => { n.textContent = Number(n.textContent) + 1; });
-  form.reset(); form.title.focus();
-  row.scrollIntoView({ block: 'nearest' });
-  runClock();
-});
-
-/* ---------- run list clock: when each item starts, from the lengths ---------- */
-function lengthMinutes(text) {
-  const t = String(text || '').trim().toLowerCase();
-  if (!t) return null;
-  let m = t.match(/^(\d+):(\d{2})(?::(\d{2}))?$/);
-  if (m) return m[3] ? Number(m[1]) * 60 + Number(m[2]) + Number(m[3]) / 60 : Number(m[1]) + Number(m[2]) / 60;
-  let total = 0, found = false;
-  const re = /(\d+(?:\.\d+)?)\s*(hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)\b/g;
-  while ((m = re.exec(t))) { found = true; total += Number(m[1]) * (m[2][0] === 'h' ? 60 : m[2][0] === 'm' ? 1 : 1 / 60); }
-  if (found) return total;
-  return /^\d+(?:\.\d+)?$/.test(t) ? Number(t) : null;
-}
-function clockText(mins) {
-  mins = ((Math.round(mins) % 1440) + 1440) % 1440;
-  const h = Math.floor(mins / 60), m = mins % 60;
-  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
-}
-function runClock() {
-  const rows = [...document.querySelectorAll('#runList .sw-run')], start = document.getElementById('runStart');
-  if (!start) return;
-  const lengths = rows.map((r) => lengthMinutes(r.dataset.length));
-  const timed = lengths.some((x) => x !== null) && /^\d\d:\d\d$/.test(start.value);
-  document.getElementById('runClock').hidden = !lengths.some((x) => x !== null);
-  let at = timed ? Number(start.value.slice(0, 2)) * 60 + Number(start.value.slice(3)) : 0, sum = 0;
-  rows.forEach((r, i) => {
-    r.querySelector('.ev-at').textContent = timed ? clockText(at) : '';
-    at += lengths[i] || 0; sum += lengths[i] || 0;
-  });
-  const missing = lengths.filter((x) => x === null).length, s = Math.round(sum);
-  document.getElementById('runTotal').textContent = !timed ? '' :
-    `Runs ${s >= 60 ? `${Math.floor(s / 60)} h ${String(s % 60).padStart(2, '0')} min` : `${s} min`}, finishing about ${clockText(at)}`
-    + (missing ? ` · ${missing} item${missing === 1 ? ' has' : 's have'} no length` : '');
-}
-const runStart = document.getElementById('runStart');
-if (runStart) {
-  runStart.addEventListener('change', async () => {
-    runClock();
-    try { await SW.api('PUT', `/events/${EV.id}/run-start`, { time: runStart.value }); }
-    catch (err) { SW.toast(err.message, 'error'); }
-  });
-  runClock();
-}
-
 quick('schedQuick', async (v, form) => {
   const when = schedDateTime(v.time), title = v.title.trim();
   const r = await SW.api('POST', `/events/${EV.id}/schedule/add`, { title, scheduled_time: when });
@@ -607,18 +523,6 @@ try {
   if (f) { sessionStorage.removeItem('ev-focus'); const el = document.querySelector(`#${f} [name=title]`); if (el) el.focus(); }
 } catch (e) {}
 
-const runList = document.getElementById('runList');
-if (runList && D.can_manage && window.Sortable) {
-  Sortable.create(runList, {
-    handle: '.handle', animation: 150,
-    onEnd: async () => {
-      const ids = [...runList.querySelectorAll('.sw-run')].map((r) => Number(r.dataset.id));
-      runList.querySelectorAll('.num').forEach((n, i) => { n.textContent = i + 1; });
-      runClock();
-      try { await SW.api('POST', `/events/${EV.id}/crew-run/reorder`, { item_ids: ids }); }
-      catch (err) { SW.toast(err.message, 'error'); }
-    },
-  });
-}
+RunningOrder.init({ eventId: EV.id, canManage: !!D.can_manage, data: D.running_order });
 </script>
 {% endblock %}

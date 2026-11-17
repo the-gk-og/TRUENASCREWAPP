@@ -697,18 +697,33 @@ class CastNote(db.Model):
 
 
 class CrewRunItem(db.Model):
+    """One line of an event's running order.
+
+    Top-level rows (parent_id NULL) are acts / segments: a band, a changeover, the interval.
+    Rows with a parent_id are the songs (or items) in that act's set, ordered within it.
+    order_number counts within the row's own level. started_at / ended_at are the actual
+    times, set from the live clock on the night (venue wall-clock time).
+    """
     id           = db.Column(db.Integer, primary_key=True)
     event_id     = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
+    parent_id    = db.Column(db.Integer, db.ForeignKey('crew_run_item.id'), nullable=True)
     order_number = db.Column(db.Integer, nullable=False)
     title        = db.Column(db.String(200), nullable=False)
     description  = db.Column(db.Text)
     duration     = db.Column(db.String(50))
-    cue_type     = db.Column(db.String(50))
+    kind         = db.Column('cue_type', db.String(50))     # Band, Changeover, Interval... (was "cue type")
     notes        = db.Column(db.Text)
+    started_at   = db.Column(db.DateTime)
+    ended_at     = db.Column(db.DateTime)
     created_at   = db.Column(db.DateTime, default=datetime.utcnow)
+    cue_type     = db.synonym('kind')
     event = db.relationship(
         'Event',
         backref=db.backref('crew_run_items', cascade='all, delete-orphan', order_by='CrewRunItem.order_number'),
+    )
+    songs = db.relationship(
+        'CrewRunItem', cascade='all, delete-orphan', order_by='CrewRunItem.order_number',
+        backref=db.backref('parent', remote_side=[id]),
     )
 
 

@@ -93,7 +93,7 @@ def runs():
 
 @pytest.mark.parametrize('kind,headers', [
     ('schedule', ['Date', 'Time', 'Title', 'Description']),
-    ('run', ['Title', 'Duration', 'Cue type', 'Description', 'Notes']),
+    ('run', ['Title', 'Length', 'Type', 'Description', 'Notes']),
 ])
 def test_templates_download_and_have_right_columns(app, alice, kind, headers):
     r = alice.get(f'/events/{eid()}/io/template/{kind}.xlsx')            # any crew member can download

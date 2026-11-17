@@ -10,7 +10,7 @@
  *   SW.eventForm({...})            create / edit an event
  *   SW.shiftForm({...})            add / edit a person's shift
  *   SW.bulkShiftForm({...})        pick many people and give them all the same shift
- *   SW.scheduleForm / SW.runForm   schedule + run-list items
+ *   SW.scheduleForm / SW.runForm   schedule items + running-order acts / songs
  *   SW.taskForm({...})             add / edit an event task, shift task or assigned task
  *
  * Everything user-supplied is escaped with SW.esc before touching innerHTML.
@@ -749,22 +749,23 @@
     });
   };
 
-  const CUES = ['Lighting', 'Sound', 'Video', 'Stage', 'Fly', 'Pyro', 'Spot', 'Other'];
-  SW.runForm = function ({ eventId, item }) {
-    const edit = !!item;
+  const ACT_TYPES = ['Band', 'Act', 'Headliner', 'Support', 'Changeover', 'Interval', 'Speech', 'Other'];
+  /** Add / edit one act (or, with parent_id, a song) in an event's running order. */
+  SW.runForm = function ({ eventId, item, parent_id }) {
+    const edit = !!item, song = !!(parent_id || (item && item.parent_id));
     return SW.form({
-      title: edit ? 'Edit run item' : 'Add run item',
+      title: (edit ? 'Edit ' : 'Add ') + (song ? 'song' : 'act'),
       values: item || {},
       fields: [
-        { name: 'title', label: 'Title', required: true, maxLength: 200 },
-        { name: 'duration', label: 'Duration', half: true, placeholder: 'e.g. 5 min', maxLength: 50 },
-        { name: 'cue_type', label: 'Cue type', half: true, suggestions: CUES, maxLength: 50 },
+        { name: 'title', label: song ? 'Song' : 'Act or segment', required: true, maxLength: 200 },
+        { name: 'duration', label: 'Length', half: true, placeholder: song ? 'e.g. 3:45' : 'e.g. 40 min', maxLength: 50 },
+        ...(song ? [] : [{ name: 'kind', label: 'Type', half: true, suggestions: ACT_TYPES, maxLength: 50 }]),
         { name: 'description', label: 'Description', type: 'markdown', rows: 4 },
         { name: 'notes', label: 'Notes', type: 'textarea', rows: 2 },
       ],
-      submitText: edit ? 'Save' : 'Add item',
+      submitText: edit ? 'Save' : 'Add',
       onSubmit: (v) => edit ? SW.api('PUT', `/events/crew-run/${item.id}/edit`, v)
-        : SW.api('POST', `/events/${eventId}/crew-run/add`, v),
+        : SW.api('POST', `/events/${eventId}/crew-run/add`, parent_id ? { ...v, parent_id } : v),
     });
   };
 
