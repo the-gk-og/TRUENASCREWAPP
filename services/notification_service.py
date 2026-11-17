@@ -88,3 +88,47 @@ def schedule_event_notifications(event) -> None:
             t = threading.Timer(delay, _send, args=[event.id, ntype])
             t.daemon = True
             t.start()
+
+
+def notify_fault_report(report: dict, recipients: list, url: str = '') -> None:
+    """Tell gear admins an item was reported faulty: email each one, and post to Discord
+    if a webhook is set. ``report`` is FaultReport.to_dict() (plain data only: this can run
+    after the request ends). Never raises: reporting a fault must not fail because email did."""
+    from services.email_service import send_email
+    subject = (f"⚠️ Fault reported: {report.get('asset_tag')} {report.get('equipment_name')}"
+               f" ({report.get('severity_label')})")
+    body = (f"{report.get('reported_by') or 'Someone'} reported a fault with "
+            f"{report.get('asset_tag')} ({report.get('equipment_name')}).\n\n"
+            f"What's wrong: {report.get('summary')}\n"
+            + (f"Category: {report['category_label']}\n" if report.get('category_label') else '')
+            + f"Severity: {report.get('severity_label')}\n"
+            + (f"Photos: {report.get('photo_count')}\n" if report.get('photo_count') else '')
+            + "\nThe item has been taken out of use until someone has checked it.\n"
+            + (f"\n{url}\n" if url else ''))
+
+    def run():
+        for to in recipients:
+            try:
+                send_email(subject, to, body)
+            except Exception as exc:                 # noqa: BLE001
+                print(f"❌ Fault email to {to} failed: {exc}")
+        if DISCORD_WEBHOOK_URL:
+            try:
+                requests.post(DISCORD_WEBHOOK_URL, json={'content': f"{subject}\n{report.get('summary')}"
+                                                                   + (f"\n{url}" if url else '')}, timeout=5)
+            except Exception as exc:                 # noqa: BLE001
+                print(f"❌ Discord fault post failed: {exc}")
+
+    try:
+        from flask import current_app
+        app = current_app._get_current_object()
+    except Exception:
+        app = None
+    if app is None or app.config.get('TESTING'):
+        run()                                        # deterministic for tests
+        return
+
+    def threaded():
+        with app.app_context():
+            run()
+    threading.Thread(target=threaded, daemon=True, name='fault-notify').start()

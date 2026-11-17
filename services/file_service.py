@@ -4,11 +4,11 @@ import os
 import tempfile
 from datetime import datetime
 
-from constants import BARCODE_SIZES
 
 
 def generate_barcode_pdf(equipment_items, barcode_size: str = 'medium'):
     """Generate a PDF of barcodes for *equipment_items*. Returns (BytesIO, filename)."""
+    from constants import BARCODE_SIZES
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.pdfgen import canvas
@@ -74,3 +74,23 @@ def generate_barcode_pdf(equipment_items, barcode_size: str = 'medium'):
     pdf_buffer.seek(0)
     filename = f"equipment_barcodes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
     return pdf_buffer, filename
+
+
+IMAGE_EXTS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+
+
+def save_image_upload(file, folder: str, prefix: str, uploads_root: str = 'uploads') -> str:
+    """Check an uploaded photo really is an image and save it under uploads/<folder>.
+    Returns the path relative to uploads/. Raises ValueError with a message for the person."""
+    from services.upload_security import is_real_image
+    name = file.filename or ''
+    ext = name.rsplit('.', 1)[1].lower() if '.' in name else ''
+    if ext not in IMAGE_EXTS:
+        raise ValueError('Photo must be a png, jpg, gif or webp image')
+    if not is_real_image(file):
+        raise ValueError('That file is not a valid image')
+    target = os.path.join(uploads_root, folder)
+    os.makedirs(target, exist_ok=True)
+    filename = f'{prefix}_{datetime.now().strftime("%Y%m%d_%H%M%S_%f")}.{ext}'
+    file.save(os.path.join(target, filename))
+    return f'{folder}/{filename}'

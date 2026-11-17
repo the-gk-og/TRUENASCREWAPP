@@ -396,11 +396,83 @@ class UnitQuarantine(db.Model):
             'outcome_label':  QUARANTINE_OUTCOMES.get(self.outcome, ''),
             'release_note':   self.release_note or '',
             'is_open':        self.released_at is None,
+            'faults':         [{'id': f.id, 'severity': f.severity,
+                                'severity_label': FAULT_SEVERITIES.get(f.severity, f.severity),
+                                'photo_count': len(f.photos)} for f in self.fault_reports],
         }
 
 
 # What an admin decided when closing a quarantine -> the status the item gets
 QUARANTINE_OUTCOMES = {'available': 'Back in use', 'repair': 'Sent for repair', 'retired': 'Retired'}
+
+FAULT_CATEGORIES = {'damaged': 'Broken or damaged', 'missing_parts': 'Parts missing',
+                    'no_power': 'Won’t turn on', 'electrical': 'Electrical fault', 'other': 'Something else'}
+FAULT_SEVERITIES = {'minor': 'Minor', 'major': 'Not usable', 'unsafe': 'Unsafe'}
+
+
+class FaultReport(db.Model):
+    """A fault reported from a phone after scanning an item. Puts the item in quarantine;
+    resolved when an admin releases that quarantine (linking the maintenance record)."""
+    __tablename__ = 'fault_report'
+    id              = db.Column(db.Integer, primary_key=True)
+    unit_id         = db.Column(db.Integer, db.ForeignKey('equipment_unit.id', ondelete='CASCADE'),
+                                nullable=False, index=True)
+    quarantine_id   = db.Column(db.Integer, db.ForeignKey('unit_quarantine.id', ondelete='SET NULL'), index=True)
+    event_id        = db.Column(db.Integer, db.ForeignKey('event.id', ondelete='SET NULL'))
+    summary         = db.Column(db.String(200), nullable=False)
+    category        = db.Column(db.String(30))                     # FAULT_CATEGORIES
+    severity        = db.Column(db.String(10), nullable=False, default='major')  # FAULT_SEVERITIES
+    reported_by     = db.Column(db.String(80))
+    reported_at     = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    resolved_by     = db.Column(db.String(80))
+    resolved_at     = db.Column(db.DateTime, index=True)
+    resolution_note = db.Column(db.Text)
+    maintenance_id  = db.Column(db.Integer, db.ForeignKey('unit_maintenance.id', ondelete='SET NULL'))
+    unit        = db.relationship('EquipmentUnit', backref=db.backref(
+        'fault_reports', cascade='all, delete-orphan', order_by='FaultReport.reported_at.desc()'))
+    quarantine  = db.relationship('UnitQuarantine', backref=db.backref(
+        'fault_reports', order_by='FaultReport.reported_at'))
+    maintenance = db.relationship('UnitMaintenance')
+    event       = db.relationship('Event')
+
+    def to_dict(self):
+        from flask import url_for
+        u = self.unit
+        fmt = lambda d: d.strftime('%d %b %Y, %H:%M') if d else ''
+        return {
+            'id':             self.id,
+            'unit_id':        self.unit_id,
+            'asset_tag':      u.asset_tag if u else '',
+            'equipment_id':   u.equipment_id if u else None,
+            'equipment_name': u.equipment.name if u and u.equipment else '',
+            'quarantine_id':  self.quarantine_id,
+            'summary':        self.summary,
+            'category':       self.category or '',
+            'category_label': FAULT_CATEGORIES.get(self.category, ''),
+            'severity':       self.severity,
+            'severity_label': FAULT_SEVERITIES.get(self.severity, self.severity),
+            'event_title':    self.event.title if self.event else '',
+            'reported_by':    self.reported_by or '',
+            'reported_at':    fmt(self.reported_at),
+            'photo_urls':     [url_for('unit_tracking.fault_photo', pid=p.id) for p in self.photos],
+            'photo_count':    len(self.photos),
+            'is_open':        self.resolved_at is None,
+            'resolved_by':    self.resolved_by or '',
+            'resolved_at':    fmt(self.resolved_at),
+            'resolution_note': self.resolution_note or '',
+            'maintenance_id': self.maintenance_id,
+        }
+
+
+class FaultPhoto(db.Model):
+    __tablename__ = 'fault_photo'
+    id         = db.Column(db.Integer, primary_key=True)
+    report_id  = db.Column(db.Integer, db.ForeignKey('fault_report.id', ondelete='CASCADE'),
+                           nullable=False, index=True)
+    path       = db.Column(db.String(300), nullable=False)          # path under uploads/
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    report = db.relationship('FaultReport', backref=db.backref(
+        'photos', cascade='all, delete-orphan', order_by='FaultPhoto.id'))
 
 
 class BulkCheckout(db.Model):

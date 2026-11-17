@@ -104,13 +104,14 @@
   // No typing needed: tap what's wrong, optionally add a note or photo. The item is
   // taken out of use until an admin has looked at it.
   const PROBLEMS = [
-    ['Broken or damaged', 'hammer'], ['Parts missing', 'puzzle-piece'],
-    ['Won’t turn on', 'power-off'], ['Something else', 'ellipsis'],
+    ['Broken or damaged', 'hammer', 'damaged'], ['Parts missing', 'puzzle-piece', 'missing_parts'],
+    ['Won’t turn on', 'power-off', 'no_power'], ['Something else', 'ellipsis', 'other'],
   ];
+  const SEVERITIES = [['minor', 'Minor'], ['major', 'Not usable'], ['unsafe', 'Unsafe']];
   Gear.quarantine = function (unit, opts) {
     opts = opts || {};
     return new Promise((resolve) => {
-      let result = null, picked = null, sending = false;
+      let result = null, picked = null, sending = false, severity = 'major', shots = [];
       const d = SW.dialog({ title: `Problem with ${unit.asset_tag}`, onClose: () => resolve(result) });
       d.body.innerHTML = `
         <p class="sw-confirm-text">${unit.equipment_name ? esc(unit.equipment_name) + '. ' : ''}What’s wrong with it?</p>
@@ -118,8 +119,10 @@
           `<button type="button" class="sw-problem" data-i="${i}" aria-pressed="false"><i class="fas fa-${icon}"></i><span>${esc(label)}</span></button>`).join('')}</div>
         <div class="sw-field"><label class="sw-label" for="swProbNote">Anything to add? <span class="sw-muted" id="swProbOpt">(optional)</span></label>
           <textarea id="swProbNote" rows="2" class="sw-input" placeholder="e.g. cuts out when the cable is moved">${esc(opts.reason || '')}</textarea></div>
-        <div class="sw-field"><label class="btn btn-secondary sw-problem-photo"><i class="fas fa-camera"></i> <span>Add a photo</span>
-          <input type="file" accept="image/*" capture="environment" class="sr-only"></label></div>
+        <div class="sw-field"><span class="sw-label">How bad?</span>
+          <div class="sw-seg sw-sev">${SEVERITIES.map(([v, l]) => `<button type="button" data-sev="${v}" aria-pressed="${v === 'major'}">${l}</button>`).join('')}</div></div>
+        <div class="sw-field"><label class="btn btn-secondary sw-problem-photo"><i class="fas fa-camera"></i> <span>Add photos</span>
+          <input type="file" accept="image/*" capture="environment" multiple class="sr-only"></label></div>
         <p class="sw-hint" style="margin-bottom:.9rem">It will be taken out of use until someone has checked it.</p>
         <div class="sw-error" hidden></div>
         <div class="sw-actions">
@@ -133,7 +136,15 @@
         $('#swProbOpt', d.body).textContent = picked === 'Something else' ? '(please say what)' : '(optional)';
         err.hidden = true;
       }));
-      file.addEventListener('change', () => { $('.sw-problem-photo span', d.body).textContent = file.files[0] ? 'Photo added' : 'Add a photo'; });
+      d.body.querySelectorAll('[data-sev]').forEach((b) => b.addEventListener('click', () => {
+        severity = b.dataset.sev;
+        d.body.querySelectorAll('[data-sev]').forEach((x) => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+      }));
+      file.addEventListener('change', () => {
+        shots = shots.concat(Array.from(file.files)).slice(0, 6);     // each camera shot adds one
+        file.value = '';
+        $('.sw-problem-photo span', d.body).textContent = shots.length ? `${shots.length} photo${shots.length > 1 ? 's' : ''} · add more` : 'Add photos';
+      });
       $('[data-cancel]', d.body).onclick = () => d.close();
       send.onclick = async () => {
         if (sending) return;
@@ -141,15 +152,17 @@
         const fail = (m) => { err.textContent = m; err.hidden = false; };
         if (!picked && !extra) return fail('Tap what’s wrong with it');
         if (picked === 'Something else' && !extra) return fail('Say what’s wrong with it');
-        const reason = picked && picked !== 'Something else' ? (extra ? `${picked}: ${extra}` : picked) : extra;
+        const cat = picked ? PROBLEMS.find((p) => p[0] === picked)[2] : '';
         sending = true; send.disabled = true; send.textContent = 'Saving…';
         try {
           if (opts.before) await opts.before();
           const fd = new FormData();
-          fd.append('reason', reason);
-          if (file.files[0]) fd.append('photo', await shrink(file.files[0]));
+          fd.append('summary', extra);
+          if (cat) fd.append('category', cat);
+          fd.append('severity', severity);
+          for (const f of shots) fd.append('photos', await shrink(f));
           if (opts.eventId) fd.append('event_id', opts.eventId);
-          result = (await postForm(`/equipment/unit/${unit.id}/quarantine`, fd)).quarantine;
+          result = (await postForm(`/equipment/unit/${unit.id}/fault`, fd)).quarantine;
           SW.toast(`${unit.asset_tag} taken out of use`);
           d.close();
         } catch (e) { sending = false; send.disabled = false; send.textContent = 'Take it out of use'; fail(e.message); }
@@ -188,7 +201,7 @@
 
   // -------------------------------------------------------------- history
   const ICONS = { out: 'arrow-right-from-bracket', return: 'arrow-right-to-bracket', maintenance: 'screwdriver-wrench',
-                  quarantine: 'triangle-exclamation', release: 'circle-check', created: 'plus' };
+                  quarantine: 'triangle-exclamation', fault: 'triangle-exclamation', release: 'circle-check', created: 'plus' };
   Gear.history = async function (unitId, opts) {
     opts = opts || {};
     const d = SW.dialog({ title: 'History', wide: true });
@@ -202,10 +215,11 @@
       const rows = h.timeline.map((t) => `<li class="sw-hist-item ${esc(t.kind)}">
           <span class="sw-hist-dot"><i class="fas fa-${ICONS[t.kind] || 'circle'}"></i></span>
           <div class="sw-hist-body">
-            <div class="sw-hist-title">${esc(t.title)}
+            <div class="sw-hist-title">${t.severity ? pill(t.severity === 'minor' ? 'warn' : 'bad', t.severity === 'unsafe' ? 'Unsafe' : t.severity === 'minor' ? 'Minor' : 'Not usable') + ' ' : ''}${esc(t.title)}
               ${opts.isAdmin && t.maintenance_id ? `<button type="button" class="btn-link sw-hist-del" data-del="${t.maintenance_id}">Delete</button>` : ''}</div>
             <div class="sw-hist-meta">${esc(t.when)}${t.by ? ' · ' + esc(t.by) : ''}${t.event_title ? ' · after ' + esc(t.event_title) : ''}</div>
             ${t.detail ? `<div class="sw-hist-detail">${esc(t.detail)}</div>` : ''}
+            ${(t.photos || []).map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener"><img class="sw-hist-photo" src="${esc(u)}" alt="Photo of the fault"></a>`).join('')}
             ${t.photo_url ? `<a href="${esc(t.photo_url)}" target="_blank" rel="noopener"><img class="sw-hist-photo" src="${esc(t.photo_url)}" alt="Photo of the damage"></a>` : ''}
           </div></li>`).join('');
       d.body.innerHTML = (due ? `<p style="margin-bottom:.75rem">${pill(due.state, `Next ${due.kind_label}: ${due.date_text}${due.state === 'overdue' ? ' (overdue)' : ''}`)}</p>` : '')
@@ -375,7 +389,7 @@
       const co = u && u.checkout;
       const where = !u ? '' : u.quarantine ? `Out of use since ${esc(u.quarantine.quarantined_at)}` : co ? `Out on ${esc(co.event_title)} since ${esc(co.checked_out_at)}`
         : (u.allocations && u.allocations.length ? `Booked for ${esc(u.allocations[0].event_title)}` : 'In storage');
-      const canQuarantine = u && !['quarantined', 'retired', 'lost'].includes(u.status);
+      const canQuarantine = u && !['retired', 'lost'].includes(u.status);
       out.innerHTML = `<div class="sw-scan-result">
           ${eq.picture_url ? `<img class="thumb" src="${esc(eq.picture_url)}" alt="">` : ''}
           <div class="main">
@@ -390,16 +404,11 @@
             </dl>
           </div>
           <div class="sw-actions">
-            ${canQuarantine ? '<button type="button" class="btn btn-outline-danger sw-left" data-q>Report a problem</button>' : ''}
+            ${canQuarantine ? `<a class="btn btn-outline-danger sw-left" href="${esc(r.fault_url)}"><i class="fas fa-triangle-exclamation"></i> Report a fault</a>` : ''}
             <button type="button" class="btn btn-secondary" data-again>Scan again</button>
             <a class="btn btn-primary" href="${esc(r.url)}">Open</a>
           </div></div>`;
       $('[data-again]', out).onclick = again;
-      const qb = $('[data-q]', out);
-      if (qb) qb.onclick = async () => {
-        const q = await Gear.quarantine({ id: u.id, asset_tag: u.asset_tag, equipment_name: eq.name });
-        if (q) lookup(u.asset_tag);
-      };
     };
     ui = await Gear.scannerUI(camHost, { onCode: lookup });
     ui.start();

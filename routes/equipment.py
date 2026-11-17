@@ -386,6 +386,8 @@ def unit_by_tag(tag):
 def unit_view_public(uid):
     """Target of a unit QR code. Crew land on the item page with the unit highlighted."""
     u = EquipmentUnit.query.get_or_404(uid)
+    if current_user.is_authenticated and request.args.get('report'):
+        return redirect(url_for('unit_tracking.fault_form', uid=u.id))
     if current_user.is_authenticated:
         return redirect(url_for('equipment.equipment_detail', id=u.equipment_id, unit=u.id)
                         + f'#unit-{u.id}')
@@ -398,6 +400,7 @@ def unit_view_public(uid):
         item=u.equipment, unit=u,
         organisation_name=org_name,
         login_url=url_for('auth.login', next=request.url),
+        fault_url=url_for('auth.login', next=url_for('unit_tracking.fault_form', uid=u.id)),
     )
 
 
