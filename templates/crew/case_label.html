@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ case.asset_tag }} contents — ShowWise</title>
+<style>
+    /* Printed on white paper whatever the app theme is */
+    :root { color-scheme: light; }
+    body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #111; background: #fff; margin: 0; padding: 16px; }
+    .sheet { max-width: 180mm; margin: 0 auto; border: 2px solid #111; border-radius: 6px; padding: 8mm; }
+    .top { display: flex; gap: 8mm; align-items: center; border-bottom: 1px solid #999; padding-bottom: 5mm; margin-bottom: 5mm; }
+    .qr { width: 38mm; height: 38mm; flex: none; }
+    .qr svg { width: 100%; height: 100%; }
+    .qr-missing { font-size: 10px; word-break: break-all; border: 1px dashed #999; padding: 4px; }
+    h1 { font-size: 22pt; margin: 0 0 2mm; font-family: ui-monospace, monospace; }
+    .sub { margin: 0; font-size: 11pt; }
+    table { width: 100%; border-collapse: collapse; font-size: 10.5pt; }
+    th, td { text-align: left; padding: 1.6mm 2mm; border-bottom: 1px solid #ddd; }
+    th { font-size: 9pt; text-transform: uppercase; letter-spacing: .04em; color: #555; }
+    td.tick { width: 8mm; }
+    td.tick span { display: inline-block; width: 4mm; height: 4mm; border: 1px solid #111; }
+    .flag { font-size: 9pt; color: #a00; }
+    .foot { margin-top: 5mm; font-size: 9pt; color: #555; }
+    .noprint { text-align: center; margin: 0 0 12px; }
+    @media print { .noprint { display: none; } body { padding: 0; } .sheet { border-width: 1px; } }
+</style>
+</head>
+<body>
+<p class="noprint"><button type="button" onclick="window.print()">Print</button></p>
+<div class="sheet">
+    <div class="top">
+        <div class="qr">{% if qr_svg %}{{ qr_svg | safe }}{% else %}<div class="qr-missing">{{ qr_url }}</div>{% endif %}</div>
+        <div>
+            <h1>{{ case.asset_tag }}</h1>
+            <p class="sub"><strong>{{ case.equipment.name }}</strong> · {{ data.count }} item{{ '' if data.count == 1 else 's' }}</p>
+            <p class="sub">Scan to check the whole case out or in.</p>
+        </div>
+    </div>
+    <table>
+        <thead><tr><th></th><th>Item</th><th>Tag</th><th>Serial</th></tr></thead>
+        <tbody>
+        {% for c in data.contents %}
+        <tr><td class="tick"><span></span></td><td>{{ c.equipment_name }}
+            {% if c.quarantined %}<div class="flag">Out of use: remove from case</div>{% endif %}
+            {% if c.missing %}<div class="flag">Missing</div>{% endif %}</td>
+            <td><code>{{ c.asset_tag }}</code></td><td>{{ c.serial_number }}</td></tr>
+        {% else %}
+        <tr><td colspan="4">Nothing packed in this case yet.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    <p class="foot">Contents as of {{ printed }}. Reprint after repacking.</p>
+</div>
+</body>
+</html>

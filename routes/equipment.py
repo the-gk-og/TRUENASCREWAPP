@@ -388,6 +388,8 @@ def unit_view_public(uid):
     u = EquipmentUnit.query.get_or_404(uid)
     if current_user.is_authenticated and request.args.get('report'):
         return redirect(url_for('unit_tracking.fault_form', uid=u.id))
+    if current_user.is_authenticated and u.is_case:
+        return redirect(url_for('cases.case_page', uid=u.id))
     if current_user.is_authenticated:
         return redirect(url_for('equipment.equipment_detail', id=u.equipment_id, unit=u.id)
                         + f'#unit-{u.id}')
@@ -422,6 +424,8 @@ def add_equipment():
     if _tag_taken(barcode):
         return jsonify({'error': f'Barcode "{barcode}" is already used by another item'}), 409
     tracking = (data.get('tracking') or 'bulk').strip().lower()
+    if data.get('is_case'):
+        tracking = 'individual'               # every case has its own label
     if tracking not in TRACKING_MODES:
         return jsonify({'error': 'Tracking must be individual or bulk'}), 400
     qty = _clean_quantity(data.get('quantity_owned'), 1)
@@ -431,6 +435,7 @@ def add_equipment():
         barcode=barcode, name=name,
         category=data.get('category', ''), location=data.get('location', ''),
         notes=data.get('notes', ''), quantity_owned=qty, tracking=tracking,
+        is_case=bool(data.get('is_case')),
     )
     db.session.add(eq)
     db.session.flush()
@@ -459,6 +464,14 @@ def update_equipment(id):
     eq.category       = data.get('category',       eq.category)
     eq.location       = data.get('location',       eq.location)
     eq.notes          = data.get('notes',          eq.notes)
+    if 'is_case' in data:
+        want_case = bool(data.get('is_case'))
+        if not want_case and eq.is_case and any(u.case_contents for u in eq.units):
+            return jsonify({'error': 'Some of these cases still have items packed in them. Unpack them first'}), 409
+        if want_case and not eq.is_individual and (eq.tracking or 'bulk') == 'bulk' \
+                and (data.get('tracking') or 'bulk') != 'individual':
+            return jsonify({'error': 'Cases are tracked one by one. Switch to individual items first'}), 409
+        eq.is_case = want_case
 
     tracking = (data.get('tracking') or eq.tracking_mode).strip().lower()
     if tracking not in TRACKING_MODES:

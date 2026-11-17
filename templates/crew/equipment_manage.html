@@ -126,6 +126,8 @@
                     { value: 'individual', label: 'Each item: every one gets its own label and history' },
                     { value: 'bulk', label: 'By count: one group label (cables, tape, consumables)' },
                 ] },
+                { name: 'is_case', label: 'These are road cases or kits (each one holds other items)', type: 'checkbox',
+                  show: v => v.tracking === 'individual' },
                 { name: 'category', label: 'Category', half: true, maxLength: 100, suggestions: cats, placeholder: 'e.g. Audio' },
                 { name: 'location', label: 'Where it lives', half: true, maxLength: 200, suggestions: locs, placeholder: 'e.g. Rack A, shelf 3' },
                 { name: 'notes', label: 'Notes', type: 'textarea', rows: 2 },

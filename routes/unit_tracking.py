@@ -286,6 +286,11 @@ def checkout_scan():
             return _group_label_answer(hit, event)
     if not unit:
         return jsonify({'error': err, 'conflict': 'not_found'}), 404
+    if unit.is_case:
+        # A road case: it and everything packed in it go out / come back together
+        from routes.cases import case_scan
+        body, status = case_scan(unit, event, mode, force)
+        return jsonify(body), status
 
     co = unit.open_checkout
     if event is None and mode != 'return':
@@ -342,6 +347,9 @@ def checkout_scan():
         _close(co, note=f'Moved to {event.title} by {current_user.username}')
     warnings, info = _picklist_check(unit, event)
     warnings = blockers + warnings          # overridden blockers stay visible in the result
+    if unit.case_link:
+        warnings.append({'code': 'in_case', 'message': f'{unit.asset_tag} is packed in case '
+                                                       f'{unit.case_link.case.asset_tag}. Scan the case to take it all'})
     new = UnitCheckout(unit_id=unit.id, event_id=event.id, checked_out_by=current_user.username,
                        checked_out_at=_now(),
                        notes=('Checked out despite: ' + '; '.join(b['message'] for b in blockers))
@@ -934,6 +942,9 @@ def stale_checkouts():
 # ---------------------------------------------------------------------------
 
 def _unit_url(u):
+    from flask import url_for
+    if u.is_case:
+        return url_for('cases.case_page', uid=u.id)
     return url_for('equipment.equipment_detail', id=u.equipment_id, unit=u.id) + f'#unit-{u.id}'
 
 

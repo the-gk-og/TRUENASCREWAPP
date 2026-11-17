@@ -108,6 +108,8 @@ class Equipment(db.Model):
     picture          = db.Column(db.String(300), nullable=True)
     # Photo of where it lives in storage
     location_picture = db.Column(db.String(300), nullable=True)
+    # A road case / kit type: each of its items can hold other items (see CaseItem)
+    is_case          = db.Column(db.Boolean, default=False)
     # Individual physical units (opt-in: empty for items tracked only by quantity)
     units            = db.relationship('EquipmentUnit', backref='equipment',
                                        cascade='all, delete-orphan',
@@ -125,6 +127,7 @@ class Equipment(db.Model):
             'quantity_owned': self.owned,
             'tracking':       self.tracking_mode,
             'unit_count':     len(self.units),
+            'is_case':        bool(self.is_case),
             'picture_url': (
                 url_for('equipment.serve_equipment_picture', id=self.id)
                 if self.picture else None
@@ -217,7 +220,14 @@ class EquipmentUnit(db.Model):
             d['quarantine']  = q.to_dict() if q else None
             d['state']       = self.state
             d['state_label'] = UNIT_STATE_LABELS[d['state']]
+            d['is_case']     = self.is_case
+            d['in_case']     = self.case_link.to_dict() if self.case_link else None
+            d['contents_count'] = len(self.case_contents) if self.is_case else 0
         return d
+
+    @property
+    def is_case(self):
+        return bool(self.equipment and self.equipment.is_case)
 
     @property
     def open_quarantine(self):
@@ -1039,3 +1049,39 @@ def _remove_deleted_files(session):
 @_sa_event.listens_for(_Session, 'after_rollback')
 def _forget_pending_deletes(session):
     session.info.pop('pending_file_deletes', None)
+
+
+class CaseItem(db.Model):
+    """A unit packed in a road case / kit (itself a unit of an `is_case` type).
+    unit_id is unique: an item is in at most one case at a time. missing_at is set
+    when someone flags it as not in the case during a scan, cleared when it is found."""
+    __tablename__ = 'case_item'
+    id               = db.Column(db.Integer, primary_key=True)
+    case_id          = db.Column(db.Integer, db.ForeignKey('equipment_unit.id', ondelete='CASCADE'),
+                                 nullable=False, index=True)
+    unit_id          = db.Column(db.Integer, db.ForeignKey('equipment_unit.id', ondelete='CASCADE'),
+                                 nullable=False, unique=True)
+    added_by         = db.Column(db.String(80))
+    added_at         = db.Column(db.DateTime, default=datetime.now)
+    missing_at       = db.Column(db.DateTime)
+    missing_by       = db.Column(db.String(80))
+    missing_event_id = db.Column(db.Integer, db.ForeignKey('event.id', ondelete='SET NULL'))
+    case = db.relationship('EquipmentUnit', foreign_keys=[case_id], backref=db.backref(
+        'case_contents', cascade='all, delete-orphan', order_by='CaseItem.id'))
+    unit = db.relationship('EquipmentUnit', foreign_keys=[unit_id], backref=db.backref(
+        'case_link', uselist=False, cascade='all, delete-orphan'))
+    missing_event = db.relationship('Event')
+
+    def to_dict(self):
+        c = self.case
+        return {
+            'id':             self.id,
+            'case_id':        self.case_id,
+            'case_tag':       c.asset_tag if c else '',
+            'case_name':      c.equipment.name if c and c.equipment else '',
+            'unit_id':        self.unit_id,
+            'missing':        self.missing_at is not None,
+            'missing_at':     self.missing_at.strftime('%d %b %Y, %H:%M') if self.missing_at else '',
+            'missing_by':     self.missing_by or '',
+            'missing_event':  self.missing_event.title if self.missing_event else '',
+        }
