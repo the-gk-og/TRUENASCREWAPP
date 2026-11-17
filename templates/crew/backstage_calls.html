@@ -12,7 +12,7 @@
     {% for p in presets %}<button class="btn btn-primary" style="min-height:3.5rem" data-call="{{ p.key }}" title="{{ p.text }}">{{ p.label }}</button>{% endfor %}
   </div>
   <form id="bc-custom" style="display:flex;gap:.5rem;margin-top:.9rem">
-    <input class="form-control" name="message" maxlength="200" placeholder="Custom call, e.g. Stand by for the fire curtain" style="flex:1">
+    <input class="sw-input" name="message" maxlength="200" placeholder="Custom call, e.g. Stand by for the fire curtain" style="flex:1">
     <button class="btn btn-secondary" type="submit">Send</button>
     <button class="btn btn-outline-danger" type="button" data-call="clear">Clear display</button>
   </form>

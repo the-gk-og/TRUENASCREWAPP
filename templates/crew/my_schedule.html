@@ -120,7 +120,7 @@ const SWAP = {
     try {
       await SW.api('POST', `/shifts/swaps/${id}/approve`);
     } catch (e) {
-      if (!/clash/.test(e.message || '')) { SW.toast(e.message, 'error'); return; }
+      if (!/clash|signed off/.test(e.message || '')) { SW.toast(e.message, 'error'); return; }
       if (!(await SW.confirm(e.message + '. Approve anyway?', { okText: 'Approve anyway' }))) return;
       if (!(await SW.run(() => SW.api('POST', `/shifts/swaps/${id}/approve`, { force: true })))) return;
     }

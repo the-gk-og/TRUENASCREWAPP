@@ -182,3 +182,42 @@ def test_removing_person_drops_their_swaps(app, admin, alice):
     ev_id = db.session.get(ShiftAssignment, aid).shift.event_id
     assert admin.delete(f'/events/{ev_id}/team/{uid("alice")}').status_code == 200
     assert db.session.get(ShiftSwap, sid) is None
+
+
+# --- Training sign-offs apply to swaps too ------------------------------------
+
+def _lx_skill(admin):
+    r = admin.post('/api/training/skills', json={'name': 'LX desk', 'roles': ['LX']})
+    assert r.status_code == 200, r.get_json()
+    return r.get_json()['skill']['id']
+
+
+def test_swap_needs_the_shifts_skills(app, admin, alice, bob, sent):
+    sk = _lx_skill(admin)
+    aid = _shift()                                                # role LX, now needs "LX desk"
+    sid = _offer(alice, aid)
+    cand = {p['name']: p for p in alice.get(f'/shifts/assignment/{aid}/swap-candidates').get_json()['people']}
+    assert cand['bob']['missing_skills'] == ['LX desk']
+    # Bob isn't signed off: the offer is hidden from him and he can't claim it
+    assert bob.get('/api/shifts/swaps').get_json()['open'] == []
+    r = bob.post(f'/shifts/swaps/{sid}/claim')
+    assert r.status_code == 400 and 'LX desk' in r.get_json()['error']
+    # Once signed off he can
+    assert admin.post('/api/training/signoffs', json={'user_id': uid('bob'), 'skill_id': sk,
+                                                      'expires_at': None}).status_code == 200
+    assert bob.post(f'/shifts/swaps/{sid}/claim').status_code == 200
+
+
+def test_approve_rechecks_skills_and_records_override(app, admin, alice, bob, sent):
+    from models_training import SkillOverride
+    aid = _shift()
+    sid = _offer(alice, aid)
+    assert bob.post(f'/shifts/swaps/{sid}/claim').status_code == 200
+    _lx_skill(admin)                                              # requirement added after the claim
+    r = admin.post(f'/shifts/swaps/{sid}/approve')
+    assert r.status_code == 409 and r.get_json()['skill_block'] is True
+    assert db.session.get(ShiftAssignment, aid).user_id == uid('alice')
+    assert admin.post(f'/shifts/swaps/{sid}/approve', json={'force': True}).status_code == 200
+    assert db.session.get(ShiftAssignment, aid).user_id == uid('bob')
+    o = SkillOverride.query.one()
+    assert o.user_id == uid('bob') and o.skill_names == 'LX desk'

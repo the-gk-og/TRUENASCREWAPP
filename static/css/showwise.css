@@ -328,7 +328,7 @@ hr { border: 0; border-top: 1px solid var(--border); }
 .form-group label, .sw-label { display: block; margin-bottom: .3rem; font-weight: 600; font-size: .88rem; color: var(--text-primary); }
 .form-group input, .form-group textarea, .form-group select,
 input[type="text"], input[type="password"], input[type="email"], input[type="number"], input[type="search"], input[type="tel"], input[type="url"],
-input[type="date"], input[type="time"], input[type="datetime-local"], textarea, select {
+input:not([type]), input[type="date"], input[type="time"], input[type="datetime-local"], textarea, select {
     background: var(--bg-input); color: var(--text-primary);
     border: 1px solid var(--border-input); border-radius: var(--radius);
     font: inherit; font-size: .95rem;
@@ -342,7 +342,7 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 @media (max-width: 768px) {
     /* 16px stops iOS zooming into a focused field */
     input[type="text"], input[type="password"], input[type="email"], input[type="number"], input[type="search"],
-    input[type="date"], input[type="time"], input[type="datetime-local"], textarea, select { font-size: 16px; }
+    input:not([type]), input[type="date"], input[type="time"], input[type="datetime-local"], textarea, select { font-size: 16px; }
 }
 [data-theme="dark"] select { color-scheme: dark; }
 [data-theme="dark"] input[type="date"], [data-theme="dark"] input[type="time"], [data-theme="dark"] input[type="datetime-local"] { color-scheme: dark; }

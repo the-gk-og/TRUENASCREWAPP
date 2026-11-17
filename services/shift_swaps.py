@@ -78,8 +78,20 @@ def eligible_people(assignment: ShiftAssignment) -> list[dict]:
         if u.id in on_shift or not _is_crew(u):
             continue
         out.append({'id': u.id, 'name': u.shown_name,
-                    'clash': bool(find_conflicts(u.id, shift.shift_date, shift.shift_end_date))})
+                    'clash': bool(find_conflicts(u.id, shift.shift_date, shift.shift_end_date)),
+                    'missing_skills': [m['name'] for m in missing_skills_for(u, shift)]})
     return sorted(out, key=lambda p: p['name'].lower())
+
+
+def missing_skills_for(user: User, shift: Shift) -> list[dict]:
+    """Required training sign-offs ``user`` lacks for ``shift`` (by its role or set on it)."""
+    from services.training_service import required_skills, missing_skills
+    skills = required_skills(shift=shift)
+    return missing_skills(user, skills, on=shift.shift_date) if skills else []
+
+
+def _skills_text(missing: list[dict]) -> str:
+    return ', '.join(m['name'] for m in missing)
 
 
 def claim_problem(swap: ShiftSwap, user: User, now: datetime | None = None) -> str | None:
@@ -99,6 +111,9 @@ def claim_problem(swap: ShiftSwap, user: User, now: datetime | None = None) -> s
     allowed = offered_to_ids(swap)
     if allowed is not None and user.id not in allowed:
         return 'This shift was offered to someone else'
+    missing = missing_skills_for(user, shift)
+    if missing:
+        return f"You need to be signed off for {_skills_text(missing)} to take this shift"
     return None
 
 
@@ -238,6 +253,10 @@ def approve(swap: ShiftSwap, admin: User, force: bool = False, now: datetime | N
     conflicts = find_conflicts(claimer.id, shift.shift_date, shift.shift_end_date)
     if conflicts and not force:
         raise SwapError(f'{claimer.shown_name} now has a clash', 409, conflicts=conflicts)
+    missing = missing_skills_for(claimer, shift)
+    if missing and not force:
+        raise SwapError(f"{claimer.shown_name} isn't signed off for {_skills_text(missing)}", 409,
+                        skill_block=True, missing=missing)
 
     old_user = a.user
     try:
@@ -249,6 +268,11 @@ def approve(swap: ShiftSwap, admin: User, force: bool = False, now: datetime | N
         a.assigned_by = admin.username
         swap.status = 'approved'
         swap.decided_by, swap.decided_at = admin.username, now
+        if missing:                            # admin approved anyway: keep a record, like other overrides
+            from services.training_service import record_override
+            record_override({'user_id': claimer.id, 'skill_names': _skills_text(missing),
+                             'reason': f'Approved shift swap anyway ({admin.username})'},
+                            assignment=a, event_id=shift.event_id)
 
         event_id = shift.event_id
         if not CrewAssignment.query.filter_by(event_id=event_id, crew_member=claimer.username).first():
