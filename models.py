@@ -638,6 +638,25 @@ class ShiftAssignment(db.Model):
     user = db.relationship('User', backref='shift_assignments')
 
 
+class ShiftSwap(db.Model):
+    """Someone on a shift offers it up; another crew member claims it; an admin approves
+    (the assignment then moves to the claimer).  See services/shift_swaps.py."""
+    id            = db.Column(db.Integer, primary_key=True)
+    assignment_id = db.Column(db.Integer, db.ForeignKey('shift_assignment.id'), nullable=False, index=True)
+    offered_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    offered_to    = db.Column(db.Text, nullable=True)       # "3,7": only these user ids; empty = anyone eligible
+    note          = db.Column(db.String(500), nullable=True)
+    status        = db.Column(db.String(20), default='open', index=True)   # open/claimed/approved/rejected/cancelled/expired
+    claimed_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    claimed_at    = db.Column(db.DateTime, nullable=True)
+    decided_by    = db.Column(db.String(80), nullable=True)
+    decided_at    = db.Column(db.DateTime, nullable=True)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    assignment = db.relationship('ShiftAssignment', backref=db.backref('swaps', cascade='all, delete-orphan'))
+    offered_by = db.relationship('User', foreign_keys=[offered_by_id])
+    claimed_by = db.relationship('User', foreign_keys=[claimed_by_id])
+
+
 class ShiftNote(db.Model):
     id         = db.Column(db.Integer, primary_key=True)
     shift_id   = db.Column(db.Integer, db.ForeignKey('shift.id'), nullable=False)
