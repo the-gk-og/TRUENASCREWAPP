@@ -908,6 +908,25 @@ class AppSetting(db.Model):
 
 
 
+class PushSubscription(db.Model):
+    """One browser/device that opted in to Web Push (see services/push_service.py)."""
+    __tablename__ = 'push_subscription'
+    id         = db.Column(db.Integer, primary_key=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    endpoint   = db.Column(db.String(700), unique=True, nullable=False)
+    p256dh     = db.Column(db.String(200), nullable=False)
+    auth       = db.Column(db.String(100), nullable=False)
+    user_agent = db.Column(db.String(300))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class PushPreference(db.Model):
+    """Kinds of push a user turned off (JSON list); anything not listed is on."""
+    __tablename__ = 'push_preference'
+    user_id        = db.Column(db.Integer, db.ForeignKey('user.id'), primary_key=True)
+    disabled_kinds = db.Column(db.Text, nullable=False, default='[]')
+
+
 # ---------------------------------------------------------------------------
 # Remove an attachment's files from disk once the row is really gone
 # ---------------------------------------------------------------------------

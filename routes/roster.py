@@ -154,7 +154,7 @@ def _item(shift, assignment=None):
 
 
 def _email_new_assignment(user, event, shift, notes=''):
-    if user.email and user.id != current_user.id:
+    if user.id != current_user.id:
         send_shift_assignment_emails_async([_shift_email_job(user, event, shift, notes)])
 
 

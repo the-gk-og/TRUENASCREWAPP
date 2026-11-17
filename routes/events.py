@@ -658,7 +658,7 @@ def _split_shared_shift(a: ShiftAssignment, start, end, role) -> Shift:
 def _shift_email_job(user: User, event: Event, shift: Shift, notes: str = '') -> dict:
     """Plain-string arguments for send_shift_assignment_email (it runs after the request ends)."""
     return dict(
-        recipient_email=user.email, username=user.shown_name,
+        user_id=user.id, recipient_email=user.email, username=user.shown_name,
         event_title=event.title, shift_title=shift.title,
         shift_date=shift.shift_date.strftime('%a %d %b %Y, %I:%M %p'),
         shift_end_time=shift.shift_end_date.strftime('%I:%M %p'),
@@ -716,7 +716,7 @@ def add_team_shift(event_id):
         db.session.rollback()
         raise ApiError(f'Could not add shift: {exc}', 500)
 
-    if user.email and user.id != current_user.id:          # no email for assigning yourself
+    if user.id != current_user.id:          # no email for assigning yourself
         send_shift_assignment_emails_async([_shift_email_job(user, event, shift, notes)])
     return jsonify({'success': True, 'shift': serialize_assignment(assignment),
                     'warnings': conflicts})
@@ -749,7 +749,7 @@ def add_all_crew(event_id):
         db.session.add(ShiftAssignment(shift_id=shift.id, user_id=user.id, status='pending',
                                        assigned_by=current_user.username))
         added += 1
-        if user.email and user.id != current_user.id:
+        if user.id != current_user.id:
             emails.append(_shift_email_job(user, event, shift))
     db.session.commit()
     send_shift_assignment_emails_async(emails)
@@ -816,7 +816,7 @@ def bulk_add_team_shifts(event_id):
             db.session.add(ShiftAssignment(shift_id=shift.id, user_id=user.id, status=status,
                                            assigned_by=current_user.username, notes=notes))
             added += 1
-            if user.email and user.id != current_user.id:
+            if user.id != current_user.id:
                 emails.append(_shift_email_job(user, event, shift, notes))
         db.session.commit()
     except Exception as exc:

@@ -18,6 +18,9 @@
     <button class="settings-tab" onclick="switchTab('calendar')" id="tab-calendar">
         <i class="fas fa-calendar-alt"></i> Calendar
     </button>
+    <button class="settings-tab" onclick="switchTab('notifications')" id="tab-notifications">
+        <i class="fas fa-bell"></i> Notifications
+    </button>
     <button class="settings-tab" onclick="switchTab('2fa')" id="tab-2fa">
         <i class="fas fa-mobile-alt"></i> Two-Factor Auth
         {% if tfa and tfa.enabled %}
@@ -317,6 +320,36 @@
             <i class="fas fa-info-circle"></i>
             <span id="cbInfoText"></span>
         </div>
+    </div>
+</div>
+
+<!-- ==================== NOTIFICATIONS TAB ==================== -->
+<div class="tab-panel" id="panel-notifications">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-bell"></i> Notifications on this device</h3>
+        </div>
+        <p style="color: var(--text-secondary); margin-bottom: 1.25rem;">
+            Get shift reminders and updates as phone or desktop notifications, as well as by email.
+            Turn it on for each phone or computer you use. Tapping a notification opens the page it's about.
+        </p>
+        <div style="background:var(--bg-table-head);border:1px solid var(--border);border-radius:8px;padding:1.25rem;margin-bottom:1.25rem;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;">
+                <div>
+                    <h4 style="margin:0 0 0.25rem;color:var(--text-primary);font-size:0.95rem;">Notifications on this device</h4>
+                    <p id="pushStatus" style="margin:0;color:var(--text-secondary);font-size:0.85rem;">Checking…</p>
+                </div>
+                <label class="toggle-switch" title="Turn notifications on or off for this device">
+                    <input type="checkbox" id="pushToggle" disabled onchange="setPushOn(this.checked)">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <button type="button" class="btn btn-secondary" id="pushTestBtn" onclick="sendTestPush()"
+                    style="display:none;margin-top:1rem;"><i class="fas fa-paper-plane"></i> Send a test</button>
+        </div>
+        <h4 style="margin:0 0 0.5rem;color:var(--text-primary);font-size:0.95rem;">What to notify me about</h4>
+        <p style="margin:0 0 0.75rem;color:var(--text-secondary);font-size:0.85rem;">Applies to all your devices. Email is not affected.</p>
+        <div id="pushKinds"></div>
     </div>
 </div>
 
@@ -737,6 +770,10 @@
     font-size: 0.875rem; color: var(--text-primary);
 }
 .cb-info-box i { color: var(--primary); margin-top: 2px; flex-shrink: 0; }
+.push-kind { display:flex; justify-content:space-between; align-items:center; gap:1rem;
+    padding:0.75rem 0; border-top:1px solid var(--border); }
+.push-kind strong { display:block; color:var(--text-primary); font-size:0.9rem; }
+.push-kind span { color:var(--text-secondary); font-size:0.82rem; }
 </style>
 
 {% endblock %}
@@ -1127,5 +1164,92 @@ document.getElementById('accountInfoForm').addEventListener('submit', async func
     } catch { showAlert('Network error', 'error'); }
     finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Save Changes'; }
 });
+// ---- Web Push (Notifications tab) ----
+const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+function b64ToBytes(b64) {
+    const pad = '='.repeat((4 - b64.length % 4) % 4);
+    const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from(raw, c => c.charCodeAt(0));
+}
+async function pushReg() { return navigator.serviceWorker.register('/sw.js').then(() => navigator.serviceWorker.ready); }
+function paintPush(on, msg) {
+    const t = document.getElementById('pushToggle');
+    t.checked = !!on;
+    document.getElementById('pushStatus').textContent = msg;
+    document.getElementById('pushTestBtn').style.display = on ? '' : 'none';
+}
+async function refreshPush() {
+    const t = document.getElementById('pushToggle');
+    if (!pushSupported) {
+        const ios = /iPhone|iPad/.test(navigator.userAgent);
+        paintPush(false, ios ? 'On iPhone/iPad, add ShowWise to your Home Screen first (Share → Add to Home Screen), then open it from there.'
+                             : "This browser can't show notifications.");
+        return;
+    }
+    if (Notification.permission === 'denied') {
+        paintPush(false, 'Notifications are blocked for this site. Allow them in your browser settings, then reload.');
+        return;
+    }
+    t.disabled = false;
+    try {
+        const sub = await (await pushReg()).pushManager.getSubscription();
+        paintPush(!!sub, sub ? 'On. This device will get notifications.' : 'Off for this device.');
+    } catch { paintPush(false, 'Off for this device.'); }
+}
+async function setPushOn(on) {
+    const t = document.getElementById('pushToggle');
+    t.disabled = true;
+    try {
+        const reg = await pushReg();
+        if (on) {
+            if (await Notification.requestPermission() !== 'granted') throw new Error('Permission was not given');
+            const { publicKey } = await (await fetch('/push/key')).json();
+            let sub = await reg.pushManager.getSubscription();
+            if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(publicKey) });
+            const r = await fetch('/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                       body: JSON.stringify({ subscription: sub.toJSON() }) });
+            if (!r.ok) throw new Error('Could not save this device');
+            showAlert('Notifications turned on for this device', 'success');
+        } else {
+            const sub = await reg.pushManager.getSubscription();
+            if (sub) {
+                await fetch('/push/unsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                   body: JSON.stringify({ endpoint: sub.endpoint }) });
+                await sub.unsubscribe();
+            }
+            showAlert('Notifications turned off for this device', 'success');
+        }
+    } catch (e) { showAlert(e.message || 'Could not change notifications', 'error'); }
+    t.disabled = false;
+    refreshPush();
+}
+async function sendTestPush() {
+    const r = await fetch('/push/test', { method: 'POST' }).then(r => r.json()).catch(() => ({}));
+    showAlert(r.sent ? 'Test sent. It should appear in a moment.' : 'Could not send a test. Try turning notifications off and on again.',
+              r.sent ? 'success' : 'error');
+}
+async function loadPushKinds() {
+    const box = document.getElementById('pushKinds');
+    const d = await fetch('/push/preferences').then(r => r.json()).catch(() => null);
+    if (!d) return;
+    box.innerHTML = '';
+    d.kinds.forEach(k => {
+        const row = document.createElement('div');
+        row.className = 'push-kind';
+        row.innerHTML = '<div><strong></strong><span></span></div><label class="toggle-switch"><input type="checkbox"><span class="toggle-slider"></span></label>';
+        row.querySelector('strong').textContent = k.label;
+        row.querySelector('span').textContent = k.hint;
+        const input = row.querySelector('input');
+        input.checked = k.on;
+        input.setAttribute('aria-label', k.label);
+        input.addEventListener('change', async () => {
+            const r = await fetch('/push/preferences', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                                                         body: JSON.stringify({ kinds: { [k.key]: input.checked } }) });
+            if (!r.ok) { input.checked = !input.checked; showAlert('Could not save', 'error'); }
+        });
+        box.appendChild(row);
+    });
+}
+window.addEventListener('DOMContentLoaded', () => { refreshPush(); loadPushKinds(); });
 </script>
 {% endblock %}

@@ -14,7 +14,7 @@
  *
  * Bump VERSION to throw away everything that was saved.
  */
-const VERSION = 'v1';
+const VERSION = 'v2';
 const STATIC = `showwise-static-${VERSION}`;
 const PAGES = `showwise-pages-${VERSION}`;
 const OFFLINE_URL = '/offline';
@@ -84,7 +84,7 @@ self.addEventListener('fetch', (event) => {
   const sameOrigin = url.origin === self.location.origin;
 
   if (request.mode === 'navigate' && sameOrigin) {
-    if (/^\/(logout|__dev\/logout)\b/.test(url.pathname)) { event.waitUntil(forgetPages()); return; }
+    if (/^\/(logout|__dev\/logout)\b/.test(url.pathname)) { event.waitUntil(Promise.all([forgetPages(), stopPush()])); return; }
     if (/^\/(login|signup|password|sw\.js)/.test(url.pathname)) return;
     event.respondWith(page(request));
     return;
@@ -117,4 +117,36 @@ self.addEventListener('message', (event) => {
       }
     })());
   }
+});
+
+// --- Web Push -------------------------------------------------------------
+// The server sends {title, body, url, tag}. Tapping opens (or focuses) that page.
+// On logout this device stops getting pushes, so the next person on a shared phone doesn't.
+async function stopPush() {
+  try { const s = await self.registration.pushManager.getSubscription(); if (s) await s.unsubscribe(); } catch (e) {}
+}
+
+self.addEventListener('push', (event) => {
+  let msg = {};
+  try { msg = event.data ? event.data.json() : {}; } catch (e) { msg = { body: event.data && event.data.text() }; }
+  event.waitUntil(self.registration.showNotification(msg.title || 'ShowWise', {
+    body: msg.body || '',
+    tag: msg.tag || undefined,
+    icon: '/static/favicon/android-chrome-192x192.png',
+    badge: '/static/favicon/favicon-96x96.png',
+    data: { url: msg.url || '/dashboard' },
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL((event.notification.data || {}).url || '/dashboard', self.location.origin);
+  if (target.origin !== self.location.origin) return;
+  event.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const same = wins.find((w) => new URL(w.url).pathname === target.pathname);
+    if (same) return same.focus();
+    if (wins[0] && 'navigate' in wins[0]) { await wins[0].navigate(target.href); return wins[0].focus(); }
+    return self.clients.openWindow(target.href);
+  })());
 });
