@@ -244,6 +244,7 @@
         }
 
         const u = data.unit, label = u ? `${u.asset_tag} · ${u.equipment_name}` : '';
+        if (ok && data.is_case) { caseResult(data); pause(false); refresh(); return { ok: true }; }
         if (ok) {
             const warns = (data.warnings || []).map(w => w.message);
             const back = data.action === 'return';
@@ -275,6 +276,42 @@
         showResult('err', title, label, [data.error || 'Could not record that scan']);
         pause(false);
         return { error: data.error || 'Could not record that scan' };
+    }
+
+    /* ---------- a road case was scanned: it and its contents moved together ---------- */
+    function caseResult(data) {
+        const c = data.case, back = data.action === 'return', moved = new Set(data.moved || []);
+        const warns = (data.warnings || []).map(w => w.message).concat(data.info ? [data.info] : []);
+        beep(warns.length ? 'warn' : back ? 'back' : 'ok');
+        const rows = c.contents.map(x => {
+            const flag = x.quarantined ? 'out of use: leave it behind' : x.missing ? 'missing'
+                : moved.has(x.id) ? (back ? 'back in' : 'going out') : '';
+            const canFlag = !x.missing && !x.quarantined;
+            return `<li><div class="main"><code>${esc(x.asset_tag)}</code> ${esc(x.equipment_name)}
+                ${flag ? `<div class="meta${x.quarantined || x.missing ? ' bad' : ''}">${esc(flag)}</div>` : ''}</div>
+                ${canFlag ? `<button type="button" class="btn btn-sm btn-secondary" data-missing="${x.id}" title="It isn’t in the case">Missing</button>` : ''}</li>`;
+        }).join('') || '<li class="co-none">Nothing is packed in this case.</li>';
+        showResult(back ? 'back' : 'ok', back ? 'Case back in' : 'Case going out', data.message, warns,
+            [{ label: 'Undo', icon: 'rotate-left', run: async () => {
+                const r = await post(`/equipment/case/${c.id}/undo`, { action: back ? 'return' : 'out' });
+                if (r.ok) { beep('warn'); showResult('idle', 'Undone', r.data.message); }
+                else showResult('err', 'Could not undo', r.data.error);
+                refresh();
+            } },
+             { label: 'Open case', icon: 'suitcase', run: () => { location.href = c.url; } }],
+            `<p class="co-big-item" style="margin-top:.4rem">Inside (${c.count}). Press <b>Missing</b> for anything not in the case.</p><ul class="co-list co-pick">${rows}</ul>`);
+        $$('#coResult [data-missing]').forEach(b => b.addEventListener('click', async () => {
+            b.disabled = true;
+            const r = await post(`/equipment/case/${c.id}/missing`,
+                { unit_id: parseInt(b.dataset.missing, 10), event_id: data.event_id || EVENT_ID, action: data.action });
+            if (r.ok) {
+                SW.toast(r.data.message);
+                const li = b.closest('li');
+                b.hidden = true;
+                li.querySelector('.main').insertAdjacentHTML('beforeend', '<div class="meta bad">missing</div>');
+            } else { SW.toast(r.data.error, 'error'); b.disabled = false; }
+            refresh();
+        }));
     }
 
     /* ---------- a group label was scanned ---------- */
