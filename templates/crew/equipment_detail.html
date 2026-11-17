@@ -50,6 +50,32 @@
     </div>
     {% endif %}
 
+    <section class="card" id="bookings">
+        <div class="sw-section-head"><h2>Booked on <span class="count">({{ bookings|length }})</span></h2></div>
+        {% if bookings %}
+        <div style="overflow-x:auto">
+        <table class="gb-table">
+            <thead><tr><th>Event</th><th>When</th><th class="num">Needs</th><th class="num">Out</th>{% if individual %}<th>Items reserved</th>{% endif %}</tr></thead>
+            <tbody>
+            {% for b in bookings %}
+            <tr class="{{ 'short' if b.short }}">
+                <td><a href="{{ url_for('picklist.picklist', event_id=b.event_id) }}">{{ b.event_title }}</a>
+                    {% if b.finished %}<span class="pill">Finished, not all back</span>{% endif %}
+                    {% if b.short %}<div class="pl-meta"><i class="fas fa-triangle-exclamation" style="color:var(--warning)"></i> {{ b.message }}</div>{% endif %}</td>
+                <td>{{ b.when }}</td>
+                <td class="num">{{ b.qty }}</td>
+                <td class="num">{{ b.out or '' }}</td>
+                {% if individual %}<td>{% for t in b.units %}<span class="plu-chip">{{ t }}</span> {% else %}<span class="pl-meta">Any</span>{% endfor %}</td>{% endif %}
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <p class="pl-meta">Not on any upcoming pick list.</p>
+        {% endif %}
+    </section>
+
     <div class="gear-type">
         <div>
             {% if individual %}

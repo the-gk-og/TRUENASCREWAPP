@@ -101,6 +101,7 @@
   <div>
     <div class="card">
       <div class="sw-card-head"><h3>Gear and plans</h3></div>
+      {% with link_picklist=event.id %}{% include 'crew/_gear_clashes.html' %}{% endwith %}
       <div style="display:grid;gap:.6rem">
         <a class="btn btn-primary" href="{{ url_for('unit_tracking.checkout_page', event_id=event.id) }}"><i class="fas fa-qrcode"></i>Scan gear out / in</a>
         <a class="btn btn-secondary" href="{{ url_for('picklist.picklist', event_id=event.id) }}"><i class="fas fa-list-check"></i>Pick list ({{ event.pick_list_items|length }})</a>

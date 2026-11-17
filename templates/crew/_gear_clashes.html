@@ -1,0 +1,12 @@
+{# Double-booking summary for one event. Needs `gear` (services/gear_bookings.event_gear_warnings) #}
+{% if gear and gear.count %}
+<details class="sw-notice gear-clashes" id="gearClashes" {{ 'open' if open_clashes }}>
+    <summary><i class="fas fa-triangle-exclamation"></i>
+        {{ gear.count }} gear clash{{ 'es' if gear.count != 1 }} with other events
+        {% if link_picklist %}· <a href="{{ url_for('picklist.picklist', event_id=link_picklist) }}">open pick list</a>{% endif %}</summary>
+    <ul>
+        {% for t in gear.types %}<li>{{ t.message }}</li>{% endfor %}
+        {% for u in gear.units %}<li>{{ u.message }}</li>{% endfor %}
+    </ul>
+</details>
+{% endif %}

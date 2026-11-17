@@ -331,6 +331,13 @@ def events_list():
                            event_end=event_end, fmt_range=fmt_range)
 
 
+def _gear_warnings(event):
+    """Double-booked gear for this event (nothing once it has finished)."""
+    from routes.picklist import _event_is_archived
+    from services.gear_bookings import event_gear_warnings
+    return None if _event_is_archived(event) else event_gear_warnings(event)
+
+
 @events_bp.route('/events/<int:id>', methods=['GET'])
 @login_required
 @crew_required
@@ -415,6 +422,7 @@ def event_detail(id):
         attachments=attachments, tasks=tasks, task_shifts=task_shifts, today=now_str(),
         can_tasks=can_edit_event(event),
         hired=HiredEquipment.query.filter_by(event_id=id).all(),
+        gear=_gear_warnings(event),
         assignable=assignable, can_manage=manager, can_edit=can_edit_event(event),
         series_count=len(series_members(event, 'all')),
         is_series=is_series(event), end=event_end(event), fmt_range=fmt_range,

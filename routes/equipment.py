@@ -125,6 +125,7 @@ def equipment_detail(id):
     org_name = current_app.config.get('ORG_NAME') or org.get('name', 'ShowWise')
     from models import MAINTENANCE_KINDS, MAINTENANCE_LABELS, MAINTENANCE_RESULTS, QUARANTINE_OUTCOMES
     from routes.unit_tracking import maintenance_alerts
+    from services.gear_bookings import equipment_bookings
     units = [u.to_dict() for u in eq.units]
     return render_template('crew/equipment_detail.html', item=eq, organisation_name=org_name,
                            units=units,
@@ -136,6 +137,7 @@ def equipment_detail(id):
                            maintenance_kinds=[(k, MAINTENANCE_LABELS[k]) for k in MAINTENANCE_KINDS],
                            maintenance_results=MAINTENANCE_RESULTS,
                            maint_alerts=maintenance_alerts(equipment_id=eq.id),
+                           bookings=equipment_bookings(eq),
                            today=datetime.now().date().isoformat(),
                            highlight_unit=request.args.get('unit', type=int))
 
@@ -1090,16 +1092,9 @@ def generate_barcodes():
         return jsonify({'error': str(exc)}), 500
 
 def _event_window(event):
-    """(start, end) an event holds its equipment for. All-day events and events
-    with no end time hold it until the end of their last day."""
-    from datetime import time as dtime
-    start = event.event_date
-    end   = event.event_end_date or event.event_date
-    if event.all_day:
-        start = datetime.combine(start.date(), dtime.min)
-    if event.all_day or not event.event_end_date:
-        end = datetime.combine(end.date(), dtime.max)
-    return start, max(start, end)
+    """(start, end) an event holds its equipment for (see services/gear_bookings.py)."""
+    from services.gear_bookings import event_window
+    return event_window(event)
 
 
 @equipment_bp.route('/equipment/<int:id>/quantity-check', methods=['POST'])
@@ -1157,3 +1152,27 @@ def check_equipment_quantity(id):
         'event_id': target.id if target else None,
         'warning': requested_qty > available,
     })
+
+# ---------------------------------------------------------------------------
+# "Booked on": upcoming commitments for a type or one unit
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/equipment/<int:id>/bookings')
+@login_required
+@crew_required
+def equipment_bookings_json(id):
+    from services.gear_bookings import equipment_bookings
+    eq = Equipment.query.get_or_404(id)
+    rows = equipment_bookings(eq)
+    for r in rows:
+        r['start'], r['end'] = r['start'].isoformat(timespec='minutes'), r['end'].isoformat(timespec='minutes')
+    return jsonify({'equipment_id': eq.id, 'name': eq.name, 'bookings': rows})
+
+
+@equipment_bp.route('/equipment/unit/<int:uid>/bookings')
+@login_required
+@crew_required
+def unit_bookings_json(uid):
+    from services.gear_bookings import unit_bookings
+    unit = EquipmentUnit.query.get_or_404(uid)
+    return jsonify({'unit_id': unit.id, 'asset_tag': unit.asset_tag, 'bookings': unit_bookings(unit)})

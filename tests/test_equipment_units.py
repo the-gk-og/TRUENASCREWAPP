@@ -209,7 +209,7 @@ def test_unit_clashes_and_wrong_item(app, admin, alice, mic):
     cable = Equipment(name='XLR cable', barcode='XLR')
     db.session.add(cable)
     db.session.commit()
-    a, b = mk_event('Show A', 3), mk_event('Show B', 4)
+    a, b = mk_event('Show A', 3), mk_event('Show B', 3)       # same day: their times overlap
     la, lb = mk_line(alice, mic, a), mk_line(alice, mic, b)
     lc = mk_line(alice, cable.id, a)
 

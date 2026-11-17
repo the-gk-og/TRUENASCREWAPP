@@ -571,6 +571,10 @@ class PickListItem(db.Model):
     created_at   = db.Column(db.DateTime, default=datetime.utcnow)
     event_id     = db.Column(db.Integer, db.ForeignKey('event.id'))
     equipment_id = db.Column(db.Integer, db.ForeignKey('equipment.id'), nullable=True)
+    # Optional reservation window, when the gear is needed outside the event's own times
+    # (e.g. collected a day early for prep). NULL = the event's window (services/gear_bookings.py).
+    hold_from    = db.Column(db.DateTime, nullable=True)
+    hold_until   = db.Column(db.DateTime, nullable=True)
     equipment    = db.relationship('Equipment', backref='pick_list_items')
     # Specific physical units allocated to this line (only for items that track units)
     unit_links   = db.relationship('PickListUnit', backref='pick_list_item',

@@ -31,6 +31,7 @@
                 <button type="submit" class="btn btn-primary">Add</button>
             </form>
 
+            {% with open_clashes=True %}{% include 'crew/_gear_clashes.html' %}{% endwith %}
             <div class="co-status pl-left" id="plLeft"></div>
             <div class="pl-progress" aria-live="polite">
                 <span><b id="plDone">{{ n_done }}</b> of <span id="plTotal">{{ items|length }}</span> packed</span>
@@ -63,7 +64,8 @@
             <ul class="pl-list" id="plList">
                 {% for item in items %}
                 {% set eq = item.equipment %}
-                <li class="pl-item{{ ' done' if item.is_checked }}" id="pl-row-{{ item.id }}" data-id="{{ item.id }}"
+                {% set clashes = gear.by_line.get(item.id, []) if gear else [] %}
+                <li class="pl-item{{ ' done' if item.is_checked }}{{ ' clash' if clashes }}" id="pl-row-{{ item.id }}" data-id="{{ item.id }}"
                     data-ck="{{ 'true' if item.is_checked else 'false' }}" data-name="{{ item.item_name|lower }}">
                     <input type="checkbox" class="pl-sel" aria-label="Select {{ item.item_name }}" hidden>
                     <button type="button" class="pl-tick" aria-pressed="{{ 'true' if item.is_checked else 'false' }}" aria-label="Packed: {{ item.item_name }}"><i class="fas fa-check"></i></button>
@@ -75,6 +77,15 @@
                         <div class="pl-meta">{{ eq.location or '' }}{% if eq.location and eq.category %} · {% endif %}{{ eq.category or '' }}</div>
                         {% elif not eq %}
                         <div class="pl-meta">Not in the equipment list</div>
+                        {% endif %}
+                        {% if eq and current_event %}
+                        <div class="pl-meta"><button type="button" class="pl-hold" data-hold="{{ item.id }}"
+                            title="Hold this gear for other dates than the event's own (e.g. collect a day early)">
+                            {% if item.hold_from or item.hold_until %}<i class="fas fa-calendar-check"></i> Held {{ item.hold_from.strftime('%a %d %b %H:%M') if item.hold_from else 'from the start' }} → {{ item.hold_until.strftime('%a %d %b %H:%M') if item.hold_until else 'the end' }}
+                            {% else %}<i class="far fa-calendar"></i> Held for the event's dates{% endif %}</button></div>
+                        {% endif %}
+                        {% if clashes %}
+                        <ul class="pl-warn">{% for m in clashes %}<li>{{ m }}</li>{% endfor %}</ul>
                         {% endif %}
                         {% if eq and unit_options.get(eq.id) is not none %}
                         <div class="plu" id="plu-{{ item.id }}" data-item="{{ item.id }}" data-eq="{{ eq.id }}" data-qty="{{ item.quantity or 1 }}"></div>
@@ -128,6 +139,7 @@
     const EVENTS = {{ events_json | tojson }};
     const OPTIONS = {{ unit_options | tojson }};      // equipment_id -> its items (with allocations)
     const ON_LINE = {{ item_units | tojson }};        // pick list line id -> [{id, asset_tag, out}]
+    const HOLDS = {{ holds | tojson }};               // pick list line id -> {from, until} ('' = the event's own)
     const $ = (s, r = document) => r.querySelector(s);
     const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
     const esc = SW.esc;
@@ -309,6 +321,7 @@
         try {
             const r = await SW.api('POST', `/picklist/${box.dataset.item}/units`, { unit_id: unitId, force: !!force });
             ON_LINE[box.dataset.item] = r.units;
+            if (force) SW.reloadSoon();                    // redraw the clash warnings
         } catch (e) {
             if (e.payload && e.payload.can_force && !force && await SW.confirm(`${e.message}. Put it on this line anyway?`, { okText: 'Use it anyway' }))
                 return assign(box, unitId, true);
@@ -327,6 +340,26 @@
         renderUnits(box);
     });
     $$('.plu').forEach(renderUnits);
+
+    /* ---------- hold a line's gear for other dates (prep day, early collection) ---------- */
+    document.addEventListener('click', e => {
+        const b = e.target.closest('[data-hold]'); if (!b) return;
+        const id = b.dataset.hold, h = HOLDS[id] || {};
+        SW.form({
+            title: 'Hold this gear', submitText: 'Save',
+            values: { hold_from: h.from || '', hold_until: h.until || '' },
+            fields: [
+                { name: 'hold_from', label: 'From', type: 'datetime', half: true,
+                  hint: 'Blank = when the event starts' },
+                { name: 'hold_until', label: 'Until', type: 'datetime', half: true,
+                  hint: 'Blank = when the event ends' },
+            ],
+            onSubmit: async v => {
+                await SW.api('POST', `/picklist/${id}/hold`, { hold_from: v.hold_from || '', hold_until: v.hold_until || '' });
+                SW.toast('Saved'); SW.reloadSoon();
+            },
+        });
+    });
 
     /* ---------- live: everyone packing the same list sees ticks as they happen ---------- */
     let fails = 0;
