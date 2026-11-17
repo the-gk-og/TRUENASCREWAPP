@@ -912,3 +912,40 @@ def _remove_deleted_files(session):
 @_sa_event.listens_for(_Session, 'after_rollback')
 def _forget_pending_deletes(session):
     session.info.pop('pending_file_deletes', None)
+
+
+# ---------------------------------------------------------------------------
+# Scan stations (kiosk mode at the store-room door); see routes/scan_station.py
+# ---------------------------------------------------------------------------
+
+class ScanStation(db.Model):
+    """A shared tablet/PC that can only scan gear in and out. It holds a device token
+    (only its hash is stored) and is paired with a one-time code an admin hands out."""
+    __tablename__ = 'scan_station'
+    id                 = db.Column(db.Integer, primary_key=True)
+    name               = db.Column(db.String(100), nullable=False)
+    token_hash         = db.Column(db.String(64), unique=True, nullable=True, index=True)
+    pairing_hash       = db.Column(db.String(64), nullable=True, index=True)
+    pairing_expires_at = db.Column(db.DateTime, nullable=True)
+    idle_seconds       = db.Column(db.Integer, default=90)
+    created_by         = db.Column(db.String(80))
+    created_at         = db.Column(db.DateTime, default=datetime.utcnow)
+    paired_at          = db.Column(db.DateTime, nullable=True)
+    last_seen_at       = db.Column(db.DateTime, nullable=True)
+    revoked_at         = db.Column(db.DateTime, nullable=True)
+
+
+class StationBadge(db.Model):
+    """How a person identifies at a scan station: their badge QR and/or a short PIN."""
+    __tablename__ = 'station_badge'
+    id            = db.Column(db.Integer, primary_key=True)
+    user_id       = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'),
+                              unique=True, nullable=False)
+    badge_code    = db.Column(db.String(64), unique=True, nullable=True, index=True)
+    pin_hash      = db.Column(db.String(200), nullable=True)
+    pin_failures  = db.Column(db.Integer, default=0)
+    locked_until  = db.Column(db.DateTime, nullable=True)
+    updated_at    = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = db.relationship('User', backref=db.backref('station_badge', uselist=False,
+                                                      cascade='all, delete-orphan'))

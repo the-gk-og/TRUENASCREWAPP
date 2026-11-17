@@ -41,6 +41,13 @@
 
 <!-- ==================== SECURITY TAB ==================== -->
 <div class="tab-panel active" id="panel-security">
+    {% if not current_user.is_cast %}
+    <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+        <div><h3 class="card-title"><i class="fas fa-id-badge"></i> Scan badge</h3>
+            <p class="sw-muted" style="margin-top:.25rem">Your QR code and PIN for signing in at the store-room scan station.</p></div>
+        <a class="btn btn-secondary" href="{{ url_for('scan_station.badge_page') }}"><i class="fas fa-qrcode"></i> Show my badge</a>
+    </div>
+    {% endif %}
     <div class="card">
         <div class="card-header">
             <h3 class="card-title"><i class="fas fa-key"></i> Change Password</h3>

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% include 'station/_head.html' %}
+    <title>{{ station.name }} — Scan station</title>
+</head>
+<body class="ks-body">
+<div class="ks" id="ks">
+    <header class="ks-top">
+        <div class="ks-top-name"><i class="fas fa-barcode"></i> <span>{{ station.name }}</span></div>
+        <div class="ks-top-who" id="ksWho" hidden>
+            <span class="ks-top-person"><i class="fas fa-user"></i> <strong id="ksPerson"></strong></span>
+            <span class="ks-top-event" id="ksEventLabel"></span>
+            <button type="button" class="btn btn-secondary ks-btn-sm" id="ksChangeEvent"><i class="fas fa-calendar"></i> Change</button>
+            <button type="button" class="btn btn-primary ks-btn-sm" id="ksDone"><i class="fas fa-right-from-bracket"></i> Done</button>
+        </div>
+        <button type="button" class="ks-icon-btn" id="ksTheme" aria-label="Switch light or dark"><i class="fas fa-circle-half-stroke"></i></button>
+    </header>
+
+    <div class="ks-main">
+        <section class="ks-screens">
+            <!-- 1. Who are you? -->
+            <div class="ks-screen" id="scrWho">
+                <div class="ks-hero">
+                    <i class="fas fa-id-badge"></i>
+                    <h1>Scan your badge to start</h1>
+                    <p>Your badge is in ShowWise under <strong>Settings › Scan badge</strong>.</p>
+                </div>
+                <div class="ks-msg" id="whoMsg" role="alert" hidden></div>
+                <button type="button" class="btn btn-secondary ks-btn" id="ksUsePin"><i class="fas fa-keyboard"></i> Use my name and PIN</button>
+            </div>
+
+            <!-- 1b. Name + PIN -->
+            <div class="ks-screen" id="scrPin" hidden>
+                <div class="ks-row-head">
+                    <button type="button" class="btn btn-secondary ks-btn-sm" id="pinBack"><i class="fas fa-arrow-left"></i> Back</button>
+                    <h2 id="pinTitle">Who are you?</h2>
+                </div>
+                <div class="ks-people" id="pinPeople"></div>
+                <div class="ks-pad-wrap" id="pinPadWrap" hidden>
+                    <div class="ks-dots" id="pinDots" aria-live="polite"></div>
+                    <div class="ks-msg" id="pinMsg" role="alert" hidden></div>
+                    <div class="ks-pad" id="pinPad">
+                        {% for n in [1,2,3,4,5,6,7,8,9] %}<button type="button" data-d="{{ n }}">{{ n }}</button>{% endfor %}
+                        <button type="button" data-d="del" aria-label="Delete"><i class="fas fa-delete-left"></i></button>
+                        <button type="button" data-d="0">0</button>
+                        <button type="button" data-d="ok" class="ok" aria-label="Sign in"><i class="fas fa-check"></i></button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. What is it for? -->
+            <div class="ks-screen" id="scrEvent" hidden>
+                <h2 class="ks-greet" id="evGreet"></h2>
+                <p class="sw-muted">What are you doing?</p>
+                <div class="ks-choices" id="evList"></div>
+            </div>
+
+            <!-- 3. Scan -->
+            <div class="ks-screen" id="scrScan" hidden>
+                <div class="sw-seg ks-what" role="group" aria-label="What a scan does">
+                    <button type="button" data-what="move" aria-pressed="true"><i class="fas fa-right-left"></i> <span id="whatMoveLabel">Check out / in</span></button>
+                    <button type="button" data-what="look" aria-pressed="false"><i class="fas fa-magnifying-glass"></i> Just look it up</button>
+                </div>
+                <div id="ksResult" class="ks-result" aria-live="assertive"></div>
+                <ul class="ks-log" id="ksLog" aria-label="Scanned this session"></ul>
+            </div>
+        </section>
+
+        <aside class="ks-side">
+            <div id="ksCam" class="ks-cam"></div>
+            <div class="sw-cam-row">
+                <span class="sw-cam-status"><span class="sw-dot" id="camDot"></span><span id="camText">Camera off</span></span>
+                <button type="button" class="btn btn-secondary ks-btn-sm" id="camToggle">Start camera</button>
+            </div>
+            <form class="sw-cam-manual" id="ksTypeForm">
+                <input type="text" class="sw-input" id="ksType" placeholder="Or type a code" autocomplete="off" spellcheck="false" enterkeyhint="go" aria-label="Type a code">
+                <button type="submit" class="btn btn-secondary">Go</button>
+            </form>
+            <p class="ks-hint"><i class="fas fa-circle-info"></i> A handheld scanner works too: just scan.</p>
+        </aside>
+    </div>
+
+    <div class="ks-idle" id="ksIdle" hidden>
+        <div class="ks-idle-box">
+            <h2>Still there?</h2>
+            <p>Signing out in <strong id="ksIdleN">15</strong> seconds.</p>
+            <button type="button" class="btn btn-primary ks-btn" id="ksStay">I’m still here</button>
+        </div>
+    </div>
+</div>
+
+<script type="application/json" id="ks-data">{{ {'idle': idle_seconds, 'station': station.name}|tojson }}</script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js" defer></script>
+<script src="{{ asset('js/sw-scanner.js') }}" defer></script>
+<script src="{{ asset('js/station.js') }}" defer></script>
+</body>
+</html>
