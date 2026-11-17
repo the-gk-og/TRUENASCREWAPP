@@ -358,7 +358,7 @@
                 r = await send(true);
             }
             if (!r.ok) { beep('err'); return SW.toast(r.data.error, 'error'); }
-            beep('ok'); showResult('ok', 'Going out', `${quantity} × ${eq.name}`); pause(false); refresh();
+            const warns = (r.data.warnings || []).map(w => w.message); beep(warns.length ? 'warn' : 'ok'); showResult('ok', 'Going out', `${quantity} × ${eq.name}`, warns); pause(false); refresh();
         });
     }
 

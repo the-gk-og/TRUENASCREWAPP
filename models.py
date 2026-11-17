@@ -1131,3 +1131,7 @@ class CaseItem(db.Model):
             'missing_by':     self.missing_by or '',
             'missing_event':  self.missing_event.title if self.missing_event else '',
         }
+
+
+# Training sign-off tables (kept in their own module; see models_training.py)
+from models_training import *  # noqa: E402,F401,F403

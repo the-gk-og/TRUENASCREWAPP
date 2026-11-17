@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}{% if is_me %}My training{% else %}Training · {{ person.shown_name }}{% endif %} - ShowWise{% endblock %}
+
+{% block content %}
+{% include "crew/_training_style.html" %}
+{% set labels = {'valid': 'Signed off', 'expiring': 'Expiring soon', 'expired': 'Expired', 'none': 'Not signed off'} %}
+<div class="sw-head">
+    <div>
+        {% if not is_me %}<a class="sw-crumb" href="{{ url_for('training.matrix') }}"><i class="fas fa-arrow-left"></i> Training matrix</a>{% endif %}
+        <h1>{% if is_me %}My training{% else %}{{ person.shown_name }}{% endif %}</h1>
+        <p>{% if is_me %}The skills you are signed off on, and when they need renewing.{% else %}Skills and sign-offs for {{ person.shown_name }}.{% endif %}</p>
+    </div>
+    <div class="sw-head-actions">
+        {% if assessor %}<a class="btn btn-secondary" href="{{ url_for('training.matrix') }}"><i class="fas fa-table-cells"></i> Training matrix</a>{% endif %}
+        {% if current_user.is_admin %}<a class="btn btn-secondary" href="{{ url_for('training.manage') }}"><i class="fas fa-sliders"></i> Manage skills</a>{% endif %}
+    </div>
+</div>
+
+{% if expiring %}
+<section class="card">
+    <div class="sw-section-head"><h2>Needs renewing</h2></div>
+    <div class="tr-list">
+    {% for e in expiring %}
+        <div class="tr-row tr-alert {{ e.state }}">
+            <div class="grow"><div class="name">{{ e.signoff.skill.name }}</div>
+                <div class="meta">{% if e.days < 0 %}Expired {{ -e.days }} day{{ '' if e.days == -1 else 's' }} ago{% elif e.days == 0 %}Expires today{% else %}Expires in {{ e.days }} day{{ '' if e.days == 1 else 's' }}{% endif %} ({{ e.signoff.expires_at.strftime('%d %b %Y') }})</div></div>
+            <span class="tr-state {{ e.state }}">{{ labels[e.state] }}</span>
+        </div>
+    {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+<section class="card">
+    <div class="sw-section-head"><h2>Skills</h2></div>
+    {% if rows %}
+    <div class="tr-list">
+    {% for r in rows %}
+        <div class="tr-row" data-skill="{{ r.skill.id }}">
+            <div class="grow">
+                <div class="name">{{ r.skill.name }}</div>
+                <div class="meta">
+                    {% if r.signoff %}
+                        Signed off {{ r.signoff.signed_at.strftime('%d %b %Y') }} by {{ name_for(r.signoff.signed_by) or 'unknown' }}{% if r.signoff.expires_at %} · {{ 'expired' if r.state == 'expired' else 'valid until' }} {{ r.signoff.expires_at.strftime('%d %b %Y') }}{% else %} · does not expire{% endif %}
+                        {% if r.signoff.note %}<br>{{ r.signoff.note }}{% endif %}
+                    {% else %}
+                        {{ r.skill.description or 'Not signed off yet.' }}
+                    {% endif %}
+                </div>
+            </div>
+            <span class="tr-state {{ r.state }}">{{ labels[r.state] }}</span>
+            {% if r.skill.id in signable %}
+                <button class="btn btn-sm btn-primary" data-act="signoff" data-skill="{{ r.skill.id }}" data-name="{{ r.skill.name }}" data-months="{{ r.skill.validity_months or '' }}">
+                    {{ 'Renew' if r.signoff else 'Sign off' }}</button>
+                {% if r.signoff %}<button class="btn btn-sm btn-ghost" data-act="revoke" data-id="{{ r.signoff.id }}" data-name="{{ r.skill.name }}">Revoke</button>{% endif %}
+            {% endif %}
+        </div>
+    {% endfor %}
+    </div>
+    {% else %}
+    <div class="tr-empty">No skills have been set up yet.{% if current_user.is_admin %} <a href="{{ url_for('training.manage') }}">Add some</a>.{% endif %}</div>
+    {% endif %}
+</section>
+
+{% if history %}
+<section class="card">
+    <details>
+        <summary class="sw-section-head" style="cursor:pointer"><h2>Sign-off history <span class="count">({{ history|length }})</span></h2></summary>
+        <div style="overflow-x:auto">
+        <table class="tr-table">
+            <thead><tr><th>Skill</th><th>Signed off</th><th>By</th><th>Expires</th><th>Note</th></tr></thead>
+            <tbody>
+            {% for h in history %}
+                <tr><td>{{ h.skill.name }}</td><td>{{ h.signed_at.strftime('%d %b %Y') }}</td><td>{{ name_for(h.signed_by) }}</td>
+                    <td>{{ h.expires_at.strftime('%d %b %Y') if h.expires_at else 'Never' }}</td>
+                    <td>{% if h.revoked_at %}<strong>Revoked</strong> {{ h.revoked_at.strftime('%d %b %Y') }} by {{ name_for(h.revoked_by) }}. {% endif %}{{ h.note or '' }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </details>
+</section>
+{% endif %}
+
+<script>
+document.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-act]');
+    if (!b) return;
+    if (b.dataset.act === 'signoff') {
+        if (await SW.trainingSignoff({ user_id: {{ person.id }}, user_name: {{ person.shown_name|tojson }},
+                                       skill_id: Number(b.dataset.skill), skill_name: b.dataset.name, months: b.dataset.months }))
+            SW.reloadSoon();
+    } else if (b.dataset.act === 'revoke') {
+        const r = await SW.form({ title: `Revoke ${b.dataset.name}`, submitText: 'Revoke', fields: [
+            { type: 'info', text: 'They will no longer count as signed off on this skill. The record is kept in the history.' },
+            { name: 'reason', label: 'Reason', type: 'textarea', rows: 2 }],
+            onSubmit: (v) => SW.api('POST', `/api/training/signoffs/${b.dataset.id}/revoke`, v) });
+        if (r) { SW.toast('Sign-off revoked'); SW.reloadSoon(); }
+    }
+});
+</script>
+{% include "crew/_training_signoff_js.html" %}
+{% endblock %}

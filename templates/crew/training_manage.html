@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Manage skills - ShowWise{% endblock %}
+
+{% block content %}
+{% include "crew/_training_style.html" %}
+<style>
+    .trs-pick { max-height: 11rem; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); padding: .35rem .5rem; display: grid; gap: .15rem; }
+    .trs-pick label { display: flex; align-items: center; gap: .45rem; font-weight: 400; color: var(--text-primary); min-height: 30px; }
+    .trs-chips { display: flex; gap: .3rem; flex-wrap: wrap; margin-top: .3rem; }
+    .trs-chip { padding: .05rem .5rem; border-radius: 999px; background: var(--bg-nav-hover); font-size: .78rem; color: var(--text-secondary); }
+    .tr-row.archived { opacity: .6; }
+</style>
+<div class="sw-head">
+    <div>
+        <a class="sw-crumb" href="{{ url_for('training.matrix') }}"><i class="fas fa-arrow-left"></i> Training matrix</a>
+        <h1>Manage skills</h1>
+        <p>Skills and qualifications people can be signed off on, who may sign them off, and which shift roles and gear need them.</p>
+    </div>
+    <div class="sw-head-actions"><button class="btn btn-primary" data-act="new"><i class="fas fa-plus"></i> Add skill</button></div>
+</div>
+
+<section class="card">
+    {% if skills %}
+    <div class="tr-list">
+    {% for s in skills %}
+        <div class="tr-row {{ '' if s.is_active else 'archived' }}">
+            <div class="grow">
+                <div class="name">{{ s.name }}{% if not s.is_active %} <span class="trs-chip">Archived</span>{% endif %}</div>
+                <div class="meta">{{ ('Valid for ' ~ s.validity_months ~ ' months') if s.validity_months else 'Does not expire' }}{% if s.description %} · {{ s.description }}{% endif %}</div>
+                <div class="trs-chips">
+                    {% for r in s.role_requirements %}<span class="trs-chip" title="Shift role that needs it"><i class="fas fa-user-tag"></i> {{ r.role }}</span>{% endfor %}
+                    {% for r in s.equipment_requirements %}<span class="trs-chip" title="Equipment that needs it"><i class="fas fa-box"></i> {{ r.equipment.name if r.equipment else '?' }}</span>{% endfor %}
+                    {% for a in s.assessors %}<span class="trs-chip" title="Can sign people off"><i class="fas fa-signature"></i> {{ a.user.shown_name if a.user else '?' }}</span>{% endfor %}
+                </div>
+            </div>
+            <button class="btn btn-sm btn-secondary" data-act="edit" data-id="{{ s.id }}">Edit</button>
+            {% if s.is_active %}<button class="btn btn-sm btn-ghost" data-act="archive" data-id="{{ s.id }}" data-name="{{ s.name }}">Archive</button>
+            {% else %}<button class="btn btn-sm btn-ghost" data-act="restore" data-id="{{ s.id }}">Restore</button>{% endif %}
+        </div>
+    {% endfor %}
+    </div>
+    {% else %}
+    <div class="tr-empty">No skills yet. Add one such as "Fly system", "Working at height" or "Pyro".</div>
+    {% endif %}
+</section>
+
+<script>
+const SKILLS = {{ skills_json|tojson }};
+const PEOPLE = {{ people|tojson }};
+const GEAR = {{ equipment|tojson }};
+
+function pickList(name, items, chosen) {
+    const set = new Set(chosen || []);
+    return `<div class="trs-pick" data-pick="${name}">${items.length ? items.map((i) =>
+        `<label><input type="checkbox" value="${i.id}" ${set.has(i.id) ? 'checked' : ''}> ${SW.esc(i.name)}</label>`).join('')
+        : '<span style="color:var(--text-muted)">None yet</span>'}</div>`;
+}
+
+function skillDialog(skill) {
+    const s = skill || { name: '', description: '', validity_months: null, assessor_ids: [], roles: [], equipment_ids: [] };
+    return new Promise((resolve) => {
+        let result = null;
+        const d = SW.dialog({ title: skill ? `Edit ${s.name}` : 'Add skill', wide: true, onClose: () => resolve(result) });
+        const form = document.createElement('form');
+        form.className = 'sw-form';
+        form.innerHTML = `
+            <div class="sw-field"><label for="sk-name">Name <span class="req">*</span></label>
+                <input id="sk-name" name="name" required maxlength="100" value="${SW.esc(s.name)}" placeholder="e.g. Fly system"></div>
+            <div class="sw-field"><label for="sk-desc">Description</label>
+                <textarea id="sk-desc" name="description" rows="2">${SW.esc(s.description)}</textarea></div>
+            <div class="sw-field"><label for="sk-months">Sign-off valid for (months)</label>
+                <input id="sk-months" name="validity_months" type="number" min="1" max="240" value="${s.validity_months || ''}" placeholder="Blank: never expires"></div>
+            <div class="sw-field"><label for="sk-roles">Shift roles that need it</label>
+                <input id="sk-roles" name="roles" value="${SW.esc(s.roles.join(', '))}" placeholder="e.g. Flys, Rigger (comma separated)">
+                <div class="sw-hint">Anyone put on a shift with one of these roles must be signed off. Admins can override with a reason.</div></div>
+            <div class="sw-field"><label>Who can sign people off (admins always can)</label>${pickList('assessor_ids', PEOPLE, s.assessor_ids)}</div>
+            <div class="sw-field"><label>Equipment that needs it</label>${pickList('equipment_ids', GEAR, s.equipment_ids)}
+                <div class="sw-hint">Checking out one of these warns if the person scanning isn't signed off.</div></div>
+            <div class="sw-error" role="alert" hidden></div>
+            <div class="sw-actions"><button type="button" class="btn btn-secondary" data-cancel>Cancel</button>
+                <button type="submit" class="btn btn-primary">${skill ? 'Save' : 'Add skill'}</button></div>`;
+        d.body.appendChild(form);
+        form.querySelector('[data-cancel]').onclick = () => d.close();
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const picked = (n) => [...form.querySelectorAll(`[data-pick=${n}] input:checked`)].map((c) => Number(c.value));
+            const payload = {
+                name: form.name.value, description: form.description.value,
+                validity_months: form.validity_months.value || null,
+                roles: form.roles.value.split(',').map((r) => r.trim()).filter(Boolean),
+                assessor_ids: picked('assessor_ids'), equipment_ids: picked('equipment_ids'),
+            };
+            const err = form.querySelector('.sw-error');
+            try {
+                result = await (skill ? SW.api('PUT', `/api/training/skills/${skill.id}`, payload)
+                                      : SW.api('POST', '/api/training/skills', payload));
+                d.close();
+            } catch (ex) { err.textContent = ex.message; err.hidden = false; }
+        });
+        setTimeout(() => form.name.focus(), 30);
+    });
+}
+
+document.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-act]');
+    if (!b) return;
+    const id = Number(b.dataset.id);
+    if (b.dataset.act === 'new' || b.dataset.act === 'edit') {
+        if (await skillDialog(SKILLS.find((s) => s.id === id))) { SW.toast('Saved'); SW.reloadSoon(); }
+    } else if (b.dataset.act === 'archive') {
+        if (!await SW.confirm(`Archive ${b.dataset.name}? It stops being required for shifts and gear and leaves the matrix. Sign-off history is kept.`,
+                              { title: 'Archive skill', okText: 'Archive', danger: true })) return;
+        if (await SW.run(() => SW.api('DELETE', `/api/training/skills/${id}`))) SW.reloadSoon();
+    } else if (b.dataset.act === 'restore') {
+        if (await SW.run(() => SW.api('PUT', `/api/training/skills/${id}`, { is_active: true }))) SW.reloadSoon();
+    }
+});
+</script>
+{% endblock %}

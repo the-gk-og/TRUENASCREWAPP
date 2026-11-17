@@ -1,0 +1,22 @@
+<style>
+    /* Training sign-offs: shared bits. Theme variables keep dark mode and colour-vision modes working. */
+    .tr-state { display: inline-flex; align-items: center; gap: .3rem; padding: .1rem .55rem; border-radius: 999px;
+                font-size: .78rem; font-weight: 600; white-space: nowrap; border: 1px solid currentColor; }
+    .tr-state.valid    { color: var(--success); }
+    .tr-state.expiring { color: var(--warning); }
+    .tr-state.expired  { color: var(--danger); }
+    .tr-state.none     { color: var(--text-muted); border-style: dashed; }
+    .tr-list { display: grid; gap: .5rem; }
+    .tr-row { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; padding: .65rem .8rem;
+              border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); }
+    .tr-row .grow { flex: 1; min-width: 12rem; }
+    .tr-row .name { font-weight: 600; color: var(--text-primary); }
+    .tr-row .meta { font-size: .84rem; color: var(--text-secondary); }
+    .tr-alert { border-left: 4px solid var(--warning); }
+    .tr-alert.expired { border-left-color: var(--danger); }
+    .tr-empty { padding: .9rem 1rem; border: 1px dashed var(--border); border-radius: var(--radius);
+                color: var(--text-muted); font-size: .9rem; text-align: center; }
+    .tr-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+    .tr-table th, .tr-table td { padding: .45rem .55rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; color: var(--text-primary); }
+    .tr-table th { font-weight: 600; color: var(--text-secondary); }
+</style>

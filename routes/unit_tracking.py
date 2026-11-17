@@ -16,6 +16,7 @@ from flask import (Blueprint, render_template, request, jsonify, abort, send_fro
 from flask_login import login_required, current_user
 
 from extensions import db
+from services.training_service import equipment_skill_warnings
 from models import (Equipment, EquipmentUnit, Event, PickListItem, PickListUnit,
                     UnitCheckout, UnitMaintenance, UnitQuarantine, BulkCheckout,
                     FaultReport, FaultPhoto, FAULT_CATEGORIES, FAULT_SEVERITIES, User,
@@ -350,7 +351,7 @@ def checkout_scan():
                  'message': f'{unit.asset_tag} is reserved for {other.title}, which overlaps {event.title}'}
                 for other in unit_reserved_elsewhere(unit, event)]
     warnings, info = _picklist_check(unit, event)
-    warnings = blockers + reserved + warnings         # overridden blockers stay visible in the result
+    warnings = blockers + reserved + warnings + equipment_skill_warnings(current_user, unit.equipment)       # overridden blockers stay visible in the result
     if unit.case_link:
         warnings.append({'code': 'in_case', 'message': f'{unit.asset_tag} is packed in case '
                                                        f'{unit.case_link.case.asset_tag}. Scan the case to take it all'})
@@ -479,6 +480,7 @@ def bulk_checkout():
     db.session.add(b)
     db.session.commit()
     return jsonify({'success': True, 'action': 'out', 'checkout': b.to_dict(),
+                    'warnings': equipment_skill_warnings(current_user, eq),
                     'message': f'{qty} × {eq.name} checked out to {event.title}'})
 
 
