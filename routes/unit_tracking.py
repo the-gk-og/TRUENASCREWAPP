@@ -15,6 +15,7 @@ from flask import Blueprint, render_template, request, jsonify, abort, send_from
 from flask_login import login_required, current_user
 
 from extensions import db
+from services.training_service import equipment_skill_warnings
 from models import (Equipment, EquipmentUnit, Event, PickListItem, PickListUnit,
                     UnitCheckout, UnitMaintenance, UnitQuarantine, BulkCheckout,
                     UNIT_STATUSES, UNIT_STATUS_LABELS, QUARANTINE_OUTCOMES,
@@ -339,7 +340,7 @@ def checkout_scan():
     if co:
         _close(co, note=f'Moved to {event.title} by {current_user.username}')
     warnings, info = _picklist_check(unit, event)
-    warnings = blockers + warnings          # overridden blockers stay visible in the result
+    warnings = blockers + warnings + equipment_skill_warnings(current_user, unit.equipment)
     new = UnitCheckout(unit_id=unit.id, event_id=event.id, checked_out_by=current_user.username,
                        checked_out_at=_now(),
                        notes=('Checked out despite: ' + '; '.join(b['message'] for b in blockers))
@@ -465,6 +466,7 @@ def bulk_checkout():
     db.session.add(b)
     db.session.commit()
     return jsonify({'success': True, 'action': 'out', 'checkout': b.to_dict(),
+                    'warnings': equipment_skill_warnings(current_user, eq),
                     'message': f'{qty} × {eq.name} checked out to {event.title}'})
 
 

@@ -912,3 +912,7 @@ def _remove_deleted_files(session):
 @_sa_event.listens_for(_Session, 'after_rollback')
 def _forget_pending_deletes(session):
     session.info.pop('pending_file_deletes', None)
+
+
+# Training sign-off tables (kept in their own module; see models_training.py)
+from models_training import *  # noqa: E402,F401,F403

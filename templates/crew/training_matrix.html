@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Training matrix - ShowWise{% endblock %}
+
+{% block content %}
+{% include "crew/_training_style.html" %}
+<style>
+    .trm-wrap { overflow: auto; max-height: 70vh; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); }
+    .trm { border-collapse: separate; border-spacing: 0; font-size: .85rem; }
+    .trm th, .trm td { border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); padding: 0; color: var(--text-primary); }
+    .trm thead th { position: sticky; top: 0; z-index: 2; background: var(--bg-card); padding: .5rem .45rem; font-weight: 600;
+                    min-width: 6.5rem; max-width: 9rem; text-align: center; vertical-align: bottom; }
+    .trm tbody th { position: sticky; left: 0; z-index: 1; background: var(--bg-card); text-align: left; padding: .4rem .6rem;
+                    font-weight: 600; white-space: nowrap; }
+    .trm tbody th a { color: var(--text-primary); text-decoration: none; }
+    .trm tbody th a:hover { color: var(--primary); }
+    .trm thead th:first-child { left: 0; z-index: 3; text-align: left; }
+    .trm-cell { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 40px; padding: .25rem;
+                border: 0; background: transparent; font: inherit; color: inherit; cursor: default; }
+    button.trm-cell { cursor: pointer; }
+    button.trm-cell:hover, button.trm-cell:focus-visible { background: var(--bg-nav-hover); }
+    .trm-cell .tr-state { font-size: .72rem; }
+    .trm-key { display: flex; gap: .5rem; flex-wrap: wrap; margin: 0 0 .75rem; }
+    .trm-filter { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .75rem; }
+    .trm-filter input { min-height: 36px; padding: .35rem .6rem; border: 1px solid var(--border); border-radius: var(--radius);
+                        background: var(--bg-input, var(--bg-card)); color: var(--text-primary); min-width: 14rem; }
+</style>
+{% set labels = {'valid': 'Signed off', 'expiring': 'Expiring', 'expired': 'Expired', 'none': '—'} %}
+<div class="sw-head">
+    <div>
+        <a class="sw-crumb" href="{{ url_for('training.my_training') }}"><i class="fas fa-arrow-left"></i> My training</a>
+        <h1>Training matrix</h1>
+        <p>Who is signed off on what. {% if signable %}Click a cell to sign someone off.{% endif %}</p>
+    </div>
+    {% if current_user.is_admin %}
+    <div class="sw-head-actions"><a class="btn btn-secondary" href="{{ url_for('training.manage') }}"><i class="fas fa-sliders"></i> Manage skills</a></div>
+    {% endif %}
+</div>
+
+{% if expiring %}
+<section class="card">
+    <div class="sw-section-head"><h2>Expiring soon <span class="count">({{ expiring|length }})</span></h2></div>
+    <div class="tr-list">
+    {% for e in expiring %}
+        <div class="tr-row tr-alert {{ e.state }}">
+            <div class="grow"><div class="name"><a href="{{ url_for('training.person_training', user_id=e.signoff.user_id) }}">{{ e.signoff.user.shown_name }}</a> · {{ e.signoff.skill.name }}</div>
+                <div class="meta">{% if e.days < 0 %}Expired {{ -e.days }} day{{ '' if e.days == -1 else 's' }} ago{% elif e.days == 0 %}Expires today{% else %}Expires in {{ e.days }} day{{ '' if e.days == 1 else 's' }}{% endif %} ({{ e.signoff.expires_at.strftime('%d %b %Y') }})</div></div>
+            <span class="tr-state {{ e.state }}">{{ 'Expired' if e.state == 'expired' else 'Expiring soon' }}</span>
+            {% if e.signoff.skill_id in signable and e.signoff.user_id != current_user.id %}
+            <button class="btn btn-sm btn-primary" data-sign data-user="{{ e.signoff.user_id }}" data-user-name="{{ e.signoff.user.shown_name }}"
+                    data-skill="{{ e.signoff.skill_id }}" data-name="{{ e.signoff.skill.name }}" data-months="{{ e.signoff.skill.validity_months or '' }}">Renew</button>
+            {% endif %}
+        </div>
+    {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+<section class="card">
+    {% if skills and people %}
+    <div class="trm-filter"><input type="search" id="trm-q" placeholder="Filter people…" aria-label="Filter people"></div>
+    <div class="trm-key" aria-hidden="true">
+        <span class="tr-state valid">Signed off</span><span class="tr-state expiring">Expiring in 30 days</span>
+        <span class="tr-state expired">Expired</span><span class="tr-state none">Not signed off</span>
+    </div>
+    <div class="trm-wrap">
+        <table class="trm">
+            <thead><tr><th scope="col">Person</th>{% for s in skills %}<th scope="col" title="{{ s.description or '' }}">{{ s.name }}{% if s.validity_months %}<br><small style="font-weight:400;color:var(--text-muted)">{{ s.validity_months }} mo</small>{% endif %}</th>{% endfor %}</tr></thead>
+            <tbody>
+            {% for p in people %}
+                <tr data-name="{{ p.shown_name|lower }}">
+                    <th scope="row"><a href="{{ url_for('training.person_training', user_id=p.id) }}">{{ p.shown_name }}</a></th>
+                    {% for s in skills %}{% set c = grid[(p.id, s.id)] %}
+                    <td>
+                        {% set tip = s.name ~ ': ' ~ (('signed off ' ~ c.signoff.signed_at.strftime('%d %b %Y') ~ ((', expires ' ~ c.signoff.expires_at.strftime('%d %b %Y')) if c.signoff.expires_at else '')) if c.signoff else 'not signed off') %}
+                        {% if s.id in signable and p.id != current_user.id %}
+                        <button class="trm-cell" data-sign data-user="{{ p.id }}" data-user-name="{{ p.shown_name }}" data-skill="{{ s.id }}" data-name="{{ s.name }}"
+                                data-months="{{ s.validity_months or '' }}" title="{{ tip }}" aria-label="{{ p.shown_name }}, {{ tip }}">
+                            <span class="tr-state {{ c.state }}">{{ labels[c.state] }}</span></button>
+                        {% else %}
+                        <span class="trm-cell" title="{{ tip }}"><span class="tr-state {{ c.state }}">{{ labels[c.state] }}</span></span>
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="tr-empty">No skills have been set up yet.{% if current_user.is_admin %} <a href="{{ url_for('training.manage') }}">Add some</a>.{% endif %}</div>
+    {% endif %}
+</section>
+
+{% if overrides %}
+<section class="card">
+    <details>
+        <summary class="sw-section-head" style="cursor:pointer"><h2>Recent sign-off overrides <span class="count">({{ overrides|length }})</span></h2></summary>
+        <div style="overflow-x:auto">
+        <table class="tr-table">
+            <thead><tr><th>When</th><th>Person</th><th>Missing</th><th>Reason</th><th>By</th></tr></thead>
+            <tbody>
+            {% for o in overrides %}
+            <tr><td>{{ o.created_at.strftime('%d %b %Y %H:%M') }}</td><td>{{ o.user.shown_name if o.user else '?' }}</td>
+                <td>{{ o.skill_names }}</td><td>{{ o.reason }}</td><td>{{ name_for(o.overridden_by) }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </details>
+</section>
+{% endif %}
+
+{% include "crew/_training_signoff_js.html" %}
+<script>
+document.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-sign]');
+    if (!b) return;
+    const ok = await SW.trainingSignoff({ user_id: Number(b.dataset.user), user_name: b.dataset.userName,
+        skill_id: Number(b.dataset.skill), skill_name: b.dataset.name, months: b.dataset.months });
+    if (ok) { SW.toast('Signed off'); SW.reloadSoon(); }
+});
+const q = document.getElementById('trm-q');
+if (q) q.addEventListener('input', () => {
+    const v = q.value.trim().toLowerCase();
+    document.querySelectorAll('.trm tbody tr').forEach((r) => { r.hidden = !!v && !r.dataset.name.includes(v); });
+});
+</script>
+{% endblock %}

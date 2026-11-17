@@ -414,6 +414,8 @@
             </div>
         </section>
 
+        {% include "crew/_training_reminders.html" %}
+
         {# Gear problems are for admins to sort out; crew don't need them on their dashboard #}
         {% if current_user.is_admin and (maint_alerts or gear_out_late) %}
         <section>

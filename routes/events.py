@@ -67,6 +67,10 @@ def _handle_api_error(err):
     return jsonify({'error': err.message, **err.extra}), err.status
 
 
+from services.training_service import (skill_gate, record_override, parse_skill_ids,  # noqa: E402
+                                       set_shift_requirements, required_skills, missing_skills)
+
+
 def is_manager(user=None) -> bool:
     user = user or current_user
     return bool(user.is_authenticated and user.is_admin)
@@ -692,6 +696,8 @@ def add_team_shift(event_id):
     if status not in ('pending', 'accepted', 'confirmed'):
         raise ApiError('Invalid status')
 
+    req_ids = parse_skill_ids(data.get('required_skill_ids'))
+    override = skill_gate(user, data, role=role, extra_ids=req_ids, on=start)
     conflicts = find_conflicts(user.id, start, end)
     if conflicts and not data.get('force'):
         raise ApiError(f'{user.shown_name} has a clash', 409, conflicts=conflicts)
@@ -708,9 +714,13 @@ def add_team_shift(event_id):
                       positions_needed=1, is_open=False, created_by=current_user.username)
         db.session.add(shift)
         db.session.flush()
+        if req_ids:
+            set_shift_requirements(shift, req_ids)
         assignment = ShiftAssignment(shift_id=shift.id, user_id=user.id, status=status,
                                      assigned_by=current_user.username, notes=notes)
         db.session.add(assignment)
+        db.session.flush()
+        record_override(override, assignment, event.id)
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
@@ -737,6 +747,8 @@ def add_all_crew(event_id):
              .filter(or_(User.is_cast.is_(False), User.is_cast.is_(None))).all())
     for user in users:
         if user.username in on_team:
+            continue
+        if missing_skills(user, required_skills('Crew Member'), event.event_date):
             continue
         db.session.add(CrewAssignment(event_id=event.id, crew_member=user.username,
                                       role='Crew Member', assigned_via='webapp'))
@@ -785,6 +797,9 @@ def bulk_add_team_shifts(event_id):
     if status not in ('pending', 'accepted', 'confirmed'):
         raise ApiError('Invalid status')
     force = bool(data.get('force'))
+    req_ids = parse_skill_ids(data.get('required_skill_ids'))
+    needed = required_skills(role, extra_ids=req_ids)
+    override_reason = str(data.get('skill_override_reason') or '').strip()[:500]
 
     users = {u.id: u for u in User.query.filter(User.id.in_(ids)).all()}
     added, skipped, emails = 0, [], []
@@ -794,6 +809,12 @@ def bulk_add_team_shifts(event_id):
             if not user or user.user_role not in ('crew', 'staff') or (user.is_cast and not user.is_admin):
                 skipped.append({'user_id': uid, 'name': user.shown_name if user else '?',
                                 'reason': 'Cannot be added to events', 'clash': False})
+                continue
+            missing = missing_skills(user, needed, start) if needed else []
+            if missing and not override_reason:
+                skipped.append({'user_id': user.id, 'name': user.shown_name, 'clash': False,
+                                'skill': True, 'missing': missing,
+                                'reason': 'Not signed off: ' + ', '.join(m['name'] for m in missing)})
                 continue
             conflicts = find_conflicts(user.id, start, end)
             if conflicts and not force:
@@ -813,8 +834,15 @@ def bulk_add_team_shifts(event_id):
                           positions_needed=1, is_open=False, created_by=current_user.username)
             db.session.add(shift)
             db.session.flush()
-            db.session.add(ShiftAssignment(shift_id=shift.id, user_id=user.id, status=status,
-                                           assigned_by=current_user.username, notes=notes))
+            if req_ids:
+                set_shift_requirements(shift, req_ids)
+            new_a = ShiftAssignment(shift_id=shift.id, user_id=user.id, status=status,
+                                    assigned_by=current_user.username, notes=notes)
+            db.session.add(new_a)
+            if missing:
+                db.session.flush()
+                record_override({'user_id': user.id, 'reason': override_reason,
+                                 'skill_names': ', '.join(m['name'] for m in missing)}, new_a, event.id)
             added += 1
             if user.email and user.id != current_user.id:
                 emails.append(_shift_email_job(user, event, shift, notes))
@@ -843,6 +871,9 @@ def edit_team_shift(aid):
     if status not in ('pending', 'accepted', 'confirmed', 'rejected'):
         raise ApiError('Invalid status')
 
+    override = None
+    if status != 'rejected' and (role or '').lower() != (shift.role or '').lower():
+        override = skill_gate(a.user, data, role=role, shift=None, on=start)
     conflicts = [] if status == 'rejected' else \
         find_conflicts(a.user_id, start, end, exclude_assignment_id=a.id)
     if conflicts and not data.get('force'):
@@ -864,6 +895,7 @@ def edit_team_shift(aid):
         ca = CrewAssignment.query.filter_by(event_id=event.id, crew_member=a.user.username).first()
         if ca and role:
             ca.role = role
+        record_override(override, a, event.id)
         db.session.commit()
     except Exception as exc:
         db.session.rollback()

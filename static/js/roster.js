@@ -125,17 +125,10 @@
     return (on || evs.find((e) => e.start.slice(0, 10) >= day) || evs[evs.length - 1] || {}).id || '';
   }
 
-  /** run `fn(force)`; if the server reports a clash, ask before forcing it through. */
+  /** run `fn(extra)`; on a clash or a missing sign-off, ask before resending with
+   *  extra = { force, skill_override_reason }. */
   async function withClashCheck(fn) {
-    try { return await fn(false); } catch (err) {
-      if (err.status === 409 && err.payload && err.payload.conflicts) {
-        const list = err.payload.conflicts.map((c) => '• ' + c.title).join('\n');
-        const ok = await SW.confirm(`${err.message}:\n\n${list}\n\nSave anyway?`, { title: 'Scheduling clash', okText: 'Save anyway', danger: true });
-        if (!ok) throw SW.CANCEL;
-        return fn(true);
-      }
-      throw err;
-    }
+    return SW.shiftChecks(fn);
   }
 
   // ---------------------------------------------------------------- create / edit dialog
@@ -188,8 +181,8 @@
         if (v.end <= v.start) throw new Error('The shift must end after it starts');
         const body = { event_id: Number(v.event_id), user_id: v.user_id ? Number(v.user_id) : null, role: v.role,
                        start: v.start, end: v.end, status: v.status || 'pending', notes: v.notes || '' };
-        return withClashCheck((force) => {
-          const b = { ...body, force };
+        return withClashCheck((extra) => {
+          const b = { ...body, ...extra };
           if (!edit) return SW.api('POST', '/api/roster/shift', b);
           return assigned ? SW.api('PUT', `/api/roster/assignment/${item.assignment_id}`, b)
                           : SW.api('PUT', `/api/roster/open/${item.shift_id}`, b);
@@ -220,7 +213,7 @@
     const uid = cell.dataset.user === 'open' ? null : Number(cell.dataset.user);
     if (item.user_id === uid && item.start.slice(0, 10) === cell.dataset.date) return;
     try {
-      await withClashCheck((force) => SW.api('POST', '/api/roster/drop', { key, user_id: uid, date: cell.dataset.date, force }));
+      await withClashCheck((extra) => SW.api('POST', '/api/roster/drop', { key, user_id: uid, date: cell.dataset.date, ...extra }));
       SW.toast('Shift moved');
     } catch (err) { if (err !== SW.CANCEL) SW.toast(err.message, 'error'); }
     load();
