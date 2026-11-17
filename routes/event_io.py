@@ -1,7 +1,7 @@
 """
 routes/event_io.py
 ==================
-Import / export for an event's schedule and run list, plus PDF / photo uploads.
+Import / export for an event's schedule and running order, plus PDF / photo uploads.
 
 Spreadsheets (CSV or Excel .xlsx)
 ---------------------------------
@@ -14,12 +14,12 @@ Spreadsheets (CSV or Excel .xlsx)
 
 PDF / photo attachments
 -----------------------
-* Attached to the schedule or the run list and shown as a gallery on the event.
+* Attached to the schedule or the running order and shown as a gallery on the event.
 * Photos are checked, auto-rotated, shrunk and given a thumbnail; PDFs are
   checked and stored as-is.  Files get random names on disk.
 
 Who can do what: any crew member can download templates, export and view
-files.  Admins (the same people who can edit the schedule and run list) import,
+files.  Admins (the same people who can edit the schedule and running order) import,
 upload and delete.
 """
 
@@ -53,7 +53,8 @@ MAX_PIXELS = 60_000_000
 MAX_SIDE = 2400
 THUMB_SIDE = 400
 MAX_PROBLEMS_SHOWN = 25
-CUES = ['Lighting', 'Sound', 'Video', 'Stage', 'Fly', 'Pyro', 'Spot', 'Other']
+TYPES = ['Band', 'Act', 'Song', 'Changeover', 'Interval', 'Speech', 'Other']
+SONG_TYPES = {'song', 'track', 'number', 'tune'}     # a row of this type goes in the set of the act above it
 
 # key, header shown to the user, column width
 KINDS = {
@@ -63,8 +64,8 @@ KINDS = {
         'required': ('time', 'title'),
     },
     'run': {
-        'label': 'Run list', 'sheet': 'Run list', 'slug': 'run-list',
-        'columns': [('title', 'Title', 36), ('duration', 'Duration', 14), ('cue_type', 'Cue type', 16),
+        'label': 'Running order', 'sheet': 'Running order', 'slug': 'running-order',
+        'columns': [('title', 'Title', 36), ('duration', 'Length', 14), ('kind', 'Type', 16),
                     ('description', 'Description', 50), ('notes', 'Notes', 40)],
         'required': ('title',),
     },
@@ -79,9 +80,9 @@ ALIASES = {
         'description': {'description', 'details', 'detail', 'desc', 'notes', 'note'},
     },
     'run': {
-        'title': {'title', 'item', 'name', 'what'},
-        'duration': {'duration', 'length', 'dur', 'running time'},
-        'cue_type': {'cue type', 'cue', 'type', 'department', 'dept'},
+        'title': {'title', 'item', 'name', 'what', 'act', 'song', 'band'},
+        'duration': {'duration', 'length', 'dur', 'running time', 'set length'},
+        'kind': {'type', 'kind', 'cue type', 'cue', 'department', 'dept', 'segment'},
         'description': {'description', 'details', 'detail', 'desc'},
         'notes': {'notes', 'note', 'comments', 'comment'},
     },
@@ -242,7 +243,7 @@ def _read_xlsx(data: bytes, kind: str) -> list[list]:
         raise ApiError('Couldn\'t open that spreadsheet. Save it as .xlsx or .csv and try again.')
     try:
         names = wb.sheetnames
-        preferred = [n for n in names if _norm(n) in (_norm(KINDS[kind]['sheet']), 'schedule', 'run list',
+        preferred = [n for n in names if _norm(n) in (_norm(KINDS[kind]['sheet']), 'schedule', 'run list', 'running order',
                                                        'run sheet', 'runsheet', 'run')]
         ordered = preferred + [n for n in names if n not in preferred and _norm(n) != 'instructions']
         for name in ordered or names:
@@ -347,9 +348,11 @@ def _build(kind: str, rows: list[list], event: Event):
                     'title': title,
                     'description': _text(_cell(row, cols, 'description')),
                     'duration': _text(_cell(row, cols, 'duration')),
-                    'cue_type': _text(_cell(row, cols, 'cue_type')),
+                    'kind': _text(_cell(row, cols, 'kind')),
                     'notes': _text(_cell(row, cols, 'notes')),
                 })
+                if payload['kind'].strip().lower() in SONG_TYPES:
+                    payload['kind'], payload['_song'] = '', True
         except ApiError as e:
             problems.append({'row': offset, 'message': e.message})
             continue
@@ -396,9 +399,18 @@ def import_rows(event_id, kind):
         if mode == 'replace':
             replaced = CrewRunItem.query.filter_by(event_id=event_id).delete(synchronize_session=False)
         else:
-            start = db.session.query(db.func.max(CrewRunItem.order_number)).filter_by(event_id=event_id).scalar() or 0
-        for i, rec in enumerate(records, start=1):
-            db.session.add(CrewRunItem(event_id=event_id, order_number=start + i, **rec))
+            start = db.session.query(db.func.max(CrewRunItem.order_number)).filter_by(
+                event_id=event_id).filter(CrewRunItem.parent_id.is_(None)).scalar() or 0
+        act, n, sn = None, start, 0
+        for rec in records:
+            if rec.pop('_song', False) and act is not None:      # a song: into the set of the act above
+                sn += 1
+                db.session.add(CrewRunItem(event_id=event_id, parent_id=act.id, order_number=sn, **rec))
+                continue
+            n, sn = n + 1, 0
+            act = CrewRunItem(event_id=event_id, order_number=n, **rec)
+            db.session.add(act)
+            db.session.flush()
     db.session.commit()
     return jsonify({'success': True, 'imported': len(records), 'replaced': replaced})
 
@@ -429,9 +441,11 @@ def _example_rows(kind: str, event: Event) -> list[list]:
             [None, time(18, 0), 'Show start (example)', 'Leave Date blank to use the event\'s day.'],
         ]
     return [
-        ['Walk-in (example)', '', 'Sound', 'Playlist 1 at -12 dB'],
-        ['Opening video (example)', '2 min', 'Video', 'Play from Q-Lab, cue 1', 'Wait for MC to finish'],
-        ['Blackout (example)', '', 'Lighting', 'Cue 12 - snap to black'],
+        ['The Openers (example)', '30 min', 'Band', 'Support act', 'Own drum kit'],
+        ['First Song (example)', '4:00', 'Song', '', ''],
+        ['Second Song (example)', '3:30', 'Song', '', 'Acoustic guitar'],
+        ['Changeover (example)', '15 min', 'Changeover', '', ''],
+        ['Headliner (example)', '60 min', 'Band', '', ''],
     ]
 
 
@@ -469,7 +483,7 @@ def _xlsx(kind: str, event: Event, rows: list[list], *, template: bool) -> io.By
                 c.number_format = 'dd/mm/yyyy'
             elif key == 'time':
                 c.number_format = 'hh:mm'
-            elif key in ('duration', 'cue_type'):
+            elif key in ('duration', 'kind'):
                 c.number_format = '@'
             if key in ('description', 'notes'):
                 c.alignment = Alignment(wrap_text=True, vertical='top')
@@ -482,14 +496,14 @@ def _xlsx(kind: str, event: Event, rows: list[list], *, template: bool) -> io.By
     last = max(len(rows) + 1, 1)
     for r in range(last + 1, last + 201):
         for ci, key in enumerate(keys, start=1):
-            if key in ('duration', 'cue_type', 'title'):
+            if key in ('duration', 'kind', 'title'):
                 ws.cell(row=r, column=ci).number_format = '@'
             elif key == 'date':
                 ws.cell(row=r, column=ci).number_format = 'dd/mm/yyyy'
             elif key == 'time':
                 ws.cell(row=r, column=ci).number_format = 'hh:mm'
     if kind == 'run':
-        dv = DataValidation(type='list', formula1='"' + ','.join(CUES) + '"', allow_blank=True,
+        dv = DataValidation(type='list', formula1='"' + ','.join(TYPES) + '"', allow_blank=True,
                             showErrorMessage=False)
         ws.add_data_validation(dv)
         dv.add(f'C2:C{last + 200}')
@@ -513,12 +527,13 @@ def _xlsx(kind: str, event: Event, rows: list[list], *, template: bool) -> io.By
             lines = [
                 f'{spec["label"]} import - {event.title}',
                 '',
-                'Fill in the "Run list" sheet, save, then use Import on the event page.',
+                'Fill in the "Running order" sheet, save, then use Import on the event page.',
                 '',
-                'The run order is the order of the rows.',
+                'The running order is the order of the rows: each act (a band, a changeover, the interval)',
+                'followed by its songs. A row whose Type is "Song" goes in the set of the act above it.',
                 'Title (required): up to 200 characters.',
-                'Duration (optional): free text, e.g. "5 min".',
-                'Cue type (optional): pick from the list or type your own, e.g. Lighting, Sound, Video.',
+                'Length (optional): e.g. "30 min", "1h 15" or "3:45" (minutes:seconds, for a song).',
+                'Type (optional): pick from the list or type your own, e.g. Band, Changeover, Interval, Song.',
                 'Description (optional): Markdown works.  Notes (optional): plain text.',
             ]
         lines += ['',
@@ -561,9 +576,9 @@ def _current_rows(kind: str, event_id: int) -> list[list]:
             EventSchedule.scheduled_time, EventSchedule.id).all()
         return [[s.scheduled_time.date(), s.scheduled_time.time().replace(second=0, microsecond=0),
                  s.title, s.description or ''] for s in items]
-    items = CrewRunItem.query.filter_by(event_id=event_id).order_by(
-        CrewRunItem.order_number, CrewRunItem.id).all()
-    return [[r.title, r.duration or '', r.cue_type or '', r.description or '', r.notes or ''] for r in items]
+    from services.running_order import sequence
+    return [[r.title, r.duration or '', 'Song' if r.parent_id else (r.kind or ''), r.description or '', r.notes or '']
+            for r in sequence(event_id)]
 
 
 def _send(buf: io.BytesIO, fmt: str, filename: str):
@@ -715,7 +730,7 @@ def upload_attachments(event_id):
     event = Event.query.get_or_404(event_id)
     target = request.form.get('target', '')
     if target not in KINDS:
-        raise ApiError('Choose whether the file is for the schedule or the run list')
+        raise ApiError('Choose whether the file is for the schedule or the running order')
     files = [f for f in request.files.getlist('files') + request.files.getlist('file') if f and f.filename]
     if not files:
         raise ApiError('Choose a PDF or photo to upload')

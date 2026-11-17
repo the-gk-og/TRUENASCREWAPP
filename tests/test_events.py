@@ -463,7 +463,7 @@ def test_pdf_whole_event_or_chosen_parts(app, admin, alice):
 
     run = alice.get(f'/events/{eid}/export-pdf?parts=run')
     assert run.status_code == 200 and run.data[:4] == b'%PDF'
-    assert 'Awards_Night_run_list_20261110.pdf' in run.headers['Content-Disposition']
+    assert 'Awards_Night_running_order_20261110.pdf' in run.headers['Content-Disposition']
     assert len(run.data) < len(whole.data)
 
     two = alice.get(f'/events/{eid}/export-pdf?parts=schedule,run')

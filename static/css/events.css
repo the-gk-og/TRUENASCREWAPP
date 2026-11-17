@@ -83,6 +83,73 @@
 .sw-run-meta { display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.2rem; }
 .sortable-ghost { opacity:.4; }
 
+/* ---------- running order: acts with their songs, planned vs actual ---------- */
+.ro-act { border:1px solid var(--border); border-radius:8px; margin-bottom:.6rem; background:var(--bg-card); overflow:hidden; }
+.ro-act.ro-quiet { background:var(--bg-nav-hover); border-style:dashed; }
+.ro-row { display:flex; gap:.6rem; align-items:flex-start; padding:.6rem .75rem; }
+.ro-row .handle { cursor:grab; color:var(--text-muted); padding:.2rem .3rem; touch-action:none; }
+.ro-act-row .num { width:1.8rem; height:1.8rem; border-radius:50%; background:var(--primary); color:#fff; font-size:.8rem; font-weight:700;
+                   display:inline-flex; align-items:center; justify-content:center; flex:none; }
+.ro-quiet .ro-act-row .num { background:var(--text-muted); }
+.ro-time { flex:none; min-width:4.6rem; font-variant-numeric:tabular-nums; font-weight:600; color:var(--primary); padding-top:.15rem; }
+.ro-time:empty { display:none; }
+.ro-main { flex:1; min-width:0; }
+.ro-title { font-weight:600; color:var(--text-primary); overflow-wrap:anywhere; }
+.ro-act-row .ro-title { font-size:1.05rem; }
+.ro-kind { font-size:.72rem; padding:.1rem .5rem; margin-left:.3rem; vertical-align:middle; }
+.ro-meta { display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.2rem; align-items:center; }
+.ro-meta:empty { display:none; }
+.ro-meta .sw-chip { font-size:.78rem; padding:.15rem .55rem; }
+.ro-len { font-size:.82rem; color:var(--text-secondary); font-variant-numeric:tabular-nums; }
+.ro-notes { margin-top:.25rem; font-size:.85rem; color:var(--text-secondary); white-space:pre-line; }
+.ro-btns { display:flex; gap:.1rem; flex-wrap:wrap; justify-content:flex-end; flex:none; }
+.ro-btns .btn-icon { width:2rem; height:2rem; min-height:0; }
+.ro-songs { border-top:1px solid var(--border); padding:.15rem 0; min-height:.4rem; }
+.ro-songs:empty { border-top:0; padding:0; }
+.ro-song { padding:.35rem .75rem .35rem 1.6rem; font-size:.92rem; }
+.ro-song + .ro-song { border-top:1px dashed var(--border); }
+.ro-song .ro-title { font-weight:500; }
+.ro-song .ro-time { min-width:4.2rem; font-weight:500; color:var(--text-secondary); }
+.ro-sn { flex:none; min-width:1.4rem; text-align:right; color:var(--text-muted); font-variant-numeric:tabular-nums; padding-top:.1rem; }
+.ro-sn::after { content:'.'; }
+.ro-on { background:color-mix(in srgb, var(--primary) 12%, transparent); box-shadow:inset 4px 0 0 var(--primary); }
+.ro-done .ro-title, .ro-done .ro-time { color:var(--text-muted); }
+.ro-next { box-shadow:inset 4px 0 0 var(--border-strong); }
+.ro-dot { font-size:.5rem; animation:ro-pulse 1.4s ease-in-out infinite; }
+@keyframes ro-pulse { 50% { opacity:.25; } }
+.ro-addsong { display:flex; gap:.4rem; padding:.35rem .75rem .5rem 1.6rem; }
+.ro-addsong .sw-input { flex:1 1 auto; min-width:0; min-height:34px; padding:.3rem .55rem; font-size:.9rem;
+                        background:transparent; border-style:dashed; }
+.ro-addsong .sw-input:focus { border-style:solid; background:var(--bg-card); }
+.ro-addsong .ro-addsong-len { flex:0 1 90px; }
+.ro-controls { display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:.8rem; }
+.ro-controls[hidden], .ro-controls [hidden] { display:none; }
+.ro-controls #roNext span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:60vw; display:inline-block; vertical-align:bottom; }
+.ro-live { border:1px solid var(--border-strong); border-radius:8px; padding:.7rem .9rem; margin-bottom:.8rem; background:var(--bg-card); }
+.ro-live[hidden] { display:none; }
+.ro-live.on { border-color:var(--primary); }
+.ro-live-now { display:flex; align-items:center; gap:.7rem; }
+.ro-live-now > div { flex:1; min-width:0; }
+.ro-live-now small { color:var(--text-secondary); }
+.ro-live-tag { flex:none; font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; padding:.15rem .5rem;
+               border-radius:4px; background:var(--bg-nav-hover); color:var(--text-secondary); }
+.ro-live.on .ro-live-tag { background:var(--primary); color:#fff; }
+.ro-elapsed { flex:none; font-size:1.35rem; font-weight:700; font-variant-numeric:tabular-nums; color:var(--text-primary); }
+.ro-elapsed.over { color:var(--bad-fg); }
+.ro-live-drift { margin-top:.35rem; font-size:.9rem; font-weight:600; }
+.ro-live-drift:empty { display:none; }
+.ro-live-drift.ok { color:var(--ok-fg); } .ro-live-drift.warn { color:var(--warn-fg); } .ro-live-drift.bad { color:var(--bad-fg); }
+@media (max-width: 640px) {
+  .ro-row { flex-wrap:wrap; gap:.45rem; }
+  .ro-time { min-width:0; }
+  .ro-song .ro-time { min-width:0; }
+  .ro-main { flex:1 1 0; min-width:9rem; }
+  .ro-btns { width:100%; justify-content:flex-end; }
+  .ro-song .ro-btns .btn-icon { width:1.75rem; height:1.75rem; font-size:.8rem; }
+  .ro-song { padding-left:.9rem; }
+  .ro-addsong { padding-left:.9rem; }
+}
+
 /* ---------- notes ---------- */
 .sw-note { border:1px solid var(--border); border-radius:8px; padding:.8rem 1rem; margin-bottom:.75rem; }
 .sw-note-head { display:flex; justify-content:space-between; gap:.5rem; align-items:center; font-size:.82rem; color:var(--text-secondary); margin-bottom:.4rem; flex-wrap:wrap; }
