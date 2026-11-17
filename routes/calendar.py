@@ -263,12 +263,24 @@ def _unavail_items(start, end, mode: str, manager: bool) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# ICS sync - one private, unguessable URL per person (events + that person's shifts)
+# ICS subscriptions - one private, unguessable, revocable slug per person.
+#   /calendar/ics/<token>      "My schedule": my shifts + events I crew or am cast in
+#   /calendar/ics/<token>/all  every event (crew only)
 # ---------------------------------------------------------------------------
+
+import hashlib
+import os
+from datetime import timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from flask import current_app
+from models import CastMember
+from services.security import throttle
+
 
 def _esc(text: str | None) -> str:
     """RFC 5545 TEXT escaping - the backslash must be escaped first."""
-    return ((text or '').replace('\\', '\\\\').replace(';', '\\;')
+    return ((text or '').replace('\\', '\\\\').replace(';', '\;')
             .replace(',', '\\,').replace('\r\n', '\n').replace('\n', '\\n'))
 
 
@@ -285,18 +297,25 @@ def _fold(line: str) -> str:
     return '\r\n'.join(out)
 
 
-TZ_BLOCK = (
-    "BEGIN:VTIMEZONE\r\nTZID:Australia/Sydney\r\n"
-    "BEGIN:STANDARD\r\nDTSTART:20240407T030000\r\nTZOFFSETFROM:+1100\r\n"
-    "TZOFFSETTO:+1000\r\nTZNAME:AEST\r\nRRULE:FREQ=YEARLY;BYMONTH=4;BYDAY=1SU\r\nEND:STANDARD\r\n"
-    "BEGIN:DAYLIGHT\r\nDTSTART:20241006T020000\r\nTZOFFSETFROM:+1000\r\n"
-    "TZOFFSETTO:+1100\r\nTZNAME:AEDT\r\nRRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=1SU\r\nEND:DAYLIGHT\r\n"
-    "END:VTIMEZONE\r\n"
-)
-
-
 # A 32-byte token is a 43-character URL-safe slug (256 bits) - not guessable.
 TOKEN_BYTES = 32
+# Throttles (per process): wrong slugs per IP, and fetches per valid slug.
+BAD_TOKEN_LIMIT, BAD_TOKEN_WINDOW = 20, 900
+FEED_HIT_LIMIT, FEED_HIT_WINDOW = 120, 3600
+
+
+def feed_tz() -> ZoneInfo:
+    """The venue timezone every stored (naive, wall-clock) time is in."""
+    name = (current_app.config.get('CALENDAR_TIMEZONE') or os.environ.get('SHOWWISE_TIMEZONE')
+            or 'Australia/Sydney')
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        return ZoneInfo('Australia/Sydney')
+
+
+def is_cast_only(user: User) -> bool:
+    return bool(user.is_cast and not user.is_admin)
 
 
 def ensure_calendar_token(user: User, rotate: bool = False) -> str:
@@ -307,112 +326,170 @@ def ensure_calendar_token(user: User, rotate: bool = False) -> str:
     return user.calendar_token
 
 
-def _sync_urls(token: str) -> dict:
+def _webcal(https: str) -> str:
+    return 'webcal://' + https.split('://', 1)[1]
+
+
+def _sync_urls(user: User) -> dict:
+    token = ensure_calendar_token(user)
     https = url_for('calendar.calendar_ics_private', token=token, _external=True)
-    return {'url': https, 'webcal_url': 'webcal://' + https.split('://', 1)[1]}
+    out = {'url': https, 'webcal_url': _webcal(https)}
+    if not is_cast_only(user):
+        all_url = url_for('calendar.calendar_ics_all', token=token, _external=True)
+        out.update(all_url=all_url, all_webcal_url=_webcal(all_url))
+    return out
 
 
 @calendar_bp.route('/api/calendar/sync-link')
 @login_required
-@crew_required
 def sync_link():
-    """The signed-in person's own private sync URL."""
-    return jsonify(_sync_urls(ensure_calendar_token(current_user)))
+    """The signed-in person's own private subscription URLs."""
+    return jsonify(_sync_urls(current_user))
 
 
 @calendar_bp.route('/api/calendar/sync-link/reset', methods=['POST'])
 @login_required
-@crew_required
 def sync_link_reset():
-    """Replace the slug - the old URL stops working immediately."""
-    return jsonify(_sync_urls(ensure_calendar_token(current_user, rotate=True)))
+    """Replace the slug - every old URL stops working immediately."""
+    ensure_calendar_token(current_user, rotate=True)
+    return jsonify(_sync_urls(current_user))
 
 
 @calendar_bp.route('/calendar/ics')
 @login_required
 def calendar_ics():
     """The old open feed is gone: signed-in people are sent to their own private feed instead."""
-    if current_user.is_cast and not current_user.is_admin:
-        abort(404)
     return redirect(url_for('calendar.calendar_ics_private', token=ensure_calendar_token(current_user)))
+
+
+def _user_for_token(token: str) -> User:
+    """Look up a slug; unknown slugs reveal nothing and are throttled per IP."""
+    ip = throttle.client_ip()
+    if throttle.is_blocked('ics_bad', ip, BAD_TOKEN_LIMIT, BAD_TOKEN_WINDOW):
+        abort(429)
+    user = User.query.filter_by(calendar_token=token).first() if 20 <= len(token) <= 64 else None
+    if not user or not secrets.compare_digest(user.calendar_token or '', token):
+        throttle.record_failure('ics_bad', ip, BAD_TOKEN_WINDOW)
+        abort(404)
+    if throttle.is_blocked('ics_hit', token, FEED_HIT_LIMIT, FEED_HIT_WINDOW):
+        abort(429)                     # a misbehaving client polling far too often
+    throttle.record_failure('ics_hit', token, FEED_HIT_WINDOW)
+    return user
+
+
+def _ics_response(body: str, filename: str):
+    resp = Response(body, mimetype='text/calendar', headers={
+        'Content-Disposition': f'inline; filename="{filename}"',
+        'Cache-Control': 'private, no-cache, must-revalidate',
+        'X-Robots-Tag': 'noindex, nofollow',
+        'Referrer-Policy': 'no-referrer',
+    })
+    resp.set_etag(hashlib.sha256(body.encode('utf-8')).hexdigest()[:32])
+    return resp.make_conditional(request)          # 304 when nothing changed since the last refresh
 
 
 @calendar_bp.route('/calendar/ics/<token>')
 def calendar_ics_private(token):
-    """Calendar-app subscription URL. No login (calendar apps can't), so the slug *is* the credential."""
-    user = User.query.filter_by(calendar_token=token).first() if 20 <= len(token) <= 64 else None
-    if not user or (user.is_cast and not user.is_admin):
-        abort(404)                                     # unknown slug: reveal nothing
-    return Response(
-        _build_ics(user, request.url_root.rstrip('/')),
-        mimetype='text/calendar',
-        headers={
-            'Content-Disposition': 'inline; filename="showwise_sync.ics"',
-            'Cache-Control': 'private, no-cache, must-revalidate',
-            'X-Robots-Tag': 'noindex, nofollow',
-            'Referrer-Policy': 'no-referrer',
-        })
+    """"My schedule" subscription. No login (calendar apps can't), so the slug *is* the credential."""
+    user = _user_for_token(token)
+    return _ics_response(_build_ics(user, request.url_root.rstrip('/'), everything=False),
+                         'showwise_my_schedule.ics')
 
 
-def _dt_lines(start: datetime, end: datetime, all_day: bool = False) -> list[str]:
+@calendar_bp.route('/calendar/ics/<token>/all')
+def calendar_ics_all(token):
+    """Every event (crew only - cast accounts never see the full crew calendar)."""
+    user = _user_for_token(token)
+    if is_cast_only(user):
+        abort(404)
+    return _ics_response(_build_ics(user, request.url_root.rstrip('/'), everything=True),
+                         'showwise_all_events.ics')
+
+
+def _utc(dt: datetime, tz: ZoneInfo) -> str:
+    return dt.replace(tzinfo=tz).astimezone(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+
+
+def _dt_lines(start: datetime, end: datetime, tz: ZoneInfo, all_day: bool = False) -> list[str]:
     if all_day:
         return [f'DTSTART;VALUE=DATE:{start:%Y%m%d}', f'DTEND;VALUE=DATE:{(end + timedelta(days=1)):%Y%m%d}']
-    return [f'DTSTART;TZID=Australia/Sydney:{start:%Y%m%dT%H%M%S}',
-            f'DTEND;TZID=Australia/Sydney:{end:%Y%m%dT%H%M%S}']
+    return [f'DTSTART:{_utc(start, tz)}', f'DTEND:{_utc(end, tz)}']
 
 
-def _build_ics(user: User, site_url: str) -> str:
-    """Every event, plus this person's own (non-declined) shifts."""
-    stamp = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
-    lines = [
+def _stamp(dt: datetime | None) -> str:
+    # Stable per item (not "now"), so an unchanged feed hashes to the same ETag.
+    return (dt or datetime(2024, 1, 1)).strftime('%Y%m%dT%H%M%SZ')
+
+
+def _my_event_ids(user: User) -> tuple[set, set]:
+    """(events I'm crewing, events I'm cast in)."""
+    crew = {a.event_id for a in CrewAssignment.query.filter_by(crew_member=user.username).all()}
+    crew |= {eid for (eid,) in db.session.query(Shift.event_id)
+             .join(ShiftAssignment, ShiftAssignment.shift_id == Shift.id)
+             .filter(ShiftAssignment.user_id == user.id, ShiftAssignment.status != 'rejected').all()}
+    cast = {eid for (eid,) in db.session.query(CastMember.event_id)
+            .filter(CastMember.user_id == user.id, CastMember.event_id.isnot(None)).all()}
+    return crew, cast
+
+
+def _build_ics(user: User, site_url: str, everything: bool) -> str:
+    tz = feed_tz()
+    name = 'ShowWise - All events' if everything else 'ShowWise - ' + user.shown_name
+    head = [
         'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//ShowWise//EN', 'CALSCALE:GREGORIAN',
-        'METHOD:PUBLISH', f'X-WR-CALNAME:{_esc("ShowWise - " + user.shown_name)}',
-        'X-WR-TIMEZONE:Australia/Sydney',
+        'METHOD:PUBLISH', f'X-WR-CALNAME:{_esc(name)}', f'X-WR-TIMEZONE:{tz.key}',
         'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H',
     ]
-    head = '\r\n'.join(lines) + '\r\n' + TZ_BLOCK
     body = []
 
-    ics_events = []          # (uid, title, start, end, all_day, event)
-    for e in Event.query.order_by(Event.event_date).all():
-        ics_events.append((f'event-{e.id}@showwise', e.title, e.event_date, event_end(e), bool(e.all_day), e))
-        ics_events += [(f'event-{e.id}-t{t.id}@showwise', time_title(e, t), t.start_time, t.end_time, False, e)
-                       for t in times_for(e)]
-
-    for uid, title, t_start, t_end, t_all_day, e in ics_events:
-        body += ['BEGIN:VEVENT', f'UID:{uid}', f'DTSTAMP:{stamp}']
-        body += _dt_lines(t_start, t_end, t_all_day)
-        body.append(f'SUMMARY:{_esc(title)}')
-        desc = [e.description] if e.description else []
-        sched = sorted(e.schedules, key=lambda x: x.scheduled_time)
+    crew_ids, cast_ids = (set(), set()) if everything else _my_event_ids(user)
+    cast_view = is_cast_only(user)
+    q = Event.query
+    if not everything:
+        q = q.filter(Event.id.in_(crew_ids | cast_ids)) if (crew_ids | cast_ids) else q.filter(False)
+    for e in q.order_by(Event.event_date).all():
+        # Cast-only people see the cast-facing text, never crew notes/schedules.
+        as_cast = cast_view or (e.id in cast_ids and e.id not in crew_ids)
+        text = (e.cast_description if as_cast else e.description) or ''
+        sched = sorted(e.cast_schedules if as_cast else e.schedules, key=lambda x: x.scheduled_time)
+        desc = [text] if text else []
         if sched:
-            desc.append('Schedule:\n' + '\n'.join(
-                f"- {s.scheduled_time:%I:%M %p} {s.title}" for s in sched))
-        if desc:
+            desc.append('Schedule:\n' + '\n'.join(f"- {s.scheduled_time:%I:%M %p} {s.title}" for s in sched))
+        url = f'{site_url}/cast-events/{e.id}' if as_cast else f'{site_url}/events/{e.id}'
+        desc.append(f'Open in ShowWise: {url}')
+        items = [(f'event-{e.id}@showwise', e.title, e.event_date, event_end(e), bool(e.all_day))]
+        items += [(f'event-{e.id}-t{t.id}@showwise', time_title(e, t), t.start_time, t.end_time, False)
+                  for t in times_for(e)]
+        for uid, title, t_start, t_end, t_all_day in items:
+            body += ['BEGIN:VEVENT', f'UID:{uid}', f'DTSTAMP:{_stamp(e.created_at)}']
+            body += _dt_lines(t_start, t_end, tz, t_all_day)
+            body.append(f'SUMMARY:{_esc(title)}')
             body.append(f"DESCRIPTION:{_esc(chr(10).join(desc))}")
-        if e.location:
-            body.append(f'LOCATION:{_esc(e.location)}')
-        body += [f'URL:{site_url}/events/{e.id}', 'STATUS:CONFIRMED', 'END:VEVENT']
+            if e.location:
+                body.append(f'LOCATION:{_esc(e.location)}')
+            body += [f'URL:{url}', 'STATUS:CONFIRMED', 'END:VEVENT']
 
-    rows = (db.session.query(ShiftAssignment, Shift, Event)
-            .join(Shift, ShiftAssignment.shift_id == Shift.id)
-            .join(Event, Shift.event_id == Event.id)
-            .filter(ShiftAssignment.user_id == user.id, ShiftAssignment.status != 'rejected')
-            .order_by(Shift.shift_date).all())
-    for a, shift, e in rows:
-        confirmed = a.status in ('accepted', 'confirmed')
-        role = shift.role or 'Crew'
-        body += ['BEGIN:VEVENT', f'UID:shift-{a.id}@showwise', f'DTSTAMP:{stamp}']
-        body += _dt_lines(shift.shift_date, shift.shift_end_date)
-        body.append(f'SUMMARY:{_esc(f"{role} shift · {e.title}")}')
-        desc = [f'Your shift ({"confirmed" if confirmed else "awaiting your response"})', f'Event: {e.title}']
-        if a.notes:
-            desc.append(f'Notes: {a.notes}')
-        body.append(f"DESCRIPTION:{_esc(chr(10).join(desc))}")
-        place = shift.location or e.location
-        if place:
-            body.append(f'LOCATION:{_esc(place)}')
-        body += [f'URL:{site_url}/events/{e.id}',
-                 f'STATUS:{"CONFIRMED" if confirmed else "TENTATIVE"}', 'END:VEVENT']
+    if not everything:
+        rows = (db.session.query(ShiftAssignment, Shift, Event)
+                .join(Shift, ShiftAssignment.shift_id == Shift.id)
+                .join(Event, Shift.event_id == Event.id)
+                .filter(ShiftAssignment.user_id == user.id, ShiftAssignment.status != 'rejected')
+                .order_by(Shift.shift_date).all())
+        for a, shift, e in rows:
+            confirmed = a.status in ('accepted', 'confirmed')
+            role = shift.role or 'Crew'
+            body += ['BEGIN:VEVENT', f'UID:shift-{a.id}@showwise', f'DTSTAMP:{_stamp(a.assigned_at)}']
+            body += _dt_lines(shift.shift_date, shift.shift_end_date, tz)
+            body.append(f'SUMMARY:{_esc(f"{role} shift · {e.title}")}')
+            desc = [f'Your shift ({"confirmed" if confirmed else "awaiting your response"})', f'Event: {e.title}']
+            if a.notes:
+                desc.append(f'Notes: {a.notes}')
+            desc.append(f'Open in ShowWise: {site_url}/events/{e.id}')
+            body.append(f"DESCRIPTION:{_esc(chr(10).join(desc))}")
+            place = shift.location or e.location
+            if place:
+                body.append(f'LOCATION:{_esc(place)}')
+            body += [f'URL:{site_url}/events/{e.id}',
+                     f'STATUS:{"CONFIRMED" if confirmed else "TENTATIVE"}', 'END:VEVENT']
 
-    return head + '\r\n'.join(_fold(l) for l in body) + ('\r\n' if body else '') + 'END:VCALENDAR\r\n'
+    return '\r\n'.join(_fold(l) for l in head + body + ['END:VCALENDAR']) + '\r\n'
