@@ -37,6 +37,7 @@ def register_blueprints(app):
     from routes.cases            import cases_bp
     from routes.consumables      import consumables_bp
     from routes.training         import training_bp
+    from routes.scan_station     import scan_station_bp
 
 
     app.register_blueprint(auth_bp)
@@ -65,3 +66,4 @@ def register_blueprints(app):
     app.register_blueprint(cases_bp)
     app.register_blueprint(consumables_bp)
     app.register_blueprint(training_bp)
+    app.register_blueprint(scan_station_bp)

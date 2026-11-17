@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Scan badge — ShowWise{% endblock %}
+{% block head_extra %}<link rel="stylesheet" href="{{ asset('css/station.css') }}">{% endblock %}
+
+{% block content %}
+<div class="sw-page-head no-print">
+    <div><h1><i class="fas fa-id-badge"></i> Scan badge</h1>
+        <div class="page-subtitle">Sign in at the store-room scan station to check gear in and out</div></div>
+    <div class="sw-head-actions"><a class="btn btn-secondary" href="{{ url_for('profile.settings_page') }}"><i class="fas fa-arrow-left"></i> Settings</a></div>
+</div>
+
+<div class="card" style="text-align:center">
+    <div class="badge-qr"><img src="{{ qr }}" alt="Your scan badge QR code"></div>
+    <p style="margin-top:.75rem;font-weight:700;font-size:1.15rem">{{ current_user.shown_name }}</p>
+    <p class="sw-muted no-print" style="max-width:520px;margin:.5rem auto 0">Hold this up to the scan station (on your phone, or print it and keep it on your lanyard).
+        Everything you scan there is recorded as you, so keep it to yourself like a key.</p>
+    <div class="sw-actions no-print" style="justify-content:center;margin-top:1rem">
+        <button class="btn btn-secondary" onclick="window.print()"><i class="fas fa-print"></i> Print</button>
+        <button class="btn btn-secondary" id="badgeNew"><i class="fas fa-rotate"></i> Make a new badge</button>
+    </div>
+</div>
+
+<div class="card no-print">
+    <div class="sw-card-head"><h3><i class="fas fa-keyboard"></i> PIN</h3></div>
+    <p class="sw-muted" style="margin-bottom:1rem">No badge on you? Pick your name at the station and type a PIN instead.
+        {% if badge.pin_hash %}<strong>You have a PIN set.</strong>{% else %}You haven’t set one yet.{% endif %}</p>
+    <form id="pinForm" style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
+        <input type="password" id="pinIn" class="sw-input" inputmode="numeric" pattern="[0-9]*" minlength="4" maxlength="8"
+               autocomplete="new-password" placeholder="4 to 8 digits" style="max-width:200px" aria-label="New PIN" required>
+        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> {{ 'Change PIN' if badge.pin_hash else 'Set PIN' }}</button>
+        {% if badge.pin_hash %}<button type="button" class="btn btn-secondary" id="pinClear">Remove PIN</button>{% endif %}
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('pinForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+        await SW.api('POST', '{{ url_for("scan_station.badge_pin") }}', { pin: document.getElementById('pinIn').value });
+        SW.toast('PIN saved'); setTimeout(() => location.reload(), 600);
+    } catch (err) { SW.toast(err.message, 'error'); }
+});
+const clear = document.getElementById('pinClear');
+if (clear) clear.addEventListener('click', async () => {
+    try { await SW.api('DELETE', '{{ url_for("scan_station.badge_pin") }}'); location.reload(); }
+    catch (err) { SW.toast(err.message, 'error'); }
+});
+document.getElementById('badgeNew').addEventListener('click', async () => {
+    if (!await SW.confirm('Make a new badge? Your old one (printouts, screenshots) stops working straight away.')) return;
+    try { await SW.api('POST', '{{ url_for("scan_station.badge_new") }}'); location.reload(); }
+    catch (err) { SW.toast(err.message, 'error'); }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Scan stations — ShowWise{% endblock %}
+
+{% block head_extra %}<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">{% endblock %}
+
+{% block content %}
+<div class="sw-page-head">
+    <div><h1><i class="fas fa-barcode"></i> Scan stations</h1>
+        <div class="page-subtitle">Shared tablets or PCs by the store room that can only check gear in and out</div></div>
+    <div class="sw-head-actions"><a class="btn btn-secondary" href="{{ url_for('admin.admin_panel') }}"><i class="fas fa-arrow-left"></i> Admin</a></div>
+</div>
+
+<div class="card">
+    <div class="sw-card-head"><h3><i class="fas fa-plus"></i> Add a station</h3></div>
+    <p class="sw-muted" style="margin-bottom:1rem">You get a one-time pairing code. Open <code>{{ request.host_url }}station/pair</code> on the device and enter it, or scan the QR with the device.
+        People sign in at the station with their badge (Settings › Scan badge) or their name and PIN. Every scan is recorded as that person.</p>
+    <form id="stNew" style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:flex-end">
+        <div><label class="sw-label" for="stName">Name</label>
+            <input id="stName" class="sw-input" maxlength="100" placeholder="Store room door" required></div>
+        <div><label class="sw-label" for="stIdle">Sign out after (seconds idle)</label>
+            <input id="stIdle" class="sw-input" type="number" min="30" max="900" value="90" style="max-width:140px"></div>
+        <button class="btn btn-primary" type="submit"><i class="fas fa-plus"></i> Add station</button>
+    </form>
+</div>
+
+<div class="card" id="stPairing" hidden>
+    <div class="sw-card-head"><h3><i class="fas fa-link"></i> Pair <span id="stPairName"></span></h3></div>
+    <div style="display:flex;gap:1.5rem;flex-wrap:wrap;align-items:center">
+        <div id="stQr" style="padding:.75rem;background:#fff;border:1px solid var(--border);border-radius:8px"></div>
+        <div>
+            <p style="font-size:2rem;font-weight:700;letter-spacing:.15em" id="stCode"></p>
+            <p class="sw-muted">Enter this on the device at <code id="stUrl"></code>. It works once and expires in <span id="stMins"></span> minutes.
+                Pairing a new device replaces any device paired with this station before.</p>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="sw-card-head"><h3><i class="fas fa-list"></i> Stations</h3></div>
+    <div class="sw-table-wrap"><table class="sw-table">
+        <thead><tr><th>Name</th><th>State</th><th>Idle sign-out</th><th>Last seen</th><th></th></tr></thead>
+        <tbody id="stBody"><tr><td colspan="5" class="sw-muted">Loading…</td></tr></tbody>
+    </table></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+(function () {
+    const $ = (id) => document.getElementById(id), esc = SW.esc;
+    const STATE = { paired: ['ok', 'Paired'], waiting: ['warn', 'Waiting for device'], not_paired: ['', 'Not paired'], revoked: ['bad', 'Revoked'] };
+    async function load() {
+        const r = await SW.api('GET', '/admin/stations/api');
+        $('stBody').innerHTML = r.stations.length ? r.stations.map((s) => {
+            const [cls, label] = STATE[s.status] || ['', s.status];
+            return `<tr><td><strong>${esc(s.name)}</strong><div class="sw-muted" style="font-size:.8rem">added by ${esc(s.created_by || '?')}, ${esc(s.created_at || '')}</div></td>
+                <td><span class="adm-badge ${cls}">${label}</span></td><td>${s.idle_seconds}s</td><td>${esc(s.last_seen_at || '—')}</td>
+                <td style="white-space:nowrap">${s.status === 'revoked'
+                    ? `<button class="btn btn-sm btn-secondary" data-del="${s.id}">Delete</button>`
+                    : `<button class="btn btn-sm btn-secondary" data-pair="${s.id}" data-name="${esc(s.name)}">New pairing code</button>
+                       <button class="btn btn-sm btn-secondary" data-idle="${s.id}" data-v="${s.idle_seconds}">Idle time</button>
+                       <button class="btn btn-sm btn-danger" data-revoke="${s.id}" data-name="${esc(s.name)}">Revoke</button>`}</td></tr>`;
+        }).join('') : '<tr><td colspan="5" class="sw-muted">No stations yet.</td></tr>';
+        document.querySelectorAll('[data-pair]').forEach((b) => b.onclick = async () => showPairing(await SW.api('POST', `/admin/stations/${b.dataset.pair}/pair`), b.dataset.name));
+        document.querySelectorAll('[data-revoke]').forEach((b) => b.onclick = async () => {
+            if (!await SW.confirm(`Revoke "${b.dataset.name}"? The device stops working straight away.`)) return;
+            await SW.api('POST', `/admin/stations/${b.dataset.revoke}/revoke`); SW.toast('Station revoked'); load();
+        });
+        document.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => { await SW.api('DELETE', `/admin/stations/${b.dataset.del}`); load(); });
+        document.querySelectorAll('[data-idle]').forEach((b) => b.onclick = async () => {
+            const v = prompt('Sign people out after how many seconds without activity? (30 to 900)', b.dataset.v);
+            if (!v) return;
+            try { await SW.api('PUT', `/admin/stations/${b.dataset.idle}`, { idle_seconds: parseInt(v, 10) }); load(); } catch (e) { SW.toast(e.message, 'error'); }
+        });
+    }
+    function showPairing(r, name) {
+        $('stPairing').hidden = false;
+        $('stPairName').textContent = name;
+        $('stCode').textContent = r.pairing.code;
+        $('stUrl').textContent = r.pairing.url.split('?')[0];
+        $('stMins').textContent = r.pairing.expires_minutes;
+        $('stQr').innerHTML = '';
+        if (window.QRCode) new QRCode($('stQr'), { text: r.pairing.url, width: 180, height: 180, correctLevel: QRCode.CorrectLevel.M });
+        $('stPairing').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        load();
+    }
+    $('stNew').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        try {
+            const r = await SW.api('POST', '/admin/stations', { name: $('stName').value, idle_seconds: parseInt($('stIdle').value, 10) });
+            $('stName').value = '';
+            showPairing(r, r.station.name);
+        } catch (err) { SW.toast(err.message, 'error'); }
+    });
+    load();
+})();
+</script>
+{% endblock %}
